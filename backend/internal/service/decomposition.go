@@ -65,6 +65,13 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 			// Send progress: starting
 			progressChan <- fmt.Sprintf(`{"status":"generating","chapter_sort":%d,"title":"%s"}`, c.Sort, c.Title)
 			
+			// Likewise limit the content sent per chapter to avoid token overflow
+			chapterSourceContent := sourceContent
+			runes := []rune(chapterSourceContent)
+			if len(runes) > 300000 {
+				chapterSourceContent = string(runes[:300000]) + "\n\n... [Content Truncated due to length limits] ..."
+			}
+
 			prompt := fmt.Sprintf(`你是一个高级全栈架构师和技术博主。请根据以下提供的源内容，以及本章节的大纲，将其转化为一篇“小白友好、图文并茂、可独立复现”的高质量技术博客章节。
 在解释抽象的理论概念时，必须提供对应的代码示例。
 所有生成的 Mermaid 图表代码块绝对禁止包含自定义样式关键字（如 style, classDef, linkStyle 等），必须使用基础语法。
@@ -76,7 +83,7 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 - 标题: %s
 - 摘要: %s
 - 排序: %d
-`, sourceContent, c.Title, c.Summary, c.Sort)
+`, chapterSourceContent, c.Title, c.Summary, c.Sort)
 
 			messages := []llm.Message{
 				{Role: "system", Content: "你是一个高级技术博客作者。"},
@@ -128,6 +135,14 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 }
 // GenerateOutline evaluates project text and generates a JSON outline
 func (s *DecompositionService) GenerateOutline(ctx context.Context, sourceContent string) ([]Chapter, error) {
+	// DeepSeek max context is ~128k tokens. 
+	// Limit source content to ~300,000 characters to avoid API 400 errors (invalid_request_error).
+	// 300,000 characters is roughly 75k - 100k tokens, leaving plenty of room for system prompts and the completion.
+	runes := []rune(sourceContent)
+	if len(runes) > 300000 {
+		sourceContent = string(runes[:300000]) + "\n\n... [Content Truncated due to length limits] ..."
+	}
+
 	prompt := fmt.Sprintf(`你是一个高级架构师。请评估以下项目文本，并生成一个系列博客的大纲。
 输出必须是纯JSON数组格式，不包含任何Markdown标记或其他文字。
 每个元素包含以下字段：

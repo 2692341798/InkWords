@@ -50,7 +50,7 @@ func (f *GitFetcher) Fetch(repoURL string) (string, error) {
 		// Skip directories that we want to ignore
 		if info.IsDir() {
 			dirName := info.Name()
-			if dirName == ".git" || dirName == "node_modules" || dirName == "dist" || dirName == "build" || dirName == ".idea" || dirName == ".vscode" {
+			if dirName == ".git" || dirName == "node_modules" || dirName == "dist" || dirName == "build" || dirName == ".idea" || dirName == ".vscode" || dirName == "vendor" {
 				return filepath.SkipDir
 			}
 			return nil
@@ -58,6 +58,12 @@ func (f *GitFetcher) Fetch(repoURL string) (string, error) {
 
 		// Check if it's a regular file
 		if !info.Mode().IsRegular() {
+			return nil
+		}
+
+		fileName := info.Name()
+		// Skip known large generated or dependency files
+		if fileName == "package-lock.json" || fileName == "yarn.lock" || fileName == "pnpm-lock.yaml" || fileName == "go.sum" || fileName == "Cargo.lock" {
 			return nil
 		}
 
