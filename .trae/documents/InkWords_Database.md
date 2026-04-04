@@ -40,7 +40,7 @@
 - `chapter_sort` (INTEGER): **章节序号**。在大项目拆解场景中，表示当前文章在整个系列中的排序位置。
 - `title` (VARCHAR): 博客或系列的标题。
 - `content` (TEXT): **Markdown 正文内容**。因为单篇内容限制约 5000 字且包含 Mermaid 代码块，PostgreSQL 中的 `TEXT` 类型支持无限长度存储，确保容量充裕且不截断。
-- `source_type` (VARCHAR): 生成来源（如 `github`, `pdf`, `word`, `markdown`）。在 Git 仓库拆解场景中，将统一标记为 `github` 或对应的 Git 平台。
+- `source_type` (VARCHAR): 生成来源（如 `github`, `pdf`, `word`, `markdown`）。在 Git 仓库拆解场景中，前端会默认下发标记为 `git` 或对应的 Git 平台。
 - `status` (SMALLINT): 生成状态（0: 生成中, 1: 已完成, 2: 生成失败/中断）。
 - `created_at`, `updated_at`, `deleted_at`: 标准时间戳 (TIMESTAMP)。
 

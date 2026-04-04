@@ -17,10 +17,10 @@
 
 ### 2.1 目录结构与技术栈
 - `src/components/`: 可复用的 UI 组件（基于 Shadcn UI + Tailwind CSS + `react-markdown` + `rehype-mermaid`），保持极简浅色阅读风。
-- `src/features/`: 核心业务模块（工作区 Uploader、历史侧边栏 Sidebar、渲染器 Renderer）。
-- `src/store/`: 基于 **Zustand** 的全局状态管理，负责处理极简状态下的 Token、当前激活的博客 ID、以及 SSE 流式追加的 Markdown 内容（`streamStore.ts`）。
+- `src/features/`: 核心业务模块（工作区 Uploader、历史侧边栏 Sidebar、渲染器 Renderer）。（当前实现在 App.tsx 中搭建了基础双栏布局）
+- `src/store/`: 基于 **Zustand** 的全局状态管理，负责处理极简状态下的 Token、当前激活的博客 ID、以及 SSE 流式追加的 Markdown 内容（`streamStore.ts` 中管理了大纲 `outline` 与章节生成状态）。
 - `src/services/`: 封装所有 HTTP/SSE 请求逻辑，统一管理接口异常。
-- `src/hooks/`: 自定义 Hooks（如 `useBlogStream` 用于封装 `@microsoft/fetch-event-source` 维持 POST 流，`useAuth`）。
+- `src/hooks/`: 自定义 Hooks（如 `useBlogStream.ts` 封装了 `analyzeGit` 与 `generateSeries`，并利用 `@microsoft/fetch-event-source` 维持 POST 流）。
 
 ### 2.2 核心渲染器架构 (Renderer)
 - **MarkdownEngine**：基于 `react-markdown` 配合 GitHub 样式（去除边框），负责实时渲染流式抵达的文本。

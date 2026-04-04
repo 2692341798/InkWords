@@ -69,4 +69,15 @@
   - 采用 Goroutine 池并结合信号量 (Semaphore) 控制并发量，防止大量并发请求导致大模型 API 频率超限或内存激增。
   - SSE 推流在系列生成模式下，不再单纯推送 chunk，而是推送每个章节的整体生成状态，以便前端展示全局进度。
 
+### 对话 9：前端工作台 (Workspace) UI 搭建与联调
+- **用户需求**：要求启动项目并解决初始化的 React 空白页面问题，构建实际的前端工作台。
+- **AI 动作**：
+  1. 诊断并修复了因缺失数据库导致的后端启动失败问题（创建 `inkwords` 数据库并初始化 `.env`）。
+  2. 开发了前端双栏布局界面，左侧边栏用于展示大项目大纲与实时进度（Loading / 完成图标），右侧用于输入 Git URL 和触发分析与生成。
+  3. 完善了 Zustand 状态库 `streamStore.ts` 以及自定义 Hooks `useBlogStream.ts`，打通了前后端的 `Analyze` 与 `Generate` 接口。
+  4. 修复了 Vite 预构建缓存导致 `lucide-react` 找不到的 404 错误（使用 `npm run dev -- --force` 重启）。
+  5. 修复了 `MarkdownEngine` 中的 ESLint 报错，并清理了冗余代码。
+- **决策/变更**：
+  - 在 `vite.config.ts` 中配置了跨域代理，将前端 `/api` 转发到后端 `8080` 端口，避免了开发环境的 CORS 问题。
+
 ---

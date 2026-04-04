@@ -1,7 +1,7 @@
 # 墨言博客助手 (InkWords) - API 接口规范与设计文档
 
 ## 1. 规范与约定
-- **基础 URL**：所有后端接口均以 `/api/v1` 开头。
+- **基础 URL**：所有后端接口均以 `/api/v1` 开头。（本地开发环境下，前端 Vite 配置了代理，将 `/api` 转发至 `http://localhost:8080`）
 - **流式接口**：大模型生成接口以 `/api/v1/stream` 开头，采用 SSE (Server-Sent Events) 协议。
 - **数据格式**：非流式接口统一采用 `application/json`。
 - **鉴权方式**：请求头携带 `Authorization: Bearer <JWT_TOKEN>`。

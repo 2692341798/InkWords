@@ -129,3 +129,16 @@
   - 在系列生成时，原有的 SSE 接口主要用于单篇打字机效果。为此，专门增加了一种 `progress` 事件类型，用于向前端播报“某章节开始生成”和“某章节生成完毕”的状态。
 - **遗留问题 (TODO)**: 
   - 后端功能已齐备，接下来需要前端开发“工作台界面”，打通 `Analyze` 与 `Generate` 两步走的 UI 交互（阶段 3 任务准备）。
+
+### 2026-04-04 (Frontend - 工作台 UI 搭建与联调)
+- **开发模块**: [React 工作台布局, Zustand 状态集成, API Hooks]
+- **完成事项**:
+  1. **工作台布局**: 基于 Tailwind CSS 和 Shadcn UI 构建了双栏布局，左侧展示系列博客的大纲和状态，右侧提供仓库 URL 输入和动作按钮。
+  2. **状态与 Hooks**: 实现 `streamStore.ts` 用于管理 `isAnalyzing`, `isGenerating` 以及各章节的生成状态；在 `useBlogStream.ts` 中封装了 fetch 与 fetchEventSource 请求。
+  3. **环境代理**: 在 `vite.config.ts` 中配置了 HTTP 代理，将前端发往 `/api` 的请求自动转发至后端 `:8080`，解决了开发阶段的 CORS 问题。
+  4. **环境修复**: 修复了后端缺少 `inkwords` 数据库的启动报错问题，以及前端 Vite `lucide-react` 的预构建缓存 404 错误。
+- **踩坑记录 / 架构调整**: 
+  - 前端使用 `lucide-react` 时，Vite 预构建缓存未及时更新导致页面报 `ERR_ABORTED` 错，通过 `vite --force` 成功解决。
+  - TypeScript 对第三方库的 AST AST类型检查较严，在 `MarkdownEngine` 中补充了 `eslint-disable-next-line` 以屏蔽 `any` 类型的警告。
+- **遗留问题 (TODO)**: 
+  - 当前已经能够解析并自动入库生成博客内容，下一步需完成阶段 3 (Beta 历史记录与编辑)：在前端侧边栏增加历史记录的拉取，并实现右侧区域的 Markdown 实时渲染和二次编辑能力。
