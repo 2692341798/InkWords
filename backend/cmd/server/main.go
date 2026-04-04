@@ -46,6 +46,7 @@ func main() {
 	authAPI := api.NewAuthAPI()
 	userAPI := api.NewUserAPI()
 	streamAPI := api.NewStreamAPI()
+	projectAPI := api.NewProjectAPI()
 
 	// v1 路由组
 	v1 := r.Group("/api/v1")
@@ -62,6 +63,13 @@ func main() {
 		userGroup.Use(middleware.AuthMiddleware())
 		{
 			userGroup.GET("/profile", userAPI.GetProfile)
+		}
+
+		// 项目分析相关路由 (需鉴权)
+		projectGroup := v1.Group("/project")
+		projectGroup.Use(middleware.AuthMiddleware())
+		{
+			projectGroup.POST("/analyze", projectAPI.Analyze)
 		}
 
 		// 流式生成路由 (需鉴权)
