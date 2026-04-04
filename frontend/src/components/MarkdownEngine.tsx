@@ -39,14 +39,20 @@ const MermaidBlock: React.FC<{ chart: string }> = ({ chart }) => {
         try {
           // Add a unique ID for each chart to avoid conflicts
           const id = `mermaid-${Math.random().toString(36).substr(2, 9)}`;
-          const { svg } = await mermaid.render(id, chart);
+          // Validate diagram type to prevent rendering errors
+          const trimmedChart = chart.trim();
+          if (!trimmedChart || trimmedChart === 'undefined') {
+            throw new Error('Empty or undefined diagram text');
+          }
+          const { svg } = await mermaid.render(id, trimmedChart);
           if (containerRef.current) {
             containerRef.current.innerHTML = svg;
           }
-        } catch (error) {
-          console.error('Failed to render mermaid chart', error);
+        } catch {
+          // Do not log the error to the console during streaming as it's expected
+          // that incomplete mermaid syntax will throw errors until fully generated.
           if (containerRef.current) {
-            containerRef.current.innerHTML = `<div class="text-red-500 text-sm p-4 border border-red-200 rounded">Failed to render diagram</div>`;
+            containerRef.current.innerHTML = `<div class="text-red-500 text-sm p-4 border border-red-200 rounded border-dashed bg-red-50/50">正在绘制图表... (等待代码块生成完毕)</div>`;
           }
         }
       };
@@ -73,7 +79,11 @@ export const MarkdownEngine: React.FC<MarkdownEngineProps> = ({ content }) => {
             
             // Render Mermaid blocks using our custom component
             if (match && match[1] === 'mermaid') {
-              return <MermaidBlock chart={String(children).replace(/\n$/, '')} />;
+              const diagramText = String(children).replace(/\n$/, '');
+              if (!diagramText || diagramText === 'undefined') {
+                return <code className={className} {...rest}>{children}</code>;
+              }
+              return <MermaidBlock chart={diagramText} />;
             }
 
             return match ? (

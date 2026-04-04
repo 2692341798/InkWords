@@ -86,6 +86,15 @@ func (api *ProjectAPI) Parse(c *gin.Context) {
 	}
 	defer file.Close()
 
+	if header.Size == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    http.StatusBadRequest,
+			"message": "The uploaded file is empty",
+			"data":    nil,
+		})
+		return
+	}
+
 	content, err := api.docParser.Parse(file, header.Filename)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{

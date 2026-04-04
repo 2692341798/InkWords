@@ -35,9 +35,19 @@ Go 后端采用经典的“三层架构”，并通过依赖注入（Dependency 
 - **Repository 层 (`internal/repo`)**：封装底层存储逻辑（PostgreSQL），提供 `UserRepo`, `BlogRepo`, `TokenRepo` 等接口。
 - **LLM 层 (`internal/llm`)**：负责封装底层针对 DeepSeek API 等外部大模型的直接请求，提供流式 (`stream=true`) 与非流式客户端接口。
 
-### 3.2 Parser 模块 (阅后即焚解析器)
-- **文档解析器 (`DocParser`)**：上传的 PDF/Word 被直接加载到内存中的 `io.Reader`，或使用极短生命周期的临时文件。提取纯文本并清洗乱码后，触发 `defer os.Remove` 或让 GC 回收，彻底防止文件滞留。
-- **Git 仓库分析器 (`GitFetcher`)**：通过 `go-git` 库进行 Shallow Clone（浅克隆），内置一份黑名单规则（自动过滤 `.git`, `node_modules`, `.png`, `.exe` 等非文本文件）。提取所有有效源码后拼接成单一长文本，克隆目录随即删除。
+### 3.2 解析器模块 (Parser)
+负责将外部数据源转化为统一格式的纯文本。
+
+- **GitFetcher**: 
+  - 通过 `os/exec` 原生调用 `git clone --depth 1` 命令浅克隆目标仓库到临时目录。
+  - **抗截断优化 (目录树生成)**：在拼接所有源码内容前，系统会先遍历并生成一份完整的**项目目录结构树 (Tree)**。这是为解决超大型项目超过 Token 上限导致代码被截断时，大模型失去对全局结构的认知而引入的关键架构优化。
+  - 自动过滤 `.git`, `node_modules`, 二进制文件及常见的依赖锁定文件。
+  - 解析完成后触发“阅后即焚”机制，立即删除临时目录。
+- **DocParser**:
+  - 统一使用 `os.CreateTemp` 获取临时文件（解决部分解析库需要文件句柄或真实文件路径的问题），并通过 `defer os.Remove` 确保物理销毁，严格遵守“阅后即焚”策略。
+  - 支持 `.md`, `.txt` 等纯文本直接读取。
+  - 支持 `.pdf` 格式（基于 `github.com/ledongthuc/pdf`）。
+  - 支持 `.docx` (Word) 格式（基于 `github.com/nguyenthenguyen/docx`），并包含定制的 `stripXMLTags` XML 标签清洗策略。
 
 ### 3.3 Integration 模块 (第三方 OpenAPI 交互)
 - 负责管理与掘金、CSDN、知乎等第三方平台的交互。

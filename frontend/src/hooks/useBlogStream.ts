@@ -67,10 +67,12 @@ export const useBlogStream = () => {
         // file doesn't have an outline by default, but we can set an empty outline to trigger single generation UI
         store.setOutline([])
       } else {
-        throw new Error(res.message || 'Failed to parse file')
+        throw new Error(res.message || '文件解析失败')
       }
     } catch (err) {
-      console.error(err)
+      // Catch specific errors sent from the backend
+      const errMsg = err instanceof Error ? err.message : '文件解析失败，请确保上传了有效的文件格式'
+      alert(errMsg)
       throw err
     } finally {
       store.setAnalyzing(false)
@@ -79,6 +81,7 @@ export const useBlogStream = () => {
 
   const generateSingle = useCallback(async (sourceContent: string) => {
     store.setGenerating(true)
+    store.clearGeneratedContent()
     if (abortCtrlRef.current) {
       abortCtrlRef.current.abort()
     }
@@ -102,7 +105,7 @@ export const useBlogStream = () => {
         }),
         onmessage(msg) {
           if (msg.event === 'chunk') {
-            // Content is streaming, we can stay in loading state in Generator.tsx
+            store.appendGeneratedContent(msg.data)
           } else if (msg.event === 'error') {
             console.error('SSE Error:', msg.data)
             throw new StopStreamError(msg.data)

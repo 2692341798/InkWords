@@ -36,15 +36,27 @@ func (p *DocParser) Parse(src io.Reader, filename string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to create temp file: %w", err)
 	}
-	defer tempFile.Close()
 
 	// 核心策略：阅后即焚
-	defer os.Remove(tempFile.Name())
+	defer func() {
+		tempFile.Close()
+		os.Remove(tempFile.Name())
+	}()
 
 	// Copy data to temp file
 	size, err := io.Copy(tempFile, src)
 	if err != nil {
 		return "", fmt.Errorf("failed to write to temp file: %w", err)
+	}
+
+	// Ensure the temp file contents are fully flushed to disk
+	if err := tempFile.Sync(); err != nil {
+		return "", fmt.Errorf("failed to sync temp file: %w", err)
+	}
+
+	// Seek to beginning before passing it to specific parsers
+	if _, err := tempFile.Seek(0, 0); err != nil {
+		return "", fmt.Errorf("failed to seek temp file: %w", err)
 	}
 
 	// Route to specific parser based on extension
@@ -100,23 +112,23 @@ func stripXMLTags(content string) string {
 
 // parsePDF extracts text from a PDF file using github.com/ledongthuc/pdf
 func (p *DocParser) parsePDF(file *os.File, size int64) (string, error) {
-	// Need to seek to the beginning before reading
-	if _, err := file.Seek(0, 0); err != nil {
-		return "", fmt.Errorf("failed to seek file: %w", err)
-	}
+	// The file pointer is already at 0,0 from the caller
 
 	reader, err := pdf.NewReader(file, size)
 	if err != nil {
-		return "", fmt.Errorf("failed to create PDF reader: %w", err)
+		if strings.Contains(err.Error(), "missing %%EOF") {
+			return "", fmt.Errorf("解析失败：该文件似乎已损坏或不是标准的PDF格式")
+		}
+		return "", fmt.Errorf("解析 PDF 失败: %w", err)
 	}
 
 	var buf bytes.Buffer
 	b, err := reader.GetPlainText()
 	if err != nil {
-		return "", fmt.Errorf("failed to get plain text from PDF: %w", err)
+		return "", fmt.Errorf("提取 PDF 文本失败: %w", err)
 	}
-
 	buf.ReadFrom(b)
+
 	return strings.TrimSpace(buf.String()), nil
 }
 

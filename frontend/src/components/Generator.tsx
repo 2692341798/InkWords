@@ -5,6 +5,8 @@ import { useBlogStream } from '@/hooks/useBlogStream'
 import { Button } from '@/components/ui/button'
 import { Loader2, GitBranch, UploadCloud } from 'lucide-react'
 
+import { MarkdownEngine } from '@/components/MarkdownEngine'
+
 export function Generator() {
   const store = useStreamStore()
   const { analyzeGit, parseFile, generateSeries, generateSingle } = useBlogStream()
@@ -195,16 +197,30 @@ export function Generator() {
             </div>
 
             {store.isGenerating && (
-              <div className="bg-zinc-50 rounded-xl border border-zinc-200 p-8 text-center">
-                <Loader2 className="w-8 h-8 animate-spin text-indigo-600 mx-auto mb-4" />
-                <h3 className="font-medium text-zinc-800">
-                  {store.sourceType === 'file' ? '正在生成您的博客...' : '正在生成您的系列博客'}
-                </h3>
-                <p className="text-sm text-zinc-500 mt-2">
-                  {store.sourceType === 'file'
-                    ? '博客内容正在实时生成，请稍候...'
-                    : '请在左侧边栏查看每个章节的实时生成进度。生成的内容将自动保存到数据库中。'}
-                </p>
+              <div className="bg-zinc-50 rounded-xl border border-zinc-200 p-8">
+                {store.sourceType === 'file' ? (
+                  <div className="space-y-6">
+                    <div className="flex items-center gap-4 border-b border-zinc-200 pb-4">
+                      <div className="flex items-center text-indigo-600">
+                        <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                        <span className="font-medium">AI 正在流式写作中...</span>
+                      </div>
+                      <div className="flex-1"></div>
+                      <span className="text-xs text-zinc-500">{store.generatedContent.length} 字符</span>
+                    </div>
+                    <div className="prose prose-zinc max-w-none text-left">
+                      <MarkdownEngine content={store.generatedContent || '正在构思文章结构...'} />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center">
+                    <Loader2 className="w-8 h-8 animate-spin text-indigo-600 mx-auto mb-4" />
+                    <h3 className="font-medium text-zinc-800">正在生成您的系列博客</h3>
+                    <p className="text-sm text-zinc-500 mt-2">
+                      请在左侧边栏查看每个章节的实时生成进度。生成的内容将自动保存到数据库中。
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </div>

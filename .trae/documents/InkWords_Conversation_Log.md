@@ -1,6 +1,30 @@
 # 墨言博客助手 (InkWords) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 15：修复 GitHub 仓库解析内容少与单文件上传进度条体验
+- **用户需求**：用户指出解析 GitHub 仓库时生成的内容过少且未按要求拆分系列博客；另外上传文件生成博客时，前端缺少流式生成的进度条提示。
+- **AI 动作**：
+  1. 通过提问明确了用户的具体痛点（GitHub源码读取不完整/内容太简略/未拆分系列，上传文件需要全链路综合进度提示）。
+  2. 修改 `backend/internal/parser/git_fetcher.go`，在读取源码时优先将目录结构（Tree）拼接到最上方，保证即便后续因过长截断，大模型也能了解仓库整体结构。
+  3. 修改 `backend/internal/service/decomposition.go`，在 `GenerateOutline` 提示词中**强制要求**大型项目至少拆分为3个章节；并在 `GenerateSeries` 的提示词中要求大模型必须深入分析、引用核心代码、提供复现步骤，甚至要求它根据目录结构合理推演缺失部分。
+  4. 修改 `frontend/src/store/streamStore.ts` 增加 `generatedContent` 状态来保存单篇博客生成的流式文本。
+  5. 修改 `frontend/src/hooks/useBlogStream.ts` 在 `generateSingle` 接收到 `chunk` 事件时，拼接实时内容。
+  6. 修改 `frontend/src/components/Generator.tsx`，在单文件生成过程中使用 `MarkdownEngine` 实时渲染生成的 Markdown 文本流，实现打字机效果。
+- **决策/变更**：
+  - GitHub 仓库过大截断是不可避免的物理限制，通过“注入目录结构”加“强化 Prompt 深度”来对抗截断导致的内容空洞。
+  - 单文件生成的体验从“Loading Spinner 盲等”升级为“实时 Markdown 渲染”，提升了反馈感知。
+
+### 对话 16：修复 Mermaid 图表渲染与 PDF 解析报错
+- **用户需求**：用户贴出了控制台中出现的 `UnknownDiagramError: No diagram type detected matching given configuration for text: undefined` 以及 PDF 解析时出现的 `failed to create PDF reader: not a PDF file: missing %%EOF` 报错日志。
+- **AI 动作**：
+  1. 修复了 `frontend/src/components/MarkdownEngine.tsx`，在传递给 Mermaid 渲染引擎之前增加了非空校验和对 `undefined` 文本流的过滤防护，防止因为打字机流式渲染期间不完整的图表语法导致崩溃。
+  2. 修复了 `backend/internal/parser/doc_parser.go` 中 PDF 的解析流程。在临时文件拷贝完成后，主动调用 `tempFile.Sync()` 强制刷盘，并执行 `Seek(0, 0)`，防止第三方 PDF 库因为读取指针位置错误或文件未完全写入导致的 `missing %%EOF`（文件不完整）错误。
+  3. 为 `backend/internal/api/project.go` 增加了对空文件的阻断拦截（`header.Size == 0`）。
+  4. 为 `frontend/src/hooks/useBlogStream.ts` 补充了针对文件解析报错的用户友好提示框（`alert`），防止前端页面只在控制台打错而没有任何反馈。
+- **决策/变更**：
+  - 流式生成的 Markdown 渲染组件必须具备极强的容错性，因为中间态的代码块极大概率是不完整的语法。
+  - Go 语言中利用 `io.Copy` 处理文件时必须严格控制文件指针和缓冲区刷盘，尤其是在第三方依赖直接使用该文件句柄时。
+
 ### 对话 14：修复 SSE 连接与 AbortError 日志报错
 - **用户需求**：用户贴出了控制台中出现的 `AbortError: BodyStreamBuffer was aborted` 报错日志，要求进行分析与修复。并且要求修复完毕后同步文档并推送到 GitHub。
 - **AI 动作**：

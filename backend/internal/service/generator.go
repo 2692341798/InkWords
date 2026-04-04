@@ -28,9 +28,12 @@ func NewGeneratorService() *GeneratorService {
 // GenerateBlogStream assembles the prompt, calls the LLM, and pushes chunks to the channel
 func (s *GeneratorService) GenerateBlogStream(ctx context.Context, userID uuid.UUID, sourceContent string, sourceType string, chunkChan chan<- string, errChan chan<- error) {
 	prompt := fmt.Sprintf(`你是一个高级全栈架构师和技术博主。请根据以下提供的源内容，将其转化为一篇“小白友好、图文并茂、可独立复现”的高质量技术博客。
-如果是大型开源项目或长篇教程，请考虑将其拆分为系列博客。
-在解释抽象的理论概念时，必须提供对应的代码示例。
-所有生成的 Mermaid 图表代码块绝对禁止包含自定义样式关键字（如 style, classDef, linkStyle 等），必须使用基础语法。
+要求：
+1. **字数充足，内容详实**：不要只写干瘪的总结。必须深入分析实现原理。
+2. **代码级剖析**：如果源内容包含代码，请引用核心代码并逐行解释其作用。
+3. **可复现的步骤**：如果是实战或教程相关，请给出明确的执行步骤。
+4. **小白友好**：在解释抽象的理论概念时，必须提供对应的代码示例或生活化比喻。
+5. 所有生成的 Mermaid 图表代码块绝对禁止包含自定义样式关键字（如 style, classDef, linkStyle 等），必须使用基础语法。
 
 源内容：
 %s`, sourceContent)

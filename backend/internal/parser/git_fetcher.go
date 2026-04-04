@@ -41,6 +41,9 @@ func (f *GitFetcher) Fetch(repoURL string) (string, error) {
 
 	// Traverse and extract text
 	var contentBuilder strings.Builder
+	var treeBuilder strings.Builder
+	
+	treeBuilder.WriteString("=== Repository Structure ===\n")
 
 	err = filepath.Walk(tempDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -73,6 +76,9 @@ func (f *GitFetcher) Fetch(repoURL string) (string, error) {
 			return nil
 		}
 
+		relPath, _ := filepath.Rel(tempDir, path)
+		treeBuilder.WriteString("- " + relPath + "\n")
+
 		// Read file content
 		data, err := os.ReadFile(path)
 		if err != nil {
@@ -85,7 +91,6 @@ func (f *GitFetcher) Fetch(repoURL string) (string, error) {
 			return nil
 		}
 
-		relPath, _ := filepath.Rel(tempDir, path)
 		contentBuilder.WriteString(fmt.Sprintf("--- File: %s ---\n", relPath))
 		contentBuilder.Write(data)
 		contentBuilder.WriteString("\n\n")
@@ -97,7 +102,7 @@ func (f *GitFetcher) Fetch(repoURL string) (string, error) {
 		return "", fmt.Errorf("failed to traverse repository files: %w", err)
 	}
 
-	return contentBuilder.String(), nil
+	return treeBuilder.String() + "\n=== Repository Content ===\n" + contentBuilder.String(), nil
 }
 
 func isBinaryExt(ext string) bool {

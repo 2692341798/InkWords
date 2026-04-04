@@ -93,7 +93,7 @@
 - **POST** `/api/v1/generator/parse`
 - **描述**：用户上传文件或提交 Git URL，后端解析完毕后返回解析出的纯文本或任务 ID。
 - **Request (Multipart/form-data 或 JSON)**:
-  - `file` (File, Optional): 本地上传的文档 (PDF/MD/Word)。
+  - `file` (File, Optional): 本地上传的文档 (目前支持 `.pdf`, `.docx`, `.md`, `.txt`)。
   - `git_url` (String, Optional): Git 仓库地址。
 - **Response Data**:
   ```json
@@ -138,13 +138,13 @@
 
 ### 3.3 建立流式生成连接 (SSE)
 - **POST** `/api/v1/stream/generate`
-- **描述**：前端通过 `@microsoft/fetch-event-source` 发起请求。若携带 `outline`，则进入系列生成模式，并发生成多个章节；否则进行单篇生成。
+- **描述**：前端必须使用 `@microsoft/fetch-event-source` 库通过 POST 请求携带大文本 Payload。系统在将 `source_content` 传给大模型前，已加入**字符截断保护**（强制截断超过 300,000 字符的文本），以防止 API 抛出 `invalid_request_error` 导致生成中断。若携带 `outline`，则进入系列生成模式，并发生成多个章节；否则进行单篇生成。
 - **Request Body (JSON)**:
   ```json
   {
     "source_content": "提取后的文档或源码内容...",
     "outline": [/* 章节大纲数组 */],
-    "source_type": "git"
+    "source_type": "git" // "git" 或 "file"
   }
   ```
 - **SSE Event 格式**:
