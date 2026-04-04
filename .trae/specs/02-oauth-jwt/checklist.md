@@ -1,0 +1,8 @@
+- [x] 后端已安装 `jwt/v5` 和 `oauth2` 依赖。
+- [x] `backend/pkg/jwt/jwt.go` 工具具备签发和验证带有过期时间的 Token 的能力。
+- [x] `backend/internal/middleware/auth.go` 能够正确拦截、解析 Bearer Token，并在请求上下文中注入 `user_id`。
+- [x] `backend/internal/service/auth.go` 中配置了 GitHub OAuth2 逻辑，成功实现了 `GetAuthURL`。
+- [x] `Callback` 服务逻辑能够成功调用 GitHub API，获取 `github_id`, `avatar_url`, `username`，并在 PostgreSQL 中 UPSERT `users` 表。
+- [x] `backend/internal/api/auth.go` 中实现的 `/api/v1/auth/oauth/:provider` 和 `/api/v1/auth/callback/:provider` 符合 `InkWords_API.md` 定义的数据格式。
+- [x] `backend/internal/api/user.go` 中实现获取 `/api/v1/user/profile`，包含配额和等级信息，且必须经过 `authMiddleware`。
+- [x] `backend/cmd/server/main.go` 中注册了 `/api/v1/auth/*` (公开) 和 `/api/v1/user/*` (鉴权保护) 路由组。

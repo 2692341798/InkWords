@@ -1,0 +1,9 @@
+- [x] 前端目录 `frontend` 包含 Vite + React 18 (TS) 结构。
+- [x] Tailwind CSS 可以在前端成功编译使用。
+- [x] Shadcn UI 基础配置 `components.json` 存在。
+- [x] Zustand 状态管理库已安装并有基础 Store 结构。
+- [x] 后端已包含 `gorm` 依赖包。
+- [x] `backend/internal/model` 目录下存在符合文档规范的 `User`, `Blog`, `OAuthToken` 模型定义。
+- [x] 数据库模型包含正确的 UUID 主键和时间戳/软删除标记。
+- [x] `blogs` 表模型上正确配置了组合索引。
+- [x] 后端包含数据库初始化及自动迁移 (AutoMigrate) 的代码，并在主入口被正确调用。
