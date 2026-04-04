@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
 	"inkwords-backend/pkg/jwt"
 )
@@ -21,6 +22,12 @@ func AuthMiddleware() gin.HandlerFunc {
 		authorizationHeader := c.GetHeader(authorizationHeaderKey)
 
 		if len(authorizationHeader) == 0 {
+			// DEV MODE: Allow requests without token in development
+			if gin.Mode() == gin.DebugMode {
+				c.Set(authorizationPayloadKey, uuid.New()) // generate dummy UUID
+				c.Next()
+				return
+			}
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"code":    http.StatusUnauthorized,
 				"message": "authorization header is not provided",
