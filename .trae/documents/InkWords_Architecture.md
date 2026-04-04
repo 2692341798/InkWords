@@ -63,11 +63,11 @@ Go 后端采用经典的“三层架构”，并通过依赖注入（Dependency 
 5. 后端 Gin 通过 `c.Stream` 将模型返回的 Token 逐片 (Chunk) 转换为 SSE 事件（`event: chunk` 和 `event: done`）推送到前端。
 6. 模型输出完毕，Service 层的 Goroutine 拦截到结束标志后，将完整的 Markdown 落库到 PostgreSQL，流程结束。
 
-### 4.2 大项目并发调度机制 (Alpha 阶段已实现)
+### 4.2 大项目流式分析与串行生成机制
 当 Parser (`GitFetcher` 或 `DocParser`) 提取的文本超长（系统判定为大项目或长篇教程）时：
-1. **大纲规划 (串行)**：前端调用 `POST /api/v1/project/analyze`，Service 层先向 DeepSeek 发送一次非流式请求，要求其根据项目全局代码生成一份“系列博客大纲”的 JSON 数组。
-2. **内容生成 (并发调度)**：大纲确认后，前端携带 `outline` 数组请求 `POST /api/v1/stream/generate`。系统通过 Goroutine 池（结合 semaphore 信号量限制并发数，防止 DeepSeek 接口 Rate Limit 或内存溢出）**并发**向模型发送请求。
-3. **断点保存与 SSE 推流**：每生成完其中一篇文章，立即落库并带有相同的 `ParentID` 与各自的 `ChapterSort`。同时，通过 SSE 通道向前端实时推送各个章节的生成进度与状态（`status: generating/done`），并在异常时支持断点保存。
+1. **大纲规划 (SSE 进度流)**：前端调用 `POST /api/v1/stream/analyze`，后端在执行克隆拉取、源码拼接、以及非流式请求大模型生成大纲的每一个阶段，都会主动向下推送 `{"step": x, "message": "..."}` 事件。前端基于此渲染真实进度条缓解等待焦虑，并在最后一步获取 JSON 数组大纲。
+2. **内容生成 (串行打字机渲染)**：大纲确认后，前端携带 `outline` 数组请求 `POST /api/v1/stream/generate`。系统按照大纲顺序**串行**向模型发送请求。利用 `json.Marshal` 严格序列化包含文本片段的 SSE 事件，实现丝滑的打字机前端渲染效果。
+3. **断点保存与进度状态流**：每生成完其中一篇文章，立即落库并带有相同的 `ParentID` 与各自的 `ChapterSort`。同时，前端实时更新该章节的 UI 状态（`generating` -> `completed`），并在完成后支持用户直接点击卡片打开完整真实文章。
 
 ## 5. 安全与部署架构
 

@@ -26,9 +26,60 @@ func NewStreamAPI() *StreamAPI {
 
 // GenerateRequest represents the request body for generating a blog
 type GenerateRequest struct {
-	SourceContent string            `json:"source_content" binding:"required"`
+	SourceContent string            `json:"source_content"`
 	SourceType    string            `json:"source_type"`
 	Outline       []service.Chapter `json:"outline"` // Optional outline for series generation
+	GitURL        string            `json:"git_url"` // For analyze stream
+}
+
+// AnalyzeStreamHandler handles the /api/v1/stream/analyze endpoint
+func (api *StreamAPI) AnalyzeStreamHandler(c *gin.Context) {
+	var req GenerateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	if req.GitURL == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "git_url is required"})
+		return
+	}
+
+	progressChan := make(chan string)
+	errChan := make(chan error)
+
+	ctx := c.Request.Context()
+
+	// Start analysis in a goroutine
+	go api.decompositionService.AnalyzeStream(ctx, req.GitURL, progressChan, errChan)
+
+	// Set headers for SSE
+	c.Writer.Header().Set("Content-Type", "text/event-stream")
+	c.Writer.Header().Set("Cache-Control", "no-cache")
+	c.Writer.Header().Set("Connection", "keep-alive")
+
+	c.Stream(func(w io.Writer) bool {
+		select {
+		case <-ctx.Done():
+			return false
+		case err, ok := <-errChan:
+			if ok && err != nil {
+				c.SSEvent("error", err.Error())
+				return false
+			}
+			if !ok {
+				errChan = nil
+			}
+			return true
+		case chunk, ok := <-progressChan:
+			if !ok {
+				c.SSEvent("done", "[DONE]")
+				return false
+			}
+			c.SSEvent("chunk", chunk)
+			return true
+		}
+	})
 }
 
 // GenerateBlogStreamHandler handles the /api/v1/stream/generate endpoint

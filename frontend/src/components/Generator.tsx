@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import type { DragEvent, ChangeEvent } from 'react'
 import { useStreamStore } from '@/store/streamStore'
 import { useBlogStream } from '@/hooks/useBlogStream'
@@ -9,27 +9,11 @@ import { MarkdownEngine } from '@/components/MarkdownEngine'
 
 export function Generator() {
   const store = useStreamStore()
-  const { analyzeGit, parseFile, generateSeries, generateSingle } = useBlogStream()
+  const { analysisStep, analysisMessage, analyzeGit, parseFile, generateSeries, generateSingle } = useBlogStream()
   const [gitUrl, setGitUrl] = useState('')
   const [isDragging, setIsDragging] = useState(false)
   const [analyzingType, setAnalyzingType] = useState<'git' | 'file'>('git')
-  const [analysisStep, setAnalysisStep] = useState(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => {
-    if (store.isAnalyzing) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setAnalysisStep(0)
-      const timer1 = setTimeout(() => setAnalysisStep(1), 2000)
-      const timer2 = setTimeout(() => setAnalysisStep(2), 5000)
-      const timer3 = setTimeout(() => setAnalysisStep(3), 8000)
-      return () => {
-        clearTimeout(timer1)
-        clearTimeout(timer2)
-        clearTimeout(timer3)
-      }
-    }
-  }, [store.isAnalyzing])
 
   const handleAnalyze = () => {
     if (!gitUrl) return
@@ -139,25 +123,25 @@ export function Generator() {
               <div className="flex items-center gap-3">
                 <div className={`w-2 h-2 rounded-full ${analysisStep >= 0 ? 'bg-indigo-600' : 'bg-zinc-200'}`}></div>
                 <span className={analysisStep >= 0 ? 'text-zinc-800 font-medium' : 'text-zinc-400'}>
-                  {analyzingType === 'file' ? '读取并提取文件文本...' : '正在克隆并拉取仓库...'}
+                  {analyzingType === 'file' ? '读取并提取文件文本...' : (analysisStep === 0 ? analysisMessage : '正在克隆并拉取仓库...')}
                 </span>
               </div>
               <div className="flex items-center gap-3">
                 <div className={`w-2 h-2 rounded-full ${analysisStep >= 1 ? 'bg-indigo-600' : 'bg-zinc-200'}`}></div>
                 <span className={analysisStep >= 1 ? 'text-zinc-800 font-medium' : 'text-zinc-400'}>
-                  {analyzingType === 'file' ? '解析文件内容结构...' : '分析仓库源码与结构...'}
+                  {analyzingType === 'file' ? '解析文件内容结构...' : (analysisStep === 1 ? analysisMessage : '分析仓库源码与结构...')}
                 </span>
               </div>
               <div className="flex items-center gap-3">
                 <div className={`w-2 h-2 rounded-full ${analysisStep >= 2 ? 'bg-indigo-600' : 'bg-zinc-200'}`}></div>
                 <span className={analysisStep >= 2 ? 'text-zinc-800 font-medium' : 'text-zinc-400'}>
-                  {analyzingType === 'file' ? '准备进行生成任务...' : '评估大模型并生成项目大纲...'}
+                  {analyzingType === 'file' ? '准备进行生成任务...' : (analysisStep === 2 ? analysisMessage : '评估大模型并生成项目大纲...')}
                 </span>
               </div>
               <div className="flex items-center gap-3">
                 <div className={`w-2 h-2 rounded-full ${analysisStep >= 3 ? 'bg-indigo-600' : 'bg-zinc-200'}`}></div>
                 <span className={analysisStep >= 3 ? 'text-zinc-800 font-medium' : 'text-zinc-400'}>
-                  正在完成最后处理...
+                  {analysisStep === 3 ? analysisMessage : '正在完成最后处理...'}
                 </span>
               </div>
             </div>
@@ -198,29 +182,29 @@ export function Generator() {
 
             {store.isGenerating && (
               <div className="bg-zinc-50 rounded-xl border border-zinc-200 p-8">
-                {store.sourceType === 'file' ? (
-                  <div className="space-y-6">
-                    <div className="flex items-center gap-4 border-b border-zinc-200 pb-4">
-                      <div className="flex items-center text-indigo-600">
-                        <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                        <span className="font-medium">AI 正在流式写作中...</span>
-                      </div>
-                      <div className="flex-1"></div>
-                      <span className="text-xs text-zinc-500">{store.generatedContent.length} 字符</span>
+                <div className="space-y-6">
+                  <div className="flex items-center gap-4 border-b border-zinc-200 pb-4">
+                    <div className="flex items-center text-indigo-600">
+                      <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                      <span className="font-medium">
+                        {store.sourceType === 'file' 
+                          ? 'AI 正在流式写作中...' 
+                          : (() => {
+                              const activeChapter = store.outline?.find(ch => store.chapterStatus[ch.sort] === 'generating')
+                              return activeChapter 
+                                ? `正在生成第 ${activeChapter.sort} 篇：${activeChapter.title}...` 
+                                : '正在准备生成...'
+                            })()
+                        }
+                      </span>
                     </div>
-                    <div className="prose prose-zinc max-w-none text-left">
-                      <MarkdownEngine content={store.generatedContent || '正在构思文章结构...'} />
-                    </div>
+                    <div className="flex-1"></div>
+                    <span className="text-xs text-zinc-500">{store.generatedContent.length} 字符</span>
                   </div>
-                ) : (
-                  <div className="text-center">
-                    <Loader2 className="w-8 h-8 animate-spin text-indigo-600 mx-auto mb-4" />
-                    <h3 className="font-medium text-zinc-800">正在生成您的系列博客</h3>
-                    <p className="text-sm text-zinc-500 mt-2">
-                      请在左侧边栏查看每个章节的实时生成进度。生成的内容将自动保存到数据库中。
-                    </p>
+                  <div className="prose prose-zinc max-w-none text-left">
+                    <MarkdownEngine content={store.generatedContent || '正在构思文章结构...'} />
                   </div>
-                )}
+                </div>
               </div>
             )}
           </div>

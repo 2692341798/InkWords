@@ -104,41 +104,48 @@
   }
   ```
 
-### 3.2 大项目分析与大纲生成 (Project Analyze)
-- **POST** `/api/v1/project/analyze`
-- **描述**：提交 Git 仓库 URL 或超长文本，系统解析后评估复杂度并返回大纲 JSON。
+### 3.2 大项目分析与大纲生成流 (Project Analyze Stream)
+- **POST** `/api/v1/stream/analyze`
+- **描述**：提交 Git 仓库 URL，系统通过 SSE 协议实时下发克隆、提取、生成大纲的各个阶段进度，缓解用户的等待焦虑。
 - **Request Body (JSON)**:
   ```json
   {
-    "git_url": "https://github.com/...",
-    "source_content": "提取后的文档或源码内容..."
+    "git_url": "https://github.com/..."
   }
   ```
-- **Response Data**:
-  ```json
-  {
-    "code": 200,
-    "message": "success",
+- **SSE Event 格式**:
+  ```text
+  // 阶段 1: 克隆进度
+  event: chunk
+  data: {"step": 0, "message": "正在克隆并拉取仓库..."}
+  
+  // 阶段 2: 分析源码
+  event: chunk
+  data: {"step": 1, "message": "分析仓库源码与结构完成"}
+
+  // 阶段 3: 大纲生成
+  event: chunk
+  data: {"step": 2, "message": "评估大模型并生成项目大纲..."}
+  
+  // 阶段 4: 完成处理（携带最终数据）
+  event: chunk
+  data: {
+    "step": 3, 
+    "message": "正在完成最后处理...",
     "data": {
-      "outline": [
-        {
-          "title": "基础篇",
-          "summary": "介绍项目背景与基础架构",
-          "sort": 1
-        },
-        {
-          "title": "核心篇",
-          "summary": "核心代码解析",
-          "sort": 2
-        }
-      ]
+      "outline": [...],
+      "source_content": "提取后的文档或源码内容..."
     }
   }
+
+  // 结束标识
+  event: done
+  data: [DONE]
   ```
 
 ### 3.3 建立流式生成连接 (SSE)
 - **POST** `/api/v1/stream/generate`
-- **描述**：前端必须使用 `@microsoft/fetch-event-source` 库通过 POST 请求携带大文本 Payload。系统在将 `source_content` 传给大模型前，已加入**字符截断保护**（强制截断超过 300,000 字符的文本），以防止 API 抛出 `invalid_request_error` 导致生成中断。若携带 `outline`，则进入系列生成模式，并发生成多个章节；否则进行单篇生成。
+- **描述**：前端必须使用 `@microsoft/fetch-event-source` 库通过 POST 请求携带大文本 Payload，并**必须设置 `openWhenHidden: true` 防止浏览器后台挂起时断流**。系统在将 `source_content` 传给大模型前，已加入**字符截断保护**（强制截断超过 300,000 字符的文本），以防止 API 抛出 `invalid_request_error` 导致生成中断。若携带 `outline`，则进入系列生成模式，**串行**生成多个章节并打字机渲染；否则进行单篇生成。
 - **Request Body (JSON)**:
   ```json
   {

@@ -1,6 +1,59 @@
 # 墨言博客助手 (InkWords) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 21：项目文档更新与代码提交
+- **用户需求**：要求更新项目的所有基准文档（PRD、API、架构、数据库、开发日志、对话日志），更新完成后提交代码至 GitHub，并在查阅现有标签后打上新标签。
+- **AI 动作**：
+  1. 查阅并更新了 `InkWords_API.md`，将分析接口 `/api/v1/project/analyze` 更新为流式接口 `/api/v1/stream/analyze`。
+  2. 查阅并更新了 `InkWords_Architecture.md`，在“核心业务流转设计”中补充了分析阶段的 SSE 进度推送机制。
+  3. 查阅并更新了 `InkWords_PRD.md`，在“大项目拆解流程”中补充了前端打字机效果及 SSE 进度条的需求描述。
+  4. 查阅并更新了 `InkWords_Database.md`，确认数据库表结构无需变更，保持最新状态。
+  5. 检查了 `InkWords_Development_Plan_and_Log.md` 与本文件，确认日志已是最新。
+  6. 接下来将执行 `git add`, `git commit`, `git push` 以及打标签操作。
+- **决策/变更**：
+  - 确保“文档即代码”的一致性，将今日修复的“串行打字机”、“SSE进度流”、“解决隐藏挂起 Bug”等核心机制正式写入基准文档，为后续版本迭代提供准确参考。
+
+### 对话 20：修复 SSE 流被浏览器后台标签页机制中断的问题 (ERR_ABORTED)
+- **用户需求**：用户贴出了 `net::ERR_ABORTED ... at onVisibilityChange` 的报错日志，在分析/生成大项目期间，如果切换了浏览器标签页，SSE 流会被直接切断并报错。
+- **AI 动作**：
+  1. 识别到这是 `@microsoft/fetch-event-source` 库的默认行为：当标签页失去焦点（Visibility Change）时，它会主动中断并挂起连接。
+  2. 修改 `frontend/src/hooks/useBlogStream.ts` 中所有的 `fetchEventSource` 调用（包括 `/analyze` 和两个 `/generate` 场景），统一加上 `openWhenHidden: true` 参数。
+- **决策/变更**：
+  - 由于大模型生成或 Git 仓库克隆的耗时较长，用户极大可能会在此期间切到别的标签页干别的事情。关闭隐藏时的断流保护能确保任务在后台继续执行，提高整体体验与成功率。
+
+### 对话 19：优化 Git 仓库分析过程，引入真实 SSE 进度流
+- **AI 动作**：
+  1. 通过 `AskUserQuestion` 与用户确认了采用“真实 SSE 进度流 + 轻量化克隆”的优化策略。
+  2. 修改 `backend/internal/api/stream.go`，新增了 `/api/v1/stream/analyze` 路由处理器，专门用于将原本 HTTP POST 的短连接改造为长连接的 SSE 流。
+  3. 修改 `backend/internal/service/decomposition.go`，新增了 `AnalyzeStream` 方法。在克隆仓库、生成大纲的各个核心节点，通过通道主动向下发包含 `step` 和 `message` 的 JSON 数据；并在最后一步 `step: 3` 时将大纲和提取的源码 `data` 下发给前端。
+  4. 修改 `frontend/src/hooks/useBlogStream.ts` 中的 `analyzeGit`，弃用原有的 `fetch` 改用 `fetchEventSource`。通过解析下发的事件流，动态更新 `analysisStep` 和 `analysisMessage` 状态。
+  5. 优化了 `frontend/src/components/Generator.tsx` 中的进度展示，移除了原有的 `useEffect` 假定时器，现在分析进度文字会随着后端 SSE 的真实状态同步改变。
+- **决策/变更**：
+  - 将大项目分析阶段也从“黑盒等待”升级为了“白盒透明”，用户可以看到当前是在“克隆拉取”还是在“AI生成大纲”，缓解了因大项目耗时过长带来的焦虑感。
+  - 保留了本地文件的假进度条（因为文件解析非常快），仅对耗时极长的大模型分析步骤开启 SSE 改造。
+- **用户需求**：用户指出在输入 Git 仓库生成系列博客时：1. 没有进度条（生成过程不明显，卡在0字符很久然后突然完成）；2. 不希望同时生成多篇文章；3. 无法点击卡片，想知道如何查看真实文章。
+- **AI 动作**：
+  1. 通过 `AskUserQuestion` 与用户确认了采用“修复打字机 + 恢复完成状态点击”的解决方案。
+  2. 修改 `backend/internal/service/decomposition.go`：修复了极其隐蔽的 Bug —— 之前在 Go 中使用 `fmt.Sprintf` 拼接 SSE 的 JSON 返回数据，大模型输出的文本中带有回车、引号等特殊字符导致前端 `JSON.parse` 报错被静默吞掉，从而表现为“假死，0 字符，很久后突然完成”。现已改用标准的 `json.Marshal(map[string]interface{})`。
+  3. 修改 `backend/internal/service/decomposition.go` 中针对每一篇文章生成期间的 SSE 事件发送逻辑：将 LLM 返回的每个 chunk 打包为 `{"status":"streaming", "content":"..."}` 事件推送给前端。
+  4. 修改 `frontend/src/hooks/useBlogStream.ts`，接收到 `streaming` 事件时实时更新 Zustand 的 `generatedContent`；当某章 `completed` 时主动调用 `fetchBlogs()` 刷新历史列表。
+  5. 修改 `frontend/src/components/Generator.tsx`，合并了 `file` 和 `git` 的生成中状态，在系列生成时统一使用 `MarkdownEngine` 实时渲染当前正在生成的章节内容。
+  6. 修改 `frontend/src/components/Sidebar.tsx`，恢复了卡片的 `onClick` 事件，但仅限于该章节状态变为 `completed`（变绿）时触发。点击后不再渲染“草稿假数据”，而是使用递归算法从最新的 `blogs` 树中查找对应的真实历史文章，并自动跳转至编辑器面板打开它。
+- **决策/变更**：
+  - 取消了系列文章的并发生成（为了提供沉浸式的打字机反馈体验并防止内容过短）。
+  - 将单文件生成与系列文章生成的“生成中”UI体验完全对齐，利用串行化和精确的 JSON 序列化彻底解决了状态展示混乱、打字机罢工的问题。
+  - 通过匹配历史文章的方式恢复卡片点击，解决了之前“草稿数据”被当做最终结果的误导问题。
+
+### 对话 17：新增“新建博客 / 返回首页”功能
+- **用户需求**：用户反馈在点击进入生成的博客详情（编辑器）后，无法退出当前状态并返回到首页进行下一篇博客的创作，要求修复并通过提问方式明确交互功能。
+- **AI 动作**：
+  1. 通过 `AskUserQuestion` 提供了三个交互位置选项（侧边栏顶部按钮、Logo可点击、编辑器顶部按钮），用户选择了“侧边栏顶部按钮 (推荐)”。
+  2. 修改 `frontend/src/components/Sidebar.tsx`，在左侧边栏顶部的 Logo 下方增加了一个醒目的“新建博客 / 返回首页”按钮。
+  3. 绑定点击事件 `selectBlog(null)`，清空当前选中的博客状态，从而触发 `App.tsx` 重新渲染 `<Generator />` 首页组件。
+  4. 同步更新了开发日志和对话记录，保持“文档即代码”的一致性。
+- **决策/变更**：
+  - 采用显式的全局常驻按钮来处理“退出阅读/编辑态”的交互，比单纯的 Logo 点击更符合直觉，提升了用户在不同博客间切换及新建任务的体验。
+
 ### 对话 15：修复 GitHub 仓库解析内容少与单文件上传进度条体验
 - **用户需求**：用户指出解析 GitHub 仓库时生成的内容过少且未按要求拆分系列博客；另外上传文件生成博客时，前端缺少流式生成的进度条提示。
 - **AI 动作**：

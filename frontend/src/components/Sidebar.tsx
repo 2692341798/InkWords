@@ -67,9 +67,18 @@ export function Sidebar() {
 
   return (
     <div className="w-80 bg-white border-r border-zinc-200 flex flex-col print:hidden">
-      <div className="p-4 border-b border-zinc-200 flex items-center gap-2 font-semibold text-lg text-zinc-800 shrink-0">
-        <GitBranch className="w-5 h-5 text-indigo-600" />
-        墨言博客助手
+      <div className="p-4 border-b border-zinc-200 flex flex-col gap-4 shrink-0">
+        <div className="flex items-center gap-2 font-semibold text-lg text-zinc-800">
+          <GitBranch className="w-5 h-5 text-indigo-600" />
+          墨言博客助手
+        </div>
+        <Button 
+          className="w-full gap-2 bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm"
+          onClick={() => selectBlog(null)}
+        >
+          <Plus className="w-4 h-4" />
+          返回
+        </Button>
       </div>
       
       <div className="flex-1 overflow-y-auto flex flex-col">
@@ -89,27 +98,38 @@ export function Sidebar() {
                   <div 
                     key={ch.sort} 
                     className={cn(
-                      "p-3 rounded-lg border flex items-start gap-3 cursor-pointer transition-colors",
-                      selectedBlog?.id === `draft-${ch.sort}` 
-                        ? "bg-indigo-50 border-indigo-200" 
-                        : "bg-zinc-50 border-zinc-100 hover:bg-zinc-100"
+                      "p-3 rounded-lg border flex items-start gap-3 transition-colors",
+                      status === 'completed'
+                        ? "bg-green-50/50 border-green-100 hover:bg-green-50 cursor-pointer" 
+                        : status === 'generating'
+                          ? "bg-indigo-50 border-indigo-200"
+                          : "bg-zinc-50 border-zinc-100"
                     )}
                     onClick={() => {
-                      const mockBlog: BlogNode = {
-                        id: `draft-${ch.sort}`,
-                        title: ch.title,
-                        content: `> **摘要**：${ch.summary}\n\n当前状态：${
-                          status === 'completed' ? '生成完成' : status === 'generating' ? '正在生成...' : '等待生成'
-                        }\n\n*(注：此处为预览，实际内容由生成器提供)*`,
-                        source_type: streamStore.sourceType || 'draft',
-                        status: status === 'completed' ? 1 : 0,
-                        chapter_sort: ch.sort,
-                        parent_id: null,
-                        created_at: new Date().toISOString(),
-                        updated_at: new Date().toISOString(),
-                        children: []
+                      if (status === 'completed') {
+                        // Find the matching real blog from history
+                        // We assume the generated ones are at the top, we match by title
+                        const matchingBlog = blogs.find(b => b.title === ch.title && b.chapter_sort === ch.sort)
+                        if (matchingBlog) {
+                          selectBlog(matchingBlog)
+                        } else {
+                          // fallback if parent-child structure makes it nested
+                          let found: BlogNode | null = null
+                          const searchNested = (nodes: BlogNode[]) => {
+                            for (const node of nodes) {
+                              if (node.title === ch.title && node.chapter_sort === ch.sort) {
+                                found = node
+                                return
+                              }
+                              if (node.children) searchNested(node.children)
+                            }
+                          }
+                          searchNested(blogs)
+                          if (found) {
+                            selectBlog(found)
+                          }
+                        }
                       }
-                      selectBlog(mockBlog)
                     }}
                   >
                     <div className="mt-0.5">

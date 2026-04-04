@@ -1,4 +1,4 @@
-import { useCallback, useRef, useEffect } from 'react'
+import { useCallback, useRef, useEffect, useState } from 'react'
 import { fetchEventSource } from '@microsoft/fetch-event-source'
 import { useStreamStore } from '@/store/streamStore'
 import { useBlogStore } from '@/store/blogStore'
@@ -9,6 +9,9 @@ export const useBlogStream = () => {
   const store = useStreamStore()
   const { fetchBlogs } = useBlogStore()
   const abortCtrlRef = useRef<AbortController | null>(null)
+
+  const [analysisStep, setAnalysisStep] = useState<number>(-1)
+  const [analysisMessage, setAnalysisMessage] = useState<string>('')
 
   // Cleanup pending streams when the component unmounts
   useEffect(() => {
@@ -21,34 +24,88 @@ export const useBlogStream = () => {
 
   const analyzeGit = useCallback(async (gitUrl: string) => {
     store.setAnalyzing(true)
+    setAnalysisStep(-1)
+    setAnalysisMessage('正在建立连接...')
+    
+    if (abortCtrlRef.current) {
+      abortCtrlRef.current.abort()
+    }
+    const ctrl = new AbortController()
+    abortCtrlRef.current = ctrl
+    
     try {
-      const response = await fetch('/api/v1/project/analyze', {
+      const token = localStorage.getItem('token')
+      
+      await fetchEventSource('/api/v1/stream/analyze', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'Authorization': localStorage.getItem('token') ? `Bearer ${localStorage.getItem('token')}` : ''
+          'Authorization': token ? `Bearer ${token}` : ''
         },
-        body: JSON.stringify({ git_url: gitUrl })
+        signal: ctrl.signal,
+        openWhenHidden: true, // Prevents fetch-event-source from aborting when tab is hidden
+        body: JSON.stringify({ git_url: gitUrl }),
+        onmessage(msg) {
+          if (msg.event === 'chunk') {
+            try {
+              const data = JSON.parse(msg.data)
+              if (data.step !== undefined) {
+                setAnalysisStep(data.step)
+                setAnalysisMessage(data.message || '')
+              }
+              if (data.data) {
+                store.setSource('git', data.data.source_content)
+                store.setOutline(data.data.outline)
+              }
+            } catch {
+              // Ignore parse error
+            }
+          } else if (msg.event === 'error') {
+            console.error('SSE Error:', msg.data)
+            throw new StopStreamError(msg.data)
+          } else if (msg.event === 'done') {
+            store.setAnalyzing(false)
+            setAnalysisStep(-1)
+            throw new StopStreamError('done')
+          }
+        },
+        onclose() {
+          throw new StopStreamError('closed by server')
+        },
+        onerror(err: unknown) {
+          if (err instanceof StopStreamError) {
+            throw err
+          }
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const e = err as any
+          if (e?.name === 'AbortError' || e?.message?.includes('AbortError')) {
+            throw new StopStreamError('aborted')
+          }
+          console.error('SSE Connection Error:', err)
+          store.setAnalyzing(false)
+          throw err
+        }
       })
-      
-      const res = await response.json()
-      if (res.code === 200 && res.data) {
-        store.setSource('git', res.data.source_content)
-        store.setOutline(res.data.outline)
-      } else {
-        throw new Error(res.message || 'Failed to analyze project')
-      }
-    } catch (err) {
+    } catch (err: unknown) {
+      if (err instanceof StopStreamError) return
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const e = err as any
+      if (e?.name === 'AbortError' || e?.message?.includes('AbortError')) return
       console.error(err)
-      // TODO: Handle error via Toast
-      throw err
-    } finally {
       store.setAnalyzing(false)
+      setAnalysisStep(-1)
     }
   }, [store])
 
   const parseFile = useCallback(async (file: File) => {
     store.setAnalyzing(true)
+    setAnalysisStep(0)
+    
+    // For file, we simulate progress visually since it's usually fast
+    const timer1 = setTimeout(() => setAnalysisStep(1), 500)
+    const timer2 = setTimeout(() => setAnalysisStep(2), 1500)
+    const timer3 = setTimeout(() => setAnalysisStep(3), 2000)
+
     try {
       const formData = new FormData()
       formData.append('file', file)
@@ -75,7 +132,11 @@ export const useBlogStream = () => {
       alert(errMsg)
       throw err
     } finally {
+      clearTimeout(timer1)
+      clearTimeout(timer2)
+      clearTimeout(timer3)
       store.setAnalyzing(false)
+      setAnalysisStep(-1)
     }
   }, [store])
 
@@ -98,6 +159,7 @@ export const useBlogStream = () => {
           'Authorization': token ? `Bearer ${token}` : ''
         },
         signal: ctrl.signal,
+        openWhenHidden: true,
         body: JSON.stringify({
           source_content: sourceContent,
           source_type: 'file',
@@ -148,6 +210,7 @@ export const useBlogStream = () => {
     if (!store.outline || !store.sourceContent) return
 
     store.setGenerating(true)
+    store.clearGeneratedContent()
     if (abortCtrlRef.current) {
       abortCtrlRef.current.abort()
     }
@@ -164,6 +227,7 @@ export const useBlogStream = () => {
           'Authorization': token ? `Bearer ${token}` : ''
         },
         signal: ctrl.signal,
+        openWhenHidden: true,
         body: JSON.stringify({
           source_content: store.sourceContent,
           outline: store.outline,
@@ -174,9 +238,13 @@ export const useBlogStream = () => {
             try {
               const data = JSON.parse(msg.data)
               if (data.status === 'generating') {
+                store.clearGeneratedContent()
                 store.updateChapterStatus(data.chapter_sort, 'generating')
+              } else if (data.status === 'streaming') {
+                store.appendGeneratedContent(data.content)
               } else if (data.status === 'completed') {
                 store.updateChapterStatus(data.chapter_sort, 'completed')
+                fetchBlogs() // Refresh to show the newly completed chapter in history
               }
             } catch {
               // Ignore parse error
@@ -218,6 +286,8 @@ export const useBlogStream = () => {
   }, [store, fetchBlogs])
 
   return {
+    analysisStep,
+    analysisMessage,
     analyzeGit,
     parseFile,
     generateSingle,

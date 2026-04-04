@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"sync"
 
 	"github.com/google/uuid"
 
 	"inkwords-backend/internal/db"
 	"inkwords-backend/internal/llm"
 	"inkwords-backend/internal/model"
+	"inkwords-backend/internal/parser"
 )
 
 // Chapter represents a single chapter in the generated outline
@@ -24,57 +24,98 @@ type Chapter struct {
 
 // DecompositionService handles the logic to evaluate project text and generate an outline
 type DecompositionService struct {
-	llmClient *llm.DeepSeekClient
+	llmClient  *llm.DeepSeekClient
+	gitFetcher *parser.GitFetcher
 }
 
 // NewDecompositionService creates a new decomposition service
 func NewDecompositionService() *DecompositionService {
 	apiKey := os.Getenv("DEEPSEEK_API_KEY")
 	return &DecompositionService{
-		llmClient: llm.NewDeepSeekClient(apiKey),
+		llmClient:  llm.NewDeepSeekClient(apiKey),
+		gitFetcher: parser.NewGitFetcher(),
 	}
 }
 
-// GenerateSeries generates blog chapters concurrently based on the outline
+// AnalyzeStream handles the full analysis pipeline with streaming progress
+func (s *DecompositionService) AnalyzeStream(ctx context.Context, gitURL string, progressChan chan<- string, errChan chan<- error) {
+	defer close(progressChan)
+	defer close(errChan)
+
+	sendProgress := func(step int, message string, data interface{}) {
+		msg := map[string]interface{}{
+			"step":    step,
+			"message": message,
+		}
+		if data != nil {
+			msg["data"] = data
+		}
+		bytes, _ := json.Marshal(msg)
+		progressChan <- string(bytes)
+	}
+
+	select {
+	case <-ctx.Done():
+		errChan <- ctx.Err()
+		return
+	default:
+	}
+
+	sendProgress(0, "正在克隆并拉取仓库 (depth=1)...", nil)
+	
+	content, err := s.gitFetcher.Fetch(gitURL)
+	if err != nil {
+		errChan <- fmt.Errorf("拉取仓库失败: %w", err)
+		return
+	}
+
+	sendProgress(1, "分析仓库源码与结构完成", nil)
+	sendProgress(2, "评估大模型并生成项目大纲...", nil)
+
+	outline, err := s.GenerateOutline(ctx, content)
+	if err != nil {
+		errChan <- fmt.Errorf("生成大纲失败: %w", err)
+		return
+	}
+
+	sendProgress(3, "正在完成最后处理...", map[string]interface{}{
+		"outline":        outline,
+		"source_content": content,
+	})
+}
+
+// GenerateSeries generates blog chapters sequentially based on the outline with streaming
 func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.UUID, parentID uuid.UUID, outline []Chapter, sourceContent string, sourceType string, progressChan chan<- string, errChan chan<- error) {
 	defer close(progressChan)
 	defer close(errChan)
 
-	var wg sync.WaitGroup
-	// Limit concurrency to avoid hitting rate limits or using too much memory
-	semaphore := make(chan struct{}, 3)
-	
-	// Create channels for collecting results
-	errs := make(chan error, len(outline))
-	
 	for _, chapter := range outline {
-		wg.Add(1)
-		go func(c Chapter) {
-			defer wg.Done()
-			
-			semaphore <- struct{}{}
-			defer func() { <-semaphore }()
-			
-			select {
-			case <-ctx.Done():
-				errs <- ctx.Err()
-				return
-			default:
-			}
+		select {
+		case <-ctx.Done():
+			errChan <- ctx.Err()
+			return
+		default:
+		}
 
-			// Send progress: starting
-			progressChan <- fmt.Sprintf(`{"status":"generating","chapter_sort":%d,"title":"%s"}`, c.Sort, c.Title)
-			
-			// Likewise limit the content sent per chapter to avoid token overflow
-			chapterSourceContent := sourceContent
-			runes := []rune(chapterSourceContent)
-			if len(runes) > 300000 {
-				chapterSourceContent = string(runes[:300000]) + "\n\n... [Content Truncated due to length limits] ..."
-			}
+		// Send progress: starting
+		startMsg := map[string]interface{}{
+			"status":       "generating",
+			"chapter_sort": chapter.Sort,
+			"title":        chapter.Title,
+		}
+		startBytes, _ := json.Marshal(startMsg)
+		progressChan <- string(startBytes)
+		
+		// Limit the content sent per chapter to avoid token overflow
+		chapterSourceContent := sourceContent
+		runes := []rune(chapterSourceContent)
+		if len(runes) > 300000 {
+			chapterSourceContent = string(runes[:300000]) + "\n\n... [Content Truncated due to length limits] ..."
+		}
 
-			prompt := fmt.Sprintf(`你是一个高级全栈架构师和技术博主。请根据以下提供的源内容，以及本章节的大纲，将其转化为一篇“小白友好、图文并茂、可独立复现”的高质量技术博客章节。
+		prompt := fmt.Sprintf(`你是一个高级全栈架构师和技术博主。请根据以下提供的源内容，以及本章节的大纲，将其转化为一篇“小白友好、图文并茂、可独立复现”的高质量技术博客章节。
 要求：
-1. **字数充足，内容详实**：不要只写干瘪的总结。必须深入分析代码实现原理，文章字数需足够丰富。
+1. **字数必须极度充足，内容极其详实（不少于 2000 字的长文）**：严禁只写干瘪的总结。必须深入分析代码实现原理，拆解每一个核心机制。
 2. **代码级剖析**：引用源内容中的核心代码，并逐行解释其作用。如果源内容因为截断而缺少具体代码，请基于目录结构和你的架构经验进行合理补充推演。
 3. **可复现的步骤**：如果是实战或配置相关，请给出明确的执行步骤。
 4. **小白友好**：在解释抽象的理论概念时，必须提供对应的代码示例或生活化比喻。
@@ -87,54 +128,87 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 - 标题: %s
 - 摘要: %s
 - 排序: %d
-`, chapterSourceContent, c.Title, c.Summary, c.Sort)
+`, chapterSourceContent, chapter.Title, chapter.Summary, chapter.Sort)
 
-			messages := []llm.Message{
-				{Role: "system", Content: "你是一个高级技术博客作者。"},
-				{Role: "user", Content: prompt},
-			}
+		messages := []llm.Message{
+			{Role: "system", Content: "你是一个高级技术博客作者。"},
+			{Role: "user", Content: prompt},
+		}
 
-			llmModel := "deepseek-chat"
-			if envModel := os.Getenv("DEEPSEEK_MODEL"); envModel != "" {
-				llmModel = envModel
-			}
+		llmModel := "deepseek-chat"
+		if envModel := os.Getenv("DEEPSEEK_MODEL"); envModel != "" {
+			llmModel = envModel
+		}
 
-			content, err := s.llmClient.Generate(ctx, llmModel, messages)
-			if err != nil {
-				errs <- fmt.Errorf("chapter %d generation failed: %w", c.Sort, err)
+		chapterChunkChan := make(chan string)
+		chapterErrChan := make(chan error)
+		
+		var fullContentBuilder strings.Builder
+		
+		go s.llmClient.GenerateStream(ctx, llmModel, messages, chapterChunkChan, chapterErrChan)
+
+		var streamErr error
+		done := false
+		for !done {
+			select {
+			case <-ctx.Done():
+				errChan <- ctx.Err()
 				return
+			case err, ok := <-chapterErrChan:
+				if ok && err != nil {
+					streamErr = err
+					done = true
+				} else if !ok {
+					// chapterErrChan closed
+					chapterErrChan = nil
+				}
+			case chunk, ok := <-chapterChunkChan:
+				if !ok {
+					done = true
+				} else {
+					fullContentBuilder.WriteString(chunk)
+					streamMsg := map[string]interface{}{
+						"status":       "streaming",
+						"chapter_sort": chapter.Sort,
+						"content":      chunk,
+					}
+					streamBytes, _ := json.Marshal(streamMsg)
+					progressChan <- string(streamBytes)
+				}
 			}
-			
-			// Save to database
-			blog := &model.Blog{
-				UserID:      userID,
-				ParentID:    &parentID,
-				ChapterSort: c.Sort,
-				Title:       c.Title,
-				Content:     content,
-				SourceType:  sourceType,
-				Status:      1, // 1 for completed
-			}
-			
-			if err := db.DB.WithContext(ctx).Create(blog).Error; err != nil {
-				errs <- fmt.Errorf("failed to save chapter %d to db: %w", c.Sort, err)
-				return
-			}
-			
-			// Send progress: completed
-			progressChan <- fmt.Sprintf(`{"status":"completed","chapter_sort":%d,"title":"%s"}`, c.Sort, c.Title)
-			
-		}(chapter)
-	}
+		}
 
-	wg.Wait()
-	close(errs)
-
-	for err := range errs {
-		if err != nil {
-			errChan <- err
+		if streamErr != nil {
+			errChan <- fmt.Errorf("chapter %d generation failed: %w", chapter.Sort, streamErr)
 			return
 		}
+
+		content := fullContentBuilder.String()
+		
+		// Save to database
+		blog := &model.Blog{
+			UserID:      userID,
+			ParentID:    &parentID,
+			ChapterSort: chapter.Sort,
+			Title:       chapter.Title,
+			Content:     content,
+			SourceType:  sourceType,
+			Status:      1, // 1 for completed
+		}
+		
+		if err := db.DB.WithContext(ctx).Create(blog).Error; err != nil {
+			errChan <- fmt.Errorf("failed to save chapter %d to db: %w", chapter.Sort, err)
+			return
+		}
+		
+		// Send progress: completed
+		endMsg := map[string]interface{}{
+			"status":       "completed",
+			"chapter_sort": chapter.Sort,
+			"title":        chapter.Title,
+		}
+		endBytes, _ := json.Marshal(endMsg)
+		progressChan <- string(endBytes)
 	}
 }
 // GenerateOutline evaluates project text and generates a JSON outline
