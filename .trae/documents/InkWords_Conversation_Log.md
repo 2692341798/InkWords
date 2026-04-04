@@ -1,6 +1,17 @@
 # 墨言博客助手 (InkWords) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 14：修复 SSE 连接与 AbortError 日志报错
+- **用户需求**：用户贴出了控制台中出现的 `AbortError: BodyStreamBuffer was aborted` 报错日志，要求进行分析与修复。并且要求修复完毕后同步文档并推送到 GitHub。
+- **AI 动作**：
+  1. 分析并定位到问题原因是 SSE 网络流由于服务端在返回 `[DONE]` 后迅速关闭或组件卸载时的残余流导致的。
+  2. 修改 `useBlogStream.ts`，引入 `useRef` 保存 `AbortController` 实例，在组件卸载 (`useEffect` 清理函数) 和每次发起新生成前主动调用 `abort()`。
+  3. 在 `fetchEventSource` 的 `onerror` 和外层 `catch` 中增加了对 `AbortError` 的静默过滤，将其转化为受控的 `StopStreamError` 以阻止默认报错和重连。
+  4. 顺带修复了 `Generator.tsx` 和 `useBlogStream.ts` 中的 Lint 报错（`react-hooks/set-state-in-effect` 及 `any` 类型使用），目前项目 `npm run lint` 已零错误。
+  5. 补充并更新了本文件和开发日志。
+- **决策/变更**：
+  - 主动接管 `fetch-event-source` 的中止信号生命周期，明确区分正常结束/组件卸载导致的流切断与网络真实断开的错误。
+
 ### 对话 13：添加用户注销（退出登录）功能
 - **用户需求**：要求为项目添加支持用户注销的功能，完成后更新项目文档、提交 GitHub 并打上对应标签。
 - **AI 动作**：

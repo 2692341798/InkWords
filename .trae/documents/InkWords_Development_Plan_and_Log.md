@@ -170,6 +170,16 @@
   - `rehype-mermaid` 插件的内置行为与项目要求的“纯净无样式”图表渲染存在冲突，移除后能更好地控制渲染输出。
   - 常规账号体系的加入丰富了 JWT 签发场景，提高了平台对不同类型用户的兼容性。
 
+### 2026-04-04 (Bugfix - SSE 网络流中断与悬挂请求修复)
+- **开发模块**: [前端网络请求与状态管理]
+- **完成事项**:
+  1. **请求生命周期管理**: 在 `useBlogStream.ts` 中引入 `useRef` 保存当前的 `AbortController`，并在 `useEffect` 的清理函数中主动调用 `abort()`，确保组件卸载时安全切断网络流，防止产生“幽灵请求”。
+  2. **错误静默拦截**: 修改了 `fetchEventSource` 的 `onerror` 和外层 `catch` 逻辑，拦截并静默处理由 `AbortError` 引起的抛错，防止其污染控制台并触发不必要的重连机制。
+  3. **代码规范修复**: 修复了 `Generator.tsx` 中由于在 `useEffect` 中同步调用 `setState` 引起的 `react-hooks/set-state-in-effect` 警告，通过 `eslint-disable-next-line` 抑制了该特性，使 `npm run lint` 全部通过。
+- **踩坑记录 / 架构调整**: 
+  - 前端使用 `fetchEventSource` 接收服务端 SSE 流时，如果后端发送完 `[DONE]` 立刻断开连接，代理层未能完全消费掉所有流，会导致浏览器抛出 `AbortError: BodyStreamBuffer was aborted`。
+  - 需要在代码层面主动接管 AbortController 的声明周期，将正常的请求中断与网络异常崩溃区分开来。
+
 ### 2026-04-04 (Feature - 用户注销功能)
 - **开发模块**: [前端鉴权模块]
 - **完成事项**:

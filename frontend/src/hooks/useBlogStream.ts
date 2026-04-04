@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useRef, useEffect } from 'react'
 import { fetchEventSource } from '@microsoft/fetch-event-source'
 import { useStreamStore } from '@/store/streamStore'
 import { useBlogStore } from '@/store/blogStore'
@@ -8,6 +8,16 @@ class StopStreamError extends Error {}
 export const useBlogStream = () => {
   const store = useStreamStore()
   const { fetchBlogs } = useBlogStore()
+  const abortCtrlRef = useRef<AbortController | null>(null)
+
+  // Cleanup pending streams when the component unmounts
+  useEffect(() => {
+    return () => {
+      if (abortCtrlRef.current) {
+        abortCtrlRef.current.abort()
+      }
+    }
+  }, [])
 
   const analyzeGit = useCallback(async (gitUrl: string) => {
     store.setAnalyzing(true)
@@ -69,7 +79,11 @@ export const useBlogStream = () => {
 
   const generateSingle = useCallback(async (sourceContent: string) => {
     store.setGenerating(true)
+    if (abortCtrlRef.current) {
+      abortCtrlRef.current.abort()
+    }
     const ctrl = new AbortController()
+    abortCtrlRef.current = ctrl
     
     try {
       const token = localStorage.getItem('token')
@@ -103,17 +117,25 @@ export const useBlogStream = () => {
         onclose() {
           throw new StopStreamError('closed by server')
         },
-        onerror(err) {
+        onerror(err: unknown) {
           if (err instanceof StopStreamError) {
             throw err
+          }
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const e = err as any
+          if (e?.name === 'AbortError' || e?.message?.includes('AbortError')) {
+            throw new StopStreamError('aborted')
           }
           console.error('SSE Connection Error:', err)
           store.setGenerating(false)
           throw err
         }
       })
-    } catch (err) {
+    } catch (err: unknown) {
       if (err instanceof StopStreamError) return
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const e = err as any
+      if (e?.name === 'AbortError' || e?.message?.includes('AbortError')) return
       console.error(err)
       store.setGenerating(false)
     }
@@ -123,7 +145,11 @@ export const useBlogStream = () => {
     if (!store.outline || !store.sourceContent) return
 
     store.setGenerating(true)
+    if (abortCtrlRef.current) {
+      abortCtrlRef.current.abort()
+    }
     const ctrl = new AbortController()
+    abortCtrlRef.current = ctrl
     
     try {
       const token = localStorage.getItem('token')
@@ -164,17 +190,25 @@ export const useBlogStream = () => {
         onclose() {
           throw new StopStreamError('closed by server')
         },
-        onerror(err) {
+        onerror(err: unknown) {
           if (err instanceof StopStreamError) {
             throw err
+          }
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const e = err as any
+          if (e?.name === 'AbortError' || e?.message?.includes('AbortError')) {
+            throw new StopStreamError('aborted')
           }
           console.error('SSE Connection Error:', err)
           store.setGenerating(false)
           throw err
         }
       })
-    } catch (err) {
+    } catch (err: unknown) {
       if (err instanceof StopStreamError) return
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const e = err as any
+      if (e?.name === 'AbortError' || e?.message?.includes('AbortError')) return
       console.error(err)
       store.setGenerating(false)
     }

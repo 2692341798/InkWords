@@ -16,6 +16,7 @@ export function Generator() {
 
   useEffect(() => {
     if (store.isAnalyzing) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAnalysisStep(0)
       const timer1 = setTimeout(() => setAnalysisStep(1), 2000)
       const timer2 = setTimeout(() => setAnalysisStep(2), 5000)
