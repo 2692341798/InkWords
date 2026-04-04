@@ -1,6 +1,26 @@
 # 墨言博客助手 (InkWords) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 11：常规登录实现与依赖/图标修复
+- **用户需求**：要求更新开发日志和对话记录，补充今日的 Bug 修复与新特性开发：移除 `rehype-mermaid`、修复 `lucide-react` 的 Github 图标以及后端常规登录与注册功能的实现。
+- **AI 动作**：
+  1. 在 `InkWords_Development_Plan_and_Log.md` 中追加了对应的 Bugfix & Feature 记录。
+  2. 在 `InkWords_Conversation_Log.md` 中补充了本次对话与决策的摘要。
+- **决策/变更**：
+  - **架构微调**：为了严格执行“纯净无样式”的图表渲染约束，移除了 `rehype-mermaid` 依赖，避免了样式冲突。
+  - **功能完善**：在已有的第三方 OAuth 授权之外，补充了传统的账号密码登录与注册机制，完善了用户鉴权闭环。
+
+### 对话 10：修复编辑器输入覆盖 Bug
+- **用户需求**：要求修复 `Editor.tsx` 中由于自动保存导致 `selectedBlog` 更新，从而触发 `useEffect` 覆盖用户正在输入的内容的 Bug。同时要求**不更新**个人任务文件 `tasks.md` 或 `checklist.md`。
+- **AI 动作**：
+  1. 将 `Editor.tsx` 中同步博客内容的 `useEffect` 依赖项从 `selectedBlog` 修改为 `selectedBlog?.id`。
+  2. 禁用了相关的 `eslint-disable-next-line react-hooks/exhaustive-deps` 检查以消除 linter 警告。
+  3. 顺手修复了 `MarkdownEngine.tsx` 中的 `node` 未使用报错。
+  4. 运行 `npm run lint` 验证所有问题均已修复。
+  5. 更新了项目开发日志 `InkWords_Development_Plan_and_Log.md` 以及本对话日志。
+- **决策/变更**：
+  - 核心决策是**只在切换文章时同步状态**，而不再每次保存后覆盖本地组件状态，以保障用户的输入流畅性。
+
 ---
 
 ## 2026-04-04 (项目规划与脚手架搭建)

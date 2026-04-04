@@ -16,7 +16,7 @@
 ## 2. 前端架构设计 (React 18)
 
 ### 2.1 目录结构与技术栈
-- `src/components/`: 可复用的 UI 组件（基于 Shadcn UI + Tailwind CSS + `react-markdown` + `rehype-mermaid`），保持极简浅色阅读风。
+- `src/components/`: 可复用的 UI 组件（基于 Shadcn UI + Tailwind CSS + `react-markdown` + 原生 Mermaid 渲染），保持极简浅色阅读风。
 - `src/features/`: 核心业务模块（工作区 Uploader、历史侧边栏 Sidebar、渲染器 Renderer）。（当前实现在 App.tsx 中搭建了基础双栏布局）
 - `src/store/`: 基于 **Zustand** 的全局状态管理，负责处理极简状态下的 Token、当前激活的博客 ID、以及 SSE 流式追加的 Markdown 内容（`streamStore.ts` 中管理了大纲 `outline` 与章节生成状态）。
 - `src/services/`: 封装所有 HTTP/SSE 请求逻辑，统一管理接口异常。
@@ -24,7 +24,7 @@
 
 ### 2.2 核心渲染器架构 (Renderer)
 - **MarkdownEngine**：基于 `react-markdown` 配合 GitHub 样式（去除边框），负责实时渲染流式抵达的文本。
-- **MermaidViewer**：基于 `rehype-mermaid`，并自定义拦截逻辑，**强制注入默认主题配置**，移除所有由于 LLM 幻觉可能携带的 `style` 或 `classDef` 样式属性，保障图表的极简统一。
+- **MermaidViewer**：基于原生 Mermaid API 进行渲染（替代 `rehype-mermaid` 解决异步渲染冲突），并自定义拦截逻辑，**强制注入默认主题配置**，移除所有由于 LLM 幻觉可能携带的 `style` 或 `classDef` 样式属性，保障图表的极简统一。
 
 ## 3. 后端架构设计 (Go 1.21+)
 

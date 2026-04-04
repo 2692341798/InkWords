@@ -26,6 +26,7 @@
 - `id` (BIGINT/UUID, PK): 雪花 ID 或 UUID。
 - `username` (VARCHAR): 用户名或昵称。
 - `email` (VARCHAR, Unique): 绑定的邮箱。
+- `password_hash` (VARCHAR): 密码的哈希值（用于账号密码登录）。
 - `github_id` / `wechat_openid` (VARCHAR, Nullable): 第三方登录唯一标识。
 - `avatar_url` (VARCHAR): 头像链接。
 - `subscription_tier` (SMALLINT): 会员等级（0: 免费版, 1: Pro, 2: 团队版）。

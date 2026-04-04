@@ -16,12 +16,58 @@
 
 ## 2. 用户与鉴权接口 (Auth API)
 
-### 2.1 第三方一键登录重定向 (OAuth Redirect)
+### 2.1 用户注册 (Register)
+- **POST** `/api/v1/auth/register`
+- **描述**：使用邮箱和密码注册新用户。
+- **Request Body (JSON)**:
+  ```json
+  {
+    "email": "user@example.com",
+    "password": "securepassword123",
+    "username": "nickname"
+  }
+  ```
+- **Response Data**:
+  ```json
+  {
+    "user": {
+      "id": "1234567890",
+      "username": "nickname",
+      "email": "user@example.com"
+    }
+  }
+  ```
+
+### 2.2 用户登录 (Login)
+- **POST** `/api/v1/auth/login`
+- **描述**：使用邮箱和密码进行登录，返回 JWT Token。
+- **Request Body (JSON)**:
+  ```json
+  {
+    "email": "user@example.com",
+    "password": "securepassword123"
+  }
+  ```
+- **Response Data**:
+  ```json
+  {
+    "token": "eyJhbGciOiJIUzI1...",
+    "user": {
+      "id": "1234567890",
+      "username": "nickname",
+      "avatar_url": "https://...",
+      "subscription_tier": 0,
+      "tokens_used": 15000
+    }
+  }
+  ```
+
+### 2.3 第三方一键登录重定向 (OAuth Redirect)
 - **GET** `/api/v1/auth/oauth/:provider`
 - **Path Params**: `provider` (`github` 或 `wechat`)
 - **描述**：重定向到 GitHub 或微信的授权页面。
 
-### 2.2 第三方登录回调 (OAuth Callback)
+### 2.4 第三方登录回调 (OAuth Callback)
 - **GET** `/api/v1/auth/callback/:provider`
 - **Query Params**: `code`
 - **Response Data**:
@@ -38,7 +84,7 @@
   }
   ```
 
-### 2.3 获取个人中心配置与额度
+### 2.5 获取个人中心配置与额度
 - **GET** `/api/v1/user/profile`
 - **Response Data**:
   ```json
