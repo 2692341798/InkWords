@@ -1,0 +1,6 @@
+- [x] 成功在后端封装了 DeepSeek API 客户端，且支持流式请求 (`stream=true`)
+- [x] `/api/v1/stream/generate` 接口可成功建立 SSE 连接并输出标准格式的事件流
+- [x] 完整生成后，系统能触发 `done` 事件，并且后端的 Service 层能接管并完成 Markdown 的持久化落库
+- [x] 前端能通过 `useBlogStream` 成功连接 SSE 接口，并在控制台或状态树中查看到实时拼接的内容
+- [x] 前端 `MarkdownEngine` 能正常渲染普通的 Markdown 语法和代码块
+- [x] 前端 `MermaidViewer` 渲染图表时没有携带花哨的自定义样式，统一采用极简的默认主题

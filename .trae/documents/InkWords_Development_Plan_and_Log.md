@@ -8,7 +8,7 @@
 - [x] 完成 Go + Gin + PostgreSQL 基础架构搭建与依赖注入。
 - [x] 搭建前端 React 18 + Zustand + Tailwind 极简阅读风骨架。
 - [x] 实现第三方（GitHub/WeChat）OAuth2 登录与 JWT 签发。
-- [ ] 实现基础 PDF/MD 文本解析器 (阅后即焚)。
+- [x] 实现基础 PDF/MD 文本解析器 (阅后即焚)。
 - [ ] 封装 DeepSeek 客户端，建立前后端 SSE 实时推流渲染通道。
 
 ### 阶段 2: Alpha (大项目智能拆解)
@@ -91,4 +91,16 @@
 - **踩坑记录 / 架构调整**: 
   - Shadcn UI 最新版本（v4.x）默认使用并推荐了 Tailwind CSS v4（弃用旧版 tailwind.config.js），因此在前端安装时做了最新技术的适配，使用 `@tailwindcss/vite` 插件替代了旧版的 PostCSS 插件方案。
 - **遗留问题 (TODO)**: 
-  - 尚未实现核心的文件解析器（DocParser/GitFetcher）及与 DeepSeek API 的 SSE 流式交互管道。
+  - ~~尚未实现核心的文件解析器（DocParser/GitFetcher）及与 DeepSeek API 的 SSE 流式交互管道。~~ (已部分实现基础 DocParser，待实现 GitFetcher 及 SSE 流式交互管道)
+
+### 2026-04-04 (MVP - 基础解析器开发)
+- **开发模块**: [后端文件解析器]
+- **完成事项**:
+  1. **文档解析器**: 在 `backend/internal/parser/` 中实现了 `DocParser`，支持解析 PDF 与 MD/TXT 纯文本格式。
+  2. **安全策略 (阅后即焚)**: 实现了严格的临时文件处理机制，使用 `defer os.Remove(tempFile.Name())` 确保无论是上传的文件流还是内存数据，解析完成后立即物理销毁，不产生任何持久化实体。
+  3. **单元测试**: 引入了 `github.com/jung-kurt/gofpdf` 生成测试 PDF，并完成了 `doc_parser_test.go`，覆盖了纯文本提取、PDF 解析与不支持格式的错误拦截。
+- **踩坑记录 / 架构调整**: 
+  - PDF 文本提取通常需要实现 `io.ReaderAt`，而用户上传的文件或网络流默认仅为 `io.Reader`。为解决此冲突并兼顾“阅后即焚”的原则，统一将流转存到 `os.CreateTemp` 的临时文件中再行解析，这样既获得了 `io.ReaderAt` 的能力，又能在函数结束时精准清空。
+- **遗留问题 (TODO)**: 
+  - 尚未封装 DeepSeek 客户端。
+  - 需要建立前后端 SSE 实时推流渲染通道。

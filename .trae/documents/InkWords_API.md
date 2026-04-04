@@ -54,21 +54,28 @@
 
 ### 3.1 提交解析任务 (获取生成 Ticket)
 - **POST** `/api/v1/generator/parse`
-- **描述**：用户上传文件或提交 Git URL，后端解析完毕后返回一个任务 ID (Ticket)，前端持此 Ticket 去建立 SSE 连接。
+- **描述**：用户上传文件或提交 Git URL，后端解析完毕后返回解析出的纯文本或任务 ID。
 - **Request (Multipart/form-data 或 JSON)**:
   - `file` (File, Optional): 本地上传的文档 (PDF/MD/Word)。
   - `git_url` (String, Optional): Git 仓库地址。
 - **Response Data**:
   ```json
   {
+    "source_content": "提取出的文本...",
     "task_id": "uuid-v4-ticket-1234",
     "estimated_series": 1 // 1: 单篇, >1: 大项目拆解系列
   }
   ```
 
 ### 3.2 建立流式生成连接 (SSE)
-- **GET** `/api/v1/stream/generate?task_id={task_id}`
-- **描述**：前端通过 `EventSource` 发起请求，后端流式返回 Markdown 文本。
+- **POST** `/api/v1/stream/generate`
+- **描述**：前端通过 `@microsoft/fetch-event-source` (或类似支持 POST 的库) 发起请求，后端流式返回 Markdown 文本。
+- **Request Body (JSON)**:
+  ```json
+  {
+    "source_content": "提取后的文档或源码内容..."
+  }
+  ```
 - **SSE Event 格式**:
   ```text
   event: chunk

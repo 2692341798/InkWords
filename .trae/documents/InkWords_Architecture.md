@@ -16,11 +16,11 @@
 ## 2. 前端架构设计 (React 18)
 
 ### 2.1 目录结构与技术栈
-- `src/components/`: 可复用的 UI 组件（基于 Shadcn UI + Tailwind CSS），保持极简浅色阅读风。
+- `src/components/`: 可复用的 UI 组件（基于 Shadcn UI + Tailwind CSS + `react-markdown` + `rehype-mermaid`），保持极简浅色阅读风。
 - `src/features/`: 核心业务模块（工作区 Uploader、历史侧边栏 Sidebar、渲染器 Renderer）。
-- `src/store/`: 基于 **Zustand** 的全局状态管理，负责处理极简状态下的 Token、当前激活的博客 ID、以及 SSE 流式追加的 Markdown 内容。
+- `src/store/`: 基于 **Zustand** 的全局状态管理，负责处理极简状态下的 Token、当前激活的博客 ID、以及 SSE 流式追加的 Markdown 内容（`streamStore.ts`）。
 - `src/services/`: 封装所有 HTTP/SSE 请求逻辑，统一管理接口异常。
-- `src/hooks/`: 自定义 Hooks（如 `useBlogStream`, `useAuth`）。
+- `src/hooks/`: 自定义 Hooks（如 `useBlogStream` 用于封装 `@microsoft/fetch-event-source` 维持 POST 流，`useAuth`）。
 
 ### 2.2 核心渲染器架构 (Renderer)
 - **MarkdownEngine**：基于 `react-markdown` 配合 GitHub 样式（去除边框），负责实时渲染流式抵达的文本。
@@ -31,8 +31,9 @@
 ### 3.1 核心分层与依赖注入
 Go 后端采用经典的“三层架构”，并通过依赖注入（Dependency Injection）实现各层解耦，方便单元测试。
 - **Controller/API 层 (`internal/api`)**：基于 Gin 框架，处理 HTTP/SSE 请求的路由分发、参数校验（绑定 Request DTO）、JWT 鉴权。
-- **Service 层 (`internal/service`)**：核心业务逻辑承载。包含 `DocService` (处理文档流转)、`LLMService` (组装 Prompt 与模型调度)、`BlogService` (数据库事务控制与历史快照)、`PublishService` (管理平台发布)。
+- **Service 层 (`internal/service`)**：核心业务逻辑承载。包含 `DocService` (处理文档流转)、`GeneratorService` (组装 Prompt 与模型调度生成，原 LLMService)、`BlogService` (数据库事务控制与历史快照)、`PublishService` (管理平台发布)。
 - **Repository 层 (`internal/repo`)**：封装底层存储逻辑（PostgreSQL），提供 `UserRepo`, `BlogRepo`, `TokenRepo` 等接口。
+- **LLM 层 (`internal/llm`)**：负责封装底层针对 DeepSeek API 等外部大模型的直接请求，提供流式 (`stream=true`) 与非流式客户端接口。
 
 ### 3.2 Parser 模块 (阅后即焚解析器)
 - **文档解析器 (`DocParser`)**：上传的 PDF/Word 被直接加载到内存中的 `io.Reader`，或使用极短生命周期的临时文件。提取纯文本并清洗乱码后，触发 `defer os.Remove` 或让 GC 回收，彻底防止文件滞留。
@@ -45,12 +46,12 @@ Go 后端采用经典的“三层架构”，并通过依赖注入（Dependency 
 ## 4. 核心业务流转设计
 
 ### 4.1 单篇博客生成流转 (SSE Pipeline)
-1. 前端上传文件/URL -> API 层接收并校验 Token。
-2. 调用 Parser 模块提取并过滤文本。
+1. 前端上传文件/URL -> API 层接收并校验 Token，通过解析器提取纯文本内容。
+2. 前端携带纯文本内容（`source_content`），向后端 POST `/api/v1/stream/generate` 发起 SSE 流式请求。
 3. Service 层组装系统级 Prompt（强制“小白友好”、“加代码解释”、“无样式 Mermaid”）。
-4. 通过 HTTP Client 调用 DeepSeek 接口，开启 `stream=true`。
-5. 后端 Gin 通过 `c.Stream` 将模型返回的 Token 逐片 (Chunk) 转换为 SSE 事件推送到前端。
-6. 模型输出完毕，Service 层将完整的 Markdown 落库到 PostgreSQL，流程结束。
+4. 通过 `DeepSeekClient` 调用 DeepSeek 接口，开启 `stream=true`。
+5. 后端 Gin 通过 `c.Stream` 将模型返回的 Token 逐片 (Chunk) 转换为 SSE 事件（`event: chunk` 和 `event: done`）推送到前端。
+6. 模型输出完毕，Service 层的 Goroutine 拦截到结束标志后，将完整的 Markdown 落库到 PostgreSQL，流程结束。
 
 ### 4.2 大项目并发/串行调度机制
 当 Parser 提取的文本超长（系统判定为大项目或长篇教程）时：

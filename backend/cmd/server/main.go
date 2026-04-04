@@ -45,6 +45,7 @@ func main() {
 	// 初始化 API Handler
 	authAPI := api.NewAuthAPI()
 	userAPI := api.NewUserAPI()
+	streamAPI := api.NewStreamAPI()
 
 	// v1 路由组
 	v1 := r.Group("/api/v1")
@@ -61,6 +62,13 @@ func main() {
 		userGroup.Use(middleware.AuthMiddleware())
 		{
 			userGroup.GET("/profile", userAPI.GetProfile)
+		}
+
+		// 流式生成路由 (需鉴权)
+		streamGroup := v1.Group("/stream")
+		streamGroup.Use(middleware.AuthMiddleware())
+		{
+			streamGroup.POST("/generate", streamAPI.GenerateBlogStreamHandler)
 		}
 	}
 
