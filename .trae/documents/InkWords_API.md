@@ -70,19 +70,10 @@
 ### 2.4 第三方登录回调 (OAuth Callback)
 - **GET** `/api/v1/auth/callback/:provider`
 - **Query Params**: `code`
-- **Response Data**:
-  ```json
-  {
-    "token": "eyJhbGciOiJIUzI1...",
-    "user": {
-      "id": "1234567890",
-      "username": "user_github",
-      "avatar_url": "https://...",
-      "subscription_tier": 0,
-      "tokens_used": 15000
-    }
-  }
-  ```
+- **描述**：后端处理完第三方授权后，不直接返回 JSON，而是通过 `HTTP 307` 重定向回前端系统。
+- **Response (Redirect)**:
+  - **成功**：`307 Temporary Redirect` -> `http://<FRONTEND_URL>/?token=eyJhbGci...`
+  - **失败**：`307 Temporary Redirect` -> `http://<FRONTEND_URL>/?error=错误信息`
 
 ### 2.5 获取个人中心配置与额度
 - **GET** `/api/v1/user/profile`

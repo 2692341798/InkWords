@@ -47,6 +47,7 @@ func main() {
 	userAPI := api.NewUserAPI()
 	streamAPI := api.NewStreamAPI()
 	projectAPI := api.NewProjectAPI()
+	blogAPI := api.NewBlogAPI()
 
 	// v1 路由组
 	v1 := r.Group("/api/v1")
@@ -54,6 +55,8 @@ func main() {
 		// 认证相关路由 (公开)
 		authGroup := v1.Group("/auth")
 		{
+			authGroup.POST("/register", authAPI.Register)
+			authGroup.POST("/login", authAPI.Login)
 			authGroup.GET("/oauth/:provider", authAPI.OAuthRedirect)
 			authGroup.GET("/callback/:provider", authAPI.OAuthCallback)
 		}
@@ -65,11 +68,20 @@ func main() {
 			userGroup.GET("/profile", userAPI.GetProfile)
 		}
 
+		// 博客相关路由 (需鉴权)
+		blogGroup := v1.Group("/blogs")
+		blogGroup.Use(middleware.AuthMiddleware())
+		{
+			blogGroup.GET("", blogAPI.GetUserBlogs)
+			blogGroup.PUT("/:id", blogAPI.UpdateBlog)
+		}
+
 		// 项目分析相关路由 (需鉴权)
 		projectGroup := v1.Group("/project")
 		projectGroup.Use(middleware.AuthMiddleware())
 		{
 			projectGroup.POST("/analyze", projectAPI.Analyze)
+			projectGroup.POST("/parse", projectAPI.Parse)
 		}
 
 		// 流式生成路由 (需鉴权)

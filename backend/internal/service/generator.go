@@ -5,7 +5,11 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/google/uuid"
+
+	"inkwords-backend/internal/db"
 	"inkwords-backend/internal/llm"
+	"inkwords-backend/internal/model"
 )
 
 // GeneratorService handles the blog generation process
@@ -22,7 +26,7 @@ func NewGeneratorService() *GeneratorService {
 }
 
 // GenerateBlogStream assembles the prompt, calls the LLM, and pushes chunks to the channel
-func (s *GeneratorService) GenerateBlogStream(ctx context.Context, sourceContent string, chunkChan chan<- string, errChan chan<- error) {
+func (s *GeneratorService) GenerateBlogStream(ctx context.Context, userID uuid.UUID, sourceContent string, sourceType string, chunkChan chan<- string, errChan chan<- error) {
 	prompt := fmt.Sprintf(`你是一个高级全栈架构师和技术博主。请根据以下提供的源内容，将其转化为一篇“小白友好、图文并茂、可独立复现”的高质量技术博客。
 如果是大型开源项目或长篇教程，请考虑将其拆分为系列博客。
 在解释抽象的理论概念时，必须提供对应的代码示例。
@@ -36,9 +40,9 @@ func (s *GeneratorService) GenerateBlogStream(ctx context.Context, sourceContent
 		{Role: "user", Content: prompt},
 	}
 
-	model := "deepseek-chat" // or deepseek-reasoner depending on env/config
+	modelType := "deepseek-chat" // or deepseek-reasoner depending on env/config
 	if envModel := os.Getenv("DEEPSEEK_MODEL"); envModel != "" {
-		model = envModel
+		modelType = envModel
 	}
 
 	// Create an intermediate channel to intercept chunks for saving
@@ -66,7 +70,7 @@ func (s *GeneratorService) GenerateBlogStream(ctx context.Context, sourceContent
 			case chunk, ok := <-internalChunkChan:
 				if !ok {
 					// Stream finished successfully, save to DB
-					s.saveToDB(fullContent)
+					s.saveToDB(ctx, userID, sourceType, fullContent)
 					return
 				}
 				fullContent += chunk
@@ -75,11 +79,30 @@ func (s *GeneratorService) GenerateBlogStream(ctx context.Context, sourceContent
 		}
 	}()
 
-	s.llmClient.GenerateStream(ctx, model, messages, internalChunkChan, internalErrChan)
+	s.llmClient.GenerateStream(ctx, modelType, messages, internalChunkChan, internalErrChan)
 }
 
-// saveToDB mocks the persistence of the generated markdown
-func (s *GeneratorService) saveToDB(content string) {
-	// TODO: Integrate with BlogRepo to save the content to PostgreSQL
-	fmt.Printf("Saving generated blog to DB (Length: %d)\n", len(content))
+// saveToDB persists the generated markdown to PostgreSQL
+func (s *GeneratorService) saveToDB(ctx context.Context, userID uuid.UUID, sourceType string, content string) {
+	// Extract a simple title from the first line or default
+	title := "文件解析生成的博客"
+	if len(content) > 0 {
+		// Attempt to grab the first H1 or just first line
+		// (A simplistic approach: we can just leave it as default or let user edit it)
+	}
+
+	blog := &model.Blog{
+		UserID:      userID,
+		Title:       title,
+		Content:     content,
+		SourceType:  sourceType,
+		Status:      1, // completed
+		ChapterSort: 1,
+	}
+
+	if err := db.DB.WithContext(ctx).Create(blog).Error; err != nil {
+		fmt.Printf("Failed to save generated blog to DB: %v\n", err)
+	} else {
+		fmt.Printf("Saved generated blog to DB (ID: %s, Length: %d)\n", blog.ID, len(content))
+	}
 }

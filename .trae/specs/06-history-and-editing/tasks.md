@@ -1,0 +1,16 @@
+# Tasks
+- [x] Task 1: 后端 - 实现获取博客历史记录接口
+  - [x] SubTask 1.1: 在 `backend/internal/api/` 或相关 Service 层添加获取用户博客列表的逻辑（支持自引用树状结构）。
+  - [x] SubTask 1.2: 暴露 `GET /api/v1/blogs` 路由。
+- [x] Task 2: 后端 - 实现更新博客内容接口
+  - [x] SubTask 2.1: 在 Service 层添加更新单篇博客 `content` 等字段的逻辑。
+  - [x] SubTask 2.2: 暴露 `PUT /api/v1/blogs/:id` 路由。
+- [x] Task 3: 前端 - 历史记录侧边栏集成
+  - [x] SubTask 3.1: 创建/修改 Sidebar 组件，调用 `GET /api/v1/blogs` 获取数据。
+  - [x] SubTask 3.2: 渲染历史记录列表（支持展开/折叠系列博客）。
+- [x] Task 4: 前端 - 二次编辑器开发
+  - [x] SubTask 4.1: 开发双栏 Markdown 编辑器组件，支持实时预览（集成 `rehype-mermaid` 等无样式图表）。
+  - [x] SubTask 4.2: 绑定 Zustand 状态，支持选中历史记录后加载内容。
+- [x] Task 5: 前端 - 自动保存与导出
+  - [x] SubTask 5.1: 实现防抖 (Debounce) 自动保存逻辑，调用 `PUT /api/v1/blogs/:id`。
+  - [x] SubTask 5.2: 实现“导出为 MD”和“导出为 PDF”功能。

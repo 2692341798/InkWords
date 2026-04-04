@@ -63,7 +63,7 @@ func (api *StreamAPI) GenerateBlogStreamHandler(c *gin.Context) {
 		go api.decompositionService.GenerateSeries(ctx, userID, parentID, req.Outline, req.SourceContent, req.SourceType, chunkChan, errChan)
 	} else {
 		// Single blog stream
-		go api.generatorService.GenerateBlogStream(ctx, req.SourceContent, chunkChan, errChan)
+		go api.generatorService.GenerateBlogStream(ctx, userID, req.SourceContent, req.SourceType, chunkChan, errChan)
 	}
 
 	// Set headers for SSE

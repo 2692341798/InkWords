@@ -1,0 +1,5 @@
+- [x] 数据库中的 `users` 表成功更新并包含 `password_hash` 字段。
+- [x] 可以通过 `POST /api/v1/auth/register` 接口使用 `email`、`username` 和 `password` 注册新用户。
+- [x] 可以通过 `POST /api/v1/auth/login` 接口使用正确的账号密码获取 JWT Token。
+- [x] `frontend/src/components/Login.tsx` 提供一个美观、设计精良的注册/登录切换页面。
+- [x] 在前端界面输入正确的账号密码后，可以成功登录系统并进入工作台。

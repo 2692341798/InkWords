@@ -11,7 +11,7 @@
 ### 1.2 核心通信协议
 - **常规请求**：基于 HTTP/RESTful API 交互（JSON 格式）。
 - **流式响应**：采用 **SSE (Server-Sent Events)** 协议，前端单向接收由后端转发的 DeepSeek 模型的流式（Stream）Markdown 输出，提供打字机效果。
-- **鉴权协议**：系统内部采用 **JWT (JSON Web Token)** 进行无状态用户鉴权；对外接入第三方平台发文时，采用标准 **OAuth2.0** 协议管理 Access Token 与 Refresh Token。
+- **鉴权协议**：系统内部采用 **JWT (JSON Web Token)** 进行无状态用户鉴权；对外接入第三方平台登录或发文时，采用标准 **OAuth2.0** 协议。其中，第三方登录回调阶段通过 HTTP 重定向（携带 Token/Error）将控制权交还前端处理路由和鉴权状态。
 
 ## 2. 前端架构设计 (React 18)
 

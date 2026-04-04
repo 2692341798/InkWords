@@ -27,7 +27,7 @@
 - `username` (VARCHAR): 用户名或昵称。
 - `email` (VARCHAR, Unique): 绑定的邮箱。
 - `password_hash` (VARCHAR): 密码的哈希值（用于账号密码登录）。
-- `github_id` / `wechat_openid` (VARCHAR, Nullable): 第三方登录唯一标识。
+- `github_id` / `wechat_openid` (VARCHAR, Nullable): 第三方登录唯一标识（通过 OAuth 回调自动绑定或创建）。
 - `avatar_url` (VARCHAR): 头像链接。
 - `subscription_tier` (SMALLINT): 会员等级（0: 免费版, 1: Pro, 2: 团队版）。
 - `tokens_used` (INTEGER): 本月已使用的 Token 数量。

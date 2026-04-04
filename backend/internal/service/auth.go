@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
+
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/github"
 	"gorm.io/gorm"
@@ -160,4 +162,69 @@ func (s *AuthService) fetchGithubUser(ctx context.Context, accessToken string) (
 	}
 
 	return &user, nil
+}
+
+// Register 注册新用户，使用邮箱和密码
+func (s *AuthService) Register(email, username, password string) (string, *model.User, error) {
+	// 检查邮箱是否已存在
+	var existingUser model.User
+	if err := db.DB.Where("email = ?", email).First(&existingUser).Error; err == nil {
+		return "", nil, errors.New("email already exists")
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return "", nil, err
+	}
+
+	// 生成密码哈希
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to hash password: %w", err)
+	}
+
+	user := &model.User{
+		ID:           uuid.New(),
+		Email:        email,
+		Username:     username,
+		PasswordHash: string(hashedPassword),
+	}
+
+	if err := db.DB.Create(user).Error; err != nil {
+		return "", nil, fmt.Errorf("failed to create user: %w", err)
+	}
+
+	// 生成 JWT Token
+	jwtToken, err := jwt.GenerateToken(user.ID, 24*time.Hour)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to generate jwt: %w", err)
+	}
+
+	return jwtToken, user, nil
+}
+
+// Login 用户登录，返回 JWT Token 和用户信息
+func (s *AuthService) Login(email, password string) (string, *model.User, error) {
+	var user model.User
+	if err := db.DB.Where("email = ?", email).First(&user).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return "", nil, errors.New("invalid email or password")
+		}
+		return "", nil, err
+	}
+
+	// 检查用户是否有密码（可能是仅通过第三方登录注册的用户）
+	if user.PasswordHash == "" {
+		return "", nil, errors.New("user has no password set, please login with third-party provider")
+	}
+
+	// 验证密码
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
+		return "", nil, errors.New("invalid email or password")
+	}
+
+	// 生成 JWT Token
+	jwtToken, err := jwt.GenerateToken(user.ID, 24*time.Hour)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to generate jwt: %w", err)
+	}
+
+	return jwtToken, &user, nil
 }

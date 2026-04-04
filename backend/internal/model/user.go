@@ -12,6 +12,7 @@ type User struct {
 	ID               uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
 	Username         string         `gorm:"type:varchar(255);not null" json:"username"`
 	Email            string         `gorm:"type:varchar(255);uniqueIndex;not null" json:"email"`
+	PasswordHash     string         `gorm:"type:varchar(255)" json:"-"`
 	GithubID         *string        `gorm:"type:varchar(255)" json:"github_id"`
 	WechatOpenID     *string        `gorm:"type:varchar(255)" json:"wechat_openid"`
 	AvatarURL        string         `gorm:"type:varchar(1024)" json:"avatar_url"`

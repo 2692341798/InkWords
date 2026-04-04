@@ -1,0 +1,3 @@
+- [x] 后端 `OAuthCallback` 接口在获取授权码失败时能正确重定向到前端页面并携带 `error` 参数
+- [x] 后端 `OAuthCallback` 接口在授权成功时能正确重定向到前端页面并携带 `token` 参数
+- [x] 前端 `Login.tsx` 页面能够捕获 URL 中的 `error` 参数并展示在页面上，随后清除 URL 参数

@@ -1,6 +1,16 @@
 # 墨言博客助手 (InkWords) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 12：修复 GitHub 登录重定向与前端列表加载 Bug
+- **用户需求**：要求修复 GitHub 授权登录后卡在后端 JSON 响应页面无法返回前端的问题，以及前端页面加载时 `fetchBlogs` 抛出 JSON 解析错误的问题。
+- **AI 动作**：
+  1. 修改后端 `internal/api/auth.go` 的 `OAuthCallback`，将 JSON 响应替换为 `c.Redirect` 重定向回前端（携带 `?token=` 或 `?error=`）。
+  2. 修改前端 `Login.tsx`，使用 `useEffect` 解析并提示 URL 中的 `error` 参数，随后清理 URL。
+  3. 修改前端 `blogStore.ts`，将 `fetchBlogs` 中的直接 `res.json()` 改为先获取 `res.text()`，增加判空和 `try-catch` 保护，防止空响应导致报错。
+  4. 更新了 PRD、API、开发日志等相关基准文档。
+- **决策/变更**：
+  - 明确第三方 OAuth 回调的闭环必须通过 HTTP 重定向交还控制权给前端，由前端提取状态（Token 或 Error）并处理后续路由和用户提示。
+
 ### 对话 11：常规登录实现与依赖/图标修复
 - **用户需求**：要求更新开发日志和对话记录，补充今日的 Bug 修复与新特性开发：移除 `rehype-mermaid`、修复 `lucide-react` 的 Github 图标以及后端常规登录与注册功能的实现。
 - **AI 动作**：
