@@ -15,5 +15,5 @@
 ## 3. 前端规范 (React 18)
 - **技术栈**：React 18 + Vite + Tailwind CSS + Shadcn UI + Zustand。
 - **组件规范**：全量使用函数式组件与 Hooks，严禁使用类组件。
-- **UI 与体验**：组件库强制使用 Tailwind CSS 配合 Shadcn UI，保持“极简阅读风（浅色主导）”，对标 Notion 体验。
+- **UI 与体验**：组件库强制使用 Tailwind CSS 配合 Shadcn UI，保持“极简阅读风（浅色主导）”，对标 Notion 体验。**前端界面所有的文本展示必须使用中文**。
 - **逻辑复用**：提取可复用的逻辑到自定义 Hooks (`src/hooks`)，分离 API 请求到单独的模块 (`src/services`)。
