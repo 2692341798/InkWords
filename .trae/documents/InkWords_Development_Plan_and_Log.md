@@ -5,11 +5,11 @@
 
 ### 阶段 1: MVP (核心单篇生成)
 **目标**：跑通前后端最小核心闭环，完成单篇轻量级文档的智能转换。
-- 完成 Go + Gin + PostgreSQL 基础架构搭建与依赖注入。
-- 实现第三方（GitHub/WeChat）OAuth2 登录与 JWT 签发。
-- 实现基础 PDF/MD 文本解析器 (阅后即焚)。
-- 封装 DeepSeek 客户端，建立前后端 SSE 实时推流渲染通道。
-- 搭建前端 React 18 + Zustand + Tailwind 极简阅读风骨架。
+- [x] 完成 Go + Gin + PostgreSQL 基础架构搭建与依赖注入。
+- [x] 搭建前端 React 18 + Zustand + Tailwind 极简阅读风骨架。
+- [x] 实现第三方（GitHub/WeChat）OAuth2 登录与 JWT 签发。
+- [ ] 实现基础 PDF/MD 文本解析器 (阅后即焚)。
+- [ ] 封装 DeepSeek 客户端，建立前后端 SSE 实时推流渲染通道。
 
 ### 阶段 2: Alpha (大项目智能拆解)
 **目标**：支持超长代码库的解析与系列博客的生成。
@@ -78,5 +78,17 @@
   - 架构设计阶段将数据库选型由 MySQL 修改为 PostgreSQL 14+，以利用其原生的 `UUIDv4` 和更优秀的 `TEXT` 存储及部分索引特性。
   - 在 PRD 与 API 阶段，发现缺少了用户注册体系，及时补充了 GitHub/Wechat 第三方 OAuth2.0 一键登录机制，并完善了数据库的 `subscription_tier` 和 `tokens_used` 字段。
 - **遗留问题 (TODO)**: 
-  - 尚未初始化 `frontend/` 目录的 React 骨架。
-  - 后端的 `gorm` 数据库模型 (Entity) 暂未建立。
+  - ~~尚未初始化 `frontend/` 目录的 React 骨架。~~ (已在后续开发中完成)
+  - ~~后端的 `gorm` 数据库模型 (Entity) 暂未建立。~~ (已在后续开发中完成)
+
+### 2026-04-04 (MVP - 基础骨架与鉴权模块)
+- **开发模块**: [前端骨架初始化, 后端数据库模型, OAuth2 与 JWT 鉴权]
+- **完成事项**:
+  1. **前端**：在 `frontend/` 目录下初始化了基于 Vite 的 React 18 (TS) 项目，并成功集成了最新版的 Tailwind CSS v4、Shadcn UI 以及 Zustand 状态管理。
+  2. **后端模型**：在 `backend/internal/model/` 目录下完成了基于 `GORM` 的 `User`, `Blog`, `OAuthToken` 实体模型定义，支持了 UUIDv4 主键生成、软删除，并在 `blogs` 实现了多字段组合索引。
+  3. **后端鉴权**：集成了 `golang-jwt/jwt/v5` 与 `golang.org/x/oauth2`，编写了 `auth` 的 Middleware 拦截器。打通了 GitHub OAuth2 授权回调获取用户信息并 UPSERT 数据库记录的完整闭环流程。
+  4. **版本控制**：项目成功梳理了根目录及子目录的 `.gitignore` 过滤规则，初始化 Git 仓库，并推送至 GitHub。
+- **踩坑记录 / 架构调整**: 
+  - Shadcn UI 最新版本（v4.x）默认使用并推荐了 Tailwind CSS v4（弃用旧版 tailwind.config.js），因此在前端安装时做了最新技术的适配，使用 `@tailwindcss/vite` 插件替代了旧版的 PostCSS 插件方案。
+- **遗留问题 (TODO)**: 
+  - 尚未实现核心的文件解析器（DocParser/GitFetcher）及与 DeepSeek API 的 SSE 流式交互管道。
