@@ -8,8 +8,10 @@ import { visit } from 'unist-util-visit';
 
 // Remark plugin to strip style and classDef from mermaid blocks
 const remarkStripMermaidStyles = () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (tree: any) => {
-    visit(tree, 'code', (node) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    visit(tree, 'code', (node: any) => {
       if (node.lang === 'mermaid' && node.value) {
         // Remove style and classDef lines to ensure a clean default theme
         node.value = node.value
@@ -48,7 +50,7 @@ export const MarkdownEngine: React.FC<MarkdownEngineProps> = ({ content }) => {
         ]}
         components={{
           code(props) {
-            const { children, className, node, ...rest } = props;
+            const { children, className, ...rest } = props;
             const match = /language-(\w+)/.exec(className || '');
             
             // Skip mermaid blocks as they are handled by rehype-mermaid

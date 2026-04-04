@@ -1,69 +1,79 @@
-import { useRef, useCallback } from 'react';
-import { fetchEventSource } from '@microsoft/fetch-event-source';
-import { useStreamStore } from '../store/streamStore';
+import { useCallback } from 'react'
+import { fetchEventSource } from '@microsoft/fetch-event-source'
+import { useStreamStore } from '@/store/streamStore'
 
 export const useBlogStream = () => {
-  const { appendContent, setIsStreaming, reset } = useStreamStore();
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const store = useStreamStore()
 
-  const startStream = useCallback(async (sourceContent: string) => {
-    reset();
-    setIsStreaming(true);
+  const analyzeGit = useCallback(async (gitUrl: string) => {
+    store.setAnalyzing(true)
+    try {
+      const response = await fetch('/api/v1/project/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ git_url: gitUrl })
+      })
+      
+      const res = await response.json()
+      if (res.code === 200 && res.data) {
+        store.setSource('git', res.data.source_content)
+        store.setOutline(res.data.outline)
+      } else {
+        throw new Error(res.message || 'Failed to analyze project')
+      }
+    } catch (err) {
+      console.error(err)
+      // TODO: Handle error via Toast
+    } finally {
+      store.setAnalyzing(false)
+    }
+  }, [store])
 
-    abortControllerRef.current = new AbortController();
+  const generateSeries = useCallback(async () => {
+    if (!store.outline || !store.sourceContent) return
 
+    store.setGenerating(true)
     try {
       await fetchEventSource('/api/v1/stream/generate', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'text/event-stream',
-        },
-        body: JSON.stringify({ source_content: sourceContent }),
-        signal: abortControllerRef.current.signal,
-        onmessage(event) {
-          if (event.event === 'chunk') {
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source_content: store.sourceContent,
+          outline: store.outline,
+          source_type: store.sourceType || 'git'
+        }),
+        onmessage(msg) {
+          if (msg.event === 'chunk') {
             try {
-              const parsed = JSON.parse(event.data);
-              if (typeof parsed === 'string') {
-                appendContent(parsed);
-              } else if (parsed.content) {
-                appendContent(parsed.content);
-              } else {
-                appendContent(event.data);
+              const data = JSON.parse(msg.data)
+              if (data.status === 'generating') {
+                store.updateChapterStatus(data.chapter_sort, 'generating')
+              } else if (data.status === 'completed') {
+                store.updateChapterStatus(data.chapter_sort, 'completed')
               }
             } catch {
-              appendContent(event.data);
+              // Ignore parse error
             }
-          } else if (event.event === 'done') {
-            setIsStreaming(false);
-            if (abortControllerRef.current) {
-              abortControllerRef.current.abort();
-            }
+          } else if (msg.event === 'error') {
+            console.error('SSE Error:', msg.data)
+          } else if (msg.event === 'done') {
+            store.setGenerating(false)
           }
         },
         onerror(err) {
-          console.error('EventSource error:', err);
-          setIsStreaming(false);
-          throw err; // Stop retrying
-        },
-        onclose() {
-          setIsStreaming(false);
+          console.error('SSE Connection Error:', err)
+          store.setGenerating(false)
+          throw err
         }
-      });
+      })
     } catch (err) {
-      console.error('Stream failed:', err);
-      setIsStreaming(false);
+      console.error(err)
+      store.setGenerating(false)
     }
-  }, [appendContent, setIsStreaming, reset]);
+  }, [store])
 
-  const stopStream = useCallback(() => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-      setIsStreaming(false);
-    }
-  }, [setIsStreaming]);
-
-  return { startStream, stopStream };
-};
+  return {
+    analyzeGit,
+    generateSeries
+  }
+}

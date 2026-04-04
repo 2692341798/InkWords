@@ -1,19 +1,53 @@
-import { create } from 'zustand';
+import { create } from 'zustand'
+
+export interface Chapter {
+  title: string
+  summary: string
+  sort: number
+}
 
 interface StreamState {
-  content: string;
-  isStreaming: boolean;
-  setContent: (content: string) => void;
-  appendContent: (chunk: string) => void;
-  setIsStreaming: (isStreaming: boolean) => void;
-  reset: () => void;
+  sourceType: 'git' | 'file' | null
+  sourceContent: string
+  outline: Chapter[] | null
+  chapterStatus: Record<number, 'pending' | 'generating' | 'completed' | 'error'>
+  isAnalyzing: boolean
+  isGenerating: boolean
+  setSource: (type: 'git' | 'file', content: string) => void
+  setOutline: (outline: Chapter[]) => void
+  updateChapterStatus: (sort: number, status: 'pending' | 'generating' | 'completed' | 'error') => void
+  setGenerating: (status: boolean) => void
+  setAnalyzing: (status: boolean) => void
+  reset: () => void
 }
 
 export const useStreamStore = create<StreamState>((set) => ({
-  content: '',
-  isStreaming: false,
-  setContent: (content) => set({ content }),
-  appendContent: (chunk) => set((state) => ({ content: state.content + chunk })),
-  setIsStreaming: (isStreaming) => set({ isStreaming }),
-  reset: () => set({ content: '', isStreaming: false }),
-}));
+  sourceType: null,
+  sourceContent: '',
+  outline: null,
+  chapterStatus: {},
+  isAnalyzing: false,
+  isGenerating: false,
+  setSource: (type, content) => set({ sourceType: type, sourceContent: content }),
+  setOutline: (outline) => set({ 
+    outline,
+    chapterStatus: outline.reduce((acc, ch) => ({ ...acc, [ch.sort]: 'pending' }), {})
+  }),
+  updateChapterStatus: (sort, status) =>
+    set((state) => ({
+      chapterStatus: {
+        ...state.chapterStatus,
+        [sort]: status
+      }
+    })),
+  setGenerating: (status) => set({ isGenerating: status }),
+  setAnalyzing: (status) => set({ isAnalyzing: status }),
+  reset: () => set({
+    sourceType: null,
+    sourceContent: '',
+    outline: null,
+    chapterStatus: {},
+    isAnalyzing: false,
+    isGenerating: false
+  })
+}))

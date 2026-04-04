@@ -65,7 +65,8 @@ func (api *ProjectAPI) Analyze(c *gin.Context) {
 		"code":    http.StatusOK,
 		"message": "success",
 		"data": gin.H{
-			"outline": outline,
+			"outline":        outline,
+			"source_content": content,
 		},
 	})
 }
