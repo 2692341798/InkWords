@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useStreamStore } from '@/store/streamStore'
 import { useBlogStore } from '@/store/blogStore'
 import type { BlogNode } from '@/store/blogStore'
-import { GitBranch, CheckCircle2, CircleDashed, Loader2, BookOpen, ChevronRight, ChevronDown, Plus } from 'lucide-react'
+import { GitBranch, CheckCircle2, CircleDashed, Loader2, BookOpen, ChevronRight, ChevronDown, Plus, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from './ui/button'
 
@@ -151,6 +151,20 @@ export function Sidebar() {
             )}
           </div>
         </div>
+      </div>
+
+      <div className="p-4 border-t border-zinc-200 mt-auto shrink-0">
+        <Button
+          variant="ghost"
+          className="w-full flex items-center justify-start gap-2 text-zinc-600 hover:text-red-600 hover:bg-red-50"
+          onClick={() => {
+            localStorage.removeItem('token')
+            window.location.href = '/'
+          }}
+        >
+          <LogOut className="w-4 h-4" />
+          退出登录
+        </Button>
       </div>
     </div>
   )
