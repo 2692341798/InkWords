@@ -67,19 +67,57 @@
   }
   ```
 
-### 3.2 建立流式生成连接 (SSE)
-- **POST** `/api/v1/stream/generate`
-- **描述**：前端通过 `@microsoft/fetch-event-source` (或类似支持 POST 的库) 发起请求，后端流式返回 Markdown 文本。
+### 3.2 大项目分析与大纲生成 (Project Analyze)
+- **POST** `/api/v1/project/analyze`
+- **描述**：提交 Git 仓库 URL 或超长文本，系统解析后评估复杂度并返回大纲 JSON。
 - **Request Body (JSON)**:
   ```json
   {
+    "git_url": "https://github.com/...",
     "source_content": "提取后的文档或源码内容..."
+  }
+  ```
+- **Response Data**:
+  ```json
+  {
+    "code": 200,
+    "message": "success",
+    "data": {
+      "outline": [
+        {
+          "title": "基础篇",
+          "summary": "介绍项目背景与基础架构",
+          "sort": 1
+        },
+        {
+          "title": "核心篇",
+          "summary": "核心代码解析",
+          "sort": 2
+        }
+      ]
+    }
+  }
+  ```
+
+### 3.3 建立流式生成连接 (SSE)
+- **POST** `/api/v1/stream/generate`
+- **描述**：前端通过 `@microsoft/fetch-event-source` 发起请求。若携带 `outline`，则进入系列生成模式，并发生成多个章节；否则进行单篇生成。
+- **Request Body (JSON)**:
+  ```json
+  {
+    "source_content": "提取后的文档或源码内容...",
+    "outline": [/* 章节大纲数组 */],
+    "source_type": "git"
   }
   ```
 - **SSE Event 格式**:
   ```text
   event: chunk
   data: {"content": "这是一段", "chapter_sort": 1}
+  
+  // 系列生成模式下的进度事件
+  event: progress
+  data: {"status": "generating", "chapter_sort": 1, "title": "基础篇"}
 
   event: done
   data: {"blog_id": "9876543210"}

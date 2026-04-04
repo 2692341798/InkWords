@@ -55,4 +55,18 @@
 - **决策/变更**：
   - 因为原生 EventSource 不支持 POST 请求，且基于 Ticket GET 状态拉取长文本设计过于复杂，**更改架构决策**为前端携带提取出的纯文本（`source_content`），直接向后端发起 `POST` 请求获取 SSE 数据流（使用 `@microsoft/fetch-event-source`）。
 
+### 对话 8：阶段二 Alpha (大项目智能拆解) 开发完成
+- **用户需求**：要求根据开发计划进行阶段二的开发（大项目智能拆解），并在完成后更新所有架构与设计文档。
+- **AI 动作**：
+  1. 查阅了 `doc-coauthoring` 和 `find-skills` 技能说明。
+  2. 使用 Spec 模式编写了 `05-project-decomposition` 的规范、任务与检查单。
+  3. 实现了 `GitFetcher`，支持 Git 仓库的拉取（`git clone --depth 1`）、过滤与文本提取，并确保阅后即焚。
+  4. 实现了 `DecompositionService` 和 `POST /api/v1/project/analyze` 路由，支持长文本的非流式大纲生成。
+  5. 实现了基于 Goroutine 池的并发调度生成机制，确保同一系列文章能够并行生成并正确落库（绑定相同的 `ParentID`）。
+  6. 更新了 SSE 推流接口，支持接收大纲并下发各个章节的进度事件。
+  7. 批量更新了所有 `.trae/documents` 下的基础文档并提交至 GitHub。
+- **决策/变更**：
+  - 采用 Goroutine 池并结合信号量 (Semaphore) 控制并发量，防止大量并发请求导致大模型 API 频率超限或内存激增。
+  - SSE 推流在系列生成模式下，不再单纯推送 chunk，而是推送每个章节的整体生成状态，以便前端展示全局进度。
+
 ---

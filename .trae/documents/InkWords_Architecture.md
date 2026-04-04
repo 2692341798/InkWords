@@ -53,11 +53,11 @@ Go 后端采用经典的“三层架构”，并通过依赖注入（Dependency 
 5. 后端 Gin 通过 `c.Stream` 将模型返回的 Token 逐片 (Chunk) 转换为 SSE 事件（`event: chunk` 和 `event: done`）推送到前端。
 6. 模型输出完毕，Service 层的 Goroutine 拦截到结束标志后，将完整的 Markdown 落库到 PostgreSQL，流程结束。
 
-### 4.2 大项目并发/串行调度机制
-当 Parser 提取的文本超长（系统判定为大项目或长篇教程）时：
-1. **大纲规划 (串行)**：Service 层先向 DeepSeek 发送一次请求，要求其根据项目全局代码生成一份“系列博客大纲”（例如分为 3 篇文章）。
-2. **内容生成 (并发 + 队列)**：大纲确认后，系统通过 Goroutine 池（Worker Pool，限制并发数防止 DeepSeek 接口 Rate Limit）**并发或异步排队**向模型发送请求。
-3. **断点保存**：每生成完其中一篇文章，立即落库并更新其状态为“已完成”，支持用户在网络中断后点击“继续生成”未完成的篇章。
+### 4.2 大项目并发调度机制 (Alpha 阶段已实现)
+当 Parser (`GitFetcher` 或 `DocParser`) 提取的文本超长（系统判定为大项目或长篇教程）时：
+1. **大纲规划 (串行)**：前端调用 `POST /api/v1/project/analyze`，Service 层先向 DeepSeek 发送一次非流式请求，要求其根据项目全局代码生成一份“系列博客大纲”的 JSON 数组。
+2. **内容生成 (并发调度)**：大纲确认后，前端携带 `outline` 数组请求 `POST /api/v1/stream/generate`。系统通过 Goroutine 池（结合 semaphore 信号量限制并发数，防止 DeepSeek 接口 Rate Limit 或内存溢出）**并发**向模型发送请求。
+3. **断点保存与 SSE 推流**：每生成完其中一篇文章，立即落库并带有相同的 `ParentID` 与各自的 `ChapterSort`。同时，通过 SSE 通道向前端实时推送各个章节的生成进度与状态（`status: generating/done`），并在异常时支持断点保存。
 
 ## 5. 安全与部署架构
 
