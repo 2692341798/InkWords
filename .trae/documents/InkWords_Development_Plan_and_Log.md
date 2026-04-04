@@ -9,7 +9,7 @@
 - [x] 搭建前端 React 18 + Zustand + Tailwind 极简阅读风骨架。
 - [x] 实现第三方（GitHub/WeChat）OAuth2 登录与 JWT 签发。
 - [x] 实现基础 PDF/MD 文本解析器 (阅后即焚)。
-- [ ] 封装 DeepSeek 客户端，建立前后端 SSE 实时推流渲染通道。
+- [x] 封装 DeepSeek 客户端，建立前后端 SSE 实时推流渲染通道。
 
 ### 阶段 2: Alpha (大项目智能拆解)
 **目标**：支持超长代码库的解析与系列博客的生成。
@@ -102,5 +102,17 @@
 - **踩坑记录 / 架构调整**: 
   - PDF 文本提取通常需要实现 `io.ReaderAt`，而用户上传的文件或网络流默认仅为 `io.Reader`。为解决此冲突并兼顾“阅后即焚”的原则，统一将流转存到 `os.CreateTemp` 的临时文件中再行解析，这样既获得了 `io.ReaderAt` 的能力，又能在函数结束时精准清空。
 - **遗留问题 (TODO)**: 
-  - 尚未封装 DeepSeek 客户端。
-  - 需要建立前后端 SSE 实时推流渲染通道。
+  - ~~尚未封装 DeepSeek 客户端。~~ (已在后续开发中完成)
+  - ~~需要建立前后端 SSE 实时推流渲染通道。~~ (已在后续开发中完成)
+
+### 2026-04-04 (MVP - DeepSeek 客户端与流式渲染)
+- **开发模块**: [封装 DeepSeek 客户端与 SSE 实时推流]
+- **完成事项**:
+  1. **后端 Client 与 Service**：在 `backend/internal/llm/` 封装了 `DeepSeekClient`，支持 `stream=true` 并使用 `bufio.Reader` 逐行解析 Delta 数据。在 `generator.go` 中内置了系统 Prompt (约束“小白友好”与 Mermaid 格式)，接管大模型流式输出与入库保存策略。
+  2. **后端 SSE 接口**：在 Gin 路由层 (`/api/v1/stream/generate`) 利用 `c.Stream` 将接收到的文字通道数据封装为标准 `event: chunk` 以及结束事件 `event: done`。
+  3. **前端状态层**：建立 `streamStore.ts` 管理文本拼接及流状态。使用 `@microsoft/fetch-event-source` 替换原生 `EventSource`，以支持 `POST` 方法下发文本 Payload (`source_content`)。
+  4. **前端渲染层**：结合 `react-markdown`、`remark-gfm` 与 `react-syntax-highlighter` 建立代码高亮阅读视图。通过自定义 remark 插件 `remarkStripMermaidStyles` 拦截 AST 树，剔除 `style` 节点，完美实现极简无样式的图表渲染 (`rehype-mermaid`)。
+- **踩坑记录 / 架构调整**: 
+  - 架构上调整了数据传递链路，因为原生 `EventSource` 仅支持 `GET` 方法，而将长达数千字的纯文本通过 `task_id` 获取状态不仅复杂，且限制较多。因此果断切换到前端 POST `fetch-event-source` 携带文本直连后端的模式。
+- **遗留问题 (TODO)**: 
+  - 核心模块 MVP 单篇生成能力已跑通，需进一步开发“工作台界面”或直接开展阶段 2 (大项目自动拆解) 的相关任务。

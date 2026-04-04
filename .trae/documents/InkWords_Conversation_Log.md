@@ -31,8 +31,28 @@
 - **用户需求**：基于已有文档，要求给出开发计划和每日开发日志。
 - **AI 动作**：使用共创模式编写了《开发计划与日志》，划分了 MVP、Alpha、Beta、V1.0 四个里程碑，并对各模块进行了耗时预估和强单测约束。
 
-### 对话 5：创建对话日志文件 (当前)
+### 对话 5：创建对话日志文件 
 - **用户需求**：在 `.trae/documents/` 目录下添加一个文件，专门用于简单记录每次的对话。
 - **AI 动作**：创建了本文件 (`InkWords_Conversation_Log.md`)，并回溯记录了今日从项目启动到脚手架搭建的完整对话脉络与关键决策点。
+
+### 对话 6：完成 MVP 骨架与基建开发
+- **用户需求**：要求继续按照开发计划执行。
+- **AI 动作**：
+  1. 使用 Spec 模式执行并完成了“基础架构与数据库搭建”(Task 1, 2)
+  2. 使用 Spec 模式执行并完成了“第三方 OAuth2.0 与 JWT 签发”(Task 3)
+  3. 使用 Spec 模式执行并完成了“基础 PDF/MD 解析器”(Task 4)
+- **决策/变更**：
+  - 遇到 PDF 流解析问题，决定采用生成临时文件然后 `defer os.Remove` 的策略，确保兼顾 `io.ReaderAt` 接口需求与“阅后即焚”的安全需求。
+
+### 对话 7：封装 DeepSeek 与 SSE 流式推流通道 (当前)
+- **用户需求**：继续开发“封装 DeepSeek 客户端，建立前后端 SSE 实时推流渲染通道”功能。
+- **AI 动作**：
+  1. 编写了前后端 `spec.md` 及相关任务，并执行开发。
+  2. 封装了 `DeepSeekClient` 以及 Gin 的 SSE 推流接口 `/api/v1/stream/generate`。
+  3. 前端集成了 Zustand、`fetch-event-source`，以及基于 `react-markdown` 的视图组件。
+  4. 利用自建 Remark 插件移除了 Mermaid 图表代码块内的样式注入。
+  5. 自动更新了 `InkWords_API.md`、`InkWords_Architecture.md` 和 `InkWords_PRD.md`，随后又将开发记录同步至 `InkWords_Development_Plan_and_Log.md` 和本文件。
+- **决策/变更**：
+  - 因为原生 EventSource 不支持 POST 请求，且基于 Ticket GET 状态拉取长文本设计过于复杂，**更改架构决策**为前端携带提取出的纯文本（`source_content`），直接向后端发起 `POST` 请求获取 SSE 数据流（使用 `@microsoft/fetch-event-source`）。
 
 ---
