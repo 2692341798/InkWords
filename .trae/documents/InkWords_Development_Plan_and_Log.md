@@ -152,6 +152,24 @@
   - **进程幽灵**：Go 后端在后台异常存活导致新修复的“父节点入库”代码并没有被真正执行，造成了“修复假象”。重新启动后根治。
   - **右侧面板的迷惑交互**：原来生成结束后，右侧由于 `isGenerating` 变为 false，又会显示回“准备生成”页面，给用户带来“是不是没生成成功”的错觉。通过状态判断，如果是全部生成完毕则切换为完成态的文案，与左侧全绿的打勾任务互相呼应。
 
+### [2026-04-05] Feature - 容器化部署架构 (Docker) 搭建
+- **开发模块**: [项目部署与运维, Docker, Nginx]
+- **完成事项**:
+  1. **多阶段构建 (Multi-stage Build)**:
+     - 编写了 `backend/Dockerfile`，在 `golang:1.24-alpine` 中编译 Go 二进制文件，并在纯净的 `alpine:3.19` 镜像中运行，极大减小了后端镜像体积。
+     - 编写了 `frontend/Dockerfile`，在 `node:20-alpine` 中完成 Vite/React 静态资源打包，最后由 `nginx:alpine` 镜像提供服务。
+  2. **Nginx 代理与流式通信优化**:
+     - 编写了 `frontend/nginx.conf`，将前端的静态路由与后端的 `/api/` 路由进行了完美分离。
+     - 针对 DeepSeek 的 SSE 流式生成请求（Server-Sent Events），专门在 Nginx 中配置了 `proxy_buffering off;`、`proxy_cache off;` 和长超时时间，防止 Nginx 缓存导致打字机效果失效。
+  3. **Docker Compose 容器编排**:
+     - 编写了根目录的 `docker-compose.yml`，一键拉起 `inkwords-db` (PostgreSQL 14)、`inkwords-backend` 和 `inkwords-frontend` 三个核心容器。
+     - 配置了数据库的 `healthcheck` 与后端的 `depends_on: condition: service_healthy`，确保容器启动顺序正确，避免后端启动时连不上数据库报错。
+  4. **构建上下文优化**:
+     - 为前后端分别配置了 `.dockerignore`，排除了 `.git`、`node_modules`、`dist` 及本地环境变量，提高构建速度并防止敏感信息泄露。
+- **踩坑记录 / 架构调整**: 
+  - **SSE 与 Nginx 代理的冲突**: Nginx 默认会开启缓冲（buffering），这会导致后端的流式块（chunk）被 Nginx 攒满一定大小后才一次性发给前端，破坏了“打字机”的实时体验。必须显式配置 `proxy_buffering off`。
+  - **跨容器网络通信**: 前端在浏览器中运行，因此发送的 AJAX 请求必须通过当前域名的 `/api` 代理转发。Nginx 在接收到 `/api` 请求后，再通过 Docker 内部的 DNS 解析将其转发到 `http://backend:8080`，完成了从宿主机到前端容器再到后端容器的请求流转。
+
 ## 4. 每日开发日志 (Dev Log)
 > 该区域将由 Vibe Coding 工程师（AI 助手）在每天/每次开发周期结束时，如实记录当天的完成事项、遇到的技术坑点及架构小规模调整。
 

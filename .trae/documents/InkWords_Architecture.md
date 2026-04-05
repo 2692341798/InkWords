@@ -90,3 +90,10 @@ Go 后端采用经典的“三层架构”，并通过依赖注入（Dependency 
 - **传输加密**：生产环境必须强制启用 HTTPS，所有前后端交互（尤其是包含 Token 和 Cookie 的请求）必须通过加密信道传输。
 - **跨域资源共享 (CORS)**：配置严格的 CORS 策略，只允许白名单中的前端域名发起跨域请求（含 SSE 请求）。
 - **反向代理 (Nginx/Caddy)**：前端通过 Nginx 部署静态资源并处理 SSL 证书，同时将 `/api` 和 `/stream` 等后端请求反向代理到 Go Gin 服务，隐藏后端真实端口，并对前端路由开启 HTML5 History Mode 支持。
+
+## 6. 容器化部署架构 (Docker)
+
+本项目采用标准的 **Docker Compose** 编排方案，包含三个核心容器：
+1. **Frontend (前端容器)**：基于 `nginx:alpine`，通过多阶段构建（Multi-stage Build）先在 Node.js 环境中打包 React 静态产物，再由 Nginx 提供静态文件服务，并将 `/api/` 路径的请求反向代理至后端容器（针对 SSE 请求做了特殊优化，关闭了 proxy_buffering）。
+2. **Backend (后端容器)**：基于 `alpine`，通过多阶段构建在 Go 环境中编译出二进制执行文件，极大减小了生产环境的镜像体积。
+3. **DB (数据库容器)**：基于 `postgres:14-alpine`，持久化挂载数据卷（Volume），并配置了 healthcheck 以确保后端服务在数据库就绪后再启动。
