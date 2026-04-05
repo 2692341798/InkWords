@@ -91,7 +91,7 @@ export function Sidebar() {
                 <Plus className="h-4 w-4" />
               </Button>
             </div>
-            <div className="space-y-3">
+            <div className="space-y-3 max-h-[30vh] overflow-y-auto custom-scrollbar">
               {streamStore.outline.map((ch) => {
                 const status = streamStore.chapterStatus[ch.sort]
                 return (

@@ -19,6 +19,7 @@ interface StreamState {
   sourceType: 'git' | 'file' | null
   sourceContent: string
   gitUrl: string
+  seriesTitle: string
   outline: Chapter[] | null
   chapterStatus: Record<number, 'pending' | 'generating' | 'completed' | 'error'>
   generatedContent: string
@@ -29,6 +30,7 @@ interface StreamState {
   analysisMessage: string
   abortController: AbortController | null
   setSource: (type: 'git' | 'file', content: string, gitUrl?: string) => void
+  setSeriesTitle: (title: string) => void
   setOutline: (outline: Chapter[]) => void
   updateChapterStatus: (sort: number, status: 'pending' | 'generating' | 'completed' | 'error') => void
   appendGeneratedContent: (chunk: string) => void
@@ -47,6 +49,7 @@ export const useStreamStore = create<StreamState>((set, get) => ({
   sourceType: null,
   sourceContent: '',
   gitUrl: '',
+  seriesTitle: '',
   outline: null,
   chapterStatus: {},
   generatedContent: '',
@@ -57,6 +60,7 @@ export const useStreamStore = create<StreamState>((set, get) => ({
   analysisMessage: '',
   abortController: null,
   setSource: (type, content, gitUrl) => set({ sourceType: type, sourceContent: content, gitUrl: gitUrl || '' }),
+  setSeriesTitle: (title) => set({ seriesTitle: title }),
   setOutline: (outline) => set({ 
     outline,
     chapterStatus: outline.reduce((acc, ch) => ({ ...acc, [ch.sort]: 'pending' }), {})
@@ -97,6 +101,7 @@ export const useStreamStore = create<StreamState>((set, get) => ({
       sourceType: null,
       sourceContent: '',
       gitUrl: '',
+      seriesTitle: '',
       outline: null,
       chapterStatus: {},
       generatedContent: '',

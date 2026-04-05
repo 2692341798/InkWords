@@ -28,6 +28,12 @@ type Chapter struct {
 	Files   []string `json:"files"`
 }
 
+// OutlineResult represents the overall generated outline result
+type OutlineResult struct {
+	SeriesTitle string    `json:"series_title"`
+	Chapters    []Chapter `json:"chapters"`
+}
+
 // DecompositionService handles the logic to evaluate project text and generate an outline
 type DecompositionService struct {
 	llmClient  *llm.DeepSeekClient
@@ -99,14 +105,15 @@ func (s *DecompositionService) AnalyzeStream(ctx context.Context, gitURL string,
 
 	sendProgress(3, "评估大模型并生成项目全局大纲...", nil)
 
-	outline, err := s.GenerateOutline(ctx, finalContent.String())
+	outlineResult, err := s.GenerateOutline(ctx, finalContent.String())
 	if err != nil {
 		errChan <- fmt.Errorf("生成大纲失败: %w", err)
 		return
 	}
 
 	sendProgress(4, "正在完成最后处理...", map[string]interface{}{
-		"outline":        outline,
+		"series_title":   outlineResult.SeriesTitle,
+		"outline":        outlineResult.Chapters,
 		"source_content": finalContent.String(), // Provide the summarized content as source to save space
 	})
 }
@@ -205,7 +212,7 @@ func (s *DecompositionService) generateLocalSummaryWithRetry(ctx context.Context
 }
 
 // GenerateSeries generates blog chapters sequentially based on the outline with streaming
-func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.UUID, parentID uuid.UUID, outline []Chapter, sourceContent string, sourceType string, gitURL string, progressChan chan<- string, errChan chan<- error) {
+func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.UUID, parentID uuid.UUID, seriesTitle string, outline []Chapter, sourceContent string, sourceType string, gitURL string, progressChan chan<- string, errChan chan<- error) {
 	defer close(progressChan)
 	defer close(errChan)
 
@@ -226,6 +233,9 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 	parentTitle := "Git 源码解析系列"
 	if sourceType == "file" {
 		parentTitle = "文件解析系列"
+	}
+	if seriesTitle != "" {
+		parentTitle = seriesTitle
 	}
 	parentBlog := &model.Blog{
 		ID:         parentID,
@@ -306,6 +316,7 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 3. **可复现的步骤**：如果是实战或配置相关，请给出明确的执行步骤。
 4. **小白友好**：在解释抽象的理论概念时，必须提供对应的代码示例或生活化比喻。
 5. 所有生成的 Mermaid 图表代码块绝对禁止包含自定义样式关键字（如 style, classDef, linkStyle 等），必须使用基础语法。
+6. **完整性约束**：请务必完整输出，不要遗漏关键知识点。如果内容较长，请合理分配篇幅，确保文章结构完整，包含结尾总结。
 
 源内容：
 %s
@@ -452,7 +463,7 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 	}
 }
 // GenerateOutline evaluates project text and generates a JSON outline
-func (s *DecompositionService) GenerateOutline(ctx context.Context, sourceContent string) ([]Chapter, error) {
+func (s *DecompositionService) GenerateOutline(ctx context.Context, sourceContent string) (*OutlineResult, error) {
 	// DeepSeek max context is ~128k tokens. 
 	// Limit source content to ~300,000 characters to avoid API 400 errors (invalid_request_error).
 	// 300,000 characters is roughly 75k - 100k tokens, leaving plenty of room for system prompts and the completion.
@@ -464,18 +475,25 @@ func (s *DecompositionService) GenerateOutline(ctx context.Context, sourceConten
 	prompt := fmt.Sprintf(`你是一个高级架构师。请评估以下项目文本，并生成一个系列博客的大纲。
 对于大型项目、源码仓库或复杂内容，**强制拆分为细粒度系列博客**。
 为了避免单篇博客过长，你需要将大模块拆分得更细致，例如分为 5-10 篇，让每篇文章只侧重 1-2 个具体的知识点或核心机制。
-输出必须是纯JSON数组格式，不包含任何Markdown标记或其他文字。
-每个元素包含以下字段：
-- title: 章节标题
-- summary: 该章节的详细摘要或内容要点（指导后续生成的具体方向）
-- sort: 排序（整数，从1开始）
-- files: 一个字符串数组，列出与本章节强相关的具体文件路径或目录（请参考下面提供的目录结构，必须是相对路径）。这非常重要，后续生成本章节时，只会提供这些文件的源码！
+输出必须是纯JSON格式，包含 series_title 和 chapters 两个字段，不包含任何Markdown标记或其他文字。
+JSON 格式如下：
+{
+  "series_title": "系列博客的标题",
+  "chapters": [
+    {
+      "title": "章节标题",
+      "summary": "该章节的详细摘要或内容要点（指导后续生成的具体方向）",
+      "sort": 1,
+      "files": ["强相关的具体文件路径或目录（必须是相对路径）"]
+    }
+  ]
+}
 
 项目文本：
 %s`, sourceContent)
 
 	messages := []llm.Message{
-		{Role: "system", Content: "你是一个高级架构师，只输出符合要求的纯JSON数组。"},
+		{Role: "system", Content: "你是一个高级架构师，只输出符合要求的纯JSON对象。"},
 		{Role: "user", Content: prompt},
 	}
 
@@ -495,10 +513,87 @@ func (s *DecompositionService) GenerateOutline(ctx context.Context, sourceConten
 	content = strings.TrimSuffix(content, "```")
 	content = strings.TrimSpace(content)
 
-	var outline []Chapter
+	var outline OutlineResult
 	if err := json.Unmarshal([]byte(content), &outline); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal llm output: %w, output: %s", err, content)
 	}
 
-	return outline, nil
+	return &outline, nil
+}
+
+// ContinueGeneration handles the SSE stream to continue generating content for an existing blog
+func (s *DecompositionService) ContinueGeneration(ctx context.Context, userID uuid.UUID, blogID uuid.UUID, chunkChan chan<- string, errChan chan<- error) {
+	defer close(chunkChan)
+	defer close(errChan)
+
+	// Fetch existing blog
+	var blog model.Blog
+	if err := db.DB.WithContext(ctx).First(&blog, "id = ? AND user_id = ?", blogID, userID).Error; err != nil {
+		errChan <- fmt.Errorf("blog not found: %w", err)
+		return
+	}
+
+	prompt := "请继续完成上文未写完的内容"
+	messages := []llm.Message{
+		{Role: "system", Content: "你是一个高级技术博客作者。"},
+		{Role: "assistant", Content: blog.Content},
+		{Role: "user", Content: prompt},
+	}
+
+	llmModel := "deepseek-chat"
+	if envModel := os.Getenv("DEEPSEEK_MODEL"); envModel != "" {
+		llmModel = envModel
+	}
+
+	streamCtx, streamCancel := context.WithCancel(ctx)
+	defer streamCancel()
+
+	internalChunkChan := make(chan string)
+	internalErrChan := make(chan error)
+
+	go s.llmClient.GenerateStream(streamCtx, llmModel, messages, internalChunkChan, internalErrChan)
+
+	var newContentBuilder strings.Builder
+	idleTimeout := 30 * time.Second
+	timer := time.NewTimer(idleTimeout)
+	defer timer.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			errChan <- ctx.Err()
+			return
+		case <-timer.C:
+			streamCancel()
+			errChan <- fmt.Errorf("AI generation idle timeout (no data for %v)", idleTimeout)
+			return
+		case err, ok := <-internalErrChan:
+			if ok && err != nil {
+				errChan <- err
+				return
+			}
+			if !ok {
+				internalErrChan = nil
+			}
+		case chunk, ok := <-internalChunkChan:
+			if !ok {
+				// Stream finished
+				finalNewContent := newContentBuilder.String()
+				if finalNewContent != "" {
+					updatedContent := blog.Content + finalNewContent
+					if err := db.DB.WithContext(ctx).Model(&blog).Update("content", updatedContent).Error; err != nil {
+						fmt.Printf("Failed to update blog content: %v\n", err)
+					}
+				}
+				return
+			}
+			if !timer.Stop() {
+				select { case <-timer.C: default: }
+			}
+			timer.Reset(idleTimeout)
+
+			newContentBuilder.WriteString(chunk)
+			chunkChan <- chunk
+		}
+	}
 }

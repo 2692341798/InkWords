@@ -149,6 +149,7 @@
 - **Request Body (JSON)**:
   ```json
   {
+    "series_title": "用户编辑后的系列标题（可选）",
     "source_content": "提取后的文档或源码内容...",
     "outline": [/* 章节大纲数组 */],
     "source_type": "git" // "git" 或 "file"
@@ -182,4 +183,16 @@
     "title": "修改后的标题",
     "content": "修改后的 Markdown 内容..."
   }
+  ```
+
+### 4.3 继续生成未写完的博客 (Continue Generating)
+- **POST** `/api/v1/blogs/:id/continue`
+- **描述**：针对生成截断或内容不全的博客，调用此接口会让大模型基于已有内容“继续完成上文未写完的内容”。采用 SSE 流式下发，并在完成后自动追加到数据库中。
+- **SSE Event 格式**:
+  ```text
+  event: chunk
+  data: "继续生成的文本片段..."
+
+  event: done
+  data: [DONE]
   ```

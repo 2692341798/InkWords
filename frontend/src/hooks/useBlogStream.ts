@@ -54,6 +54,9 @@ export const useBlogStream = () => {
               if (data.data?.outline) {
                 store.setSource('git', data.data.source_content, gitUrl)
                 store.setOutline(data.data.outline)
+                if (data.data.series_title) {
+                  store.setSeriesTitle(data.data.series_title)
+                }
               }
             } catch {
               // Ignore parse error
@@ -248,7 +251,8 @@ export const useBlogStream = () => {
           source_content: store.sourceContent,
           outline: store.outline,
           source_type: store.sourceType || 'git',
-          git_url: store.gitUrl || ''
+          git_url: store.gitUrl || '',
+          series_title: store.seriesTitle || ''
         }),
         onmessage(msg) {
           if (msg.event === 'chunk') {

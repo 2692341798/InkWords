@@ -226,26 +226,60 @@ export function Generator() {
               if (allCompleted) return null;
 
               return (
-                <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-6 mb-8">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="font-semibold text-indigo-900">准备生成</h3>
-                      <p className="text-sm text-indigo-700 mt-1">
-                        {store.sourceType === 'file'
-                          ? '系统将根据文件内容生成一篇详细的技术博客。'
-                          : `系统将并发生成 ${store.outline.length} 篇博客章节。`}
-                      </p>
+                <>
+                  {store.sourceType !== 'file' && store.outline.length > 0 && (
+                    <div className="mb-8">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold text-zinc-800">系列博客大纲</h3>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-zinc-500">系列标题:</span>
+                          <input
+                            type="text"
+                            value={store.seriesTitle}
+                            onChange={(e) => store.setSeriesTitle(e.target.value)}
+                            placeholder="请输入系列标题"
+                            className="px-3 py-1.5 bg-zinc-50 border border-zinc-200 rounded-md text-sm w-64 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            disabled={store.isGenerating}
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-4 max-h-[40vh] overflow-y-auto custom-scrollbar pr-2">
+                        {store.outline.map((ch) => (
+                          <div key={ch.sort} className="p-4 bg-zinc-50 rounded-xl border border-zinc-200">
+                            <div className="flex items-center gap-3 mb-2">
+                              <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-sm font-semibold shrink-0">
+                                {ch.sort}
+                              </div>
+                              <h4 className="font-medium text-zinc-900">{ch.title}</h4>
+                            </div>
+                            <p className="text-sm text-zinc-500 pl-9">{ch.summary}</p>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    <Button 
-                      onClick={handleGenerate} 
-                      disabled={store.isGenerating}
-                      className="bg-indigo-600 text-white hover:bg-indigo-700"
-                    >
-                      {store.isGenerating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                      {store.isGenerating ? '生成中...' : '开始生成'}
-                    </Button>
+                  )}
+
+                  <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-6 mb-8">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="font-semibold text-indigo-900">准备生成</h3>
+                        <p className="text-sm text-indigo-700 mt-1">
+                          {store.sourceType === 'file'
+                            ? '系统将根据文件内容生成一篇详细的技术博客。'
+                            : `系统将并发生成 ${store.outline.length} 篇博客章节。`}
+                        </p>
+                      </div>
+                      <Button 
+                        onClick={handleGenerate} 
+                        disabled={store.isGenerating}
+                        className="bg-indigo-600 text-white hover:bg-indigo-700"
+                      >
+                        {store.isGenerating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                        {store.isGenerating ? '生成中...' : '开始生成'}
+                      </Button>
+                    </div>
                   </div>
-                </div>
+                </>
               );
             })()}
 

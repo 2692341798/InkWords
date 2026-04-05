@@ -32,6 +32,7 @@ type GenerateRequest struct {
 	SourceType    string            `json:"source_type"`
 	Outline       []service.Chapter `json:"outline"` // Optional outline for series generation
 	GitURL        string            `json:"git_url"` // For analyze stream
+	SeriesTitle   string            `json:"series_title"` // Series title for parent blog
 }
 
 // AnalyzeStreamHandler handles the /api/v1/stream/analyze endpoint
@@ -143,7 +144,7 @@ func (api *StreamAPI) GenerateBlogStreamHandler(c *gin.Context) {
 	if len(req.Outline) > 0 {
 		// Series Generation
 		parentID := uuid.New()
-		go api.decompositionService.GenerateSeries(bgCtx, userID, parentID, req.Outline, req.SourceContent, req.SourceType, req.GitURL, chunkChan, errChan)
+		go api.decompositionService.GenerateSeries(bgCtx, userID, parentID, req.SeriesTitle, req.Outline, req.SourceContent, req.SourceType, req.GitURL, chunkChan, errChan)
 	} else {
 		// Single blog stream
 		go api.generatorService.GenerateBlogStream(bgCtx, userID, req.SourceContent, req.SourceType, chunkChan, errChan)
@@ -183,6 +184,73 @@ func (api *StreamAPI) GenerateBlogStreamHandler(c *gin.Context) {
 		case chunk, ok := <-chunkChan:
 			if !ok {
 				// Stream finished
+				c.SSEvent("done", "[DONE]")
+				return false
+			}
+			c.SSEvent("chunk", chunk)
+			return true
+		}
+	})
+}
+
+// ContinueBlogStreamHandler handles the /api/v1/blogs/:id/continue endpoint
+func (api *StreamAPI) ContinueBlogStreamHandler(c *gin.Context) {
+	blogIDStr := c.Param("id")
+	blogID, err := uuid.Parse(blogIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid blog ID"})
+		return
+	}
+
+	var userID uuid.UUID
+	if v, exists := c.Get("user_id"); exists {
+		if id, ok := v.(uuid.UUID); ok {
+			userID = id
+		}
+	}
+	if userID == uuid.Nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	chunkChan := make(chan string)
+	errChan := make(chan error)
+
+	bgCtx := context.WithoutCancel(c.Request.Context())
+	ctx := c.Request.Context()
+
+	go api.decompositionService.ContinueGeneration(bgCtx, userID, blogID, chunkChan, errChan)
+
+	c.Writer.Header().Set("Content-Type", "text/event-stream")
+	c.Writer.Header().Set("Cache-Control", "no-cache")
+	c.Writer.Header().Set("Connection", "keep-alive")
+
+	c.Stream(func(w io.Writer) bool {
+		select {
+		case <-ctx.Done():
+			go func() {
+				for {
+					select {
+					case <-chunkChan:
+					case err, ok := <-errChan:
+						if !ok || err != nil {
+							return
+						}
+					}
+				}
+			}()
+			return false
+		case err, ok := <-errChan:
+			if ok && err != nil {
+				c.SSEvent("error", err.Error())
+				return false
+			}
+			if !ok {
+				errChan = nil
+			}
+			return true
+		case chunk, ok := <-chunkChan:
+			if !ok {
 				c.SSEvent("done", "[DONE]")
 				return false
 			}

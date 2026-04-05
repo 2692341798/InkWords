@@ -2,14 +2,16 @@ import { useState, useEffect, useRef } from 'react'
 import { useBlogStore } from '@/store/blogStore'
 import { MarkdownEngine } from './MarkdownEngine'
 import { Button } from './ui/button'
-import { Download, FileDown, Save, Loader2 } from 'lucide-react'
+import { Download, FileDown, Save, Loader2, Sparkles } from 'lucide-react'
 import { useDebounce } from '@/hooks/useDebounce'
+import { fetchEventSource } from '@microsoft/fetch-event-source'
 
 export function Editor() {
   const { selectedBlog, updateBlog } = useBlogStore()
   const [title, setTitle] = useState(selectedBlog?.title || '')
   const [content, setContent] = useState(selectedBlog?.content || '')
   const [isSaving, setIsSaving] = useState(false)
+  const [isContinuing, setIsContinuing] = useState(false)
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
 
   const editorRef = useRef<HTMLTextAreaElement>(null)
@@ -75,6 +77,48 @@ export function Editor() {
 
   const exportPDF = () => {
     window.print()
+  }
+
+  const handleContinueGenerating = async () => {
+    if (!selectedBlog || isContinuing) return
+    setIsContinuing(true)
+
+    const token = localStorage.getItem('token')
+
+    try {
+      let currentContent = content
+      await fetchEventSource(`/api/v1/blogs/${selectedBlog.id}/continue`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({}),
+        onmessage(msg) {
+          if (msg.event === 'chunk') {
+            currentContent += msg.data
+            setContent(currentContent)
+          } else if (msg.event === 'done') {
+            updateBlog(selectedBlog.id, { content: currentContent })
+            setIsContinuing(false)
+          } else if (msg.event === 'error') {
+            console.error('Continue generating error:', msg.data)
+            setIsContinuing(false)
+          }
+        },
+        onclose() {
+          setIsContinuing(false)
+        },
+        onerror(err) {
+          console.error('Continue generating fetch error:', err)
+          setIsContinuing(false)
+          throw err
+        }
+      })
+    } catch (err) {
+      console.error('Failed to continue generating:', err)
+      setIsContinuing(false)
+    }
   }
 
   const handleEditorScroll = () => {
@@ -268,6 +312,20 @@ export function Editor() {
         </div>
 
         <div className="flex items-center gap-2">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleContinueGenerating} 
+            disabled={isContinuing}
+            className="gap-1.5 text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+          >
+            {isContinuing ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Sparkles className="w-4 h-4" />
+            )}
+            继续生成
+          </Button>
           <Button variant="outline" size="sm" onClick={exportMarkdown} className="gap-1.5 text-zinc-600">
             <Download className="w-4 h-4" /> 导出 MD
           </Button>

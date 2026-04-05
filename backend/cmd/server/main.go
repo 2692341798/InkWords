@@ -74,6 +74,7 @@ func main() {
 		{
 			blogGroup.GET("", blogAPI.GetUserBlogs)
 			blogGroup.PUT("/:id", blogAPI.UpdateBlog)
+			blogGroup.POST("/:id/continue", streamAPI.ContinueBlogStreamHandler)
 		}
 
 		// 项目分析相关路由 (需鉴权)

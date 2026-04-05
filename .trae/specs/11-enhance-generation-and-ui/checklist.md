@@ -1,0 +1,7 @@
+- [x] Outline generation returns a `series_title` and `chapters` list.
+- [x] Frontend displays an input field for the `seriesTitle` before generation starts.
+- [x] The generated parent blog uses the user-edited `seriesTitle` instead of "Git源码解析系列".
+- [x] The outline list in `Generator.tsx` has a vertical scrollbar and max height.
+- [x] The "当前生成任务" list in `Sidebar.tsx` has a vertical scrollbar and max height.
+- [x] A "继续生成" (Continue Generating) button is available in the `Editor.tsx` view.
+- [x] Clicking "继续生成" successfully appends new LLM content to the existing blog.
