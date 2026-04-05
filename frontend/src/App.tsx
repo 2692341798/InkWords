@@ -31,7 +31,7 @@ function App() {
   return (
     <div className="min-h-screen bg-zinc-50 flex print:bg-white print:block print:h-auto">
       <Sidebar />
-      {selectedBlog ? <Editor /> : <Generator />}
+      {selectedBlog ? <Editor key={selectedBlog.id} /> : <Generator />}
     </div>
   )
 }

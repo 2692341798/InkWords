@@ -17,14 +17,21 @@ export function Editor() {
   const activePaneRef = useRef<'editor' | 'preview' | null>(null)
   const scrollTimeoutRef = useRef<number | null>(null)
 
-  // Update local state when selectedBlog changes
+  // Track latest state for unmount save
+  const currentStateRef = useRef({ selectedBlog, title, content })
   useEffect(() => {
-    if (selectedBlog) {
-      setTitle(selectedBlog.title || '')
-      setContent(selectedBlog.content || '')
+    currentStateRef.current = { selectedBlog, title, content }
+  }, [selectedBlog, title, content])
+
+  // Save on unmount if there are unsaved changes
+  useEffect(() => {
+    return () => {
+      const { selectedBlog: b, title: t, content: c } = currentStateRef.current
+      if (b && (t !== b.title || c !== b.content)) {
+        updateBlog(b.id, { title: t, content: c })
+      }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedBlog?.id])
+  }, [updateBlog])
 
   // Debounced values for auto-saving
   const debouncedTitle = useDebounce(title, 2000)
