@@ -151,34 +151,49 @@ export function Generator() {
         {store.outline && !store.isAnalyzing && (
           <div className="max-w-3xl mx-auto">
             <h2 className="text-2xl font-bold text-zinc-800 mb-2">
-              {store.sourceType === 'file' ? '文件解析成功' : '项目大纲已生成'}
+              {(() => {
+                const allCompleted = store.outline.every(ch => store.chapterStatus[ch.sort] === 'completed');
+                if (allCompleted) return '系列博客生成完毕';
+                return store.sourceType === 'file' ? '文件解析成功' : '项目大纲已生成';
+              })()}
             </h2>
             <p className="text-zinc-500 mb-8">
-              {store.sourceType === 'file'
-                ? '我们已经成功提取了您的文件内容。点击“开始生成”以编写单篇博客。'
-                : '我们已经分析了您的代码库并生成了以下系列博客大纲。点击“开始生成”以编写该系列博客。'}
+              {(() => {
+                const allCompleted = store.outline.every(ch => store.chapterStatus[ch.sort] === 'completed');
+                if (allCompleted) return '所有的章节已经成功生成并保存到数据库。您可以在左侧边栏点击生成的章节查看完整内容。';
+                return store.sourceType === 'file'
+                  ? '我们已经成功提取了您的文件内容。点击“开始生成”以编写单篇博客。'
+                  : '我们已经分析了您的代码库并生成了以下系列博客大纲。点击“开始生成”以编写该系列博客。';
+              })()}
             </p>
 
-            <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-6 mb-8">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-semibold text-indigo-900">准备生成</h3>
-                  <p className="text-sm text-indigo-700 mt-1">
-                    {store.sourceType === 'file'
-                      ? '系统将根据文件内容生成一篇详细的技术博客。'
-                      : `系统将并发生成 ${store.outline.length} 篇博客章节。`}
-                  </p>
+            {(() => {
+              const allCompleted = store.outline.every(ch => store.chapterStatus[ch.sort] === 'completed');
+              if (allCompleted) return null;
+
+              return (
+                <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-6 mb-8">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-semibold text-indigo-900">准备生成</h3>
+                      <p className="text-sm text-indigo-700 mt-1">
+                        {store.sourceType === 'file'
+                          ? '系统将根据文件内容生成一篇详细的技术博客。'
+                          : `系统将并发生成 ${store.outline.length} 篇博客章节。`}
+                      </p>
+                    </div>
+                    <Button 
+                      onClick={handleGenerate} 
+                      disabled={store.isGenerating}
+                      className="bg-indigo-600 text-white hover:bg-indigo-700"
+                    >
+                      {store.isGenerating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                      {store.isGenerating ? '生成中...' : '开始生成'}
+                    </Button>
+                  </div>
                 </div>
-                <Button 
-                  onClick={handleGenerate} 
-                  disabled={store.isGenerating}
-                  className="bg-indigo-600 text-white hover:bg-indigo-700"
-                >
-                  {store.isGenerating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                  {store.isGenerating ? '生成中...' : '开始生成'}
-                </Button>
-              </div>
-            </div>
+              );
+            })()}
 
             {store.isGenerating && (
               <div className="bg-zinc-50 rounded-xl border border-zinc-200 p-8">
@@ -201,7 +216,7 @@ export function Generator() {
                     <div className="flex-1"></div>
                     <span className="text-xs text-zinc-500">{store.generatedContent.length} 字符</span>
                   </div>
-                  <div className="prose prose-zinc max-w-none text-left">
+                  <div className="prose prose-zinc max-w-none text-left max-h-[500px] overflow-y-auto">
                     <MarkdownEngine content={store.generatedContent || '正在构思文章结构...'} />
                   </div>
                 </div>

@@ -89,6 +89,24 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 	defer close(progressChan)
 	defer close(errChan)
 
+	// --- FIX START: Save the parent node so that History Blogs can query it ---
+	parentTitle := "Git 源码解析系列"
+	if sourceType == "file" {
+		parentTitle = "文件解析系列"
+	}
+	parentBlog := &model.Blog{
+		ID:         parentID,
+		UserID:     userID,
+		Title:      parentTitle,
+		Content:    "该节点为系列文章的父节点，请点击展开查看具体的章节。",
+		SourceType: sourceType,
+		Status:     1, // 1 for completed
+	}
+	if err := db.DB.WithContext(ctx).Create(parentBlog).Error; err != nil {
+		fmt.Printf("Failed to create parent blog: %v\n", err)
+	}
+	// --- FIX END ---
+
 	for _, chapter := range outline {
 		select {
 		case <-ctx.Done():

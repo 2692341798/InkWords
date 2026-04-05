@@ -23,8 +23,8 @@
 - `src/hooks/`: 自定义 Hooks（如 `useBlogStream.ts` 封装了 `analyzeGit` 与 `generateSeries`，并利用 `@microsoft/fetch-event-source` 维持 POST 流）。
 
 ### 2.2 核心渲染器架构 (Renderer)
-- **MarkdownEngine**：基于 `react-markdown` 配合 GitHub 样式（去除边框），负责实时渲染流式抵达的文本。
-- **MermaidViewer**：基于原生 Mermaid API 进行渲染（替代 `rehype-mermaid` 解决异步渲染冲突），并自定义拦截逻辑，**强制注入默认主题配置**，移除所有由于 LLM 幻觉可能携带的 `style` 或 `classDef` 样式属性，保障图表的极简统一。
+- **MarkdownEngine**：基于 `react-markdown` 配合 GitHub 样式（去除边框），负责实时渲染流式抵达的文本。为了防止生成极长文章时撑爆页面导致卡顿，该容器设置了最大高度并支持内部滚动。
+- **MermaidViewer**：基于原生 Mermaid API 进行渲染（替代 `rehype-mermaid` 解决异步渲染冲突）。通过开启 `suppressErrorRendering: true` 并在捕获异常时清空容器，彻底静默了 LLM 流式输出中间态时的语法报错（"Syntax error in text"），保障极简平滑的视觉体验。同时自定义拦截逻辑，**强制注入默认主题配置**，移除所有由于 LLM 幻觉可能携带的 `style` 或 `classDef` 样式属性。
 
 ## 3. 后端架构设计 (Go 1.21+)
 
@@ -66,8 +66,8 @@ Go 后端采用经典的“三层架构”，并通过依赖注入（Dependency 
 ### 4.2 大项目流式分析与串行生成机制
 当 Parser (`GitFetcher` 或 `DocParser`) 提取的文本超长（系统判定为大项目或长篇教程）时：
 1. **大纲规划 (SSE 进度流)**：前端调用 `POST /api/v1/stream/analyze`，后端在执行克隆拉取、源码拼接、以及非流式请求大模型生成大纲的每一个阶段，都会主动向下推送 `{"step": x, "message": "..."}` 事件。前端基于此渲染真实进度条缓解等待焦虑，并在最后一步获取 JSON 数组大纲。
-2. **内容生成 (串行打字机渲染)**：大纲确认后，前端携带 `outline` 数组请求 `POST /api/v1/stream/generate`。系统按照大纲顺序**串行**向模型发送请求。利用 `json.Marshal` 严格序列化包含文本片段的 SSE 事件，实现丝滑的打字机前端渲染效果。
-3. **断点保存与进度状态流**：每生成完其中一篇文章，立即落库并带有相同的 `ParentID` 与各自的 `ChapterSort`。同时，前端实时更新该章节的 UI 状态（`generating` -> `completed`），并在完成后支持用户直接点击卡片打开完整真实文章。
+2. **内容生成 (串行打字机渲染)**：大纲确认后，前端携带 `outline` 数组请求 `POST /api/v1/stream/generate`。后端首先会在数据库中**主动持久化一个代表整个系列的 Parent 节点**（防止后续子文章成为无法查询的孤岛数据），随后按照大纲顺序**串行**向模型发送请求。利用 `json.Marshal` 严格序列化包含文本片段的 SSE 事件，实现丝滑的打字机前端渲染效果。
+3. **断点保存与联动状态流**：每生成完其中一篇文章，立即落库并带有相同的 `ParentID` 与各自的 `ChapterSort`。前端实时更新该章节的 UI 状态（`generating` -> `completed`），并在整个系列完成后，自动在左侧“历史博客”树中**递归查找、展开并高亮**对应的真实文章节点。右侧面板则隐藏生成按钮并提供明确的完成引导。
 
 ## 5. 安全与部署架构
 

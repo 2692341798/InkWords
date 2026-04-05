@@ -11,6 +11,7 @@ mermaid.initialize({
   startOnLoad: false,
   theme: 'default',
   securityLevel: 'loose',
+  suppressErrorRendering: true, // Prevent "Syntax error in text" from rendering on the page
 });
 
 // Remark plugin to strip style and classDef from mermaid blocks
@@ -44,6 +45,10 @@ const MermaidBlock: React.FC<{ chart: string }> = ({ chart }) => {
           if (!trimmedChart || trimmedChart === 'undefined') {
             throw new Error('Empty or undefined diagram text');
           }
+          
+          // Use suppressErrors to prevent mermaid from throwing errors directly to console/UI
+          mermaid.mermaidAPI.getConfig().suppressErrorRendering = true;
+          
           const { svg } = await mermaid.render(id, trimmedChart);
           if (containerRef.current) {
             containerRef.current.innerHTML = svg;
@@ -51,8 +56,9 @@ const MermaidBlock: React.FC<{ chart: string }> = ({ chart }) => {
         } catch {
           // Do not log the error to the console during streaming as it's expected
           // that incomplete mermaid syntax will throw errors until fully generated.
+          // Hide errors completely to avoid cluttering the UI with "Syntax error in text"
           if (containerRef.current) {
-            containerRef.current.innerHTML = `<div class="text-red-500 text-sm p-4 border border-red-200 rounded border-dashed bg-red-50/50">正在绘制图表... (等待代码块生成完毕)</div>`;
+            containerRef.current.innerHTML = '';
           }
         }
       };

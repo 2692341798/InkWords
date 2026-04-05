@@ -107,27 +107,32 @@ export function Sidebar() {
                     )}
                     onClick={() => {
                       if (status === 'completed') {
-                        // Find the matching real blog from history
-                        // We assume the generated ones are at the top, we match by title
-                        const matchingBlog = blogs.find(b => b.title === ch.title && b.chapter_sort === ch.sort)
-                        if (matchingBlog) {
-                          selectBlog(matchingBlog)
-                        } else {
-                          // fallback if parent-child structure makes it nested
-                          let found: BlogNode | null = null
-                          const searchNested = (nodes: BlogNode[]) => {
-                            for (const node of nodes) {
-                              if (node.title === ch.title && node.chapter_sort === ch.sort) {
-                                found = node
-                                return
-                              }
-                              if (node.children) searchNested(node.children)
+                        let found: BlogNode | null = null
+                        let parentIdToExpand: string | null = null
+
+                        const searchNested = (nodes: BlogNode[], parentId: string | null = null) => {
+                          for (const node of nodes) {
+                            if (node.title === ch.title && node.chapter_sort === ch.sort) {
+                              found = node
+                              parentIdToExpand = parentId
+                              return
+                            }
+                            if (node.children && node.children.length > 0) {
+                              searchNested(node.children, node.id)
+                              if (found) return
                             }
                           }
-                          searchNested(blogs)
-                          if (found) {
-                            selectBlog(found)
+                        }
+
+                        searchNested(blogs)
+
+                        if (found) {
+                          if (parentIdToExpand) {
+                            const newExpanded = new Set(expandedNodes)
+                            newExpanded.add(parentIdToExpand)
+                            setExpandedNodes(newExpanded)
                           }
+                          selectBlog(found)
                         }
                       }
                     }}

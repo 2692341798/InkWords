@@ -37,8 +37,8 @@
 核心业务表，存储生成的 Markdown 内容及大项目拆解结构。
 - `id` (BIGINT/UUID, PK): 雪花 ID。
 - `user_id` (BIGINT/UUID, FK): 关联作者。
-- `parent_id` (BIGINT/UUID, Nullable): **父级系列 ID**。若为大项目生成的系列博客，此字段指向代表“整个系列”的根节点记录。若是单篇独立博客，则为 NULL。
-- `chapter_sort` (INTEGER): **章节序号**。在大项目拆解场景中，表示当前文章在整个系列中的排序位置。
+- `parent_id` (BIGINT/UUID, Nullable): **父级系列 ID**。若为大项目生成的系列博客，此字段指向代表“整个系列”的根节点记录（系统会在开始生成系列前**主动创建并持久化该根节点**，避免其下子节点成为无法被查询的孤岛数据）。若是单篇独立博客，则为 NULL。
+- `chapter_sort` (INTEGER): **章节序号**。在大项目拆解场景中，表示当前文章在整个系列中的排序位置（根节点默认通常为 0，具体内容子章节从 1 开始递增）。
 - `title` (VARCHAR): 博客或系列的标题。
 - `content` (TEXT): **Markdown 正文内容**。因为单篇内容限制约 5000 字且包含 Mermaid 代码块，PostgreSQL 中的 `TEXT` 类型支持无限长度存储，确保容量充裕且不截断。
 - `source_type` (VARCHAR): 生成来源（如 `github`, `pdf`, `word`, `markdown`）。在 Git 仓库拆解场景中，前端会默认下发标记为 `git` 或对应的 Git 平台。
