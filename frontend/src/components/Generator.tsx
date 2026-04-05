@@ -152,14 +152,14 @@ export function Generator() {
           <div className="max-w-3xl mx-auto">
             <h2 className="text-2xl font-bold text-zinc-800 mb-2">
               {(() => {
-                const allCompleted = store.outline.every(ch => store.chapterStatus[ch.sort] === 'completed');
+                const allCompleted = store.outline.length > 0 && store.outline.every(ch => store.chapterStatus[ch.sort] === 'completed');
                 if (allCompleted) return '系列博客生成完毕';
                 return store.sourceType === 'file' ? '文件解析成功' : '项目大纲已生成';
               })()}
             </h2>
             <p className="text-zinc-500 mb-8">
               {(() => {
-                const allCompleted = store.outline.every(ch => store.chapterStatus[ch.sort] === 'completed');
+                const allCompleted = store.outline.length > 0 && store.outline.every(ch => store.chapterStatus[ch.sort] === 'completed');
                 if (allCompleted) return '所有的章节已经成功生成并保存到数据库。您可以在左侧边栏点击生成的章节查看完整内容。';
                 return store.sourceType === 'file'
                   ? '我们已经成功提取了您的文件内容。点击“开始生成”以编写单篇博客。'
@@ -168,7 +168,7 @@ export function Generator() {
             </p>
 
             {(() => {
-              const allCompleted = store.outline.every(ch => store.chapterStatus[ch.sort] === 'completed');
+              const allCompleted = store.outline.length > 0 && store.outline.every(ch => store.chapterStatus[ch.sort] === 'completed');
               if (allCompleted) return null;
 
               return (

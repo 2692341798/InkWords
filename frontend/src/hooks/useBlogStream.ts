@@ -173,8 +173,7 @@ export const useBlogStream = () => {
             throw new StopStreamError(msg.data)
           } else if (msg.event === 'done') {
             store.setGenerating(false)
-            store.setOutline([]) // clear generator state
-            store.setSource('file', '')
+            store.reset() // clear generator state completely
             fetchBlogs() // Refresh to get the saved blog from DB
             throw new StopStreamError('done')
           }
