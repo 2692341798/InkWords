@@ -6,6 +6,14 @@ export interface Chapter {
   sort: number
 }
 
+export interface MapReduceProgress {
+  status: 'chunk_analyzing' | 'chunk_done' | 'chunk_failed' | 'chunk_failed_final' | ''
+  dir: string
+  index: number
+  total: number
+  attempt?: number
+}
+
 interface StreamState {
   sourceType: 'git' | 'file' | null
   sourceContent: string
@@ -14,6 +22,7 @@ interface StreamState {
   generatedContent: string
   isAnalyzing: boolean
   isGenerating: boolean
+  mapReduceProgress: MapReduceProgress | null
   setSource: (type: 'git' | 'file', content: string) => void
   setOutline: (outline: Chapter[]) => void
   updateChapterStatus: (sort: number, status: 'pending' | 'generating' | 'completed' | 'error') => void
@@ -21,6 +30,7 @@ interface StreamState {
   clearGeneratedContent: () => void
   setGenerating: (status: boolean) => void
   setAnalyzing: (status: boolean) => void
+  setMapReduceProgress: (progress: MapReduceProgress | null) => void
   reset: () => void
 }
 
@@ -32,6 +42,7 @@ export const useStreamStore = create<StreamState>((set) => ({
   generatedContent: '',
   isAnalyzing: false,
   isGenerating: false,
+  mapReduceProgress: null,
   setSource: (type, content) => set({ sourceType: type, sourceContent: content }),
   setOutline: (outline) => set({ 
     outline,
@@ -48,6 +59,7 @@ export const useStreamStore = create<StreamState>((set) => ({
   clearGeneratedContent: () => set({ generatedContent: '' }),
   setGenerating: (status) => set({ isGenerating: status }),
   setAnalyzing: (status) => set({ isAnalyzing: status }),
+  setMapReduceProgress: (progress) => set({ mapReduceProgress: progress }),
   reset: () => set({
     sourceType: null,
     sourceContent: '',
@@ -55,6 +67,7 @@ export const useStreamStore = create<StreamState>((set) => ({
     chapterStatus: {},
     generatedContent: '',
     isAnalyzing: false,
-    isGenerating: false
+    isGenerating: false,
+    mapReduceProgress: null
   })
 }))

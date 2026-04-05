@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -63,17 +64,29 @@ func TestGitFetcher_Fetch(t *testing.T) {
 
 	// Using the local directory path as a file:// URL works with git clone
 	repoURL := "file://" + filepath.ToSlash(tempDir)
-	content, err := fetcher.Fetch(repoURL)
+	content, chunks, err := fetcher.Fetch(repoURL)
 	require.NoError(t, err)
+	assert.NotEmpty(t, chunks)
 
-	// Validate content
-	assert.Contains(t, content, "package main")
-	assert.Contains(t, content, "--- File: main.go ---")
-	assert.Contains(t, content, "# Test Repo")
-	assert.Contains(t, content, "--- File: README.md ---")
+	// Build the full content from chunks to validate
+	var fullContent strings.Builder
+	for _, chunk := range chunks {
+		fullContent.WriteString(chunk.Content)
+	}
+	allText := fullContent.String()
+
+	// Validate tree content
+	assert.Contains(t, content, "- main.go")
+	assert.Contains(t, content, "- README.md")
+
+	// Validate chunk content
+	assert.Contains(t, allText, "package main")
+	assert.Contains(t, allText, "--- File: main.go ---")
+	assert.Contains(t, allText, "# Test Repo")
+	assert.Contains(t, allText, "--- File: README.md ---")
 
 	// Validate ignored contents
-	assert.NotContains(t, content, "ignore me")
-	assert.NotContains(t, content, "image.png")
+	assert.NotContains(t, allText, "ignore me")
+	assert.NotContains(t, allText, "image.png")
 	assert.NotContains(t, content, "node_modules")
 }

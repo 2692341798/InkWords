@@ -1,8 +1,10 @@
 package api
 
 import (
+	"context"
 	"io"
 	"net/http"
+	"sync"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -48,19 +50,40 @@ func (api *StreamAPI) AnalyzeStreamHandler(c *gin.Context) {
 	progressChan := make(chan string)
 	errChan := make(chan error)
 
+	bgCtx := context.WithoutCancel(c.Request.Context())
 	ctx := c.Request.Context()
 
-	// Start analysis in a goroutine
-	go api.decompositionService.AnalyzeStream(ctx, req.GitURL, progressChan, errChan)
+	// We use a WaitGroup to ensure the goroutine finishes before we return from the handler
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	go func() {
+		defer wg.Done()
+		api.decompositionService.AnalyzeStream(bgCtx, req.GitURL, progressChan, errChan)
+	}()
 
 	// Set headers for SSE
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")
 	c.Writer.Header().Set("Connection", "keep-alive")
 
+	// Read from channels until done or error
 	c.Stream(func(w io.Writer) bool {
 		select {
 		case <-ctx.Done():
+			// Client disconnected or request timed out
+			// Drain channels in background so the generation task doesn't block
+			go func() {
+				for {
+					select {
+					case <-progressChan:
+					case err, ok := <-errChan:
+						if !ok || err != nil {
+							return
+						}
+					}
+				}
+			}()
 			return false
 		case err, ok := <-errChan:
 			if ok && err != nil {
@@ -71,15 +94,23 @@ func (api *StreamAPI) AnalyzeStreamHandler(c *gin.Context) {
 				errChan = nil
 			}
 			return true
-		case chunk, ok := <-progressChan:
+		case msg, ok := <-progressChan:
 			if !ok {
 				c.SSEvent("done", "[DONE]")
 				return false
 			}
-			c.SSEvent("chunk", chunk)
+			c.SSEvent("chunk", msg)
 			return true
 		}
 	})
+
+	// Wait for the goroutine to finish before exiting the handler
+	// so we don't leak goroutines or write to closed channels.
+	// But note: Gin's c.Stream blocks until it returns false,
+	// so the context might already be done here.
+	// We wait in a separate goroutine so we don't block the request handler forever
+	// if something goes wrong, but we allow it to clean up.
+	go wg.Wait()
 }
 
 // GenerateBlogStreamHandler handles the /api/v1/stream/generate endpoint
@@ -93,6 +124,7 @@ func (api *StreamAPI) GenerateBlogStreamHandler(c *gin.Context) {
 	chunkChan := make(chan string)
 	errChan := make(chan error)
 
+	bgCtx := context.WithoutCancel(c.Request.Context())
 	ctx := c.Request.Context()
 
 	// Retrieve UserID from context if available, otherwise create a dummy one for testing
@@ -111,10 +143,10 @@ func (api *StreamAPI) GenerateBlogStreamHandler(c *gin.Context) {
 	if len(req.Outline) > 0 {
 		// Series Generation
 		parentID := uuid.New()
-		go api.decompositionService.GenerateSeries(ctx, userID, parentID, req.Outline, req.SourceContent, req.SourceType, chunkChan, errChan)
+		go api.decompositionService.GenerateSeries(bgCtx, userID, parentID, req.Outline, req.SourceContent, req.SourceType, chunkChan, errChan)
 	} else {
 		// Single blog stream
-		go api.generatorService.GenerateBlogStream(ctx, userID, req.SourceContent, req.SourceType, chunkChan, errChan)
+		go api.generatorService.GenerateBlogStream(bgCtx, userID, req.SourceContent, req.SourceType, chunkChan, errChan)
 	}
 
 	// Set headers for SSE
@@ -126,6 +158,18 @@ func (api *StreamAPI) GenerateBlogStreamHandler(c *gin.Context) {
 		select {
 		case <-ctx.Done():
 			// Client disconnected
+			// Drain channels in background so the generation task doesn't block
+			go func() {
+				for {
+					select {
+					case <-chunkChan:
+					case err, ok := <-errChan:
+						if !ok || err != nil {
+							return
+						}
+					}
+				}
+			}()
 			return false
 		case err, ok := <-errChan:
 			if ok && err != nil {

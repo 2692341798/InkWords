@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -52,15 +53,26 @@ func (s *GeneratorService) GenerateBlogStream(ctx context.Context, userID uuid.U
 	internalChunkChan := make(chan string)
 	internalErrChan := make(chan error)
 
+	streamCtx, streamCancel := context.WithCancel(ctx)
+	defer streamCancel()
+
 	go func() {
 		defer close(chunkChan)
 		defer close(errChan)
 
 		var fullContent string
+		idleTimeout := 30 * time.Second
+		timer := time.NewTimer(idleTimeout)
+		defer timer.Stop()
+
 		for {
 			select {
 			case <-ctx.Done():
 				errChan <- ctx.Err()
+				return
+			case <-timer.C:
+				streamCancel()
+				errChan <- fmt.Errorf("AI generation idle timeout (no data for %v)", idleTimeout)
 				return
 			case err, ok := <-internalErrChan:
 				if ok && err != nil {
@@ -76,13 +88,18 @@ func (s *GeneratorService) GenerateBlogStream(ctx context.Context, userID uuid.U
 					s.saveToDB(ctx, userID, sourceType, fullContent)
 					return
 				}
+				if !timer.Stop() {
+					select { case <-timer.C: default: }
+				}
+				timer.Reset(idleTimeout)
+
 				fullContent += chunk
 				chunkChan <- chunk
 			}
 		}
 	}()
 
-	s.llmClient.GenerateStream(ctx, modelType, messages, internalChunkChan, internalErrChan)
+	s.llmClient.GenerateStream(streamCtx, modelType, messages, internalChunkChan, internalErrChan)
 }
 
 // saveToDB persists the generated markdown to PostgreSQL

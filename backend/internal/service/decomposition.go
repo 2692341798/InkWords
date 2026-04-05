@@ -6,8 +6,11 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/google/uuid"
+	"golang.org/x/sync/semaphore"
 
 	"inkwords-backend/internal/db"
 	"inkwords-backend/internal/llm"
@@ -63,25 +66,139 @@ func (s *DecompositionService) AnalyzeStream(ctx context.Context, gitURL string,
 
 	sendProgress(0, "正在克隆并拉取仓库 (depth=1)...", nil)
 	
-	content, err := s.gitFetcher.Fetch(gitURL)
+	treeContent, chunks, err := s.gitFetcher.Fetch(gitURL)
 	if err != nil {
 		errChan <- fmt.Errorf("拉取仓库失败: %w", err)
 		return
 	}
 
 	sendProgress(1, "分析仓库源码与结构完成", nil)
-	sendProgress(2, "评估大模型并生成项目大纲...", nil)
 
-	outline, err := s.GenerateOutline(ctx, content)
+	// Map-Reduce Phase
+	var finalContent strings.Builder
+	fullContent := treeContent + "\n=== Repository Content ===\n"
+
+	// If it's a very small project, we can skip the Map-Reduce to save time and token overhead.
+	if len(chunks) == 1 && len([]rune(chunks[0].Content)) < 150000 {
+		sendProgress(2, "项目较小，跳过 Map 阶段，直接生成大纲...", nil)
+		finalContent.WriteString(fullContent)
+		finalContent.WriteString(chunks[0].Content)
+	} else {
+		sendProgress(2, fmt.Sprintf("开启 Map-Reduce 分析，共 %d 个分块", len(chunks)), nil)
+		summaries := s.mapReduceAnalyze(ctx, chunks, sendProgress)
+		finalContent.WriteString(treeContent)
+		finalContent.WriteString("\n=== Local Summaries ===\n")
+		for _, summary := range summaries {
+			finalContent.WriteString(summary)
+			finalContent.WriteString("\n\n")
+		}
+	}
+
+	sendProgress(3, "评估大模型并生成项目全局大纲...", nil)
+
+	outline, err := s.GenerateOutline(ctx, finalContent.String())
 	if err != nil {
 		errChan <- fmt.Errorf("生成大纲失败: %w", err)
 		return
 	}
 
-	sendProgress(3, "正在完成最后处理...", map[string]interface{}{
+	sendProgress(4, "正在完成最后处理...", map[string]interface{}{
 		"outline":        outline,
-		"source_content": content,
+		"source_content": finalContent.String(), // Provide the summarized content as source to save space
 	})
+}
+
+// mapReduceAnalyze runs the map phase over the chunks and returns a list of local summaries
+func (s *DecompositionService) mapReduceAnalyze(ctx context.Context, chunks []parser.FileChunk, sendProgress func(int, string, interface{})) []string {
+	var summaries []string
+	var mu sync.Mutex
+
+	sem := semaphore.NewWeighted(5) // Max 5 concurrent goroutines
+	var wg sync.WaitGroup
+
+	for i, chunk := range chunks {
+		wg.Add(1)
+		go func(idx int, c parser.FileChunk) {
+			defer wg.Done()
+			if err := sem.Acquire(ctx, 1); err != nil {
+				return
+			}
+			defer sem.Release(1)
+
+			sendProgress(2, fmt.Sprintf("正在分析分块 %d/%d [%s]...", idx+1, len(chunks), c.Dir), map[string]interface{}{
+				"status": "chunk_analyzing",
+				"dir":    c.Dir,
+				"index":  idx + 1,
+				"total":  len(chunks),
+			})
+
+			summary := s.generateLocalSummaryWithRetry(ctx, c, 3, sendProgress, idx+1, len(chunks))
+
+			if summary != "" {
+				mu.Lock()
+				summaries = append(summaries, summary)
+				mu.Unlock()
+				sendProgress(2, fmt.Sprintf("分块 %d/%d 分析完成", idx+1, len(chunks)), map[string]interface{}{
+					"status": "chunk_done",
+					"dir":    c.Dir,
+					"index":  idx + 1,
+				})
+			}
+		}(i, chunk)
+	}
+
+	wg.Wait()
+	return summaries
+}
+
+func (s *DecompositionService) generateLocalSummaryWithRetry(ctx context.Context, chunk parser.FileChunk, maxRetries int, sendProgress func(int, string, interface{}), idx int, total int) string {
+	prompt := fmt.Sprintf(`你是一个高级全栈架构师。请分析以下代码块，提取其核心功能、主要接口和数据结构。
+你的输出应该是一份精简的局部摘要，不需要过多的寒暄，直接列出关键信息。
+目录位置：%s
+代码内容：
+%s`, chunk.Dir, chunk.Content)
+
+	messages := []llm.Message{
+		{Role: "system", Content: "你是一个高级架构师，专注于代码分析并输出精简摘要。"},
+		{Role: "user", Content: prompt},
+	}
+
+	modelStr := "deepseek-chat"
+	if envModel := os.Getenv("DEEPSEEK_MODEL"); envModel != "" {
+		modelStr = envModel
+	}
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		select {
+		case <-ctx.Done():
+			return ""
+		default:
+		}
+
+		attemptCtx, cancel := context.WithTimeout(ctx, 3*time.Minute)
+		summary, err := s.llmClient.Generate(attemptCtx, modelStr, messages)
+		cancel()
+
+		if err == nil {
+			return fmt.Sprintf("【目录: %s】\n%s", chunk.Dir, summary)
+		}
+
+		sendProgress(2, fmt.Sprintf("分块 %d/%d 分析失败，正在重试 (%d/%d)...", idx, total, attempt, maxRetries), map[string]interface{}{
+			"status": "chunk_failed",
+			"dir":    chunk.Dir,
+			"index":  idx,
+			"attempt": attempt,
+		})
+
+		time.Sleep(time.Second * time.Duration(attempt*2)) // backoff
+	}
+
+	sendProgress(2, fmt.Sprintf("分块 %d/%d 分析最终失败，已跳过", idx, total), map[string]interface{}{
+		"status": "chunk_failed_final",
+		"dir":    chunk.Dir,
+		"index":  idx,
+	})
+	return ""
 }
 
 // GenerateSeries generates blog chapters sequentially based on the outline with streaming
@@ -115,15 +232,6 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 		default:
 		}
 
-		// Send progress: starting
-		startMsg := map[string]interface{}{
-			"status":       "generating",
-			"chapter_sort": chapter.Sort,
-			"title":        chapter.Title,
-		}
-		startBytes, _ := json.Marshal(startMsg)
-		progressChan <- string(startBytes)
-		
 		// Limit the content sent per chapter to avoid token overflow
 		chapterSourceContent := sourceContent
 		runes := []rune(chapterSourceContent)
@@ -158,51 +266,105 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 			llmModel = envModel
 		}
 
-		chapterChunkChan := make(chan string)
-		chapterErrChan := make(chan error)
-		
-		var fullContentBuilder strings.Builder
-		
-		go s.llmClient.GenerateStream(ctx, llmModel, messages, chapterChunkChan, chapterErrChan)
-
 		var streamErr error
-		done := false
-		for !done {
+		var content string
+		maxRetries := 3
+
+		for attempt := 1; attempt <= maxRetries; attempt++ {
 			select {
 			case <-ctx.Done():
 				errChan <- ctx.Err()
 				return
-			case err, ok := <-chapterErrChan:
-				if ok && err != nil {
-					streamErr = err
-					done = true
-				} else if !ok {
-					// chapterErrChan closed
-					chapterErrChan = nil
+			default:
+			}
+
+			if attempt > 1 {
+				retryMsg := map[string]interface{}{
+					"status":       "retrying",
+					"chapter_sort": chapter.Sort,
+					"attempt":      attempt,
 				}
-			case chunk, ok := <-chapterChunkChan:
-				if !ok {
+				retryBytes, _ := json.Marshal(retryMsg)
+				progressChan <- string(retryBytes)
+			} else {
+				startMsg := map[string]interface{}{
+					"status":       "generating",
+					"chapter_sort": chapter.Sort,
+					"title":        chapter.Title,
+				}
+				startBytes, _ := json.Marshal(startMsg)
+				progressChan <- string(startBytes)
+			}
+
+			streamCtx, streamCancel := context.WithCancel(ctx)
+			chapterChunkChan := make(chan string)
+			chapterErrChan := make(chan error)
+			
+			var fullContentBuilder strings.Builder
+			
+			go s.llmClient.GenerateStream(streamCtx, llmModel, messages, chapterChunkChan, chapterErrChan)
+
+			idleTimeout := 30 * time.Second
+			timer := time.NewTimer(idleTimeout)
+
+			streamErr = nil
+			done := false
+
+			for !done {
+				select {
+				case <-ctx.Done():
+					streamCancel()
+					timer.Stop()
+					errChan <- ctx.Err()
+					return
+				case <-timer.C:
+					streamCancel()
+					streamErr = fmt.Errorf("AI generation idle timeout (no data for %v)", idleTimeout)
 					done = true
-				} else {
-					fullContentBuilder.WriteString(chunk)
-					streamMsg := map[string]interface{}{
-						"status":       "streaming",
-						"chapter_sort": chapter.Sort,
-						"content":      chunk,
+				case err, ok := <-chapterErrChan:
+					if ok && err != nil {
+						streamErr = err
+						done = true
+					} else if !ok {
+						chapterErrChan = nil
 					}
-					streamBytes, _ := json.Marshal(streamMsg)
-					progressChan <- string(streamBytes)
+				case chunk, ok := <-chapterChunkChan:
+					if !ok {
+						done = true
+					} else {
+						if !timer.Stop() {
+							select { case <-timer.C: default: }
+						}
+						timer.Reset(idleTimeout)
+
+						fullContentBuilder.WriteString(chunk)
+						streamMsg := map[string]interface{}{
+							"status":       "streaming",
+							"chapter_sort": chapter.Sort,
+							"content":      chunk,
+						}
+						streamBytes, _ := json.Marshal(streamMsg)
+						progressChan <- string(streamBytes)
+					}
 				}
 			}
+
+			timer.Stop()
+			streamCancel()
+
+			if streamErr == nil {
+				content = fullContentBuilder.String()
+				break
+			}
+
+			time.Sleep(time.Second * time.Duration(attempt*2))
 		}
 
 		if streamErr != nil {
-			errChan <- fmt.Errorf("chapter %d generation failed: %w", chapter.Sort, streamErr)
+			errChan <- fmt.Errorf("chapter %d generation failed after %d attempts: %w", chapter.Sort, maxRetries, streamErr)
 			return
 		}
 
-		content := fullContentBuilder.String()
-		
 		// Save to database
 		blog := &model.Blog{
 			UserID:      userID,

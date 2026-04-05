@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -42,7 +43,7 @@ func (api *ProjectAPI) Analyze(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	// 1. Fetch Git content
-	content, err := api.gitFetcher.Fetch(req.GitURL)
+	treeContent, chunks, err := api.gitFetcher.Fetch(req.GitURL)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    http.StatusInternalServerError,
@@ -51,6 +52,15 @@ func (api *ProjectAPI) Analyze(c *gin.Context) {
 		})
 		return
 	}
+
+	// For the legacy non-streaming endpoint, we'll just concatenate the chunks
+	var fullContentBuilder strings.Builder
+	fullContentBuilder.WriteString(treeContent)
+	fullContentBuilder.WriteString("\n=== Repository Content ===\n")
+	for _, chunk := range chunks {
+		fullContentBuilder.WriteString(chunk.Content)
+	}
+	content := fullContentBuilder.String()
 
 	// 2. Generate Outline
 	outline, err := api.decompositionService.GenerateOutline(ctx, content)

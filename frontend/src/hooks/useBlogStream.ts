@@ -23,6 +23,12 @@ export const useBlogStream = () => {
   }, [])
 
   const analyzeGit = useCallback(async (gitUrl: string) => {
+    // 基础拦截，防止用户输入非法的 git URL
+    if (!gitUrl.startsWith('http://') && !gitUrl.startsWith('https://') && !gitUrl.startsWith('git@') && !gitUrl.startsWith('file://')) {
+      alert('请输入有效的 Git 仓库链接 (以 http://, https://, git@ 或 file:// 开头)')
+      throw new Error('invalid url')
+    }
+
     store.setAnalyzing(true)
     setAnalysisStep(-1)
     setAnalysisMessage('正在建立连接...')
@@ -52,8 +58,13 @@ export const useBlogStream = () => {
               if (data.step !== undefined) {
                 setAnalysisStep(data.step)
                 setAnalysisMessage(data.message || '')
+                if (data.data?.status && data.data.status.startsWith('chunk_')) {
+                  store.setMapReduceProgress(data.data)
+                } else if (data.step === 3 || data.step === 4) {
+                  store.setMapReduceProgress(null) // clear when entering next stages
+                }
               }
-              if (data.data) {
+              if (data.data?.outline) {
                 store.setSource('git', data.data.source_content)
                 store.setOutline(data.data.outline)
               }
@@ -74,26 +85,44 @@ export const useBlogStream = () => {
         },
         onerror(err: unknown) {
           if (err instanceof StopStreamError) {
+            // 如果是我们自己 throw 的 StopStreamError，不要向外抛出（特别是 aborted 时）
+            // fetchEventSource 如果遇到内部的 throw 会停止，并且它可能会打印一个默认错误
+            // 但是我们不想它变成一个 Uncaught Error。由于 fetchEventSource 内部逻辑，
+            // 只要我们抛出任何 Error 都会触发中止连接，但最好是被我们外层 catch 捕获。
             throw err
+          }
+          // 拦截浏览器抛出的 AbortError，将其转换为我们的内部错误
+          if (err instanceof DOMException && err.name === 'AbortError') {
+            throw new StopStreamError('aborted')
           }
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const e = err as any
-          if (e?.name === 'AbortError' || e?.message?.includes('AbortError')) {
+          if (e?.name === 'AbortError' || e?.message?.includes('AbortError') || e?.message?.includes('aborted') || e?.message?.includes('Failed to fetch')) {
             throw new StopStreamError('aborted')
           }
           console.error('SSE Connection Error:', err)
           store.setAnalyzing(false)
+          setAnalysisStep(-1)
           throw err
         }
       })
     } catch (err: unknown) {
-      if (err instanceof StopStreamError) return
+      if (err instanceof StopStreamError) {
+        if (err.message !== 'done' && err.message !== 'aborted') {
+          alert(`分析失败: ${err.message}`)
+          throw err
+        }
+        return // 正常结束或手动中止，不往外抛异常，不触发控制台红色 Uncaught
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const e = err as any
+      // AbortError 经常在网络请求被主动中止时由浏览器抛出
       if (e?.name === 'AbortError' || e?.message?.includes('AbortError')) return
       console.error(err)
       store.setAnalyzing(false)
       setAnalysisStep(-1)
+      alert(`分析出错: ${e?.message || '未知错误'}`)
+      throw err // Rethrow to let the component know it failed
     }
   }, [store])
 
@@ -102,9 +131,10 @@ export const useBlogStream = () => {
     setAnalysisStep(0)
     
     // For file, we simulate progress visually since it's usually fast
-    const timer1 = setTimeout(() => setAnalysisStep(1), 500)
-    const timer2 = setTimeout(() => setAnalysisStep(2), 1500)
-    const timer3 = setTimeout(() => setAnalysisStep(3), 2000)
+    const timer1 = setTimeout(() => setAnalysisStep(1), 300)
+    const timer2 = setTimeout(() => setAnalysisStep(2), 800)
+    const timer3 = setTimeout(() => setAnalysisStep(3), 1300)
+    const timer4 = setTimeout(() => setAnalysisStep(4), 1800)
 
     try {
       const formData = new FormData()
@@ -135,6 +165,7 @@ export const useBlogStream = () => {
       clearTimeout(timer1)
       clearTimeout(timer2)
       clearTimeout(timer3)
+      clearTimeout(timer4)
       store.setAnalyzing(false)
       setAnalysisStep(-1)
     }
@@ -185,9 +216,12 @@ export const useBlogStream = () => {
           if (err instanceof StopStreamError) {
             throw err
           }
+          if (err instanceof DOMException && err.name === 'AbortError') {
+            throw new StopStreamError('aborted')
+          }
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const e = err as any
-          if (e?.name === 'AbortError' || e?.message?.includes('AbortError')) {
+          if (e?.name === 'AbortError' || e?.message?.includes('AbortError') || e?.message?.includes('aborted') || e?.message?.includes('Failed to fetch')) {
             throw new StopStreamError('aborted')
           }
           console.error('SSE Connection Error:', err)
@@ -196,12 +230,18 @@ export const useBlogStream = () => {
         }
       })
     } catch (err: unknown) {
-      if (err instanceof StopStreamError) return
+      if (err instanceof StopStreamError) {
+        if (err.message !== 'done' && err.message !== 'aborted') {
+          alert(`生成失败: ${err.message}`)
+        }
+        return
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const e = err as any
-      if (e?.name === 'AbortError' || e?.message?.includes('AbortError')) return
+      if (e?.name === 'AbortError' || e?.message?.includes('AbortError') || e?.message?.includes('aborted')) return
       console.error(err)
       store.setGenerating(false)
+      alert(`生成出错: ${e?.message || '未知错误'}`)
     }
   }, [store, fetchBlogs])
 
@@ -264,23 +304,32 @@ export const useBlogStream = () => {
           if (err instanceof StopStreamError) {
             throw err
           }
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const e = err as any
-          if (e?.name === 'AbortError' || e?.message?.includes('AbortError')) {
+          if (err instanceof DOMException && err.name === 'AbortError') {
             throw new StopStreamError('aborted')
           }
-          console.error('SSE Connection Error:', err)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const e = err as any
+          if (e?.name === 'AbortError' || e?.message?.includes('AbortError') || e?.message?.includes('aborted') || e?.message?.includes('Failed to fetch')) {
+            throw new StopStreamError('aborted')
+          }
+          console.error('Generate SSE Connection Error:', err)
           store.setGenerating(false)
           throw err
         }
       })
     } catch (err: unknown) {
-      if (err instanceof StopStreamError) return
+      if (err instanceof StopStreamError) {
+        if (err.message !== 'done' && err.message !== 'aborted') {
+          alert(`生成失败: ${err.message}`)
+        }
+        return
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const e = err as any
-      if (e?.name === 'AbortError' || e?.message?.includes('AbortError')) return
+      if (e?.name === 'AbortError' || e?.message?.includes('AbortError') || e?.message?.includes('aborted')) return
       console.error(err)
       store.setGenerating(false)
+      alert(`生成出错: ${e?.message || '未知错误'}`)
     }
   }, [store, fetchBlogs])
 
@@ -290,6 +339,7 @@ export const useBlogStream = () => {
     analyzeGit,
     parseFile,
     generateSingle,
-    generateSeries
+    generateSeries,
+    abortCtrlRef
   }
 }

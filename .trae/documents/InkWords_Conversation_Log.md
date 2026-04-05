@@ -1,6 +1,19 @@
 # 墨言博客助手 (InkWords) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 28：修复大项目分析生成卡死问题与添加超时/重试机制
+- **用户需求**：用户反馈在分析大项目并生成系列博客时，有概率在生成第一、第二篇之后卡住。要求分析原因，并通过提问明确修改需求。
+- **AI 动作**：
+  1. 通过代码分析定位到 3 个卡死风险点：客户端断开导致的 `errChan` 永久阻塞（Goroutine 泄露）、`http.Client` 未设置超时导致的流式读取假死、以及串行生成和并发信号量耗尽引发的雪崩效应。
+  2. 调用 `AskUserQuestion` 向用户明确了三个维度的处理策略：流式空闲超时、后台继续生成（防泄露）、自动重试。
+  3. 修改 `internal/api/stream.go`：引入 `context.WithoutCancel` 分离 HTTP 生命周期与业务生命周期。当客户端（前端）断开时，启动后台协程排空（drain）`chunkChan` 和 `errChan`，确保生成任务在后台继续执行并落库，防止 Goroutine 阻塞泄露。
+  4. 修改 `internal/service/decomposition.go` 中的 `GenerateSeries`：为单章生成引入最大 3 次的 `for` 循环自动重试机制；并使用 `time.Timer` 实现了 30 秒的流式空闲超时（Idle Timeout），一旦超时则主动 `cancel()` HTTP 请求并触发重试。
+  5. 修改 `internal/service/generator.go` 中的 `GenerateBlogStream`：同样引入了 30 秒的流式空闲超时保护。
+  6. 修改 `internal/service/decomposition.go` 中的 `generateLocalSummaryWithRetry`：为单次非流式的 HTTP 请求增加了 3 分钟的 Context 超时控制。
+- **决策/变更**：
+  - 彻底解决了由于网络波动或客户端异常断开导致的服务端“假死”和资源泄露问题。
+  - 实现了“前端断开，后台继续”的健壮逻辑，极大提升了大项目（耗时较长）生成的最终成功率。
+
 ### 对话 27：使用 Playwright 进行全链路端到端 (E2E) 测试及 Bug 修复
 - **用户需求**：要求使用 Playwright 对项目进行全方位的测试，并通过提问明确测试细节。
 - **AI 动作**：
