@@ -64,6 +64,21 @@
   1. 上传一个极简的小脚本（如 100 行 Go 代码），验证生成的单篇内容是否丰富详实。
   2. 导入一个著名长篇开源项目或官方教程（如 React 官方教程），测试系统的“复杂度评估器”是否能准确切分为多个结构连贯的 5000 字篇章。
 
+### [2026-04-05] Feature - Markdown 编辑区与预览区精准双向滚动同步
+- **开发模块**: [前端 Markdown 编辑器]
+- **完成事项**:
+  1. **底层行号支持**: 在 `MarkdownEngine.tsx` 编写了自定义的 Rehype 插件 `rehypeSourceLine`，在渲染 Markdown 时拦截 AST 并将行号信息注入到 HTML 元素的 `data-source-line` 属性中。
+  2. **双向插值算法**: 在 `Editor.tsx` 中实现了 `handleEditorScroll` 与 `handlePreviewScroll`。通过寻找视口边界上下两个带有行号的 DOM 节点，并结合其真实的 `offsetTop` 进行数学插值计算，实现了像素级精准对齐的滚动。
+  3. **防抖与边缘处理**: 引入了 `activePaneRef` 作为滚动锁防止左右面板互相触发导致的死循环；特殊处理了头尾填充区域 (`scrollTop <= 0` 和滚动到底) 的边缘情况，确保顺滑回弹。
+- **踩坑记录 / 架构调整**: 
+  - 传统的基于 `scrollHeight` 的百分比同步在遇到 Mermaid 长流程图时会导致严重的错位（因为左边是几行代码，右边是一张巨型图片）。通过在底层注入 AST 行号并做精确的 DOM 位置插值，彻底解决了该痛点，提供了业界一流的写作体验。
+
+### [2026-04-05] Feature - Vibe Coding 规范更新与 Git 提交流程标准化
+- **开发模块**: [项目规范与架构体系]
+- **完成事项**:
+  1. 修改 `.trae/rules/vibe-coding-workflow.md`，增加“强制询问与需求明确”原则，防止需求模糊时直接生成代码。
+  2. 新增 `.trae/rules/git-and-release.md`，规范了提交流程：`git diff` 对比 -> 详实的 Angular 规范 Commit -> 查询并打标签 -> 推送代码与标签的完整流水线。
+
 ### [2026-04-05] 修复生成的系列博客无法添加到“历史博客”的问题
 - **完成事项**：
   - 修改 `backend/internal/service/decomposition.go`，在 `GenerateSeries` 方法开始前，主动在数据库中创建并持久化一个 Parent 节点（父博客），并设置 `ParentID`。

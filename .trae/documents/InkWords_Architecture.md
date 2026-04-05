@@ -23,7 +23,8 @@
 - `src/hooks/`: 自定义 Hooks（如 `useBlogStream.ts` 封装了 `analyzeGit` 与 `generateSeries`，并利用 `@microsoft/fetch-event-source` 维持 POST 流）。
 
 ### 2.2 核心渲染器架构 (Renderer)
-- **MarkdownEngine**：基于 `react-markdown` 配合 GitHub 样式（去除边框），负责实时渲染流式抵达的文本。为了防止生成极长文章时撑爆页面导致卡顿，该容器设置了最大高度并支持内部滚动。
+- **MarkdownEngine**：基于 `react-markdown` 配合 GitHub 样式（去除边框），负责实时渲染流式抵达的文本。为了防止生成极长文章时撑爆页面导致卡顿，该容器设置了最大高度并支持内部滚动。引入了自定义的 Rehype 插件 `rehypeSourceLine`，通过拦截 AST 为所有 HTML 元素注入源文件的 `data-source-line` 属性，为双向精准滚动提供底层锚点支持。
+- **Editor 双向滚动同步机制**：编辑区 (`Editor.tsx`) 实现了高度定制的防抖双向滚动逻辑。不采用简单的百分比同步，而是通过读取视口内的 `data-source-line` 属性，进行上、下文元素的行号与真实 `offsetTop` 偏移量的精准插值计算。这确保了即便是遇到巨大的图片或 Mermaid 流程图，左右两侧的文本依然能够像素级完美对齐。
 - **MermaidViewer**：基于原生 Mermaid API 进行渲染（替代 `rehype-mermaid` 解决异步渲染冲突）。通过开启 `suppressErrorRendering: true` 并在捕获异常时清空容器，彻底静默了 LLM 流式输出中间态时的语法报错（"Syntax error in text"），保障极简平滑的视觉体验。同时自定义拦截逻辑，**强制注入默认主题配置**，移除所有由于 LLM 幻觉可能携带的 `style` 或 `classDef` 样式属性。
 
 ## 3. 后端架构设计 (Go 1.21+)

@@ -31,6 +31,20 @@ const remarkStripMermaidStyles = () => {
   };
 };
 
+// Rehype plugin to add source line numbers to elements
+const rehypeSourceLine = () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (tree: any) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    visit(tree, 'element', (node: any) => {
+      if (node.position?.start?.line) {
+        node.properties = node.properties || {};
+        node.properties['data-source-line'] = node.position.start.line;
+      }
+    });
+  };
+};
+
 const MermaidBlock: React.FC<{ chart: string }> = ({ chart }) => {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -78,6 +92,7 @@ export const MarkdownEngine: React.FC<MarkdownEngineProps> = ({ content }) => {
     <div className="prose prose-sm md:prose-base max-w-none dark:prose-invert">
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkStripMermaidStyles]}
+        rehypePlugins={[rehypeSourceLine]}
         components={{
           code(props) {
             const { children, className, ref, ...rest } = props;
