@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -20,9 +22,10 @@ import (
 
 // Chapter represents a single chapter in the generated outline
 type Chapter struct {
-	Title   string `json:"title"`
-	Summary string `json:"summary"`
-	Sort    int    `json:"sort"`
+	Title   string   `json:"title"`
+	Summary string   `json:"summary"`
+	Sort    int      `json:"sort"`
+	Files   []string `json:"files"`
 }
 
 // DecompositionService handles the logic to evaluate project text and generate an outline
@@ -202,9 +205,22 @@ func (s *DecompositionService) generateLocalSummaryWithRetry(ctx context.Context
 }
 
 // GenerateSeries generates blog chapters sequentially based on the outline with streaming
-func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.UUID, parentID uuid.UUID, outline []Chapter, sourceContent string, sourceType string, progressChan chan<- string, errChan chan<- error) {
+func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.UUID, parentID uuid.UUID, outline []Chapter, sourceContent string, sourceType string, gitURL string, progressChan chan<- string, errChan chan<- error) {
 	defer close(progressChan)
 	defer close(errChan)
+
+	// --- FIX START: Clone repo to precisely feed files ---
+	var tempDir string
+	if sourceType == "git" && gitURL != "" {
+		dir, err := os.MkdirTemp("", "inkwords-gen-*")
+		if err == nil {
+			tempDir = dir
+			defer os.RemoveAll(tempDir)
+			cmd := exec.Command("git", "clone", "--depth", "1", gitURL, tempDir)
+			cmd.Run() // Ignore error, if it fails, we'll just use the sourceContent fallback
+		}
+	}
+	// --- FIX END ---
 
 	// --- FIX START: Save the parent node so that History Blogs can query it ---
 	parentTitle := "Git 源码解析系列"
@@ -233,15 +249,59 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 		}
 
 		// Limit the content sent per chapter to avoid token overflow
-		chapterSourceContent := sourceContent
+		var chapterSourceContent string
+		if sourceType == "git" && tempDir != "" && len(chapter.Files) > 0 {
+			var builder strings.Builder
+			for _, fPath := range chapter.Files {
+				fullPath := filepath.Join(tempDir, fPath)
+				// Prevent path traversal
+				if !strings.HasPrefix(filepath.Clean(fullPath), filepath.Clean(tempDir)) {
+					continue
+				}
+				info, err := os.Stat(fullPath)
+				if err != nil {
+					continue
+				}
+				if info.IsDir() {
+					filepath.Walk(fullPath, func(p string, i os.FileInfo, err error) error {
+						if err != nil || i.IsDir() || !i.Mode().IsRegular() {
+							return nil
+						}
+						ext := strings.ToLower(filepath.Ext(p))
+						if parser.IsBinaryExt(ext) {
+							return nil
+						}
+						data, err := os.ReadFile(p)
+						if err == nil {
+							relPath, _ := filepath.Rel(tempDir, p)
+							builder.WriteString(fmt.Sprintf("--- File: %s ---\n%s\n\n", relPath, string(data)))
+						}
+						return nil
+					})
+				} else {
+					data, err := os.ReadFile(fullPath)
+					if err == nil {
+						builder.WriteString(fmt.Sprintf("--- File: %s ---\n%s\n\n", fPath, string(data)))
+					}
+				}
+			}
+			if builder.Len() > 0 {
+				chapterSourceContent = builder.String()
+			} else {
+				chapterSourceContent = sourceContent
+			}
+		} else {
+			chapterSourceContent = sourceContent
+		}
+
 		runes := []rune(chapterSourceContent)
-		if len(runes) > 300000 {
-			chapterSourceContent = string(runes[:300000]) + "\n\n... [Content Truncated due to length limits] ..."
+		if len(runes) > 100000 {
+			chapterSourceContent = string(runes[:100000]) + "\n\n... [Content Truncated due to length limits] ..."
 		}
 
 		prompt := fmt.Sprintf(`你是一个高级全栈架构师和技术博主。请根据以下提供的源内容，以及本章节的大纲，将其转化为一篇“小白友好、图文并茂、可独立复现”的高质量技术博客章节。
 要求：
-1. **字数必须极度充足，内容极其详实（不少于 2000 字的长文）**：严禁只写干瘪的总结。必须深入分析代码实现原理，拆解每一个核心机制。
+1. **字数和篇幅适中**：为了保证生成完整性，单篇文章内容不要过于冗长（控制在 1000-1500 字左右）。不要一次性铺陈太多知识点，聚焦于本章节的核心目标即可。
 2. **代码级剖析**：引用源内容中的核心代码，并逐行解释其作用。如果源内容因为截断而缺少具体代码，请基于目录结构和你的架构经验进行合理补充推演。
 3. **可复现的步骤**：如果是实战或配置相关，请给出明确的执行步骤。
 4. **小白友好**：在解释抽象的理论概念时，必须提供对应的代码示例或生活化比喻。
@@ -402,12 +462,14 @@ func (s *DecompositionService) GenerateOutline(ctx context.Context, sourceConten
 	}
 
 	prompt := fmt.Sprintf(`你是一个高级架构师。请评估以下项目文本，并生成一个系列博客的大纲。
-对于大型项目、源码仓库或复杂内容，**强制拆分为系列博客**（如：基础概念篇、核心架构篇、实战复现篇等），必须至少包含 3 个章节。
+对于大型项目、源码仓库或复杂内容，**强制拆分为细粒度系列博客**。
+为了避免单篇博客过长，你需要将大模块拆分得更细致，例如分为 5-10 篇，让每篇文章只侧重 1-2 个具体的知识点或核心机制。
 输出必须是纯JSON数组格式，不包含任何Markdown标记或其他文字。
 每个元素包含以下字段：
 - title: 章节标题
 - summary: 该章节的详细摘要或内容要点（指导后续生成的具体方向）
 - sort: 排序（整数，从1开始）
+- files: 一个字符串数组，列出与本章节强相关的具体文件路径或目录（请参考下面提供的目录结构，必须是相对路径）。这非常重要，后续生成本章节时，只会提供这些文件的源码！
 
 项目文本：
 %s`, sourceContent)

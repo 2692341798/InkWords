@@ -9,7 +9,7 @@ import { MarkdownEngine } from '@/components/MarkdownEngine'
 
 export function Generator() {
   const store = useStreamStore()
-  const { analysisStep, analysisMessage, analyzeGit, parseFile, generateSeries, generateSingle, abortCtrlRef } = useBlogStream()
+  const { analyzeGit, parseFile, generateSeries, generateSingle, stopAnalyzing } = useBlogStream()
   const [gitUrl, setGitUrl] = useState('')
   const [isDragging, setIsDragging] = useState(false)
   const [analyzingType, setAnalyzingType] = useState<'git' | 'file'>('git')
@@ -137,24 +137,24 @@ export function Generator() {
             <Loader2 className="w-8 h-8 mb-6 animate-spin text-indigo-600" />
             <div className="space-y-4 max-w-sm w-full">
               <div className="flex items-center gap-3">
-                <div className={`w-2 h-2 rounded-full ${analysisStep >= 0 ? 'bg-indigo-600' : 'bg-zinc-200'}`}></div>
-                <span className={analysisStep >= 0 ? 'text-zinc-800 font-medium' : 'text-zinc-400'}>
-                  {analyzingType === 'file' ? '读取并提取文件文本...' : (analysisStep === 0 ? analysisMessage : '正在克隆并拉取仓库...')}
+                <div className={`w-2 h-2 rounded-full ${store.analysisStep >= 0 ? 'bg-indigo-600' : 'bg-zinc-200'}`}></div>
+                <span className={store.analysisStep >= 0 ? 'text-zinc-800 font-medium' : 'text-zinc-400'}>
+                  {analyzingType === 'file' ? '读取并提取文件文本...' : (store.analysisStep === 0 ? store.analysisMessage : '正在克隆并拉取仓库...')}
                 </span>
               </div>
               <div className="flex items-center gap-3">
-                <div className={`w-2 h-2 rounded-full ${analysisStep >= 1 ? 'bg-indigo-600' : 'bg-zinc-200'}`}></div>
-                <span className={analysisStep >= 1 ? 'text-zinc-800 font-medium' : 'text-zinc-400'}>
-                  {analyzingType === 'file' ? '解析文件内容结构...' : (analysisStep === 1 ? analysisMessage : '分析仓库源码与结构...')}
+                <div className={`w-2 h-2 rounded-full ${store.analysisStep >= 1 ? 'bg-indigo-600' : 'bg-zinc-200'}`}></div>
+                <span className={store.analysisStep >= 1 ? 'text-zinc-800 font-medium' : 'text-zinc-400'}>
+                  {analyzingType === 'file' ? '解析文件内容结构...' : (store.analysisStep === 1 ? store.analysisMessage : '分析仓库源码与结构...')}
                 </span>
               </div>
               <div className="flex items-center gap-3">
-                <div className={`w-2 h-2 rounded-full ${analysisStep >= 2 ? 'bg-indigo-600' : 'bg-zinc-200'}`}></div>
+                <div className={`w-2 h-2 rounded-full ${store.analysisStep >= 2 ? 'bg-indigo-600' : 'bg-zinc-200'}`}></div>
                 <div className="flex-1 flex flex-col">
-                  <span className={analysisStep >= 2 ? 'text-zinc-800 font-medium' : 'text-zinc-400'}>
-                    {analyzingType === 'file' ? '准备进行生成任务...' : (analysisStep === 2 ? analysisMessage : '评估大模型并生成项目大纲...')}
+                  <span className={store.analysisStep >= 2 ? 'text-zinc-800 font-medium' : 'text-zinc-400'}>
+                    {analyzingType === 'file' ? '准备进行生成任务...' : (store.analysisStep === 2 ? store.analysisMessage : '评估大模型并生成项目大纲...')}
                   </span>
-                  {analysisStep === 2 && store.mapReduceProgress && (
+                  {store.analysisStep === 2 && store.mapReduceProgress && (
                     <div className="mt-2 text-sm text-zinc-500 bg-zinc-50 p-3 rounded-lg border border-zinc-100">
                       <div className="flex justify-between mb-1">
                         <span>正在处理分块 {store.mapReduceProgress.index} / {store.mapReduceProgress.total}</span>
@@ -174,15 +174,15 @@ export function Generator() {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <div className={`w-2 h-2 rounded-full ${analysisStep >= 3 ? 'bg-indigo-600' : 'bg-zinc-200'}`}></div>
-                <span className={analysisStep >= 3 ? 'text-zinc-800 font-medium' : 'text-zinc-400'}>
-                  {analyzingType === 'file' ? '读取并渲染内容...' : (analysisStep === 3 ? analysisMessage : '生成项目全局大纲...')}
+                <div className={`w-2 h-2 rounded-full ${store.analysisStep >= 3 ? 'bg-indigo-600' : 'bg-zinc-200'}`}></div>
+                <span className={store.analysisStep >= 3 ? 'text-zinc-800 font-medium' : 'text-zinc-400'}>
+                  {analyzingType === 'file' ? '读取并渲染内容...' : (store.analysisStep === 3 ? store.analysisMessage : '生成项目全局大纲...')}
                 </span>
               </div>
               <div className="flex items-center gap-3">
-                <div className={`w-2 h-2 rounded-full ${analysisStep >= 4 ? 'bg-indigo-600' : 'bg-zinc-200'}`}></div>
-                <span className={analysisStep >= 4 ? 'text-zinc-800 font-medium' : 'text-zinc-400'}>
-                  {analyzingType === 'file' ? '完成' : (analysisStep === 4 ? analysisMessage : '正在完成最后处理...')}
+                <div className={`w-2 h-2 rounded-full ${store.analysisStep >= 4 ? 'bg-indigo-600' : 'bg-zinc-200'}`}></div>
+                <span className={store.analysisStep >= 4 ? 'text-zinc-800 font-medium' : 'text-zinc-400'}>
+                  {analyzingType === 'file' ? '完成' : (store.analysisStep === 4 ? store.analysisMessage : '正在完成最后处理...')}
                 </span>
               </div>
             </div>
@@ -190,11 +190,7 @@ export function Generator() {
             <div className="mt-8 flex justify-center w-full">
               <Button 
                 onClick={() => {
-                  if (abortCtrlRef.current) {
-                    abortCtrlRef.current.abort()
-                  }
-                  store.setAnalyzing(false)
-                  setAnalysisStep(-1)
+                  stopAnalyzing()
                   setGitUrl('')
                 }} 
                 variant="outline"

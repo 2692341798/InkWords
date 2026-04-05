@@ -81,7 +81,7 @@ func (f *GitFetcher) Fetch(repoURL string) (string, []FileChunk, error) {
 
 		// Skip binary files and some extensions
 		ext := strings.ToLower(filepath.Ext(path))
-		if isBinaryExt(ext) {
+		if IsBinaryExt(ext) {
 			return nil
 		}
 
@@ -165,7 +165,7 @@ func (f *GitFetcher) Fetch(repoURL string) (string, []FileChunk, error) {
 	return treeBuilder.String(), chunks, nil
 }
 
-func isBinaryExt(ext string) bool {
+func IsBinaryExt(ext string) bool {
 	binaryExts := map[string]bool{
 		".exe": true, ".dll": true, ".so": true, ".dylib": true,
 		".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".svg": true, ".ico": true, ".webp": true,

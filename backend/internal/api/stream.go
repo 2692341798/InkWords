@@ -143,7 +143,7 @@ func (api *StreamAPI) GenerateBlogStreamHandler(c *gin.Context) {
 	if len(req.Outline) > 0 {
 		// Series Generation
 		parentID := uuid.New()
-		go api.decompositionService.GenerateSeries(bgCtx, userID, parentID, req.Outline, req.SourceContent, req.SourceType, chunkChan, errChan)
+		go api.decompositionService.GenerateSeries(bgCtx, userID, parentID, req.Outline, req.SourceContent, req.SourceType, req.GitURL, chunkChan, errChan)
 	} else {
 		// Single blog stream
 		go api.generatorService.GenerateBlogStream(bgCtx, userID, req.SourceContent, req.SourceType, chunkChan, errChan)
