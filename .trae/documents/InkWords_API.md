@@ -149,7 +149,7 @@
 
 ### 3.3 建立流式生成连接 (SSE)
 - **POST** `/api/v1/stream/generate`
-- **描述**：前端必须使用 `@microsoft/fetch-event-source` 库通过 POST 请求携带大文本 Payload，并**必须设置 `openWhenHidden: true` 防止浏览器后台挂起时断流**。系统在将 `source_content` 传给大模型前，已加入**字符截断保护**（强制截断超过 300,000 字符的文本），以防止 API 抛出 `invalid_request_error` 导致生成中断。若携带 `outline`，则进入系列生成模式，后端会主动创建并持久化一个 Parent 节点以避免数据孤岛，并**串行**生成多个章节并打字机渲染；否则进行单篇生成。
+- **描述**：前端必须使用 `@microsoft/fetch-event-source` 库通过 POST 请求携带大文本 Payload，并**必须设置 `openWhenHidden: true` 防止浏览器后台挂起时断流**。系统在将 `source_content` 传给大模型前，已加入**字符截断保护**（强制截断超过 300,000 字符的文本），以防止 API 抛出 `invalid_request_error` 导致生成中断。若携带 `outline`，则进入系列生成模式，后端会主动创建并持久化一个 Parent 节点以避免数据孤岛，并**串行**生成多个章节并打字机渲染；否则进行单篇生成。支持前端使用 `AbortController` 随时中断请求，后端会优雅中止生成任务以节省 Token。
 - **Request Body (JSON)**:
   ```json
   {

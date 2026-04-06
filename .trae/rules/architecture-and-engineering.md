@@ -27,7 +27,8 @@
 
 ## 5. 容器化部署与环境规范 (Docker-First)
 - **环境一致性优先**：在本地开发、测试、以及生产环境部署时，必须首选基于 Docker 与 Docker Compose 的容器化方案，确保跨平台运行环境的一致性。
-- **一键拉起**：所有微服务组件（前端、后端、数据库等）都必须能够通过一条 `docker-compose up -d --build` 命令一键拉起并成功互通。
+- **一键拉起与重启**：所有微服务组件（前端、后端、数据库等）都必须能够通过一条 `docker compose up -d --build` 命令一键拉起并成功互通。如需重启或应用新代码，**必须**使用 `docker compose down && docker compose up -d --build` 一键重启项目。
+- **访问入口**：由于后端不提供页面服务，前端由独立的 Nginx 容器提供静态文件服务和 API 代理。项目启动后，**必须通过前端入口 `http://localhost` 访问应用**，严禁通过后端端口直接访问页面。
 - **多阶段构建 (Multi-Stage Build)**：
   - **Go 后端**：必须使用多阶段构建（如 `golang:1.21-alpine` 编译，`alpine` 或 `scratch` 运行），以大幅缩减最终镜像体积。
   - **React 前端**：使用多阶段构建（如 `node:18-alpine` 安装依赖并执行 `npm run build` 构建产物，然后使用 `nginx:alpine` 代理并挂载静态文件）。

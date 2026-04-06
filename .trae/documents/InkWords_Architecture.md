@@ -22,6 +22,9 @@
 - `src/store/`: 基于 **Zustand** 的全局状态管理，负责处理极简状态下的 Token、当前激活的博客 ID、以及 SSE 流式追加的 Markdown 内容（`streamStore.ts` 中管理了大纲 `outline` 与章节生成状态）。
 - `src/services/`: 封装所有 HTTP/SSE 请求逻辑，统一管理接口异常。
 - `src/hooks/`: 自定义 Hooks（如 `useBlogStream.ts` 封装了 `analyzeGit` 与 `generateSeries`，并利用 `@microsoft/fetch-event-source` 维持 POST 流）。
+  - 确保大文本 Payload 成功传输（传统 GET 方式的 SSE 会受限 URL 长度）。
+  - 支持 `AbortController` 随时切断 SSE 连接，且**后端（Gin）已将请求上下文 `ctx` 透传至生成服务，切断连接时会立刻停止大模型调用**，避免浪费 Token。
+  - 设置 `openWhenHidden: true`，防止浏览器切换后台时连接断开。
 - **第三方工具库**：使用 `jszip` 处理前端轻量级的多文件/系列打包导出功能，减轻后端文件 I/O 压力。
 
 ### 2.2 核心渲染器架构 (Renderer)

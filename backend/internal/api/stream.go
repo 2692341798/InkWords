@@ -130,7 +130,6 @@ func (api *StreamAPI) GenerateBlogStreamHandler(c *gin.Context) {
 	chunkChan := make(chan string)
 	errChan := make(chan error)
 
-	bgCtx := context.WithoutCancel(c.Request.Context())
 	ctx := c.Request.Context()
 
 	// Retrieve UserID from context if available, otherwise create a dummy one for testing
@@ -149,10 +148,10 @@ func (api *StreamAPI) GenerateBlogStreamHandler(c *gin.Context) {
 	if len(req.Outline) > 0 {
 		// Series Generation
 		parentID := uuid.New()
-		go api.decompositionService.GenerateSeries(bgCtx, userID, parentID, req.SeriesTitle, req.Outline, req.SourceContent, req.SourceType, req.GitURL, chunkChan, errChan)
+		go api.decompositionService.GenerateSeries(ctx, userID, parentID, req.SeriesTitle, req.Outline, req.SourceContent, req.SourceType, req.GitURL, chunkChan, errChan)
 	} else {
 		// Single blog stream
-		go api.generatorService.GenerateBlogStream(bgCtx, userID, req.SourceContent, req.SourceType, chunkChan, errChan)
+		go api.generatorService.GenerateBlogStream(ctx, userID, req.SourceContent, req.SourceType, chunkChan, errChan)
 	}
 
 	// Set headers for SSE

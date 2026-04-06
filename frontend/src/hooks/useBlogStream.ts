@@ -351,11 +351,16 @@ export const useBlogStream = () => {
     store.stopAllStreams()
   }, [store])
 
+  const stopGenerating = useCallback(() => {
+    store.stopAllStreams()
+  }, [store])
+
   return {
     analyzeGit,
     parseFile,
     generateSingle,
     generateSeries,
-    stopAnalyzing
+    stopAnalyzing,
+    stopGenerating
   }
 }

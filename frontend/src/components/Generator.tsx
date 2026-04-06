@@ -1,19 +1,28 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import type { DragEvent, ChangeEvent } from 'react'
 import { useStreamStore } from '@/store/streamStore'
 import { useBlogStream } from '@/hooks/useBlogStream'
 import { Button } from '@/components/ui/button'
-import { Loader2, GitBranch, UploadCloud, ArrowUp, ArrowDown, Trash2, Plus } from 'lucide-react'
+import { Loader2, GitBranch, UploadCloud, ArrowUp, ArrowDown, Trash2, Plus, ChevronDown, ChevronUp } from 'lucide-react'
 
 import { MarkdownEngine } from '@/components/MarkdownEngine'
 
 export function Generator() {
   const store = useStreamStore()
-  const { analyzeGit, parseFile, generateSeries, generateSingle, stopAnalyzing } = useBlogStream()
+  const { analyzeGit, parseFile, generateSeries, generateSingle, stopAnalyzing, stopGenerating } = useBlogStream()
   const [gitUrl, setGitUrl] = useState('')
   const [isDragging, setIsDragging] = useState(false)
   const [analyzingType, setAnalyzingType] = useState<'git' | 'file'>('git')
+  const [isOutlineExpanded, setIsOutlineExpanded] = useState(true)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (store.isGenerating) {
+      setIsOutlineExpanded(false)
+    } else {
+      setIsOutlineExpanded(true)
+    }
+  }, [store.isGenerating, store.isAnalyzing])
 
   const handleAnalyze = async () => {
     if (!gitUrl) return
@@ -135,7 +144,7 @@ export function Generator() {
         {store.isAnalyzing && (
           <div className="h-full flex flex-col items-center justify-center text-zinc-500">
             <Loader2 className="w-8 h-8 mb-6 animate-spin text-indigo-600" />
-            <div className="space-y-4 max-w-sm w-full">
+            <div className="space-y-4 max-w-3xl w-full">
               <div className="flex items-center gap-3">
                 <div className={`w-2 h-2 rounded-full ${store.analysisStep >= 0 ? 'bg-indigo-600' : 'bg-zinc-200'}`}></div>
                 <span className={store.analysisStep >= 0 ? 'text-zinc-800 font-medium' : 'text-zinc-400'}>
@@ -257,7 +266,16 @@ export function Generator() {
                   {store.sourceType !== 'file' && store.outline.length > 0 && (
                     <div className="mb-8">
                       <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-lg font-semibold text-zinc-800">系列博客大纲</h3>
+                        <div className="flex items-center gap-3">
+                          <h3 className="text-lg font-semibold text-zinc-800">系列博客大纲</h3>
+                          <button
+                            onClick={() => setIsOutlineExpanded(!isOutlineExpanded)}
+                            className="p-1 hover:bg-zinc-100 rounded text-zinc-500 transition-colors"
+                            title={isOutlineExpanded ? "折叠大纲" : "展开大纲"}
+                          >
+                            {isOutlineExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                          </button>
+                        </div>
                         <div className="flex items-center gap-2">
                           <span className="text-sm text-zinc-500">系列标题:</span>
                           <input
@@ -270,8 +288,9 @@ export function Generator() {
                           />
                         </div>
                       </div>
-                      <div className="space-y-4 max-h-[50vh] overflow-y-auto custom-scrollbar pr-2">
-                        {store.outline.map((ch, index) => (
+                      {isOutlineExpanded && (
+                        <div className="space-y-4 max-h-[50vh] overflow-y-auto custom-scrollbar pr-2">
+                          {store.outline.map((ch, index) => (
                           <div key={ch.sort} className="p-4 bg-white rounded-xl border border-zinc-200 shadow-sm hover:border-indigo-200 transition-colors group">
                             <div className="flex items-start gap-3 mb-3">
                               <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-sm font-semibold shrink-0 mt-1">
@@ -340,6 +359,7 @@ export function Generator() {
                           添加新章节
                         </button>
                       </div>
+                      )}
                     </div>
                   )}
 
@@ -353,14 +373,25 @@ export function Generator() {
                             : `系统将并发生成 ${store.outline.length} 篇博客章节。`}
                         </p>
                       </div>
-                      <Button 
-                        onClick={handleGenerate} 
-                        disabled={store.isGenerating}
-                        className="bg-indigo-600 text-white hover:bg-indigo-700"
-                      >
-                        {store.isGenerating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                        {store.isGenerating ? '生成中...' : '开始生成'}
-                      </Button>
+                      <div className="flex items-center gap-3">
+                        {store.isGenerating && (
+                          <Button 
+                            onClick={stopGenerating} 
+                            variant="outline"
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                          >
+                            停止生成
+                          </Button>
+                        )}
+                        <Button 
+                          onClick={handleGenerate} 
+                          disabled={store.isGenerating}
+                          className="bg-indigo-600 text-white hover:bg-indigo-700"
+                        >
+                          {store.isGenerating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                          {store.isGenerating ? '生成中...' : '开始生成'}
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </>

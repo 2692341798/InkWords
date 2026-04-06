@@ -444,3 +444,5 @@
   5. 加入 `e.preventDefault()` 和 `e.stopPropagation()` 阻断事件冒泡。
 - **决策/变更**：
   - 前端涉及破坏性操作（如删除）的 `onClick` 事件，不仅需要 `window.confirm`，还必须考虑 React 异步状态更新期间用户连续点击造成的重复触发问题，通过 `useRef` 和原生 `e.detail` 进行双重防御。
+
+| 2026-04-06 | Fix Worker UI & Add Outline Collapse & Stop Generation Feature | 修复了并发生成期间 Worker 卡片被 `max-w-sm` 挤压变形的问题；新增大纲“手风琴式”折叠功能，在生成时自动折叠大纲面板以优化阅读体验；新增“停止生成”按钮，通过前端 `AbortController` 和后端绑定 `Context` 结合，实现中断流式生成且立即释放大模型资源；更新 Docker 规范，要求使用 `docker compose down && docker compose up -d --build` 一键重启并测试验证，确认前端入口为 `http://localhost`。 |
