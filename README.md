@@ -48,7 +48,7 @@ docker-compose up -d --build
 **启动后端：**
 ```bash
 cd backend
-cp .env.example .env  # 并配置数据库与 API 密钥
+cp .env  # 并配置数据库与 API 密钥
 go mod tidy
 go run ./cmd/server/main.go
 ```
