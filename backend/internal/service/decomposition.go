@@ -126,6 +126,11 @@ func (s *DecompositionService) mapReduceAnalyze(ctx context.Context, chunks []pa
 	sem := semaphore.NewWeighted(5) // Max 5 concurrent goroutines
 	var wg sync.WaitGroup
 
+	workerPool := make(chan int, 5)
+	for i := 0; i < 5; i++ {
+		workerPool <- i
+	}
+
 	for i, chunk := range chunks {
 		wg.Add(1)
 		go func(idx int, c parser.FileChunk) {
@@ -133,25 +138,31 @@ func (s *DecompositionService) mapReduceAnalyze(ctx context.Context, chunks []pa
 			if err := sem.Acquire(ctx, 1); err != nil {
 				return
 			}
-			defer sem.Release(1)
+			workerID := <-workerPool
+			defer func() {
+				workerPool <- workerID
+				sem.Release(1)
+			}()
 
 			sendProgress(2, fmt.Sprintf("正在分析分块 %d/%d [%s]...", idx+1, len(chunks), c.Dir), map[string]interface{}{
-				"status": "chunk_analyzing",
-				"dir":    c.Dir,
-				"index":  idx + 1,
-				"total":  len(chunks),
+				"status":    "chunk_analyzing",
+				"dir":       c.Dir,
+				"index":     idx + 1,
+				"total":     len(chunks),
+				"worker_id": workerID,
 			})
 
-			summary := s.generateLocalSummaryWithRetry(ctx, c, 3, sendProgress, idx+1, len(chunks))
+			summary := s.generateLocalSummaryWithRetry(ctx, c, 3, sendProgress, idx+1, len(chunks), workerID)
 
 			if summary != "" {
 				mu.Lock()
 				summaries = append(summaries, summary)
 				mu.Unlock()
 				sendProgress(2, fmt.Sprintf("分块 %d/%d 分析完成", idx+1, len(chunks)), map[string]interface{}{
-					"status": "chunk_done",
-					"dir":    c.Dir,
-					"index":  idx + 1,
+					"status":    "chunk_done",
+					"dir":       c.Dir,
+					"index":     idx + 1,
+					"worker_id": workerID,
 				})
 			}
 		}(i, chunk)
@@ -161,7 +172,7 @@ func (s *DecompositionService) mapReduceAnalyze(ctx context.Context, chunks []pa
 	return summaries
 }
 
-func (s *DecompositionService) generateLocalSummaryWithRetry(ctx context.Context, chunk parser.FileChunk, maxRetries int, sendProgress func(int, string, interface{}), idx int, total int) string {
+func (s *DecompositionService) generateLocalSummaryWithRetry(ctx context.Context, chunk parser.FileChunk, maxRetries int, sendProgress func(int, string, interface{}), idx int, total int, workerID int) string {
 	prompt := fmt.Sprintf(`你是一个高级全栈架构师。请分析以下代码块，提取其核心功能、主要接口和数据结构。
 你的输出应该是一份精简的局部摘要，不需要过多的寒暄，直接列出关键信息。
 目录位置：%s
@@ -194,19 +205,21 @@ func (s *DecompositionService) generateLocalSummaryWithRetry(ctx context.Context
 		}
 
 		sendProgress(2, fmt.Sprintf("分块 %d/%d 分析失败，正在重试 (%d/%d)...", idx, total, attempt, maxRetries), map[string]interface{}{
-			"status": "chunk_failed",
-			"dir":    chunk.Dir,
-			"index":  idx,
-			"attempt": attempt,
+			"status":    "chunk_failed",
+			"dir":       chunk.Dir,
+			"index":     idx,
+			"attempt":   attempt,
+			"worker_id": workerID,
 		})
 
 		time.Sleep(time.Second * time.Duration(attempt*2)) // backoff
 	}
 
 	sendProgress(2, fmt.Sprintf("分块 %d/%d 分析最终失败，已跳过", idx, total), map[string]interface{}{
-		"status": "chunk_failed_final",
-		"dir":    chunk.Dir,
-		"index":  idx,
+		"status":    "chunk_failed_final",
+		"dir":       chunk.Dir,
+		"index":     idx,
+		"worker_id": workerID,
 	})
 	return ""
 }
@@ -520,7 +533,7 @@ func (s *DecompositionService) GenerateOutline(ctx context.Context, sourceConten
 
 	prompt := fmt.Sprintf(`你是一个高级架构师。请评估以下项目文本，并生成一个系列博客的大纲。
 对于大型项目、源码仓库或复杂内容，**强制拆分为细粒度系列博客**。
-为了避免单篇博客过长，你需要将大模块拆分得更细致，例如分为 5-10 篇，让每篇文章只侧重 1-2 个具体的知识点或核心机制。
+要求一个技术点分为一个博客，博客篇数上不封顶，只要有需要，技术点可以拆的更加详细。
 输出必须是纯JSON格式，包含 series_title 和 chapters 两个字段，不包含任何Markdown标记或其他文字。
 JSON 格式如下：
 {

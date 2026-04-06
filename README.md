@@ -36,12 +36,12 @@
 项目已提供完整的容器化支持，只需一行命令即可拉起前后端与数据库：
 ```bash
 # 复制环境变量模板并填入您的 DeepSeek API Key
-cp backend/.env
+cp .env.example .env
 
 # 使用 Docker Compose 一键启动
 docker-compose up -d --build
 ```
-启动后，直接访问 `http://localhost` 即可体验。
+启动后，直接访问 `http://localhost:5173` 即可体验。
 
 ### 4.2 本地开发环境运行
 如果您需要进行二次开发，请确保本地已安装 Node.js 18+、Go 1.24+ 和 PostgreSQL 14+。

@@ -123,9 +123,13 @@
   event: chunk
   data: {"step": 1, "message": "分析仓库源码与结构完成"}
 
-  // 阶段 3: 大纲生成
+  // 阶段 3: 大纲生成 (包含 Map-Reduce 进度)
   event: chunk
   data: {"step": 2, "message": "评估大模型并生成项目大纲..."}
+  // 额外可能触发的分块进度事件:
+  // {"status": "chunk_analyzing", "dir": "cmd/api", "index": 1, "total": 10, "worker_id": 0}
+  // {"status": "chunk_failed", "dir": "cmd/api", "index": 1, "attempt": 1, "worker_id": 0}
+  // {"status": "chunk_done", "dir": "cmd/api", "index": 1, "worker_id": 0}
   
   // 阶段 4: 完成处理（携带最终数据）
   event: chunk

@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"log"
 	"net/http"
 	"strings"
 
@@ -24,7 +25,9 @@ func AuthMiddleware() gin.HandlerFunc {
 		if len(authorizationHeader) == 0 {
 			// DEV MODE: Allow requests without token in development
 			if gin.Mode() == gin.DebugMode {
-				c.Set(authorizationPayloadKey, uuid.New()) // generate dummy UUID
+				dummyID := uuid.New()
+				log.Printf("AuthMiddleware: Missing token, generated dummy UUID %v for path %s", dummyID, c.Request.URL.Path)
+				c.Set(authorizationPayloadKey, dummyID) // generate dummy UUID
 				c.Next()
 				return
 			}

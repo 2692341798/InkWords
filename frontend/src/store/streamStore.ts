@@ -13,6 +13,7 @@ export interface MapReduceProgress {
   index: number
   total: number
   attempt?: number
+  worker_id?: number
 }
 
 interface StreamState {
@@ -26,12 +27,17 @@ interface StreamState {
   isAnalyzing: boolean
   isGenerating: boolean
   mapReduceProgress: MapReduceProgress | null
+  workers: Record<number, MapReduceProgress>
   analysisStep: number
   analysisMessage: string
   abortController: AbortController | null
   setSource: (type: 'git' | 'file', content: string, gitUrl?: string) => void
   setSeriesTitle: (title: string) => void
   setOutline: (outline: Chapter[]) => void
+  updateChapter: (sort: number, field: 'title' | 'summary', value: string) => void
+  addChapter: () => void
+  removeChapter: (sort: number) => void
+  moveChapter: (sort: number, direction: 'up' | 'down') => void
   updateChapterStatus: (sort: number, status: 'pending' | 'generating' | 'completed' | 'error') => void
   appendGeneratedContent: (chunk: string) => void
   clearGeneratedContent: () => void
@@ -56,6 +62,7 @@ export const useStreamStore = create<StreamState>((set, get) => ({
   isAnalyzing: false,
   isGenerating: false,
   mapReduceProgress: null,
+  workers: {},
   analysisStep: -1,
   analysisMessage: '',
   abortController: null,
@@ -64,6 +71,45 @@ export const useStreamStore = create<StreamState>((set, get) => ({
   setOutline: (outline) => set({ 
     outline,
     chapterStatus: outline.reduce((acc, ch) => ({ ...acc, [ch.sort]: 'pending' }), {})
+  }),
+  updateChapter: (sort, field, value) => set((state) => ({
+    outline: state.outline?.map(ch => 
+      ch.sort === sort ? { ...ch, [field]: value } : ch
+    )
+  })),
+  addChapter: () => set((state) => {
+    if (!state.outline) return state;
+    const maxSort = state.outline.reduce((max, ch) => Math.max(max, ch.sort), 0);
+    const newChapter: Chapter = {
+      sort: maxSort + 1,
+      title: '新章节标题',
+      summary: '请填写章节摘要...',
+      files: []
+    };
+    return { outline: [...state.outline, newChapter] };
+  }),
+  removeChapter: (sort) => set((state) => {
+    if (!state.outline) return state;
+    const newOutline = state.outline
+      .filter(ch => ch.sort !== sort)
+      .map((ch, index) => ({ ...ch, sort: index + 1 }));
+    return { outline: newOutline };
+  }),
+  moveChapter: (sort, direction) => set((state) => {
+    if (!state.outline) return state;
+    const index = state.outline.findIndex(ch => ch.sort === sort);
+    if (
+      (direction === 'up' && index === 0) || 
+      (direction === 'down' && index === state.outline.length - 1)
+    ) return state;
+
+    const newOutline = [...state.outline];
+    const swapIndex = direction === 'up' ? index - 1 : index + 1;
+    
+    [newOutline[index], newOutline[swapIndex]] = [newOutline[swapIndex], newOutline[index]];
+    
+    const sortedOutline = newOutline.map((ch, i) => ({ ...ch, sort: i + 1 }));
+    return { outline: sortedOutline };
   }),
   updateChapterStatus: (sort, status) =>
     set((state) => ({
@@ -76,7 +122,19 @@ export const useStreamStore = create<StreamState>((set, get) => ({
   clearGeneratedContent: () => set({ generatedContent: '' }),
   setGenerating: (status) => set({ isGenerating: status }),
   setAnalyzing: (status) => set({ isAnalyzing: status }),
-  setMapReduceProgress: (progress) => set({ mapReduceProgress: progress }),
+  setMapReduceProgress: (progress) => set((state) => {
+    if (!progress) return { mapReduceProgress: null, workers: {} };
+    if (progress.worker_id !== undefined) {
+      return {
+        mapReduceProgress: progress,
+        workers: {
+          ...state.workers,
+          [progress.worker_id]: progress
+        }
+      }
+    }
+    return { mapReduceProgress: progress }
+  }),
   setAnalysisStep: (step) => set({ analysisStep: step }),
   setAnalysisMessage: (msg) => set({ analysisMessage: msg }),
   setAbortController: (ctrl) => set({ abortController: ctrl }),
@@ -108,6 +166,7 @@ export const useStreamStore = create<StreamState>((set, get) => ({
       isAnalyzing: false,
       isGenerating: false,
       mapReduceProgress: null,
+      workers: {},
       analysisStep: -1,
       analysisMessage: '',
       abortController: null

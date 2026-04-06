@@ -3,7 +3,7 @@ import type { DragEvent, ChangeEvent } from 'react'
 import { useStreamStore } from '@/store/streamStore'
 import { useBlogStream } from '@/hooks/useBlogStream'
 import { Button } from '@/components/ui/button'
-import { Loader2, GitBranch, UploadCloud } from 'lucide-react'
+import { Loader2, GitBranch, UploadCloud, ArrowUp, ArrowDown, Trash2, Plus } from 'lucide-react'
 
 import { MarkdownEngine } from '@/components/MarkdownEngine'
 
@@ -154,21 +154,47 @@ export function Generator() {
                   <span className={store.analysisStep >= 2 ? 'text-zinc-800 font-medium' : 'text-zinc-400'}>
                     {analyzingType === 'file' ? '准备进行生成任务...' : (store.analysisStep === 2 ? store.analysisMessage : '评估大模型并生成项目大纲...')}
                   </span>
-                  {store.analysisStep === 2 && store.mapReduceProgress && (
-                    <div className="mt-2 text-sm text-zinc-500 bg-zinc-50 p-3 rounded-lg border border-zinc-100">
-                      <div className="flex justify-between mb-1">
-                        <span>正在处理分块 {store.mapReduceProgress.index} / {store.mapReduceProgress.total}</span>
-                        <span className={
-                          store.mapReduceProgress.status === 'chunk_failed' ? 'text-orange-500' : 
-                          store.mapReduceProgress.status === 'chunk_failed_final' ? 'text-red-500' : 
-                          store.mapReduceProgress.status === 'chunk_done' ? 'text-green-500' : 'text-indigo-500'
-                        }>
-                          {store.mapReduceProgress.status === 'chunk_failed' ? `重试中 (${store.mapReduceProgress.attempt}/3)` :
-                           store.mapReduceProgress.status === 'chunk_failed_final' ? '已跳过' :
-                           store.mapReduceProgress.status === 'chunk_done' ? '完成' : '分析中'}
-                        </span>
-                      </div>
-                      <div className="truncate font-mono text-xs text-zinc-400">{store.mapReduceProgress.dir}</div>
+                  {store.analysisStep === 2 && Object.keys(store.workers).length > 0 && (
+                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                      {[0, 1, 2, 3, 4].map(workerId => {
+                        const worker = store.workers[workerId];
+                        if (!worker) return (
+                          <div key={workerId} className="h-20 bg-zinc-50 border border-zinc-100 rounded-lg flex items-center justify-center text-zinc-300 text-xs">
+                            Worker {workerId + 1} 闲置
+                          </div>
+                        );
+                        
+                        const isAnalyzing = worker.status === 'chunk_analyzing';
+                        const isFailed = worker.status === 'chunk_failed';
+                        const isDone = worker.status === 'chunk_done';
+                        
+                        return (
+                          <div key={workerId} className={`p-3 rounded-lg border text-sm transition-all duration-300 ${
+                            isAnalyzing ? 'bg-indigo-50 border-indigo-200 shadow-[0_0_10px_rgba(99,102,241,0.2)] animate-pulse' :
+                            isFailed ? 'bg-orange-50 border-orange-200' :
+                            isDone ? 'bg-green-50 border-green-200' : 'bg-zinc-50 border-zinc-200'
+                          }`}>
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="text-xs font-medium text-zinc-500">Worker {workerId + 1}</span>
+                              <span className={
+                                isFailed ? 'text-orange-500' : 
+                                worker.status === 'chunk_failed_final' ? 'text-red-500' : 
+                                isDone ? 'text-green-500' : 'text-indigo-500 font-medium'
+                              }>
+                                {isFailed ? `重试 (${worker.attempt}/3)` :
+                                 worker.status === 'chunk_failed_final' ? '跳过' :
+                                 isDone ? '完成' : '分析中'}
+                              </span>
+                            </div>
+                            <div className="truncate font-mono text-xs text-zinc-600" title={worker.dir}>
+                              {worker.dir}
+                            </div>
+                            <div className="text-xs text-zinc-400 mt-1">
+                              {worker.index} / {worker.total}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -243,18 +269,66 @@ export function Generator() {
                           />
                         </div>
                       </div>
-                      <div className="space-y-4 max-h-[40vh] overflow-y-auto custom-scrollbar pr-2">
-                        {store.outline.map((ch) => (
-                          <div key={ch.sort} className="p-4 bg-zinc-50 rounded-xl border border-zinc-200">
-                            <div className="flex items-center gap-3 mb-2">
-                              <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-sm font-semibold shrink-0">
+                      <div className="space-y-4 max-h-[50vh] overflow-y-auto custom-scrollbar pr-2">
+                        {store.outline.map((ch, index) => (
+                          <div key={ch.sort} className="p-4 bg-white rounded-xl border border-zinc-200 shadow-sm hover:border-indigo-200 transition-colors group">
+                            <div className="flex items-start gap-3 mb-3">
+                              <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-sm font-semibold shrink-0 mt-1">
                                 {ch.sort}
                               </div>
-                              <h4 className="font-medium text-zinc-900">{ch.title}</h4>
+                              <div className="flex-1 min-w-0">
+                                <input
+                                  type="text"
+                                  value={ch.title}
+                                  onChange={(e) => store.updateChapter(ch.sort, 'title', e.target.value)}
+                                  className="w-full font-medium text-zinc-900 border-none bg-transparent focus:outline-none focus:ring-0 p-0 text-base"
+                                  placeholder="章节标题"
+                                  disabled={store.isGenerating}
+                                />
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0 opacity-0 hover:opacity-100 focus-within:opacity-100 group-hover:opacity-100 transition-opacity">
+                                <button 
+                                  onClick={() => store.moveChapter(ch.sort, 'up')}
+                                  disabled={index === 0 || store.isGenerating}
+                                  className="p-1.5 text-zinc-400 hover:text-indigo-600 hover:bg-indigo-50 rounded disabled:opacity-30"
+                                >
+                                  <ArrowUp className="w-4 h-4" />
+                                </button>
+                                <button 
+                                  onClick={() => store.moveChapter(ch.sort, 'down')}
+                                  disabled={index === store.outline!.length - 1 || store.isGenerating}
+                                  className="p-1.5 text-zinc-400 hover:text-indigo-600 hover:bg-indigo-50 rounded disabled:opacity-30"
+                                >
+                                  <ArrowDown className="w-4 h-4" />
+                                </button>
+                                <button 
+                                  onClick={() => store.removeChapter(ch.sort)}
+                                  disabled={store.outline!.length <= 1 || store.isGenerating}
+                                  className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded disabled:opacity-30"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
                             </div>
-                            <p className="text-sm text-zinc-500 pl-9">{ch.summary}</p>
+                            <div className="pl-9">
+                              <textarea
+                                value={ch.summary}
+                                onChange={(e) => store.updateChapter(ch.sort, 'summary', e.target.value)}
+                                className="w-full text-sm text-zinc-600 bg-zinc-50 border border-transparent hover:border-zinc-200 focus:border-indigo-300 focus:bg-white rounded-md p-2 resize-y min-h-[60px] focus:outline-none transition-colors"
+                                placeholder="章节内容摘要或要点..."
+                                disabled={store.isGenerating}
+                              />
+                            </div>
                           </div>
                         ))}
+                        <button
+                          onClick={() => store.addChapter()}
+                          disabled={store.isGenerating}
+                          className="w-full py-3 border-2 border-dashed border-zinc-200 rounded-xl text-zinc-500 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50/50 transition-all flex items-center justify-center gap-2 font-medium"
+                        >
+                          <Plus className="w-4 h-4" />
+                          添加新章节
+                        </button>
                       </div>
                     </div>
                   )}
