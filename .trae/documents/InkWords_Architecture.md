@@ -21,6 +21,7 @@
 - `src/store/`: 基于 **Zustand** 的全局状态管理，负责处理极简状态下的 Token、当前激活的博客 ID、以及 SSE 流式追加的 Markdown 内容（`streamStore.ts` 中管理了大纲 `outline` 与章节生成状态）。
 - `src/services/`: 封装所有 HTTP/SSE 请求逻辑，统一管理接口异常。
 - `src/hooks/`: 自定义 Hooks（如 `useBlogStream.ts` 封装了 `analyzeGit` 与 `generateSeries`，并利用 `@microsoft/fetch-event-source` 维持 POST 流）。
+- **第三方工具库**：使用 `jszip` 处理前端轻量级的多文件/系列打包导出功能，减轻后端文件 I/O 压力。
 
 ### 2.2 核心渲染器架构 (Renderer)
 - **MarkdownEngine**：基于 `react-markdown` 配合 GitHub 样式（去除边框），负责实时渲染流式抵达的文本。为了防止生成极长文章时撑爆页面导致卡顿，该容器设置了最大高度并支持内部滚动。引入了自定义的 Rehype 插件 `rehypeSourceLine`，通过拦截 AST 为所有 HTML 元素注入源文件的 `data-source-line` 属性，为双向精准滚动提供底层锚点支持。

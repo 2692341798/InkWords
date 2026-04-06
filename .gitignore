@@ -3,6 +3,7 @@
 
 # Go
 backend/main
+backend/bin/
 backend/.env
 backend/tmp/
 *.exe

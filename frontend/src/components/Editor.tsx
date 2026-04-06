@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useBlogStore } from '@/store/blogStore'
 import { MarkdownEngine } from './MarkdownEngine'
 import { Button } from './ui/button'
-import { Download, FileDown, Save, Loader2, Sparkles } from 'lucide-react'
+import { Download, FileDown, Save, Loader2, Sparkles, FileArchive } from 'lucide-react'
 import { useDebounce } from '@/hooks/useDebounce'
 import { fetchEventSource } from '@microsoft/fetch-event-source'
 
@@ -19,7 +19,7 @@ export function Editor() {
   const editorRef = useRef<HTMLTextAreaElement>(null)
   const previewRef = useRef<HTMLDivElement>(null)
   const activePaneRef = useRef<'editor' | 'preview' | null>(null)
-  const scrollTimeoutRef = useRef<number | null>(null)
+  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Track latest state for unmount save
   const currentStateRef = useRef({ selectedBlog, title, content })
@@ -75,6 +75,32 @@ export function Editor() {
     a.download = `${title || '未命名博客'}.md`
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  const exportSeriesZip = async () => {
+    if (!selectedBlog) return
+    const token = localStorage.getItem('token')
+    
+    try {
+      const res = await fetch(`/api/v1/blogs/${selectedBlog.id}/export`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      if (!res.ok) throw new Error('Export failed')
+      
+      const blob = await res.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${title || 'series'}.zip`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+    } catch (err) {
+      console.error('Failed to export zip:', err)
+    }
   }
 
   const exportPDF = () => {
@@ -336,6 +362,11 @@ export function Editor() {
         </div>
 
         <div className="flex items-center gap-2">
+          {selectedBlog?.parent_id === '00000000-0000-0000-0000-000000000000' && selectedBlog?.children && selectedBlog.children.length > 0 && (
+            <Button variant="outline" size="sm" onClick={exportSeriesZip} className="gap-1.5 text-zinc-600">
+              <FileArchive className="w-4 h-4" /> 导出 ZIP
+            </Button>
+          )}
           <Button 
             variant="outline" 
             size="sm" 

@@ -196,3 +196,8 @@
   event: done
   data: [DONE]
   ```
+
+### 4.4 导出系列博客 (Export Series)
+- **GET** `/api/v1/blogs/:id/export`
+- **描述**：将指定的系列博客（或带子节点的文件夹）打包导出为 ZIP 压缩包下载。
+- **Response**: 返回 `application/zip` 二进制流。

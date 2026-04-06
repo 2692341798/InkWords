@@ -29,7 +29,7 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-50 flex print:bg-white print:block print:h-auto">
+    <div className="h-screen overflow-hidden bg-zinc-50 flex print:bg-white print:block print:h-auto print:overflow-visible">
       <Sidebar />
       {selectedBlog ? <Editor key={selectedBlog.id} /> : <Generator />}
     </div>

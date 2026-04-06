@@ -1,6 +1,14 @@
 # Git 提交与发布规范
 
 ## 1. 提交前检查与对比
+- **强制更新项目文档（核心约束）**：在每次执行 `git commit` 提交项目并 push 到 GitHub 之前，**必须**检查并更新以下所有项目文档，确保文档与最新业务逻辑和架构保持强同步：
+  - `/Users/huangqijun/Documents/墨言博客助手/InkWords/.trae/documents/InkWords_API.md`
+  - `/Users/huangqijun/Documents/墨言博客助手/InkWords/.trae/documents/InkWords_Architecture.md`
+  - `/Users/huangqijun/Documents/墨言博客助手/InkWords/.trae/documents/InkWords_Conversation_Log.md`
+  - `/Users/huangqijun/Documents/墨言博客助手/InkWords/.trae/documents/InkWords_Database.md`
+  - `/Users/huangqijun/Documents/墨言博客助手/InkWords/.trae/documents/InkWords_Development_Plan_and_Log.md`
+  - `/Users/huangqijun/Documents/墨言博客助手/InkWords/.trae/documents/InkWords_PRD.md`
+  - `/Users/huangqijun/Documents/墨言博客助手/InkWords/README.md`
 - **强制对比**：在执行 `git commit` 之前，必须使用 `git diff` 或相关工具，明确本次修改与上一次提交（或暂存区）的具体区别，梳理出变更的核心逻辑和影响范围。
 
 ## 2. Commit Message 编写规范

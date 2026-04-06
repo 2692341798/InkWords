@@ -1,13 +1,15 @@
 package api
 
 import (
-"net/http"
-"strconv"
+	"archive/zip"
+	"fmt"
+	"net/http"
+	"strconv"
 
-"github.com/gin-gonic/gin"
-"github.com/google/uuid"
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
-"inkwords-backend/internal/service"
+	"inkwords-backend/internal/service"
 )
 
 type BlogAPI struct {
@@ -120,9 +122,104 @@ c.JSON(http.StatusInternalServerError, gin.H{
 return
 }
 
-c.JSON(http.StatusOK, gin.H{
-"code":    http.StatusOK,
-"message": "success",
-"data":    nil,
-})
+	c.JSON(http.StatusOK, gin.H{
+		"code":    http.StatusOK,
+		"message": "success",
+		"data":    nil,
+	})
+}
+
+// ExportSeries 导出系列博客为 ZIP 包
+func (a *BlogAPI) ExportSeries(c *gin.Context) {
+	userIDStr, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"code":    http.StatusUnauthorized,
+			"message": "unauthorized",
+			"data":    nil,
+		})
+		return
+	}
+
+	uid, ok := userIDStr.(uuid.UUID)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    http.StatusInternalServerError,
+			"message": "invalid user id type",
+			"data":    nil,
+		})
+		return
+	}
+
+	blogIDStr := c.Param("id")
+	blogID, err := uuid.Parse(blogIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    http.StatusBadRequest,
+			"message": "invalid blog id",
+			"data":    nil,
+		})
+		return
+	}
+
+	blogs, err := a.blogService.GetSeriesBlogs(c.Request.Context(), blogID, uid)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    http.StatusInternalServerError,
+			"message": err.Error(),
+			"data":    nil,
+		})
+		return
+	}
+
+	if len(blogs) == 0 {
+		c.JSON(http.StatusNotFound, gin.H{
+			"code":    http.StatusNotFound,
+			"message": "series not found",
+			"data":    nil,
+		})
+		return
+	}
+
+	parentTitle := blogs[0].Title
+	if parentTitle == "" {
+		parentTitle = "series"
+	}
+
+	c.Writer.Header().Set("Content-Type", "application/zip")
+	c.Writer.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s.zip\"", parentTitle))
+
+	zw := zip.NewWriter(c.Writer)
+
+	for i, blog := range blogs {
+		title := blog.Title
+		if title == "" {
+			title = fmt.Sprintf("未命名_%d", i)
+		}
+		
+		filename := ""
+		if blog.ParentID == uuid.Nil {
+			filename = fmt.Sprintf("%s.md", title)
+		} else {
+			filename = fmt.Sprintf("%02d-%s.md", blog.ChapterSort, title)
+		}
+
+		f, err := zw.Create(filename)
+		if err != nil {
+			continue
+		}
+
+		// 内容前面可以加上标题
+		// 如果原有内容中已经包含了标题，可以考虑不再重复，但简单处理直接追加
+		_, _ = f.Write([]byte(fmt.Sprintf("# %s\n\n%s", title, blog.Content)))
+	}
+
+	if err := zw.Close(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    http.StatusInternalServerError,
+			"message": "failed to create zip",
+			"data":    nil,
+		})
+		return
+	}
 }

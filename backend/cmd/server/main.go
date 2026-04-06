@@ -74,6 +74,7 @@ func main() {
 		{
 			blogGroup.GET("", blogAPI.GetUserBlogs)
 			blogGroup.PUT("/:id", blogAPI.UpdateBlog)
+			blogGroup.GET("/:id/export", blogAPI.ExportSeries)
 			blogGroup.POST("/:id/continue", streamAPI.ContinueBlogStreamHandler)
 		}
 

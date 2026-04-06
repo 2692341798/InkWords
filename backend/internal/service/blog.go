@@ -117,6 +117,28 @@ result = append(result, pNode)
 return result, nil
 }
 
+// GetSeriesBlogs 获取系列博客（父节点及所有子节点）
+func (s *BlogService) GetSeriesBlogs(ctx context.Context, parentID uuid.UUID, userID uuid.UUID) ([]model.Blog, error) {
+	var blogs []model.Blog
+	
+	var parent model.Blog
+	err := s.db.WithContext(ctx).Where("id = ? AND user_id = ?", parentID, userID).First(&parent).Error
+	if err != nil {
+		return nil, err
+	}
+	
+	blogs = append(blogs, parent)
+	
+	var children []model.Blog
+	err = s.db.WithContext(ctx).Where("parent_id = ? AND user_id = ?", parentID, userID).Order("chapter_sort ASC").Find(&children).Error
+	if err != nil {
+		return nil, err
+	}
+	
+	blogs = append(blogs, children...)
+	return blogs, nil
+}
+
 // UpdateBlogRequest 更新博客内容的请求体
 type UpdateBlogRequest struct {
 Title   *string `json:"title"`
