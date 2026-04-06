@@ -190,12 +190,18 @@
 - **描述**：针对生成截断或内容不全的博客，调用此接口会让大模型基于已有内容“继续完成上文未写完的内容”。采用 SSE 流式下发，并在完成后自动追加到数据库中。
 - **SSE Event 格式**:
   ```text
-  event: chunk
-  data: "继续生成的文本片段..."
+  event: message
+  data: {"content": "继续输出", "status": "generating"}
 
   event: done
   data: [DONE]
   ```
+- **Heartbeat Event:**
+  ```text
+  event: ping
+  data: {}
+  ```
+  *(注：前端接收到 ping 事件应直接忽略，此机制仅用于防止 Nginx 等代理因长连接空闲而主动切断 SSE 链接)*
 
 ### 4.4 导出系列博客 (Export Series)
 - **GET** `/api/v1/blogs/:id/export`

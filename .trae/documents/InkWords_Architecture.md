@@ -10,7 +10,8 @@
 
 ### 1.2 核心通信协议
 - **常规请求**：基于 HTTP/RESTful API 交互（JSON 格式）。
-- **流式响应**：采用 **SSE (Server-Sent Events)** 协议，前端单向接收由后端转发的 DeepSeek 模型的流式（Stream）Markdown 输出，提供打字机效果。
+- **流式响应与保活 (SSE & Heartbeat)**：在向前端推送 AI 生成文本时，使用 Server-Sent Events (SSE) 技术，并通过定时 Goroutine 发送 `event: ping` 心跳包，防止代理层（如 Nginx）因长时间无数据流而切断长连接。
+- **大模型无缝续写 (Auto Continuation)**：底层 `deepseek.go` 客户端封装了 `FinishReason` 校验。如果发现返回截断（如 `length` 超过 token 限制），`generator.go` 会在服务端无缝触发新的一轮请求，并将后续输出直接拼接推送给前端，实现用户侧大文本生成的“无感”接续体验。
 - **鉴权协议**：系统内部采用 **JWT (JSON Web Token)** 进行无状态用户鉴权；对外接入第三方平台登录或发文时，采用标准 **OAuth2.0** 协议。其中，第三方登录回调阶段通过 HTTP 重定向（携带 Token/Error）将控制权交还前端处理路由和鉴权状态。
 
 ## 2. 前端架构设计 (React 18)
