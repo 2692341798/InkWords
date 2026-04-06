@@ -19,8 +19,8 @@ FROM alpine:3.19
 
 WORKDIR /app
 
-# 设置时区为上海
-RUN apk add --no-cache tzdata ca-certificates && \
+# 设置时区为上海，并安装 git 供拉取代码使用
+RUN apk add --no-cache tzdata ca-certificates git && \
     cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
     echo "Asia/Shanghai" > /etc/timezone
 

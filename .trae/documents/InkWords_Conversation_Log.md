@@ -1,6 +1,42 @@
 # 墨言博客助手 (InkWords) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 38：真实场景/效果验证 (Reader Testing)
+- **用户需求**：真实场景/效果验证 (Reader Testing)
+- **AI 动作**：
+  1. 为用户生成了 `.env.example` 模板。
+  2. 提供了 3 个优质的开源项目（如 `lo`, `gjson`, `axios`）作为测试素材。
+  3. 引导用户启动真实的生产容器集群并填入真实的 DeepSeek API 密钥，随时准备进行联合走查（Co-Review）。
+- **决策/变更**：
+  - 准备进入真实的生产验证阶段，确保环境配置完整。
+
+### 对话 37：清理测试文件并将项目提交到 GitHub
+- **用户需求**：清理测试文件，将项目提交到github。
+- **AI 动作**：
+  1. 删除了之前创建的 E2E 测试脚本、Docker 编排以及 Mock Server 冗余文件，确保代码库纯净。
+  2. 同步更新项目七大核心文档，并调用 git 技能完成版本控制与提交。
+- **决策/变更**：
+  - 在完成端到端测试与并发 UI 的全流程收尾后，清理不需要的测试环境冗余文件。
+
+### 对话 36：项目端到端测试与并发 UI Bug 修复
+- **用户需求**：对我的项目进行端到端测试，请询问我来明确测试需求。
+- **AI 动作**：
+  1. 通过 `AskUserQuestion` 技能明确了测试重点、框架偏好与环境配置。
+  2. 搭建了全隔离的 Playwright E2E 测试套件，并编写了 Mock LLM 服务器加速测试。
+  3. 修复了测试中暴露的 Go Context 过早 Canceled 以及前端 SSE 断流后 UI 永久 Loading 死锁的严重 Bug。
+- **决策/变更**：
+  - 引入全隔离的 Mock 环境进行 E2E 测试，不仅能加快测试速度，还能暴露深度的并发状态 Bug。
+
+### 对话 35：修复后端容器拉取 Git 仓库失败 (exec: "git": executable file not found in $PATH)
+- **用户需求**：用户提供了一张截图，显示在生成分析任务时报错：`分析失败: 拉取仓库失败: failed to clone repository: exec: "git": executable file not found in $PATH, stderr: `。
+- **AI 动作**：
+  1. 识别出报错是因为后端 Go 程序运行在 `alpine` 容器内，而该运行时镜像缺少 `git` 依赖。
+  2. 修改 `backend/Dockerfile` 的 `Stage 2: Runtime` 阶段，在 `apk add` 命令中补充安装了 `git`。
+  3. 执行 `docker compose build backend` 验证镜像可以成功构建。
+  4. 同步更新了开发日志和本对话记录。
+- **决策/变更**：
+  - 容器化部署中，除了构建阶段（Builder）需要特定工具链外，如果运行时（Runtime）的业务逻辑（如使用 `os/exec` 调用外部命令）依赖系统级工具，必须在运行镜像中显式安装。
+
 ### 对话 34：修复 SSE 流被代理或错误拦截时的迷惑报错 (Expected content-type...)
 - **用户需求**：用户贴出浏览器控制台关于 `Expected content-type to be text/event-stream, Actual: text/plain` 的报错，可能因为后端没启动或代理错误，要求修复。
 - **AI 动作**：

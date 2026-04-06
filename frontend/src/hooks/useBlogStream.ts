@@ -235,6 +235,7 @@ export const useBlogStream = () => {
     } catch (err: unknown) {
       if (err instanceof StopStreamError) {
         if (err.message !== 'done' && err.message !== 'aborted') {
+          store.setGenerating(false)
           alert(`生成失败: ${err.message}`)
         }
         return
