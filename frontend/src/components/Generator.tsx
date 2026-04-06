@@ -152,11 +152,12 @@ export function Generator() {
                 <div className={`w-2 h-2 rounded-full ${store.analysisStep >= 2 ? 'bg-indigo-600' : 'bg-zinc-200'}`}></div>
                 <div className="flex-1 flex flex-col">
                   <span className={store.analysisStep >= 2 ? 'text-zinc-800 font-medium' : 'text-zinc-400'}>
-                    {analyzingType === 'file' ? '准备进行生成任务...' : (store.analysisStep === 2 ? store.analysisMessage : '评估大模型并生成项目大纲...')}
+                    {analyzingType === 'file' ? '准备进行生成任务...' : (store.analysisStep === 2 ? store.analysisMessage : '并发分析代码分块...')}
                   </span>
                   {store.analysisStep === 2 && Object.keys(store.workers).length > 0 && (
-                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-                      {[0, 1, 2, 3, 4].map(workerId => {
+                    <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                      {Object.keys(store.workers).map(key => {
+                        const workerId = Number(key);
                         const worker = store.workers[workerId];
                         if (!worker) return (
                           <div key={workerId} className="h-20 bg-zinc-50 border border-zinc-100 rounded-lg flex items-center justify-center text-zinc-300 text-xs">

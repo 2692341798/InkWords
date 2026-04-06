@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -123,11 +124,21 @@ func (s *DecompositionService) mapReduceAnalyze(ctx context.Context, chunks []pa
 	var summaries []string
 	var mu sync.Mutex
 
-	sem := semaphore.NewWeighted(5) // Max 5 concurrent goroutines
+	// 根据系统 CPU 核心数动态调整并发数（网络 I/O 密集型任务，设置适当倍数并限制上下限，防止 LLM 限流或性能过低）
+	numCPU := runtime.NumCPU()
+	maxWorkers := numCPU * 2
+	if maxWorkers < 5 {
+		maxWorkers = 5
+	}
+	if maxWorkers > 20 {
+		maxWorkers = 20
+	}
+
+	sem := semaphore.NewWeighted(int64(maxWorkers))
 	var wg sync.WaitGroup
 
-	workerPool := make(chan int, 5)
-	for i := 0; i < 5; i++ {
+	workerPool := make(chan int, maxWorkers)
+	for i := 0; i < maxWorkers; i++ {
 		workerPool <- i
 	}
 
@@ -263,7 +274,7 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 	}
 	// --- FIX END ---
 
-	for _, chapter := range outline {
+	for i, chapter := range outline {
 		select {
 		case <-ctx.Done():
 			errChan <- ctx.Err()
@@ -322,6 +333,17 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 			chapterSourceContent = string(runes[:100000]) + "\n\n... [Content Truncated due to length limits] ..."
 		}
 
+		extraRequirements := ""
+		reqIndex := 7
+		if gitURL != "" {
+			extraRequirements += fmt.Sprintf("%d. **源码仓库引用**：请在文章开头或合适的位置，引用本项目的 Git 仓库地址：%s\n", reqIndex, gitURL)
+			reqIndex++
+		}
+		if i+1 < len(outline) {
+			extraRequirements += fmt.Sprintf("%d. **下期预告**：请在文章结尾处，明确预告下一篇文章的内容：“下期预告：%s”\n", reqIndex, outline[i+1].Title)
+			reqIndex++
+		}
+
 		prompt := fmt.Sprintf(`你是一个高级全栈架构师和技术博主。请根据以下提供的源内容，以及本章节的大纲，将其转化为一篇“小白友好、图文并茂、可独立复现”的高质量技术博客章节。
 要求：
 1. **字数和篇幅适中**：为了保证生成完整性，单篇文章内容不要过于冗长（控制在 1000-1500 字左右）。不要一次性铺陈太多知识点，聚焦于本章节的核心目标即可。
@@ -330,7 +352,7 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 4. **小白友好**：在解释抽象的理论概念时，必须提供对应的代码示例或生活化比喻。
 5. 所有生成的 Mermaid 图表代码块绝对禁止包含自定义样式关键字（如 style, classDef, linkStyle 等），必须使用基础语法。
 6. **完整性约束**：请务必完整输出，不要遗漏关键知识点。如果内容较长，请合理分配篇幅，确保文章结构完整，包含结尾总结。
-
+%s
 源内容：
 %s
 
@@ -338,7 +360,7 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 - 标题: %s
 - 摘要: %s
 - 排序: %d
-`, chapterSourceContent, chapter.Title, chapter.Summary, chapter.Sort)
+`, extraRequirements, chapterSourceContent, chapter.Title, chapter.Summary, chapter.Sort)
 
 		messages := []llm.Message{
 			{Role: "system", Content: "你是一个高级技术博客作者。"},

@@ -469,3 +469,11 @@
      - 为 `Sidebar.tsx` 的批量删除动作引入了 `useRef` 同步锁 (`isConfirmingRef`)，使得即便在 React 异步状态更新时发生的并发连击，也只会被响应一次，防止产生“假弹窗真删除”的现象。
 - **踩坑记录 / 架构调整**:
   - React 异步更新与原生 `window.confirm` 同步阻塞的结合会引发有趣的竞态：当用户快速双击删除按钮时，第一次点击阻塞主线程弹出提示框，一旦用户点击确认，代码向下执行发起删除 API 请求，而第二次被排队的点击此时立刻又被执行，弹出第二个提示框，造成文章“已经先被删除，而提示框还在”的错误体验。必须在最上层引入 `useRef` 或 `e.detail` 进行防抖防御。
+
+### [2026-04-07] Refactor - 根据系统性能动态调整并发协程数
+- **开发模块**: [后端并发调度机制, `DecompositionService`]
+- **完成事项**:
+  1. **动态协程调整**: 修改了 `backend/internal/service/decomposition.go` 中的 `mapReduceAnalyze` 方法。移除了硬编码的 5 个并发 Goroutine 限制，改用 `runtime.NumCPU() * 2` 来动态计算并发数（网络 I/O 密集型任务适合适当放大倍数）。
+  2. **并发安全限制**: 增加了最小并发数 5 和最大并发数 20 的硬性限制，既保证了低配机器的分析效率，又避免了因并发过高触发 LLM (DeepSeek) API 的并发限流报错。
+- **决策/踩坑记录**:
+  - LLM API 请求属于典型的网络 I/O 密集型操作，纯依赖 CPU 核心数可能无法打满带宽和 API 并发度，因此采用 `CPU核心数 * 2` 的策略，并结合 `semaphore.NewWeighted` 和带有缓冲的 `workerPool` Channel 来实现安全调度。

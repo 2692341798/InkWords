@@ -70,7 +70,7 @@ Go 后端采用经典的“三层架构”，并通过依赖注入（Dependency 
 ### 4.2 大项目流式分析与串行生成机制
 当 Parser (`GitFetcher` 或 `DocParser`) 提取的文本超长（系统判定为大项目或长篇教程）时，引入 **Map-Reduce 并发分析架构** 与 **按需精准读取机制 (Precise On-Demand Code Feeding)**：
 1. **智能拆分 (Split)**：`GitFetcher` 按目录层级聚合文件内容，当单块超过 300,000 字符时自动拆分为多个 `FileChunk`，并附带项目全局树状结构。
-2. **并发分析 (Map 阶段)**：`DecompositionService` 利用 Goroutine 池与 `semaphore` 信号量控制最大并发数（默认为 5 个并发 Worker）。针对每个 `FileChunk`，系统向大模型发起局部摘要请求（支持 3 次重试失败跳过）。期间，后端会主动向下推送 `{"step": 2, "message": "...", "data": {"status": "chunk_analyzing", "index": 1}}` 等细粒度事件，前端在大项目分析期间（Map-Reduce 阶段）展示多个 Worker 的并发执行状态（如分析中、重试、成功、失败），缓解等待焦虑。
+2. **并发分析 (Map 阶段)**：`DecompositionService` 利用 Goroutine 池与 `semaphore` 信号量控制最大并发数（动态根据系统 CPU 核心数计算，默认为 `numCPU * 2`，并限制在 5~20 之间，以防触发大模型并发限流）。针对每个 `FileChunk`，系统向大模型发起局部摘要请求（支持 3 次重试失败跳过）。期间，后端会主动向下推送 `{"step": 2, "message": "...", "data": {"status": "chunk_analyzing", "index": 1}}` 等细粒度事件，前端在大项目分析期间（Map-Reduce 阶段）展示多个 Worker 的并发执行状态（如分析中、重试、成功、失败），缓解等待焦虑。
 3. **层级汇总 (Reduce 阶段)**：所有局部摘要拼接后，与全局目录结构合并，发起一次全局大纲规划请求。**关键优化**：此时大模型不仅会生成系列标题、章节的标题和摘要，还必须严格根据目录树输出该章节强相关的**文件路径列表 (`files` 数组)**。大纲生成后，允许用户对章节进行标题和摘要的修改，支持新增、删除、上移、下移，定制化程度极高。
 4. **内容生成 (精准按需读取 + 串行打字机渲染)**：
    - 大纲确认后，前端携带 `outline` 数组及 Git 仓库地址请求 `POST /api/v1/stream/generate`。系列博客不会一拥而上导致并发熔断，而是通过大模型队列**串行**逐篇生成。

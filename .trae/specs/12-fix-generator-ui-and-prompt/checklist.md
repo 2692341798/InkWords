@@ -1,0 +1,4 @@
+- [x] Worker cards display correctly with an adaptive grid, avoiding squashed aspect ratios.
+- [x] Step 2 and Step 3 labels are distinct and not duplicated.
+- [x] The Git repository link is injected into the LLM prompt.
+- [x] The next chapter title is injected into the LLM prompt.
