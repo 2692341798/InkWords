@@ -21,6 +21,7 @@ interface BlogState {
   selectBlog: (blog: BlogNode | null) => void
   updateBlog: (id: string, updates: { title?: string; content?: string }) => Promise<void>
   updateBlogLocal: (id: string, updates: { title?: string; content?: string }) => void
+  batchDeleteBlogs: (ids: string[]) => Promise<void>
 }
 
 export const useBlogStore = create<BlogState>((set, get) => ({
@@ -110,6 +111,36 @@ export const useBlogStore = create<BlogState>((set, get) => ({
       console.error('Failed to update blog:', error)
       // We could revert the optimistic update here if needed
       // get().fetchBlogs()
+    }
+  },
+
+  batchDeleteBlogs: async (ids: string[]) => {
+    try {
+      const token = localStorage.getItem('token')
+      const res = await fetch('/api/v1/blogs', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token ? `Bearer ${token}` : ''
+        },
+        body: JSON.stringify({ blog_ids: ids })
+      })
+
+      if (!res.ok) {
+        throw new Error('Failed to batch delete blogs')
+      }
+
+      // 刷新列表并清除选中状态
+      await get().fetchBlogs()
+      
+      // 如果当前选中的博客被删除了，或者它的父节点被删除了，清除选中状态
+      const selectedBlog = get().selectedBlog
+      if (selectedBlog && (ids.includes(selectedBlog.id) || (selectedBlog.parent_id && ids.includes(selectedBlog.parent_id)))) {
+        get().selectBlog(null)
+      }
+    } catch (error) {
+      console.error('Failed to batch delete blogs:', error)
+      throw error
     }
   }
 }))

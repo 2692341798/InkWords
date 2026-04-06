@@ -139,6 +139,20 @@ func (s *BlogService) GetSeriesBlogs(ctx context.Context, parentID uuid.UUID, us
 	return blogs, nil
 }
 
+// BatchDeleteBlogs 批量删除博客及其子节点
+func (s *BlogService) BatchDeleteBlogs(ctx context.Context, userID uuid.UUID, blogIDs []uuid.UUID) error {
+	if len(blogIDs) == 0 {
+		return nil
+	}
+
+	// 删除选中的博客，或者其父节点在选中列表中的博客
+	res := s.db.WithContext(ctx).
+		Where("user_id = ? AND (id IN ? OR parent_id IN ?)", userID, blogIDs, blogIDs).
+		Delete(&model.Blog{})
+
+	return res.Error
+}
+
 // UpdateBlogRequest 更新博客内容的请求体
 type UpdateBlogRequest struct {
 Title   *string `json:"title"`
@@ -147,13 +161,13 @@ Content *string `json:"content"`
 
 // UpdateBlog 更新博客内容
 func (s *BlogService) UpdateBlog(ctx context.Context, id uuid.UUID, userID uuid.UUID, req UpdateBlogRequest) error {
-updates := map[string]interface{}{}
-if req.Title != nil {
-updates["title"] = *req.Title
-}
-if req.Content != nil {
-updates["content"] = *req.Content
-}
+	updates := map[string]interface{}{}
+	if req.Title != nil {
+		updates["title"] = *req.Title
+	}
+	if req.Content != nil {
+		updates["content"] = *req.Content
+	}
 
 // 如果没有更新内容则直接返回
 if len(updates) == 0 {

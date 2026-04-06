@@ -3,7 +3,7 @@ import JSZip from 'jszip'
 import { useStreamStore } from '@/store/streamStore'
 import { useBlogStore } from '@/store/blogStore'
 import type { BlogNode } from '@/store/blogStore'
-import { GitBranch, CheckCircle2, CircleDashed, Loader2, BookOpen, ChevronRight, ChevronDown, Plus, LogOut, FolderArchive, Square, CheckSquare, RefreshCw } from 'lucide-react'
+import { GitBranch, CheckCircle2, CircleDashed, Loader2, BookOpen, ChevronRight, ChevronDown, Plus, LogOut, FolderArchive, Square, CheckSquare, RefreshCw, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from './ui/button'
 
@@ -14,6 +14,7 @@ export function Sidebar() {
   const [isBatchMode, setIsBatchMode] = useState(false)
   const [selectedForExport, setSelectedForExport] = useState<Set<string>>(new Set())
   const [isExporting, setIsExporting] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   useEffect(() => {
     fetchBlogs()
@@ -89,6 +90,28 @@ export function Sidebar() {
       console.error('Failed to export batch zip:', err)
     } finally {
       setIsExporting(false)
+    }
+  }
+
+  const handleBatchDelete = async () => {
+    if (selectedForExport.size === 0) return
+    
+    if (!window.confirm(`确定要删除选中的 ${selectedForExport.size} 篇博客吗？此操作不可恢复。`)) {
+      return
+    }
+
+    setIsDeleting(true)
+    try {
+      const { batchDeleteBlogs } = useBlogStore.getState()
+      await batchDeleteBlogs(Array.from(selectedForExport))
+      
+      setIsBatchMode(false)
+      setSelectedForExport(new Set())
+    } catch (err) {
+      console.error('Failed to batch delete blogs:', err)
+      alert('批量删除失败，请稍后重试')
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -285,11 +308,21 @@ export function Sidebar() {
               <div className="flex items-center gap-2">
                 <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setIsBatchMode(false)}>取消</Button>
                 <Button 
+                  variant="destructive" 
+                  size="sm" 
+                  className="h-7 text-xs px-2"
+                  onClick={handleBatchDelete}
+                  disabled={selectedForExport.size === 0 || isDeleting || isExporting}
+                  title="批量删除"
+                >
+                  {isDeleting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                </Button>
+                <Button 
                   variant="default" 
                   size="sm" 
                   className="h-7 text-xs bg-indigo-600 hover:bg-indigo-700"
                   onClick={handleBatchExport}
-                  disabled={selectedForExport.size === 0 || isExporting}
+                  disabled={selectedForExport.size === 0 || isExporting || isDeleting}
                 >
                   {isExporting ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
                   导出 ZIP

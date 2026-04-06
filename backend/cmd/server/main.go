@@ -73,6 +73,7 @@ func main() {
 		blogGroup.Use(middleware.AuthMiddleware())
 		{
 			blogGroup.GET("", blogAPI.GetUserBlogs)
+			blogGroup.DELETE("", blogAPI.BatchDeleteBlogs)
 			blogGroup.PUT("/:id", blogAPI.UpdateBlog)
 			blogGroup.GET("/:id/export", blogAPI.ExportSeries)
 			blogGroup.POST("/:id/continue", streamAPI.ContinueBlogStreamHandler)

@@ -201,3 +201,24 @@
 - **GET** `/api/v1/blogs/:id/export`
 - **描述**：将指定的系列博客（或带子节点的文件夹）打包导出为 ZIP 压缩包下载。
 - **Response**: 返回 `application/zip` 二进制流。
+
+### 4.5 批量删除博客 (Batch Delete)
+- **DELETE** `/api/v1/blogs`
+- **描述**：批量删除用户选中的多篇博客（及其子节点）。
+- **Request Body (JSON)**:
+  ```json
+  {
+    "blog_ids": [
+      "uuid-1",
+      "uuid-2"
+    ]
+  }
+  ```
+- **Response Data**:
+  ```json
+  {
+    "code": 200,
+    "message": "success",
+    "data": null
+  }
+  ```

@@ -123,6 +123,17 @@ export function Editor() {
           ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         },
         body: JSON.stringify({}),
+        async onopen(response) {
+          if (response.ok && response.headers.get('content-type')?.startsWith('text/event-stream')) {
+            return;
+          }
+          if (response.headers.get('content-type')?.includes('application/json')) {
+            const data = await response.json();
+            throw new StopStreamError(data.error || '请求失败');
+          }
+          const text = await response.text();
+          throw new StopStreamError(text || `请求失败: ${response.status} ${response.statusText}`);
+        },
         onmessage(msg) {
           if (msg.event === 'chunk') {
             currentContent += msg.data

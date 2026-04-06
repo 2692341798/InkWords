@@ -38,6 +38,17 @@ export const useBlogStream = () => {
         signal: ctrl.signal,
         openWhenHidden: true, // Prevents fetch-event-source from aborting when tab is hidden
         body: JSON.stringify({ git_url: gitUrl }),
+        async onopen(response) {
+          if (response.ok && response.headers.get('content-type')?.startsWith('text/event-stream')) {
+            return; // everything's good
+          }
+          if (response.headers.get('content-type')?.includes('application/json')) {
+            const data = await response.json();
+            throw new StopStreamError(data.error || '请求失败');
+          }
+          const text = await response.text();
+          throw new StopStreamError(text || `请求失败: ${response.status} ${response.statusText}`);
+        },
         onmessage(msg) {
           if (msg.event === 'chunk') {
             try {
@@ -178,6 +189,17 @@ export const useBlogStream = () => {
           source_type: 'file',
           outline: []
         }),
+        async onopen(response) {
+          if (response.ok && response.headers.get('content-type')?.startsWith('text/event-stream')) {
+            return;
+          }
+          if (response.headers.get('content-type')?.includes('application/json')) {
+            const data = await response.json();
+            throw new StopStreamError(data.error || '请求失败');
+          }
+          const text = await response.text();
+          throw new StopStreamError(text || `请求失败: ${response.status} ${response.statusText}`);
+        },
         onmessage(msg) {
           if (msg.event === 'chunk') {
             store.appendGeneratedContent(msg.data)
@@ -254,6 +276,17 @@ export const useBlogStream = () => {
           git_url: store.gitUrl || '',
           series_title: store.seriesTitle || ''
         }),
+        async onopen(response) {
+          if (response.ok && response.headers.get('content-type')?.startsWith('text/event-stream')) {
+            return;
+          }
+          if (response.headers.get('content-type')?.includes('application/json')) {
+            const data = await response.json();
+            throw new StopStreamError(data.error || '请求失败');
+          }
+          const text = await response.text();
+          throw new StopStreamError(text || `请求失败: ${response.status} ${response.statusText}`);
+        },
         onmessage(msg) {
           if (msg.event === 'chunk') {
             try {

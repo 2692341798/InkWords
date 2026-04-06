@@ -70,6 +70,68 @@ c.JSON(http.StatusOK, gin.H{
 })
 }
 
+// BatchDeleteBlogsRequest 批量删除请求体
+type BatchDeleteBlogsRequest struct {
+	BlogIDs []uuid.UUID `json:"blog_ids" binding:"required"`
+}
+
+// BatchDeleteBlogs 批量删除博客
+func (a *BlogAPI) BatchDeleteBlogs(c *gin.Context) {
+	userIDStr, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"code":    http.StatusUnauthorized,
+			"message": "unauthorized",
+			"data":    nil,
+		})
+		return
+	}
+
+	uid, ok := userIDStr.(uuid.UUID)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    http.StatusInternalServerError,
+			"message": "invalid user id type",
+			"data":    nil,
+		})
+		return
+	}
+
+	var req BatchDeleteBlogsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    http.StatusBadRequest,
+			"message": "invalid request body",
+			"data":    nil,
+		})
+		return
+	}
+
+	if len(req.BlogIDs) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    http.StatusBadRequest,
+			"message": "blog_ids cannot be empty",
+			"data":    nil,
+		})
+		return
+	}
+
+	if err := a.blogService.BatchDeleteBlogs(c.Request.Context(), uid, req.BlogIDs); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    http.StatusInternalServerError,
+			"message": err.Error(),
+			"data":    nil,
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":    http.StatusOK,
+		"message": "success",
+		"data":    nil,
+	})
+}
+
 // UpdateBlog 更新博客内容
 func (a *BlogAPI) UpdateBlog(c *gin.Context) {
 userIDStr, exists := c.Get("user_id")
@@ -198,7 +260,7 @@ func (a *BlogAPI) ExportSeries(c *gin.Context) {
 		}
 		
 		filename := ""
-		if blog.ParentID == uuid.Nil {
+		if blog.ParentID == nil || *blog.ParentID == uuid.Nil {
 			filename = fmt.Sprintf("%s.md", title)
 		} else {
 			filename = fmt.Sprintf("%02d-%s.md", blog.ChapterSort, title)

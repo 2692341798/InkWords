@@ -1,6 +1,16 @@
 # 墨言博客助手 (InkWords) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 34：修复 SSE 流被代理或错误拦截时的迷惑报错 (Expected content-type...)
+- **用户需求**：用户贴出浏览器控制台关于 `Expected content-type to be text/event-stream, Actual: text/plain` 的报错，可能因为后端没启动或代理错误，要求修复。
+- **AI 动作**：
+  1. 诊断出 `@microsoft/fetch-event-source` 库在建连时严格校验 `Content-Type`，当后端代理报错 `502` 或返回 JSON 错误信息时，库会静默抛出类型错误，掩盖真实原因。
+  2. 修改前端 `src/hooks/useBlogStream.ts` 和 `src/components/Editor.tsx` 中所有的 `fetchEventSource` 调用，补充 `onopen` 拦截钩子。
+  3. 当响应非 `text/event-stream` 时，主动通过 `response.json()` 或 `response.text()` 读取真实报错信息，并封装为 `StopStreamError` 抛出给外层提示用户。
+  4. 为用户一键重启了前后端项目，并在随后更新了项目文档并提交至 GitHub。
+- **决策/变更**：
+  - 前端处理 SSE 流时，必须实现自定义的 `onopen` 拦截器来解析业务级或代理级的普通 HTTP 错误，而不是依赖底层的隐式报错，这对于排查网络连通性问题至关重要。
+
 ### 对话 33：整理项目基准文档并提交至 GitHub
 - **用户需求**：要求确认提交内容并提交项目到 GitHub。
 - **AI 动作**：

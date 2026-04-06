@@ -64,6 +64,23 @@
   1. 上传一个极简的小脚本（如 100 行 Go 代码），验证生成的单篇内容是否丰富详实。
   2. 导入一个著名长篇开源项目或官方教程（如 React 官方教程），测试系统的“复杂度评估器”是否能准确切分为多个结构连贯的 5000 字篇章。
 
+### [2026-04-06] Bugfix - 修复 SSE 连接在非流式响应时的报错处理
+- **开发模块**: [前端网络请求, SSE 流控制]
+- **完成事项**:
+  1. **自定义 onopen 拦截器**: 修改 `frontend/src/hooks/useBlogStream.ts` 和 `frontend/src/components/Editor.tsx` 中所有的 `fetchEventSource` 调用。补充了 `async onopen(response)` 方法。
+  2. **精确抛错**: 当后端未启动（代理返回 `502/504 text/plain`）或业务拦截（返回 `application/json`）时，拦截器会主动读取并抛出真实的错误信息（如 `请求失败: 502 Bad Gateway` 或后端的 JSON 错误），而不是让 `@microsoft/fetch-event-source` 库抛出令人迷惑的 `Expected content-type to be text/event-stream, Actual: text/plain` 错误。
+- **踩坑记录 / 架构调整**:
+  - `fetch-event-source` 库默认严格校验 `Content-Type`，如果不符合预期会直接在内部抛错中止请求，导致前端无法捕获真实的 HTTP 状态码和响应体。通过重写 `onopen` 钩子，前端可以优雅地处理非 SSE 的异常响应，极大提升了错误排查效率和用户体验。
+
+### [2026-04-06] Feature - 批量删除历史博客功能
+- **开发模块**: [前端侧边栏, 后端批量删除 API, 状态管理]
+- **完成事项**:
+  1. **批量删除 API**: 在 `backend/internal/api/blog.go` 与 `backend/internal/service/blog.go` 中新增了 `DELETE /api/v1/blogs` 接口。接收前端传入的 `blog_ids` 数组，并通过 GORM 进行安全软删除，同时删除选中的父节点及其所有子节点。
+  2. **前端状态层 (Zustand)**: 在 `useBlogStore` 中新增了 `batchDeleteBlogs` 方法，并在删除成功后自动调用 `fetchBlogs()` 刷新列表，同时清空可能被删除的当前选中文章状态。
+  3. **UI 交互更新**: 在 `Sidebar.tsx` 的批量操作栏中，新增了红色的“批量删除”按钮。结合原有的 `isBatchMode` 多选模式，用户可以一键勾选多篇文章并执行删除。删除前增加了 `window.confirm` 二次确认弹窗，防止误操作。
+- **踩坑记录 / 架构调整**:
+  - 在设计批量删除时，由于数据库中存在父子节点的层级关系，直接删除父节点并不会自动级联删除子节点（除非配置了物理外键级联）。通过在 GORM 查询条件中加入 `OR parent_id IN ?`，实现了仅需传入父节点 ID 即可同时软删除其下所有子章节的完美逻辑。
+
 ### [2026-04-06] Feature - 批量导出 ZIP 与 UI 滚动条优化
 - **开发模块**: [前端侧边栏, 批量管理, 博客导出]
 - **完成事项**:
