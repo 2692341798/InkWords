@@ -62,14 +62,13 @@ func (s *AuthService) GetAuthURL(provider string) (string, error) {
 }
 
 // HandleCallback 处理 OAuth 回调并生成本系统 JWT
-func (s *AuthService) HandleCallback(provider, code string) (string, *model.User, error) {
+func (s *AuthService) HandleCallback(ctx context.Context, provider, code string) (string, *model.User, error) {
 	config, err := getOAuthConfig(provider)
 	if err != nil {
 		return "", nil, err
 	}
 
 	// 1. 获取 Access Token
-	ctx := context.Background()
 	token, err := config.Exchange(ctx, code)
 	if err != nil {
 		return "", nil, fmt.Errorf("%w: failed to exchange token: %v", ErrOAuthCallback, err)

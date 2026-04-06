@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -56,12 +57,13 @@ func (s *GeneratorService) GenerateBlogStream(ctx context.Context, userID uuid.U
 	streamCtx, streamCancel := context.WithCancel(ctx)
 	defer streamCancel()
 
+	// Receiver goroutine
 	go func() {
 		defer close(chunkChan)
 		defer close(errChan)
 
 		var fullContent string
-		idleTimeout := 30 * time.Second
+		idleTimeout := 60 * time.Second // Increased to 60s
 		timer := time.NewTimer(idleTimeout)
 		defer timer.Stop()
 
@@ -99,7 +101,52 @@ func (s *GeneratorService) GenerateBlogStream(ctx context.Context, userID uuid.U
 		}
 	}()
 
-	s.llmClient.GenerateStream(streamCtx, modelType, messages, internalChunkChan, internalErrChan)
+	// Generator loop (handles auto-continuation)
+	go func() {
+		defer close(internalChunkChan)
+		defer close(internalErrChan)
+		
+		for {
+			tempChunkChan := make(chan string)
+			var assistantContent string
+			var wg sync.WaitGroup
+			wg.Add(1)
+			
+			go func() {
+				defer wg.Done()
+				for chunk := range tempChunkChan {
+					assistantContent += chunk
+					internalChunkChan <- chunk
+				}
+			}()
+
+			finishReason, err := s.llmClient.GenerateStream(streamCtx, modelType, messages, tempChunkChan)
+			wg.Wait() // Ensure all chunks are collected
+			
+			if err != nil {
+				internalErrChan <- err
+				return
+			}
+			
+			// Append what the assistant just generated
+			messages = append(messages, llm.Message{
+				Role:    "assistant",
+				Content: assistantContent,
+			})
+
+			if finishReason != "length" {
+				return
+			}
+			
+			// Auto-continue if it stopped due to length limit
+			// We append the prompt to strictly continue without conversational filler
+			continueMsg := llm.Message{
+				Role:    "user",
+				Content: "刚才你的回答被截断了，请严格从上文最后一个字符开始无缝续写。绝对不要输出“好的，我们继续”等任何过渡性废话，直接输出后续的Markdown或代码内容。",
+			}
+			messages = append(messages, continueMsg)
+		}
+	}()
 }
 
 // saveToDB persists the generated markdown to PostgreSQL

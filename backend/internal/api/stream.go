@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -102,6 +103,10 @@ func (api *StreamAPI) AnalyzeStreamHandler(c *gin.Context) {
 			}
 			c.SSEvent("chunk", msg)
 			return true
+		case <-time.After(15 * time.Second):
+			// Keep-alive ping to prevent proxy timeout (e.g. Vite proxy times out after 120s)
+			c.SSEvent("ping", "keepalive")
+			return true
 		}
 	})
 
@@ -189,6 +194,10 @@ func (api *StreamAPI) GenerateBlogStreamHandler(c *gin.Context) {
 			}
 			c.SSEvent("chunk", chunk)
 			return true
+		case <-time.After(15 * time.Second):
+			// Keep-alive ping
+			c.SSEvent("ping", "keepalive")
+			return true
 		}
 	})
 }
@@ -228,6 +237,7 @@ func (api *StreamAPI) ContinueBlogStreamHandler(c *gin.Context) {
 	c.Stream(func(w io.Writer) bool {
 		select {
 		case <-ctx.Done():
+			// Client disconnected
 			go func() {
 				for {
 					select {
@@ -255,6 +265,10 @@ func (api *StreamAPI) ContinueBlogStreamHandler(c *gin.Context) {
 				return false
 			}
 			c.SSEvent("chunk", chunk)
+			return true
+		case <-time.After(15 * time.Second):
+			// Keep-alive ping
+			c.SSEvent("ping", "keepalive")
 			return true
 		}
 	})
