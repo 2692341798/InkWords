@@ -36,7 +36,7 @@
 项目已提供完整的容器化支持，只需一行命令即可拉起前后端与数据库：
 ```bash
 # 复制环境变量模板并填入您的 DeepSeek API Key
-cp backend/.env.example backend/.env
+cp backend/.env
 
 # 使用 Docker Compose 一键启动
 docker-compose up -d --build
