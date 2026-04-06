@@ -115,11 +115,9 @@ func (c *DeepSeekClient) Generate(ctx context.Context, model string, messages []
 }
 
 // GenerateStream calls the DeepSeek API with stream=true and parses the chunks
-// It sends the content deltas to the provided channel and closes the channel when done or on error
-func (c *DeepSeekClient) GenerateStream(ctx context.Context, model string, messages []Message, chunkChan chan<- string, errChan chan<- error) {
+// It sends the content deltas to the provided channel. It returns the finish reason and any error.
+func (c *DeepSeekClient) GenerateStream(ctx context.Context, model string, messages []Message, chunkChan chan<- string) (string, error) {
 	defer close(chunkChan)
-	defer close(errChan)
-
 	reqBody := ChatRequest{
 		Model:    model,
 		Messages: messages,
@@ -128,14 +126,12 @@ func (c *DeepSeekClient) GenerateStream(ctx context.Context, model string, messa
 
 	jsonData, err := json.Marshal(reqBody)
 	if err != nil {
-		errChan <- fmt.Errorf("failed to marshal request body: %w", err)
-		return
+		return "", fmt.Errorf("failed to marshal request body: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.APIURL, bytes.NewBuffer(jsonData))
 	if err != nil {
-		errChan <- fmt.Errorf("failed to create request: %w", err)
-		return
+		return "", fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -143,33 +139,30 @@ func (c *DeepSeekClient) GenerateStream(ctx context.Context, model string, messa
 
 	resp, err := c.Client.Do(req)
 	if err != nil {
-		errChan <- fmt.Errorf("failed to execute request: %w", err)
-		return
+		return "", fmt.Errorf("failed to execute request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		errChan <- fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(bodyBytes))
-		return
+		return "", fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
 	reader := bufio.NewReader(resp.Body)
+	var finalFinishReason string
 	for {
 		select {
 		case <-ctx.Done():
-			errChan <- ctx.Err()
-			return
+			return "", ctx.Err()
 		default:
 		}
 
 		line, err := reader.ReadBytes('\n')
 		if err != nil {
 			if err == io.EOF {
-				return
+				return finalFinishReason, nil
 			}
-			errChan <- fmt.Errorf("failed to read stream: %w", err)
-			return
+			return "", fmt.Errorf("failed to read stream: %w", err)
 		}
 
 		lineStr := strings.TrimSpace(string(line))
@@ -183,13 +176,11 @@ func (c *DeepSeekClient) GenerateStream(ctx context.Context, model string, messa
 
 		data := strings.TrimPrefix(lineStr, "data: ")
 		if data == "[DONE]" {
-			return
+			return finalFinishReason, nil
 		}
 
 		var chunk ChatCompletionChunk
 		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
-			// Instead of failing completely on one bad chunk, we log/ignore or just continue.
-			// For robustness, we continue parsing the stream.
 			continue
 		}
 
@@ -199,9 +190,11 @@ func (c *DeepSeekClient) GenerateStream(ctx context.Context, model string, messa
 				chunkChan <- content
 			}
 			
-			// If finish reason is not null, we can consider it done
-			if chunk.Choices[0].FinishReason != nil && *chunk.Choices[0].FinishReason == "stop" {
-			    return
+			if chunk.Choices[0].FinishReason != nil {
+				finalFinishReason = *chunk.Choices[0].FinishReason
+				if finalFinishReason == "stop" || finalFinishReason == "length" {
+					return finalFinishReason, nil
+				}
 			}
 		}
 	}

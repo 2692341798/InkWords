@@ -6,6 +6,8 @@ import { Download, FileDown, Save, Loader2, Sparkles } from 'lucide-react'
 import { useDebounce } from '@/hooks/useDebounce'
 import { fetchEventSource } from '@microsoft/fetch-event-source'
 
+class StopStreamError extends Error {}
+
 export function Editor() {
   const { selectedBlog, updateBlog } = useBlogStore()
   const [title, setTitle] = useState(selectedBlog?.title || '')
@@ -87,6 +89,7 @@ export function Editor() {
 
     try {
       let currentContent = content
+
       await fetchEventSource(`/api/v1/blogs/${selectedBlog.id}/continue`, {
         method: 'POST',
         headers: {
@@ -101,21 +104,42 @@ export function Editor() {
           } else if (msg.event === 'done') {
             updateBlog(selectedBlog.id, { content: currentContent })
             setIsContinuing(false)
+            throw new StopStreamError('done')
           } else if (msg.event === 'error') {
             console.error('Continue generating error:', msg.data)
             setIsContinuing(false)
+            throw new StopStreamError(msg.data)
           }
         },
         onclose() {
           setIsContinuing(false)
+          throw new StopStreamError('closed by server')
         },
-        onerror(err) {
+        onerror(err: unknown) {
+          if (err instanceof StopStreamError) {
+            throw err
+          }
+          if (err instanceof DOMException && err.name === 'AbortError') {
+            throw new StopStreamError('aborted')
+          }
+          const e = err as any
+          if (e?.name === 'AbortError' || e?.message?.includes('AbortError') || e?.message?.includes('aborted') || e?.message?.includes('Failed to fetch')) {
+            throw new StopStreamError('aborted')
+          }
           console.error('Continue generating fetch error:', err)
           setIsContinuing(false)
           throw err
         }
       })
-    } catch (err) {
+    } catch (err: unknown) {
+      if (err instanceof StopStreamError) {
+        if (err.message === 'done' || err.message === 'aborted') {
+          return
+        }
+      }
+      const e = err as any
+      if (e?.name === 'AbortError' || e?.message?.includes('AbortError') || e?.message?.includes('aborted')) return
+      
       console.error('Failed to continue generating:', err)
       setIsContinuing(false)
     }

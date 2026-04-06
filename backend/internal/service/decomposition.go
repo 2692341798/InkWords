@@ -373,9 +373,55 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 			
 			var fullContentBuilder strings.Builder
 			
-			go s.llmClient.GenerateStream(streamCtx, llmModel, messages, chapterChunkChan, chapterErrChan)
+			// Generator loop (handles auto-continuation)
+			go func() {
+				defer close(chapterChunkChan)
+				defer close(chapterErrChan)
+				
+				currentMessages := make([]llm.Message, len(messages))
+				copy(currentMessages, messages)
 
-			idleTimeout := 30 * time.Second
+				for {
+					tempChunkChan := make(chan string)
+					var assistantContent string
+					var wg sync.WaitGroup
+					wg.Add(1)
+
+					go func() {
+						defer wg.Done()
+						for chunk := range tempChunkChan {
+							assistantContent += chunk
+							chapterChunkChan <- chunk
+						}
+					}()
+
+					finishReason, err := s.llmClient.GenerateStream(streamCtx, llmModel, currentMessages, tempChunkChan)
+					wg.Wait()
+
+					if err != nil {
+						chapterErrChan <- err
+						return
+					}
+
+					currentMessages = append(currentMessages, llm.Message{
+						Role:    "assistant",
+						Content: assistantContent,
+					})
+
+					if finishReason != "length" {
+						return
+					}
+
+					// Auto-continue
+					continueMsg := llm.Message{
+						Role:    "user",
+						Content: "刚才你的回答被截断了，请严格从上文最后一个字符开始无缝续写。绝对不要输出“好的，我们继续”等任何过渡性废话，直接输出后续的Markdown或代码内容。",
+					}
+					currentMessages = append(currentMessages, continueMsg)
+				}
+			}()
+
+			idleTimeout := 60 * time.Second
 			timer := time.NewTimer(idleTimeout)
 
 			streamErr = nil
@@ -533,7 +579,7 @@ func (s *DecompositionService) ContinueGeneration(ctx context.Context, userID uu
 		return
 	}
 
-	prompt := "请继续完成上文未写完的内容"
+	prompt := "刚才你的回答被截断了，请严格从上文最后一个字符开始无缝续写。绝对不要输出“好的，我们继续”等任何过渡性废话，直接输出后续的Markdown或代码内容。"
 	messages := []llm.Message{
 		{Role: "system", Content: "你是一个高级技术博客作者。"},
 		{Role: "assistant", Content: blog.Content},
@@ -551,10 +597,55 @@ func (s *DecompositionService) ContinueGeneration(ctx context.Context, userID uu
 	internalChunkChan := make(chan string)
 	internalErrChan := make(chan error)
 
-	go s.llmClient.GenerateStream(streamCtx, llmModel, messages, internalChunkChan, internalErrChan)
+	go func() {
+		defer close(internalChunkChan)
+		defer close(internalErrChan)
+		
+		currentMessages := make([]llm.Message, len(messages))
+		copy(currentMessages, messages)
+
+		for {
+			tempChunkChan := make(chan string)
+			var assistantContent string
+			var wg sync.WaitGroup
+			wg.Add(1)
+
+			go func() {
+				defer wg.Done()
+				for chunk := range tempChunkChan {
+					assistantContent += chunk
+					internalChunkChan <- chunk
+				}
+			}()
+
+			finishReason, err := s.llmClient.GenerateStream(streamCtx, llmModel, currentMessages, tempChunkChan)
+			wg.Wait()
+
+			if err != nil {
+				internalErrChan <- err
+				return
+			}
+
+			currentMessages = append(currentMessages, llm.Message{
+				Role:    "assistant",
+				Content: assistantContent,
+			})
+
+			if finishReason != "length" {
+				return
+			}
+
+			// Auto-continue
+			continueMsg := llm.Message{
+				Role:    "user",
+				Content: "刚才你的回答被截断了，请严格从上文最后一个字符开始无缝续写。绝对不要输出“好的，我们继续”等任何过渡性废话，直接输出后续的Markdown或代码内容。",
+			}
+			currentMessages = append(currentMessages, continueMsg)
+		}
+	}()
 
 	var newContentBuilder strings.Builder
-	idleTimeout := 30 * time.Second
+	idleTimeout := 60 * time.Second
 	timer := time.NewTimer(idleTimeout)
 	defer timer.Stop()
 

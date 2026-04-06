@@ -47,13 +47,18 @@ func (a *AuthAPI) OAuthCallback(c *gin.Context) {
 	if frontendURL == "" {
 		frontendURL = "http://localhost:5173"
 	}
+	
+	// Ensure no trailing slash for the base URL to prevent double slashes
+	if len(frontendURL) > 0 && frontendURL[len(frontendURL)-1] == '/' {
+		frontendURL = frontendURL[:len(frontendURL)-1]
+	}
 
 	if code == "" {
 		c.Redirect(http.StatusTemporaryRedirect, fmt.Sprintf("%s/?error=%s", frontendURL, url.QueryEscape("code is required")))
 		return
 	}
 
-	token, _, err := a.authService.HandleCallback(provider, code)
+	token, _, err := a.authService.HandleCallback(c.Request.Context(), provider, code)
 	if err != nil {
 		c.Redirect(http.StatusTemporaryRedirect, fmt.Sprintf("%s/?error=%s", frontendURL, url.QueryEscape(err.Error())))
 		return
