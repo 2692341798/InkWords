@@ -433,3 +433,14 @@
 **决策与解决**：
 - 底层重构 (`deepseek.go`)：在解析 SSE chunk 时检测 `FinishReason`，将其透传回业务层。
 - 业务层重构 (`generator.go` & `decomposition.go`)：引入内部自动重试与续写循环。如果检测到模型输出是因为达到长度上限（`length`）而终止，业务层会自动追加提示词（“刚才你的回答被截断了，请严格从上文最后一个字符开始无缝续写...”），并再次发起请求。这些追加的内容将无缝拼接后继续通过外层的 SSE 管道推流给前端。用户侧完全感知不到模型的截断限制。
+
+### 对话 10：前端文章删除的二次确认与竞态Bug修复
+- **用户需求**：修复点击删除按钮后未等待确认即删除文章的 Bug，且二次反馈确认框弹出时文章已被删除。
+- **AI 动作**：
+  1. 在 `Generator.tsx`（章节删除）和 `Sidebar.tsx`（批量删除）中为删除按钮显式增加 `type="button"` 和 `window.confirm`。
+  2. 诊断出事件冒泡及并发连点（双击）导致数据先行删除的竞态条件（Race Condition）。
+  3. 在 `Sidebar.tsx` 中引入 `useRef` 级别的确认锁 (`isConfirmingRef`) 拦截排队的确认框。
+  4. 在 `Generator.tsx` 章节删除中增加 `e.detail > 1` 拦截，从浏览器底层原生事件阻断双击/多击。
+  5. 加入 `e.preventDefault()` 和 `e.stopPropagation()` 阻断事件冒泡。
+- **决策/变更**：
+  - 前端涉及破坏性操作（如删除）的 `onClick` 事件，不仅需要 `window.confirm`，还必须考虑 React 异步状态更新期间用户连续点击造成的重复触发问题，通过 `useRef` 和原生 `e.detail` 进行双重防御。

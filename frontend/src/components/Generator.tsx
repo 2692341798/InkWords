@@ -302,9 +302,18 @@ export function Generator() {
                                   <ArrowDown className="w-4 h-4" />
                                 </button>
                                 <button 
-                                  onClick={() => store.removeChapter(ch.sort)}
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    if (e.detail > 1) return; // Prevent double click
+                                    if (window.confirm('确定要删除该章节吗？此操作不可恢复。')) {
+                                      store.removeChapter(ch.sort)
+                                    }
+                                  }}
                                   disabled={store.outline!.length <= 1 || store.isGenerating}
                                   className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded disabled:opacity-30"
+                                  title="删除章节"
                                 >
                                   <Trash2 className="w-4 h-4" />
                                 </button>

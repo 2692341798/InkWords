@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import JSZip from 'jszip'
 import { useStreamStore } from '@/store/streamStore'
 import { useBlogStore } from '@/store/blogStore'
@@ -93,10 +93,16 @@ export function Sidebar() {
     }
   }
 
+  const isConfirmingRef = useRef(false)
+
   const handleBatchDelete = async () => {
-    if (selectedForExport.size === 0) return
+    if (selectedForExport.size === 0 || isConfirmingRef.current || isDeleting) return
     
-    if (!window.confirm(`确定要删除选中的 ${selectedForExport.size} 篇博客吗？此操作不可恢复。`)) {
+    isConfirmingRef.current = true
+    const confirmed = window.confirm(`确定要删除选中的 ${selectedForExport.size} 篇博客吗？此操作不可恢复。`)
+    isConfirmingRef.current = false
+    
+    if (!confirmed) {
       return
     }
 
@@ -308,10 +314,15 @@ export function Sidebar() {
               <div className="flex items-center gap-2">
                 <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setIsBatchMode(false)}>取消</Button>
                 <Button 
+                  type="button"
                   variant="destructive" 
                   size="sm" 
                   className="h-7 text-xs px-2"
-                  onClick={handleBatchDelete}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleBatchDelete();
+                  }}
                   disabled={selectedForExport.size === 0 || isDeleting || isExporting}
                   title="批量删除"
                 >
