@@ -3,14 +3,14 @@ import JSZip from 'jszip'
 import { useStreamStore } from '@/store/streamStore'
 import { useBlogStore } from '@/store/blogStore'
 import type { BlogNode } from '@/store/blogStore'
-import { GitBranch, CheckCircle2, CircleDashed, Loader2, BookOpen, ChevronRight, ChevronDown, Plus, LogOut, FolderArchive, Square, CheckSquare, RefreshCw, Trash2 } from 'lucide-react'
+import { GitBranch, CheckCircle2, CircleDashed, Loader2, BookOpen, ChevronRight, ChevronDown, Plus, LogOut, FolderArchive, Square, CheckSquare, RefreshCw, Trash2, User } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from './ui/button'
 import { ConfirmDialog } from './ui/confirm-dialog'
 
 export function Sidebar() {
   const streamStore = useStreamStore()
-  const { blogs, fetchBlogs, selectedBlog, selectBlog } = useBlogStore()
+  const { blogs, fetchBlogs, selectedBlog, selectBlog, currentView, setCurrentView } = useBlogStore()
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set())
   const [isBatchMode, setIsBatchMode] = useState(false)
   const [selectedForExport, setSelectedForExport] = useState<Set<string>>(new Set())
@@ -187,7 +187,7 @@ export function Sidebar() {
         </div>
         <Button 
           className="w-full gap-2 bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm"
-          onClick={() => selectBlog(null)}
+          onClick={() => setCurrentView('generator')}
         >
           <Plus className="w-4 h-4" />
           返回
@@ -340,7 +340,18 @@ export function Sidebar() {
         </div>
       </div>
 
-      <div className="p-4 border-t border-zinc-200 mt-auto shrink-0">
+      <div className="p-4 border-t border-zinc-200 mt-auto shrink-0 flex flex-col gap-2">
+        <Button
+          variant="ghost"
+          className={cn(
+            "w-full flex items-center justify-start gap-2",
+            currentView === 'dashboard' && !selectedBlog ? "bg-indigo-50 text-indigo-700 font-medium" : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
+          )}
+          onClick={() => setCurrentView('dashboard')}
+        >
+          <User className="w-4 h-4" />
+          个人中心
+        </Button>
         <Button
           variant="ghost"
           className="w-full flex items-center justify-start gap-2 text-zinc-600 hover:text-red-600 hover:bg-red-50"

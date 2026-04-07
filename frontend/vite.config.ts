@@ -18,6 +18,10 @@ export default defineConfig({
         changeOrigin: true,
         timeout: 120000,
       },
+      '/uploads': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+      }
     },
   },
 })

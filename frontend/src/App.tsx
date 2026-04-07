@@ -4,9 +4,10 @@ import { Sidebar } from '@/components/Sidebar'
 import { Generator } from '@/components/Generator'
 import { Editor } from '@/components/Editor'
 import { Login } from '@/components/Login'
+import { Dashboard } from '@/components/Dashboard'
 
 function App() {
-  const { selectedBlog } = useBlogStore()
+  const { selectedBlog, currentView } = useBlogStore()
   const [isAuthenticated] = useState<boolean>(() => {
     const urlParams = new URLSearchParams(window.location.search)
     const token = urlParams.get('token')
@@ -31,7 +32,7 @@ function App() {
   return (
     <div className="h-screen overflow-hidden bg-zinc-50 flex print:bg-white print:block print:h-auto print:overflow-visible">
       <Sidebar />
-      {selectedBlog ? <Editor key={selectedBlog.id} /> : <Generator />}
+      {selectedBlog ? <Editor key={selectedBlog.id} /> : currentView === 'dashboard' ? <Dashboard /> : <Generator />}
     </div>
   )
 }
