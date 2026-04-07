@@ -32,6 +32,8 @@ services:
       - FRONTEND_URL=http://localhost
     ports:
       - "8081:8080"
+    volumes:
+      - uploads:/app/uploads
     depends_on:
       db:
         condition: service_healthy
@@ -51,3 +53,4 @@ services:
 
 volumes:
   pgdata:
+  uploads:
