@@ -69,6 +69,9 @@ func main() {
 		userGroup.Use(middleware.AuthMiddleware())
 		{
 			userGroup.GET("/profile", userAPI.GetProfile)
+			userGroup.PUT("/profile", userAPI.UpdateProfile)
+			userGroup.POST("/avatar", userAPI.UploadAvatar)
+			userGroup.GET("/stats", userAPI.GetUserStats)
 		}
 
 		// 博客相关路由 (需鉴权)
