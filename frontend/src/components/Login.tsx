@@ -19,7 +19,7 @@ const GithubIcon = ({ className }: { className?: string }) => (
   </svg>
 )
 
-type AuthMode = 'login' | 'register' | 'forgot_password'
+type AuthMode = 'login' | 'register'
 
 const getPasswordStrength = (pwd: string) => {
   if (!pwd) return 0
@@ -34,7 +34,6 @@ const getPasswordStrength = (pwd: string) => {
 export function Login() {
   const [mode, setMode] = useState<AuthMode>('login')
   const [captcha, setCaptcha] = useState({ id: '', image: '', value: '' })
-  const [countdown, setCountdown] = useState(0)
   const [rememberMe, setRememberMe] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [loginNeedsCaptcha, setLoginNeedsCaptcha] = useState(false)
@@ -45,7 +44,6 @@ export function Login() {
     name: '',
     email: '',
     password: '',
-    emailCode: '',
   })
 
   const fetchCaptcha = async () => {
@@ -61,50 +59,10 @@ export function Login() {
   }
 
   useEffect(() => {
-    if (mode === 'register' || mode === 'forgot_password' || (mode === 'login' && loginNeedsCaptcha)) {
+    if (mode === 'register' || (mode === 'login' && loginNeedsCaptcha)) {
       fetchCaptcha()
     }
   }, [mode, loginNeedsCaptcha])
-
-  useEffect(() => {
-    let timer: NodeJS.Timeout
-    if (countdown > 0) {
-      timer = setTimeout(() => setCountdown(c => c - 1), 1000)
-    }
-    return () => clearTimeout(timer)
-  }, [countdown])
-
-  const handleSendCode = async () => {
-    if (!formData.email) return setError('请输入邮箱')
-    if (!captcha.value) return setError('请输入图形验证码')
-    
-    try {
-      const res = await fetch('/api/v1/auth/send-code', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: formData.email,
-          type: mode === 'register' ? 'register' : 'reset_password',
-          captcha_id: captcha.id,
-          captcha_value: captcha.value
-        })
-      })
-      const data = await res.json()
-      if (data.code === 200) {
-        setCountdown(60)
-        setError('')
-      } else {
-        setError(data.message)
-        fetchCaptcha()
-      }
-    } catch (err: unknown) {
-      if (err instanceof Error) {
-        setError(err.message || '发送失败')
-      } else {
-        setError('发送失败')
-      }
-    }
-  }
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -126,12 +84,10 @@ export function Login() {
     setError('')
     setIsLoading(true)
 
-    const endpoint = mode === 'login' ? '/api/v1/auth/login' : mode === 'register' ? '/api/v1/auth/register' : '/api/v1/auth/reset-password'
+    const endpoint = mode === 'login' ? '/api/v1/auth/login' : '/api/v1/auth/register'
     const payload = mode === 'login'
       ? { email: formData.email, password: formData.password, captcha_id: captcha.id, captcha_value: captcha.value, remember_me: rememberMe }
-      : mode === 'register'
-      ? { username: formData.name, email: formData.email, password: formData.password, code: formData.emailCode }
-      : { email: formData.email, new_password: formData.password, code: formData.emailCode }
+      : { username: formData.name, email: formData.email, password: formData.password, captcha_id: captcha.id, captcha_value: captcha.value }
 
     try {
       const response = await fetch(endpoint, {
@@ -149,13 +105,6 @@ export function Login() {
           setLoginNeedsCaptcha(true)
         }
         throw new Error(data.message || '操作失败，请重试')
-      }
-
-      if (mode === 'forgot_password') {
-        setMode('login')
-        setError('')
-        setFormData(prev => ({ ...prev, password: '', emailCode: '' }))
-        return
       }
 
       if (data.data?.token) {
@@ -187,10 +136,10 @@ export function Login() {
             墨
           </div>
           <h1 className="text-2xl font-semibold mb-2 text-zinc-900">
-            {mode === 'login' ? '欢迎回来' : mode === 'register' ? '创建账号' : '重置密码'}
+            {mode === 'login' ? '欢迎回来' : '创建账号'}
           </h1>
           <p className="text-zinc-500 text-sm">
-            {mode === 'login' ? '登录以继续使用墨言博客助手' : mode === 'register' ? '注册并随时随地开启智能写作' : '输入您的邮箱获取验证码以重置密码'}
+            {mode === 'login' ? '登录以继续使用墨言博客助手' : '注册并随时随地开启智能写作'}
           </p>
         </div>
 
@@ -233,7 +182,7 @@ export function Login() {
             </div>
           </div>
 
-          {(mode !== 'login' || loginNeedsCaptcha) && (
+          {(mode === 'register' || loginNeedsCaptcha) && (
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-zinc-700">图形验证码</label>
               <div className="flex gap-2">
@@ -260,49 +209,11 @@ export function Login() {
             </div>
           )}
 
-          {mode !== 'login' && (
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-zinc-700">邮箱验证码</label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  name="emailCode"
-                  value={formData.emailCode}
-                  onChange={handleInputChange}
-                  required
-                  className="flex-1 px-3 py-2 border border-zinc-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/20 focus:border-zinc-900 transition-colors"
-                  placeholder="6位验证码"
-                />
-                <Button
-                  type="button"
-                  onClick={handleSendCode}
-                  disabled={countdown > 0}
-                  variant="outline"
-                  className="w-[120px] h-[38px] flex-shrink-0 text-sm border-zinc-200"
-                >
-                  {countdown > 0 ? `${countdown}s 后重试` : '获取验证码'}
-                </Button>
-              </div>
-            </div>
-          )}
-
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium text-zinc-700">
-                {mode === 'forgot_password' ? '新密码' : '密码'}
+                密码
               </label>
-              {mode === 'login' && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode('forgot_password')
-                    setError('')
-                  }}
-                  className="text-xs text-zinc-500 hover:text-zinc-900 focus:outline-none"
-                >
-                  忘记密码？
-                </button>
-              )}
             </div>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-zinc-400">
@@ -329,7 +240,7 @@ export function Login() {
                 )}
               </button>
             </div>
-            {mode !== 'login' && formData.password && (
+            {mode === 'register' && formData.password && (
               <div className="flex items-center gap-1 mt-1">
                 {[1, 2, 3, 4].map((level) => {
                   const strength = getPasswordStrength(formData.password)
@@ -349,7 +260,7 @@ export function Login() {
                 })}
               </div>
             )}
-            {mode !== 'login' && formData.password && (
+            {mode === 'register' && formData.password && (
               <div className="text-xs text-zinc-500 mt-1">
                 密码强度: {['极弱', '弱', '中', '强', '极强'][getPasswordStrength(formData.password)]}
               </div>
@@ -386,7 +297,7 @@ export function Login() {
               <Loader2 className="w-5 h-5 animate-spin" />
             ) : (
               <>
-                {mode === 'login' ? '登录' : mode === 'register' ? '注册' : '重置密码'}
+                {mode === 'login' ? '登录' : '注册'}
                 <ArrowRight className="w-4 h-4 ml-2" />
               </>
             )}
