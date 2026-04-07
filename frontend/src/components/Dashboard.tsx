@@ -203,7 +203,7 @@ export function Dashboard() {
             <div>
               <p className="text-sm font-medium text-zinc-500">预估费用 (元)</p>
               <h3 className="text-2xl font-bold text-zinc-900 mt-1">¥{stats?.estimated_cost?.toFixed(2) || '0.00'}</h3>
-              <p className="text-[10px] text-zinc-400 mt-1">按 1元/1M Tokens 计算</p>
+              <p className="text-[10px] text-zinc-400 mt-1">按 2.3元/1M Tokens 均价估算</p>
             </div>
           </div>
 

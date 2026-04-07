@@ -190,7 +190,12 @@ func (a *UserAPI) GetUserStats(c *gin.Context) {
 		techStackStats = append(techStackStats, TechStackStat{Name: k, Count: v})
 	}
 
-	estimatedCost := float64(user.TokensUsed) / 1000000.0
+	// 计算预估费用
+	// 根据 DeepSeek V3 (deepseek-chat) 收费标准，粗略估算输入和输出混合：
+	// 输入：缓存命中 0.2元/百万token，未命中 2元/百万token
+	// 输出：3元/百万token
+	// 此处采用一个平均经验值，比如假设 70% 是输入（未命中占大头），30% 是输出，综合单价约为：2.3元/百万token
+	estimatedCost := (float64(user.TokensUsed) / 1000000.0) * 2.3
 
 	c.JSON(http.StatusOK, gin.H{
 		"code":    http.StatusOK,
