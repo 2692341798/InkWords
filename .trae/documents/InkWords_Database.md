@@ -39,6 +39,8 @@
 | `content` | TEXT | | Markdown 格式正文内容 |
 | `source_type` | VARCHAR(50) | | 来源类型 (`file`, `git`) |
 | `status` | INTEGER | Default 0 | 状态 (0:生成中, 1:已完成, -1:失败) |
+| `word_count` | INTEGER | Default 0 | 生成博客的总字数统计 |
+| `tech_stacks` | JSONB | Nullable | 自动提取的涉及技术栈列表 |
 | `chapter_sort`| INTEGER | Default 1 | 在系列博客中的排序序号 |
 
 ## 3. 关联关系 (Associations)

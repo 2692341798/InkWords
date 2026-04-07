@@ -521,3 +521,14 @@
 - 原有串行生成模式速度过慢。通过并发调用 DeepSeek API，大幅缩短长系列文章的整体生成时间。
 - 限制并发数为 3 以平衡速度与 API 限制。
 - 前端卡片式流式渲染能让用户直观看到多个章节的同时进度，符合业务直觉。
+
+### [2026-04-07] 用户仪表盘与统计功能 (User Dashboard)
+- **Backend**:
+  - `Blog` 模型新增 `WordCount` 与 `TechStacks` 字段。
+  - `Generator` 在生成结束后计算字数并通过 LLM 提取涉及的技术栈。
+  - 增加 `/api/v1/user/stats` 接口聚合统计信息（Token、费用、文章数、字数、技术栈排名）。
+  - 增加 `/api/v1/user/profile` 与 `/api/v1/user/avatar` 支持更新用户名与头像上传。
+- **Frontend**:
+  - 增加 `Dashboard` 组件使用 `recharts` 渲染柱状图。
+  - 侧边栏增加“个人中心”入口。
+  - 修复 `nginx.conf` 与 `vite.config.ts` 代理 `/uploads/` 静态文件服务。

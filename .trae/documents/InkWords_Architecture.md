@@ -9,7 +9,7 @@
 ## 2. 核心技术栈
 ### 2.1 前端 (Frontend)
 - **核心框架**: React 18 + Vite
-- **UI 库**: Tailwind CSS + Shadcn UI
+- **UI 库**: Tailwind CSS + Shadcn UI + Recharts
 - **状态管理**: Zustand (含多 store：`blogStore`, `streamStore`, `authStore`)
 - **流式通信**: `@microsoft/fetch-event-source` 维持 SSE 连接
 - **Markdown 渲染**: `react-markdown` 配合 `rehype-highlight`、`remark-gfm` 和 `mermaid`。

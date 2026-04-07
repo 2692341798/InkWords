@@ -12,6 +12,9 @@
 | 接口地址 | 请求方法 | 功能描述 | 参数 |
 | -------- | -------- | -------- | ---- |
 | `/api/v1/user/profile` | GET | 获取当前登录用户信息 | JWT Bearer Token |
+| `/api/v1/user/profile` | PUT | 更新当前登录用户名 | `{ username }` |
+| `/api/v1/user/avatar` | POST | 上传用户头像图片 | `multipart/form-data` -> `avatar` |
+| `/api/v1/user/stats` | GET | 获取用户仪表盘统计数据 (Token, 费用, 字数, 技术栈) | JWT Bearer Token |
 
 ## 3. 项目解析模块 (ProjectAPI)
 | 接口地址 | 请求方法 | 功能描述 | 参数 |
