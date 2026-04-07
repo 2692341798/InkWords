@@ -161,17 +161,19 @@ func (a *UserAPI) GetUserStats(c *gin.Context) {
 	var totalArticles int64
 	var totalWords int64
 
-	db.DB.Model(&model.Blog{}).Where("user_id = ? AND status = 1", uid).Count(&totalArticles)
+	// Exclude parent nodes (where parent_id is null) when counting articles
+	db.DB.Model(&model.Blog{}).Where("user_id = ? AND status = 1 AND parent_id IS NOT NULL", uid).Count(&totalArticles)
 
 	type Result struct {
 		TotalWords int64
 	}
 	var res Result
-	db.DB.Model(&model.Blog{}).Select("sum(word_count) as total_words").Where("user_id = ? AND status = 1", uid).Scan(&res)
+	db.DB.Model(&model.Blog{}).Select("sum(word_count) as total_words").Where("user_id = ? AND status = 1 AND parent_id IS NOT NULL", uid).Scan(&res)
 	totalWords = res.TotalWords
 
 	var blogs []model.Blog
-	db.DB.Where("user_id = ? AND status = 1 AND tech_stacks IS NOT NULL", uid).Find(&blogs)
+	// Exclude parent nodes when aggregating tech stacks
+	db.DB.Where("user_id = ? AND status = 1 AND parent_id IS NOT NULL AND tech_stacks IS NOT NULL", uid).Find(&blogs)
 
 	stackMap := make(map[string]int)
 	for _, blog := range blogs {
