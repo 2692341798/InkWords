@@ -2,15 +2,19 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"net/http"
 	"os"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mojocn/base64Captcha"
 	"golang.org/x/crypto/bcrypt"
+	"gopkg.in/gomail.v2"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/github"
@@ -24,6 +28,7 @@ import (
 var (
 	ErrUnsupportedProvider = errors.New("unsupported oauth provider")
 	ErrOAuthCallback       = errors.New("oauth callback failed")
+	store                  = base64Captcha.DefaultMemStore
 )
 
 type AuthService struct{}
@@ -226,4 +231,57 @@ func (s *AuthService) Login(email, password string) (string, *model.User, error)
 	}
 
 	return jwtToken, &user, nil
+}
+
+// GenerateCaptcha 生成图形验证码
+func (s *AuthService) GenerateCaptcha() (string, string, error) {
+	driver := base64Captcha.NewDriverDigit(80, 240, 5, 0.7, 80)
+	c := base64Captcha.NewCaptcha(driver, store)
+	id, b64s, _, err := c.Generate()
+	return id, b64s, err
+}
+
+// VerifyCaptcha 校验图形验证码
+func (s *AuthService) VerifyCaptcha(id string, verifyValue string) bool {
+	return store.Verify(id, verifyValue, true)
+}
+
+// GenerateRandomCode 生成 6 位随机验证码
+func (s *AuthService) GenerateRandomCode() string {
+	n, _ := rand.Int(rand.Reader, big.NewInt(1000000))
+	return fmt.Sprintf("%06d", n)
+}
+
+// SaveVerificationCode 记录验证码到数据库
+func (s *AuthService) SaveVerificationCode(email, code, codeType string) error {
+	vc := &model.VerificationCode{
+		Email:     email,
+		Code:      code,
+		Type:      codeType,
+		ExpiresAt: time.Now().Add(15 * time.Minute),
+	}
+	return db.DB.Create(vc).Error
+}
+
+// SendVerificationEmail 发送验证邮件（含 Mock）
+func (s *AuthService) SendVerificationEmail(email, code, codeType string) error {
+	smtpHost := os.Getenv("SMTP_HOST")
+	if smtpHost == "" {
+		// Mock 兜底
+		fmt.Printf("======== MOCK EMAIL ========\nTo: %s\nType: %s\nCode: %s\n============================\n", email, codeType, code)
+		return nil
+	}
+
+	smtpPort := 465 // 或从 env 获取，默认 465
+	smtpUser := os.Getenv("SMTP_USER")
+	smtpPass := os.Getenv("SMTP_PASS")
+
+	m := gomail.NewMessage()
+	m.SetHeader("From", smtpUser)
+	m.SetHeader("To", email)
+	m.SetHeader("Subject", "InkWords 验证码")
+	m.SetBody("text/html", fmt.Sprintf("您的验证码是：<b>%s</b>，有效期15分钟。", code))
+
+	d := gomail.NewDialer(smtpHost, smtpPort, smtpUser, smtpPass)
+	return d.DialAndSend(m)
 }
