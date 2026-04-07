@@ -263,13 +263,19 @@ export function Generator() {
               const allCompleted = store.outline.length > 0 && store.outline.every(ch => store.chapterStatus[ch.sort] === 'completed');
               if (allCompleted) return null;
 
+              const hasCompleted = store.outline.length > 0 && store.outline.some(ch => store.chapterStatus[ch.sort] === 'completed');
+              const isResume = hasCompleted && !allCompleted;
+              const visibleOutline = store.outline.filter(ch => store.chapterStatus[ch.sort] !== 'completed');
+
               return (
                 <>
-                  {store.sourceType !== 'file' && store.outline.length > 0 && (
+                  {store.sourceType !== 'file' && visibleOutline.length > 0 && (
                     <div className="mb-8">
                       <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-3">
-                          <h3 className="text-lg font-semibold text-zinc-800">系列博客大纲</h3>
+                          <h3 className="text-lg font-semibold text-zinc-800">
+                            {isResume ? '待生成章节大纲' : '系列博客大纲'}
+                          </h3>
                           <button
                             onClick={() => setIsOutlineExpanded(!isOutlineExpanded)}
                             className="p-1 hover:bg-zinc-100 rounded text-zinc-500 transition-colors"
@@ -292,7 +298,7 @@ export function Generator() {
                       </div>
                       {isOutlineExpanded && (
                         <div className="space-y-4 max-h-[50vh] overflow-y-auto custom-scrollbar pr-2">
-                          {store.outline.map((ch, index) => (
+                          {visibleOutline.map((ch, index) => (
                           <div key={ch.sort} className="p-4 bg-white rounded-xl border border-zinc-200 shadow-sm hover:border-indigo-200 transition-colors group">
                             <div className="flex items-start gap-3 mb-3">
                               <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-sm font-semibold shrink-0 mt-1">
@@ -311,14 +317,14 @@ export function Generator() {
                               <div className="flex items-center gap-1 shrink-0 opacity-0 hover:opacity-100 focus-within:opacity-100 group-hover:opacity-100 transition-opacity">
                                 <button 
                                   onClick={() => store.moveChapter(ch.sort, 'up')}
-                                  disabled={index === 0 || store.isGenerating}
+                                  disabled={index === 0 || store.isGenerating || isResume}
                                   className="p-1.5 text-zinc-400 hover:text-indigo-600 hover:bg-indigo-50 rounded disabled:opacity-30"
                                 >
                                   <ArrowUp className="w-4 h-4" />
                                 </button>
                                 <button 
                                   onClick={() => store.moveChapter(ch.sort, 'down')}
-                                  disabled={index === store.outline!.length - 1 || store.isGenerating}
+                                  disabled={index === visibleOutline.length - 1 || store.isGenerating || isResume}
                                   className="p-1.5 text-zinc-400 hover:text-indigo-600 hover:bg-indigo-50 rounded disabled:opacity-30"
                                 >
                                   <ArrowDown className="w-4 h-4" />
@@ -331,7 +337,7 @@ export function Generator() {
                                     if (e.detail > 1) return; // Prevent double click
                                     setShowChapterDeleteConfirm(ch.sort);
                                   }}
-                                  disabled={store.outline!.length <= 1 || store.isGenerating}
+                                  disabled={store.outline!.length <= 1 || store.isGenerating || isResume}
                                   className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded disabled:opacity-30"
                                   title="删除章节"
                                 >
@@ -352,8 +358,8 @@ export function Generator() {
                         ))}
                         <button
                           onClick={() => store.addChapter()}
-                          disabled={store.isGenerating}
-                          className="w-full py-3 border-2 border-dashed border-zinc-200 rounded-xl text-zinc-500 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50/50 transition-all flex items-center justify-center gap-2 font-medium"
+                          disabled={store.isGenerating || isResume}
+                          className="w-full py-3 border-2 border-dashed border-zinc-200 rounded-xl text-zinc-500 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50/50 transition-all flex items-center justify-center gap-2 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <Plus className="w-4 h-4" />
                           添加新章节
@@ -366,11 +372,11 @@ export function Generator() {
                   <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-6 mb-8">
                     <div className="flex items-center justify-between">
                       <div>
-                        <h3 className="font-semibold text-indigo-900">准备生成</h3>
+                        <h3 className="font-semibold text-indigo-900">{isResume ? '继续生成' : '准备生成'}</h3>
                         <p className="text-sm text-indigo-700 mt-1">
                           {store.sourceType === 'file'
                             ? '系统将根据文件内容生成一篇详细的技术博客。'
-                            : `系统将并发生成 ${store.outline.length} 篇博客章节。`}
+                            : `系统将并发生成 ${visibleOutline.length} 篇博客章节。`}
                         </p>
                       </div>
                       <div className="flex items-center gap-3">
@@ -389,7 +395,7 @@ export function Generator() {
                           className="bg-indigo-600 text-white hover:bg-indigo-700"
                         >
                           {store.isGenerating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                          {store.isGenerating ? '生成中...' : '开始生成'}
+                          {store.isGenerating ? '生成中...' : (isResume ? '继续生成' : '开始生成')}
                         </Button>
                       </div>
                     </div>

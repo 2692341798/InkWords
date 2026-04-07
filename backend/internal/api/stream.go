@@ -34,6 +34,7 @@ type GenerateRequest struct {
 	Outline       []service.Chapter `json:"outline"` // Optional outline for series generation
 	GitURL        string            `json:"git_url"` // For analyze stream
 	SeriesTitle   string            `json:"series_title"` // Series title for parent blog
+	ParentID      string            `json:"parent_id"`    // Optional parent ID for resuming series
 }
 
 // AnalyzeStreamHandler handles the /api/v1/stream/analyze endpoint
@@ -147,7 +148,16 @@ func (api *StreamAPI) GenerateBlogStreamHandler(c *gin.Context) {
 	// Start generation in a goroutine
 	if len(req.Outline) > 0 {
 		// Series Generation
-		parentID := uuid.New()
+		var parentID uuid.UUID
+		if req.ParentID != "" {
+			parsedID, err := uuid.Parse(req.ParentID)
+			if err == nil {
+				parentID = parsedID
+			}
+		}
+		if parentID == uuid.Nil {
+			parentID = uuid.New()
+		}
 		go api.decompositionService.GenerateSeries(ctx, userID, parentID, req.SeriesTitle, req.Outline, req.SourceContent, req.SourceType, req.GitURL, chunkChan, errChan)
 	} else {
 		// Single blog stream

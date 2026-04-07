@@ -156,7 +156,8 @@
     "series_title": "用户编辑后的系列标题（可选）",
     "source_content": "提取后的文档或源码内容...",
     "outline": [/* 章节大纲数组 */],
-    "source_type": "git" // "git" 或 "file"
+    "source_type": "git", // "git" 或 "file"
+    "parent_id": "已存在系列ID（可选，断点续传时使用）"
   }
   ```
 - **SSE Event 格式**:

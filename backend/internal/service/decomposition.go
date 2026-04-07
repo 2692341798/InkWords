@@ -265,16 +265,20 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 	if seriesTitle != "" {
 		parentTitle = seriesTitle
 	}
-	parentBlog := &model.Blog{
-		ID:         parentID,
-		UserID:     userID,
-		Title:      parentTitle,
-		Content:    "该节点为系列文章的父节点，请点击展开查看具体的章节。",
-		SourceType: sourceType,
-		Status:     1, // 1 for completed
-	}
-	if err := db.DB.WithContext(ctx).Create(parentBlog).Error; err != nil {
-		fmt.Printf("Failed to create parent blog: %v\n", err)
+
+	var existingParent model.Blog
+	if err := db.DB.WithContext(ctx).First(&existingParent, "id = ?", parentID).Error; err != nil {
+		parentBlog := &model.Blog{
+			ID:         parentID,
+			UserID:     userID,
+			Title:      parentTitle,
+			Content:    "该节点为系列文章的父节点，请点击展开查看具体的章节。",
+			SourceType: sourceType,
+			Status:     1, // 1 for completed
+		}
+		if err := db.DB.WithContext(ctx).Create(parentBlog).Error; err != nil {
+			fmt.Printf("Failed to create parent blog: %v\n", err)
+		}
 	}
 	// --- FIX END ---
 
@@ -393,6 +397,7 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 					"status":       "retrying",
 					"chapter_sort": chapter.Sort,
 					"attempt":      attempt,
+					"parent_id":    parentID.String(),
 				}
 				retryBytes, _ := json.Marshal(retryMsg)
 				progressChan <- string(retryBytes)
@@ -401,6 +406,7 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 					"status":       "generating",
 					"chapter_sort": chapter.Sort,
 					"title":        chapter.Title,
+					"parent_id":    parentID.String(),
 				}
 				startBytes, _ := json.Marshal(startMsg)
 				progressChan <- string(startBytes)

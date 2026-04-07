@@ -31,6 +31,7 @@ interface StreamState {
   analysisStep: number
   analysisMessage: string
   abortController: AbortController | null
+  parentBlogId: string | null
   setSource: (type: 'git' | 'file', content: string, gitUrl?: string) => void
   setSeriesTitle: (title: string) => void
   setOutline: (outline: Chapter[]) => void
@@ -47,6 +48,7 @@ interface StreamState {
   setAnalysisStep: (step: number) => void
   setAnalysisMessage: (msg: string) => void
   setAbortController: (ctrl: AbortController | null) => void
+  setParentBlogId: (id: string | null) => void
   stopAllStreams: () => void
   reset: () => void
 }
@@ -66,6 +68,7 @@ export const useStreamStore = create<StreamState>((set, get) => ({
   analysisStep: -1,
   analysisMessage: '',
   abortController: null,
+  parentBlogId: null,
   setSource: (type, content, gitUrl) => set({ sourceType: type, sourceContent: content, gitUrl: gitUrl || '' }),
   setSeriesTitle: (title) => set({ seriesTitle: title }),
   setOutline: (outline) => set({ 
@@ -138,16 +141,26 @@ export const useStreamStore = create<StreamState>((set, get) => ({
   setAnalysisStep: (step) => set({ analysisStep: step }),
   setAnalysisMessage: (msg) => set({ analysisMessage: msg }),
   setAbortController: (ctrl) => set({ abortController: ctrl }),
+  setParentBlogId: (id) => set({ parentBlogId: id }),
   stopAllStreams: () => {
     const ctrl = get().abortController;
     if (ctrl) {
       ctrl.abort();
     }
-    set({ 
-      isAnalyzing: false, 
-      isGenerating: false, 
-      analysisStep: -1, 
-      abortController: null 
+    set((state) => {
+      const newStatus = { ...state.chapterStatus };
+      Object.keys(newStatus).forEach((key) => {
+        if (newStatus[Number(key)] === 'generating') {
+          newStatus[Number(key)] = 'pending';
+        }
+      });
+      return { 
+        isAnalyzing: false, 
+        isGenerating: false, 
+        analysisStep: -1, 
+        abortController: null,
+        chapterStatus: newStatus
+      };
     });
   },
   reset: () => {
@@ -169,7 +182,8 @@ export const useStreamStore = create<StreamState>((set, get) => ({
       workers: {},
       analysisStep: -1,
       analysisMessage: '',
-      abortController: null
+      abortController: null,
+      parentBlogId: null
     })
   }
 }))

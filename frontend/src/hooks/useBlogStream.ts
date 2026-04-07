@@ -262,6 +262,8 @@ export const useBlogStream = () => {
     try {
       const token = localStorage.getItem('token')
       
+      const remainingOutline = store.outline.filter(ch => store.chapterStatus[ch.sort] !== 'completed')
+      
       await fetchEventSource('/api/v1/stream/generate', {
         method: 'POST',
         headers: { 
@@ -272,10 +274,11 @@ export const useBlogStream = () => {
         openWhenHidden: true,
         body: JSON.stringify({
           source_content: store.sourceContent,
-          outline: store.outline,
+          outline: remainingOutline,
           source_type: store.sourceType || 'git',
           git_url: store.gitUrl || '',
-          series_title: store.seriesTitle || ''
+          series_title: store.seriesTitle || '',
+          parent_id: store.parentBlogId || ''
         }),
         async onopen(response) {
           if (response.ok && response.headers.get('content-type')?.startsWith('text/event-stream')) {
@@ -295,6 +298,9 @@ export const useBlogStream = () => {
               if (data.status === 'generating') {
                 store.clearGeneratedContent()
                 store.updateChapterStatus(data.chapter_sort, 'generating')
+                if (data.parent_id && !store.parentBlogId) {
+                  store.setParentBlogId(data.parent_id)
+                }
               } else if (data.status === 'streaming') {
                 store.appendGeneratedContent(data.content)
               } else if (data.status === 'completed') {
