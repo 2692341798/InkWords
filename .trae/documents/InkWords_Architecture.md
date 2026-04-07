@@ -20,7 +20,6 @@
 - **数据库 ORM**: GORM (`gorm.io/gorm` + `gorm.io/driver/postgres`)
 - **认证与安全**: 
   - JWT Token (长短效签发) + GitHub OAuth (`golang.org/x/oauth2`)
-  - 邮箱验证码 (通过 `gopkg.in/gomail.v2` 实现 SMTP 发送及本地 Mock)
   - 图形验证码防刷 (`github.com/mojocn/base64Captcha`)
   - 密码强度与连续登录失败防爆破锁定 (`LockedUntil`)
 - **并发控制**: `golang.org/x/sync/semaphore` + `sync.WaitGroup` 限制请求 DeepSeek API 的 Goroutine 数量。

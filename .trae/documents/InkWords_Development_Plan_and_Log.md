@@ -551,3 +551,13 @@
   3. **后端回调处理**: 实现了自定义的 `handleWechatCallback`，分别请求微信的 access_token 与 userinfo 接口。
   4. **数据库存储**: 依赖现有的 `wechat_openid` 字段，解析微信 OpenID 与用户信息并实现新用户注册与老用户登录更新。
   5. **环境变量**: `backend/.env` 增加了 `WECHAT_APP_ID`, `WECHAT_APP_SECRET`, `WECHAT_REDIRECT_URL` 配置项。
+
+### [2026-04-07] Refactor - Auth Downgrade (移除复杂的邮箱验证和密码重置流程)
+- **开发模块**: [AuthAPI, 数据库层, 前端 UI]
+- **完成事项**:
+  1. **数据库层**: 删除了 `verification_codes` 表，移除了 `users` 表的 `is_email_verified` 字段。
+  2. **后端 API 层**: 删除了邮件发送依赖 `gomail.v2`，移除了 `/send-code` 和 `/reset-password` 接口，精简 `/register` 逻辑仅验证图形验证码和密码强度。
+  3. **前端 UI 层**: 从 `Login.tsx` 中彻底移除了验证码发送、倒计时、忘记密码模式等冗余 UI，保留单纯的登录与注册表单。
+  4. **文档同步**: 更新了 `InkWords_API.md`、`InkWords_Database.md`、`InkWords_PRD.md`、`InkWords_Architecture.md` 和 `README.md`，去除了与邮件验证码和重置密码相关的描述。
+- **踩坑记录 / 架构调整**:
+  - 简化认证流程可以大幅降低用户的注册门槛，同时保留图形验证码和密码强度校验依然能提供足够的防爆破保护。

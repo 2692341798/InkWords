@@ -23,23 +23,10 @@
 | `github_id` | VARCHAR(255) | Unique | GitHub OAuth ID |
 | `avatar_url` | VARCHAR(255) | | 头像地址 |
 | `name` | VARCHAR(255) | | 用户昵称/显示名 |
-| `is_email_verified` | BOOLEAN | Default false | 邮箱是否已验证 |
 | `failed_login_attempts` | INTEGER | Default 0 | 连续登录失败次数 |
 | `locked_until` | TIMESTAMP | Nullable | 账号锁定到期时间 |
 
-### 2.2 验证码表 (`verification_codes`)
-存储邮箱验证码信息。
-
-| 字段名 | 数据类型 | 约束/索引 | 描述 |
-| ------ | -------- | --------- | ---- |
-| `id` | SERIAL | Primary Key | 验证码唯一标识 |
-| `email` | VARCHAR(255) | Index, Not Null | 接收验证码的邮箱 |
-| `code` | VARCHAR(255) | Not Null | 验证码内容 |
-| `type` | VARCHAR(50) | Not Null | 验证码类型 (register, reset_password) |
-| `expires_at` | TIMESTAMP | Not Null | 过期时间 |
-| `created_at` | TIMESTAMP | | 创建时间 |
-
-### 2.3 博客表 (`blogs`)
+### 2.2 博客表 (`blogs`)
 存储通过解析文档或 Git 仓库生成的博客数据。支持树形结构（父节点 - 子章节）。
 
 | 字段名 | 数据类型 | 约束/索引 | 描述 |

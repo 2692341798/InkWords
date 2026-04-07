@@ -273,15 +273,15 @@ git commit -m "refactor(ui): simplify login and register forms, remove email ver
 - Modify: `.trae/documents/InkWords_Conversation_Log.md`
 - Modify: `README.md`
 
-- [ ] **Step 1: 更新基准文档中的冗余描述**
+- [x] **Step 1: 更新基准文档中的冗余描述**
 - 从 API 文档中移除 `/send-code` 和 `/reset-password`，修改 `/register` 参数。
 - 从数据库文档中移除 `verification_codes` 表和 `is_email_verified` 字段。
 - 从 PRD 和 README 中将“邮件验证码”和“重置密码”相关的宣传字眼移除。
 
-- [ ] **Step 2: 写入开发日志与对话记录**
+- [x] **Step 2: 写入开发日志与对话记录**
 记录本次进行 Auth 流程瘦身（移除邮件验证，精简流程）的决策与行动。
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 ```bash
 git add .trae/documents/ README.md backend/.env
 git commit -m "docs: sync all documentation with auth downgrade changes"

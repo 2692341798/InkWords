@@ -527,3 +527,14 @@
   2. 增加了环境变量 `LLM_MAX_CONCURRENCY` 的读取支持，方便在不修改代码的情况下动态调整并发。
   3. 保留了一个绝对硬上限（如 8），防止环境变量配置错误导致 OOM 或被 API 封停。
 - **执行**：已修复代码并执行 `docker compose up -d --build backend` 热更新了后端服务。
+
+### 对话 44：Auth Downgrade (移除复杂的邮箱验证和密码重置流程)
+- **用户需求**：根据 `2026-04-07-auth-downgrade.md` 计划，实现 Task 4 更新项目文档。
+- **AI 动作**：
+  1. 更新了 `.trae/documents/InkWords_API.md`，移除了 `/send-code` 和 `/reset-password`，更新了 `/register` 参数。
+  2. 更新了 `.trae/documents/InkWords_Database.md`，移除了 `verification_codes` 表和 `users.is_email_verified` 字段。
+  3. 更新了 `.trae/documents/InkWords_PRD.md` 和 `README.md`，去除了与邮件验证码和重置密码相关的描述。
+  4. 更新了 `.trae/documents/InkWords_Architecture.md`，移除了 `gomail.v2` 相关的架构描述。
+  5. 更新了 `.trae/documents/InkWords_Development_Plan_and_Log.md` 和本文件，记录了本次认证流程降级的决策和操作。
+- **决策/变更**：
+  - 简化了认证流程，去除了复杂的邮件验证机制，降低了用户注册门槛，同时保留图形验证码和密码强度校验以维持基本的防爆破安全性。
