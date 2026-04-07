@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Loader2, GitBranch, UploadCloud, ArrowUp, ArrowDown, Trash2, Plus, ChevronDown, ChevronUp } from 'lucide-react'
 
 import { MarkdownEngine } from '@/components/MarkdownEngine'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 
 export function Generator() {
   const store = useStreamStore()
@@ -14,6 +15,7 @@ export function Generator() {
   const [isDragging, setIsDragging] = useState(false)
   const [analyzingType, setAnalyzingType] = useState<'git' | 'file'>('git')
   const [isOutlineExpanded, setIsOutlineExpanded] = useState(true)
+  const [showChapterDeleteConfirm, setShowChapterDeleteConfirm] = useState<number | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -327,9 +329,7 @@ export function Generator() {
                                     e.preventDefault();
                                     e.stopPropagation();
                                     if (e.detail > 1) return; // Prevent double click
-                                    if (window.confirm('确定要删除该章节吗？此操作不可恢复。')) {
-                                      store.removeChapter(ch.sort)
-                                    }
+                                    setShowChapterDeleteConfirm(ch.sort);
                                   }}
                                   disabled={store.outline!.length <= 1 || store.isGenerating}
                                   className="p-1.5 text-zinc-400 hover:text-red-600 hover:bg-red-50 rounded disabled:opacity-30"
@@ -428,6 +428,21 @@ export function Generator() {
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        isOpen={showChapterDeleteConfirm !== null}
+        title="确认删除章节"
+        message="确定要删除该章节吗？此操作不可恢复。"
+        confirmText="确认删除"
+        onConfirm={() => {
+          if (showChapterDeleteConfirm !== null) {
+            store.removeChapter(showChapterDeleteConfirm)
+            setShowChapterDeleteConfirm(null)
+          }
+        }}
+        onCancel={() => setShowChapterDeleteConfirm(null)}
+        isDestructive={true}
+      />
     </div>
   )
 }

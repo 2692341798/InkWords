@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import JSZip from 'jszip'
 import { useStreamStore } from '@/store/streamStore'
 import { useBlogStore } from '@/store/blogStore'
@@ -6,6 +6,7 @@ import type { BlogNode } from '@/store/blogStore'
 import { GitBranch, CheckCircle2, CircleDashed, Loader2, BookOpen, ChevronRight, ChevronDown, Plus, LogOut, FolderArchive, Square, CheckSquare, RefreshCw, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from './ui/button'
+import { ConfirmDialog } from './ui/confirm-dialog'
 
 export function Sidebar() {
   const streamStore = useStreamStore()
@@ -15,6 +16,7 @@ export function Sidebar() {
   const [selectedForExport, setSelectedForExport] = useState<Set<string>>(new Set())
   const [isExporting, setIsExporting] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false)
 
   useEffect(() => {
     fetchBlogs()
@@ -93,20 +95,9 @@ export function Sidebar() {
     }
   }
 
-  const isConfirmingRef = useRef(false)
-
-  const handleBatchDelete = async () => {
-    if (selectedForExport.size === 0 || isConfirmingRef.current || isDeleting) return
-    
-    isConfirmingRef.current = true
-    const confirmed = window.confirm(`确定要删除选中的 ${selectedForExport.size} 篇博客吗？此操作不可恢复。`)
-    isConfirmingRef.current = false
-    
-    if (!confirmed) {
-      return
-    }
-
+  const executeBatchDelete = async () => {
     setIsDeleting(true)
+    setShowBatchDeleteConfirm(false)
     try {
       const { batchDeleteBlogs } = useBlogStore.getState()
       await batchDeleteBlogs(Array.from(selectedForExport))
@@ -119,6 +110,11 @@ export function Sidebar() {
     } finally {
       setIsDeleting(false)
     }
+  }
+
+  const handleBatchDeleteClick = () => {
+    if (selectedForExport.size === 0 || isDeleting) return
+    setShowBatchDeleteConfirm(true)
   }
 
   const renderBlogNode = (node: BlogNode, level = 0) => {
@@ -321,7 +317,7 @@ export function Sidebar() {
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    handleBatchDelete();
+                    handleBatchDeleteClick();
                   }}
                   disabled={selectedForExport.size === 0 || isDeleting || isExporting}
                   title="批量删除"
@@ -357,6 +353,16 @@ export function Sidebar() {
           退出登录
         </Button>
       </div>
+
+      <ConfirmDialog
+        isOpen={showBatchDeleteConfirm}
+        title="确认批量删除"
+        message={`确定要删除选中的 ${selectedForExport.size} 篇博客吗？此操作不可恢复。`}
+        confirmText="确认删除"
+        onConfirm={executeBatchDelete}
+        onCancel={() => setShowBatchDeleteConfirm(false)}
+        isDestructive={true}
+      />
     </div>
   )
 }

@@ -124,14 +124,18 @@ func (s *DecompositionService) mapReduceAnalyze(ctx context.Context, chunks []pa
 	var summaries []string
 	var mu sync.Mutex
 
-	// 根据系统 CPU 核心数动态调整并发数（网络 I/O 密集型任务，设置适当倍数并限制上下限，防止 LLM 限流或性能过低）
+	// 根据系统 CPU 核心数动态调整并发数，优化动态范围（限制在 3~8 之间），避免过多导致 UI 杂乱和 LLM 并发限流
 	numCPU := runtime.NumCPU()
-	maxWorkers := numCPU * 2
-	if maxWorkers < 5 {
-		maxWorkers = 5
+	maxWorkers := numCPU
+	if maxWorkers < 3 {
+		maxWorkers = 3
 	}
-	if maxWorkers > 20 {
-		maxWorkers = 20
+	if maxWorkers > 8 {
+		maxWorkers = 8
+	}
+	// 避免 Worker 数量大于任务数
+	if len(chunks) < maxWorkers {
+		maxWorkers = len(chunks)
 	}
 
 	sem := semaphore.NewWeighted(int64(maxWorkers))
