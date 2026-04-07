@@ -14,6 +14,8 @@ import (
 
 	"github.com/google/uuid"
 	"golang.org/x/sync/semaphore"
+	"gorm.io/datatypes"
+	"gorm.io/gorm"
 
 	"inkwords-backend/internal/db"
 	"inkwords-backend/internal/llm"
@@ -546,6 +548,25 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 			return
 		}
 
+		// Calculate word count
+		wordCount := len([]rune(content))
+
+		// Extract Tech Stacks using LLM
+		var techStacks datatypes.JSON
+		extractPrompt := "请从以下文章内容中提取出涉及的核心技术栈名称（如 React, Go, Docker 等），以 JSON 数组格式返回，不要有任何其他多余字符：\n\n" + content
+		extractMessages := []llm.Message{
+			{Role: "user", Content: extractPrompt},
+		}
+
+		extractedJSON, err := s.llmClient.Generate(ctx, llmModel, extractMessages)
+		if err == nil && len(extractedJSON) > 0 {
+			// basic validation that it is a json array
+			var parsed []string
+			if json.Unmarshal([]byte(extractedJSON), &parsed) == nil {
+				techStacks = datatypes.JSON(extractedJSON)
+			}
+		}
+
 		// Save to database
 		blog := &model.Blog{
 			UserID:      userID,
@@ -555,6 +576,8 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 			Content:     content,
 			SourceType:  sourceType,
 			Status:      1, // 1 for completed
+			WordCount:   wordCount,
+			TechStacks:  techStacks,
 		}
 
 		if err := db.DB.WithContext(ctx).Create(blog).Error; err != nil {
@@ -566,6 +589,10 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 			errBytes, _ := json.Marshal(errMsg)
 			progressChan <- string(errBytes)
 			return
+		} else {
+			// Update user tokens used
+			estimatedTokens := len([]rune(content)) * 2
+			db.DB.Model(&model.User{}).Where("id = ?", userID).UpdateColumn("tokens_used", gorm.Expr("tokens_used + ?", estimatedTokens))
 		}
 
 		// Send progress: completed
