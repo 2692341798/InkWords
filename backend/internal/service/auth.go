@@ -2,11 +2,9 @@ package service
 
 import (
 	"context"
-	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/big"
 	"net/http"
 	"os"
 	"time"
@@ -14,7 +12,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/mojocn/base64Captcha"
 	"golang.org/x/crypto/bcrypt"
-	"gopkg.in/gomail.v2"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/github"
@@ -169,54 +166,55 @@ func (s *AuthService) fetchGithubUser(ctx context.Context, accessToken string) (
 }
 
 // Register 注册新用户，使用邮箱和密码
-func (s *AuthService) Register(email, username, password, code string) (string, *model.User, error) {
-	// 校验验证码
-	var vc model.VerificationCode
-	if err := db.DB.Where("email = ? AND code = ? AND type = ? AND expires_at > ?", email, code, "register", time.Now()).First(&vc).Error; err != nil {
-		return "", nil, errors.New("验证码错误或已过期")
+func (s *AuthService) Register(req struct {
+	Username     string `json:"username" binding:"required"`
+	Email        string `json:"email" binding:"required,email"`
+	Password     string `json:"password" binding:"required"`
+	CaptchaID    string `json:"captcha_id" binding:"required"`
+	CaptchaValue string `json:"captcha_value" binding:"required"`
+}) (string, error) {
+	// 校验图形验证码
+	if !s.VerifyCaptcha(req.CaptchaID, req.CaptchaValue) {
+		return "", errors.New("图形验证码错误或已过期")
 	}
 
-	// 校验密码强度
-	if len(password) < 8 {
-		return "", nil, errors.New("密码长度必须大于或等于8位")
+	// 密码强度校验：长度必须大于等于 8 位
+	if len(req.Password) < 8 {
+		return "", errors.New("密码长度必须至少为 8 位")
 	}
 
-	// 检查邮箱是否已存在
-	var existingUser model.User
-	if err := db.DB.Where("email = ?", email).First(&existingUser).Error; err == nil {
-		return "", nil, errors.New("邮箱已被注册")
-	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return "", nil, err
+	// 检查邮箱或用户名是否已存在
+	var count int64
+	db.DB.Model(&model.User{}).Where("email = ? OR username = ?", req.Email, req.Username).Count(&count)
+	if count > 0 {
+		return "", errors.New("邮箱或用户名已被注册")
 	}
 
 	// 生成密码哈希
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to hash password: %w", err)
+		return "", fmt.Errorf("failed to hash password: %w", err)
 	}
 
-	user := &model.User{
-		ID:              uuid.New(),
-		Email:           email,
-		Username:        username,
-		PasswordHash:    string(hashedPassword),
-		IsEmailVerified: true,
+	// 创建新用户
+	user := model.User{
+		ID:           uuid.New(),
+		Username:     req.Username,
+		Email:        req.Email,
+		PasswordHash: string(hashedPassword),
 	}
 
-	if err := db.DB.Create(user).Error; err != nil {
-		return "", nil, fmt.Errorf("failed to create user: %w", err)
+	if err := db.DB.Create(&user).Error; err != nil {
+		return "", errors.New("创建用户失败，请稍后重试")
 	}
-
-	// 验证成功后删除验证码
-	db.DB.Delete(&vc)
 
 	// 生成 JWT Token
 	jwtToken, err := jwt.GenerateToken(user.ID, 24*time.Hour)
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to generate jwt: %w", err)
+		return "", fmt.Errorf("failed to generate jwt: %w", err)
 	}
 
-	return jwtToken, user, nil
+	return jwtToken, nil
 }
 
 // Login 用户登录，返回 JWT Token 和用户信息
@@ -271,37 +269,6 @@ func (s *AuthService) Login(email, password, captchaID, captchaValue string) (st
 	return jwtToken, &user, nil
 }
 
-// ResetPassword 重置密码
-func (s *AuthService) ResetPassword(email, code, newPassword string) error {
-	var vc model.VerificationCode
-	if err := db.DB.Where("email = ? AND code = ? AND type = ? AND expires_at > ?", email, code, "reset_password", time.Now()).First(&vc).Error; err != nil {
-		return errors.New("验证码错误或已过期")
-	}
-
-	if len(newPassword) < 8 {
-		return errors.New("密码长度必须大于或等于8位")
-	}
-
-	var user model.User
-	if err := db.DB.Where("email = ?", email).First(&user).Error; err != nil {
-		return errors.New("用户不存在")
-	}
-
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
-	if err != nil {
-		return fmt.Errorf("failed to hash password: %w", err)
-	}
-
-	user.PasswordHash = string(hashedPassword)
-	user.FailedLoginAttempts = 0
-	user.LockedUntil = nil
-
-	db.DB.Save(&user)
-	db.DB.Delete(&vc)
-
-	return nil
-}
-
 // GenerateCaptcha 生成图形验证码
 func (s *AuthService) GenerateCaptcha() (string, string, error) {
 	driver := base64Captcha.NewDriverDigit(80, 240, 5, 0.7, 80)
@@ -313,44 +280,4 @@ func (s *AuthService) GenerateCaptcha() (string, string, error) {
 // VerifyCaptcha 校验图形验证码
 func (s *AuthService) VerifyCaptcha(id string, verifyValue string) bool {
 	return store.Verify(id, verifyValue, true)
-}
-
-// GenerateRandomCode 生成 6 位随机验证码
-func (s *AuthService) GenerateRandomCode() string {
-	n, _ := rand.Int(rand.Reader, big.NewInt(1000000))
-	return fmt.Sprintf("%06d", n)
-}
-
-// SaveVerificationCode 记录验证码到数据库
-func (s *AuthService) SaveVerificationCode(email, code, codeType string) error {
-	vc := &model.VerificationCode{
-		Email:     email,
-		Code:      code,
-		Type:      codeType,
-		ExpiresAt: time.Now().Add(15 * time.Minute),
-	}
-	return db.DB.Create(vc).Error
-}
-
-// SendVerificationEmail 发送验证邮件（含 Mock）
-func (s *AuthService) SendVerificationEmail(email, code, codeType string) error {
-	smtpHost := os.Getenv("SMTP_HOST")
-	if smtpHost == "" {
-		// Mock 兜底
-		fmt.Printf("======== MOCK EMAIL ========\nTo: %s\nType: %s\nCode: %s\n============================\n", email, codeType, code)
-		return nil
-	}
-
-	smtpPort := 465 // 或从 env 获取，默认 465
-	smtpUser := os.Getenv("SMTP_USER")
-	smtpPass := os.Getenv("SMTP_PASS")
-
-	m := gomail.NewMessage()
-	m.SetHeader("From", smtpUser)
-	m.SetHeader("To", email)
-	m.SetHeader("Subject", "InkWords 验证码")
-	m.SetBody("text/html", fmt.Sprintf("您的验证码是：<b>%s</b>，有效期15分钟。", code))
-
-	d := gomail.NewDialer(smtpHost, smtpPort, smtpUser, smtpPass)
-	return d.DialAndSend(m)
 }
