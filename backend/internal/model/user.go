@@ -18,7 +18,6 @@ type User struct {
 	AvatarURL           string         `gorm:"type:varchar(1024)" json:"avatar_url"`
 	SubscriptionTier    int16          `gorm:"type:smallint;default:0" json:"subscription_tier"`
 	TokensUsed          int            `gorm:"type:integer;default:0" json:"tokens_used"`
-	IsEmailVerified     bool           `gorm:"default:false" json:"is_email_verified"`
 	FailedLoginAttempts int            `gorm:"default:0" json:"-"`
 	LockedUntil         *time.Time     `json:"-"`
 	CreatedAt           time.Time      `json:"created_at"`
