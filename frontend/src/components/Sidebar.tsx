@@ -187,10 +187,20 @@ export function Sidebar() {
         </div>
         <Button 
           className="w-full gap-2 bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm"
-          onClick={() => setCurrentView('generator')}
+          onClick={() => {
+            if (streamStore.isGenerating || streamStore.isAnalyzing) {
+              if (window.confirm('当前有任务正在执行，确定要终止并开启新工作区吗？')) {
+                streamStore.reset()
+                setCurrentView('generator')
+              }
+            } else {
+              streamStore.reset()
+              setCurrentView('generator')
+            }
+          }}
         >
           <Plus className="w-4 h-4" />
-          返回
+          新工作区
         </Button>
       </div>
       
@@ -200,7 +210,17 @@ export function Sidebar() {
           <div className="p-4 border-b border-zinc-100">
             <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-4 flex items-center justify-between">
               <span>当前生成任务</span>
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => selectBlog(null)}>
+              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => {
+                if (streamStore.isGenerating || streamStore.isAnalyzing) {
+                  if (window.confirm('当前有任务正在执行，确定要终止并开启新工作区吗？')) {
+                    streamStore.reset()
+                    setCurrentView('generator')
+                  }
+                } else {
+                  streamStore.reset()
+                  setCurrentView('generator')
+                }
+              }} title="新建工作区">
                 <Plus className="h-4 w-4" />
               </Button>
             </div>

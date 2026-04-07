@@ -241,28 +241,28 @@ export function Login() {
               </button>
             </div>
             {mode === 'register' && formData.password && (
-              <div className="flex items-center gap-1 mt-1">
-                {[1, 2, 3, 4].map((level) => {
-                  const strength = getPasswordStrength(formData.password)
-                  let colorClass = 'bg-zinc-200'
-                  if (level <= strength) {
-                    if (strength <= 1) colorClass = 'bg-red-500'
-                    else if (strength === 2) colorClass = 'bg-orange-500'
-                    else if (strength === 3) colorClass = 'bg-yellow-500'
-                    else colorClass = 'bg-green-500'
-                  }
-                  return (
-                    <div
-                      key={level}
-                      className={`h-1 flex-1 rounded-full transition-colors ${colorClass}`}
-                    />
-                  )
-                })}
-              </div>
-            )}
-            {mode === 'register' && formData.password && (
-              <div className="text-xs text-zinc-500 mt-1">
-                密码强度: {['极弱', '弱', '中', '强', '极强'][getPasswordStrength(formData.password)]}
+              <div className="flex flex-col gap-2 mt-3">
+                <div className="flex items-center gap-1">
+                  {[1, 2, 3, 4].map((level) => {
+                    const strength = getPasswordStrength(formData.password)
+                    let colorClass = 'bg-zinc-200'
+                    if (level <= strength) {
+                      if (strength <= 1) colorClass = 'bg-red-500'
+                      else if (strength === 2) colorClass = 'bg-orange-500'
+                      else if (strength === 3) colorClass = 'bg-yellow-500'
+                      else colorClass = 'bg-green-500'
+                    }
+                    return (
+                      <div
+                        key={level}
+                        className={`h-1.5 flex-1 rounded-full transition-colors ${colorClass}`}
+                      />
+                    )
+                  })}
+                </div>
+                <div className="text-xs text-zinc-500">
+                  密码强度: {['极弱', '弱', '中', '强', '极强'][getPasswordStrength(formData.password)]}
+                </div>
               </div>
             )}
           </div>

@@ -436,28 +436,45 @@ export function Generator() {
                         const isError = status === 'error';
                         const isCompleted = status === 'completed';
 
+                        if (isCompleted) {
+                          return (
+                            <div key={ch.sort} className="p-4 flex flex-col justify-center h-24 rounded-xl border transition-all duration-300 bg-green-50/20 border-green-200 shadow-sm">
+                              <div className="flex justify-between items-center mb-2">
+                                <span className="text-sm font-semibold text-zinc-700 truncate pr-2" title={ch.title}>
+                                  第 {ch.sort} 篇：{ch.title}
+                                </span>
+                                <span className="text-xs font-medium px-2 py-1 rounded-full whitespace-nowrap bg-green-100 text-green-700">
+                                  已完成
+                                </span>
+                              </div>
+                              <div className="text-xs text-zinc-400 flex justify-between items-center">
+                                <span>{content.length} 字符</span>
+                                <span>可在左侧边栏查看</span>
+                              </div>
+                            </div>
+                          );
+                        }
+
                         return (
-                          <div key={ch.sort} className={`p-4 flex flex-col h-[250px] rounded-xl border transition-all duration-300 ${
+                          <div key={ch.sort} className={`p-4 flex flex-col h-[300px] rounded-xl border transition-all duration-300 ${
                             isGenerating ? 'bg-indigo-50/50 border-indigo-200 shadow-[0_0_15px_rgba(99,102,241,0.15)]' :
-                            isError ? 'bg-red-50/50 border-red-200' :
-                            isCompleted ? 'bg-green-50/50 border-green-200' : 'bg-white border-zinc-200'
+                            isError ? 'bg-red-50/50 border-red-200' : 'bg-white border-zinc-200'
                           }`}>
-                            <div className="flex justify-between items-center mb-3 pb-2 border-b border-black/5">
-                              <span className="text-sm font-semibold text-zinc-700 truncate pr-2">
+                            <div className="flex justify-between items-center mb-3 pb-2 border-b border-black/5 shrink-0">
+                              <span className="text-sm font-semibold text-zinc-700 truncate pr-2" title={ch.title}>
                                 第 {ch.sort} 篇：{ch.title}
                               </span>
                               <span className={`text-xs font-medium px-2 py-1 rounded-full whitespace-nowrap ${
                                 isGenerating ? 'bg-indigo-100 text-indigo-700 animate-pulse' :
-                                isError ? 'bg-red-100 text-red-700' :
-                                isCompleted ? 'bg-green-100 text-green-700' : 'bg-zinc-100 text-zinc-600'
+                                isError ? 'bg-red-100 text-red-700' : 'bg-zinc-100 text-zinc-600'
                               }`}>
-                                {isGenerating ? '生成中...' : isError ? '生成失败' : isCompleted ? '已完成' : '等待中'}
+                                {isGenerating ? '生成中...' : isError ? '生成失败' : '等待中'}
                               </span>
                             </div>
                             <div className="flex-1 overflow-y-auto prose prose-sm prose-zinc max-w-none text-left scrollbar-thin text-xs">
                               <MarkdownEngine content={content || (isGenerating ? '正在构思内容...' : '暂无内容')} />
                             </div>
-                            <div className="mt-2 pt-2 border-t border-black/5 flex justify-between items-center text-xs text-zinc-400">
+                            <div className="mt-2 pt-2 border-t border-black/5 flex justify-between items-center text-xs text-zinc-400 shrink-0">
                               <span>{content.length} 字符</span>
                             </div>
                           </div>
