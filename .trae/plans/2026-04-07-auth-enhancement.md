@@ -385,7 +385,7 @@ git commit -m "feat(ui): add captcha fetching and email code sending logic"
 **Files:**
 - Modify: `frontend/src/components/Login.tsx`
 
-- [ ] **Step 1: 实现密码强度检测 Hook / 函数**
+- [x] **Step 1: 实现密码强度检测 Hook / 函数**
 ```tsx
 const getPasswordStrength = (pwd: string) => {
     let score = 0
@@ -397,16 +397,16 @@ const getPasswordStrength = (pwd: string) => {
 }
 ```
 
-- [ ] **Step 2: 构建表单动态渲染 (单卡片切换)**
+- [x] **Step 2: 构建表单动态渲染 (单卡片切换)**
 根据 `mode` 渲染不同的表单字段：
 - **`login`**: 邮箱、密码、记住我、忘记密码链接。需要验证码时（可由后端 400 提示触发，或默认显示）展示图形验证码框。
 - **`register`**: 昵称、邮箱、图形验证码、发送邮件按钮、邮箱验证码、密码（带强度条）。
 - **`forgot_password`**: 邮箱、图形验证码、发送邮件按钮、邮箱验证码、新密码（带强度条）。
 
-- [ ] **Step 3: 完善 Submit 逻辑**
+- [x] **Step 3: 完善 Submit 逻辑**
 在 `handleSubmit` 中根据 `mode` 发送请求到对应的 `/login`, `/register`, `/reset-password`，携带正确的 Payload。重置成功后 `setMode('login')`。
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 ```bash
 git add frontend/
 git commit -m "feat(ui): implement dynamic auth forms and password strength meter"
@@ -421,16 +421,16 @@ git commit -m "feat(ui): implement dynamic auth forms and password strength mete
 - Modify: `.trae/documents/InkWords_Database.md`
 - Modify: `.trae/documents/InkWords_Development_Plan_and_Log.md`
 
-- [ ] **Step 1: 更新 API 文档**
+- [x] **Step 1: 更新 API 文档**
 添加 `/api/v1/auth/captcha`, `/api/v1/auth/send-code`, `/api/v1/auth/reset-password` 的接口说明，更新 `/login` 和 `/register` 的参数。
 
-- [ ] **Step 2: 更新数据库文档**
+- [x] **Step 2: 更新数据库文档**
 增加 `verification_codes` 表，补充 `users` 表的新增字段 `is_email_verified`, `failed_login_attempts`, `locked_until`。
 
-- [ ] **Step 3: 写入开发日志**
+- [x] **Step 3: 写入开发日志**
 在 `InkWords_Development_Plan_and_Log.md` 中记录本次 Auth 功能增强的开发完成情况。
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 ```bash
 git add .trae/documents/
 git commit -m "docs: update API, Database and Dev Log for Auth enhancement"

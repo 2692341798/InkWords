@@ -3,8 +3,11 @@
 ## 1. 认证模块 (AuthAPI)
 | 接口地址 | 请求方法 | 功能描述 | 参数 |
 | -------- | -------- | -------- | ---- |
-| `/api/v1/auth/register` | POST | 邮箱密码注册 | `{ email, password }` |
-| `/api/v1/auth/login` | POST | 邮箱密码登录 | `{ email, password }` -> 返回 `token` |
+| `/api/v1/auth/captcha` | GET | 获取图形验证码 | 无 -> 返回 `{ captcha_id, image }` |
+| `/api/v1/auth/send-code` | POST | 发送邮箱验证码 | `{ email, type, captcha_id, captcha_value }` |
+| `/api/v1/auth/register` | POST | 邮箱密码注册 | `{ username, email, password, code }` |
+| `/api/v1/auth/login` | POST | 邮箱密码登录 | `{ email, password, captcha_id, captcha_value, remember_me }` -> 返回 `token` |
+| `/api/v1/auth/reset-password` | POST | 重置密码 | `{ email, new_password, code }` |
 | `/api/v1/auth/oauth/:provider` | GET | 第三方授权跳转 (如 `github`) | 无 |
 | `/api/v1/auth/callback/:provider` | GET | OAuth回调 | `code`, `state` -> 重定向至前端 |
 

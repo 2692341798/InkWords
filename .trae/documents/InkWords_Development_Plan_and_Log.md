@@ -243,6 +243,16 @@
 ## 4. 每日开发日志 (Dev Log)
 > 该区域将由 Vibe Coding 工程师（AI 助手）在每天/每次开发周期结束时，如实记录当天的完成事项、遇到的技术坑点及架构小规模调整。
 
+### [2026-04-07] Feature - 增强登录注册安全与密码强度校验
+- **开发模块**: [AuthAPI, 数据库层, 前端 UI]
+- **完成事项**:
+  1. **数据库迁移**: 新增 `VerificationCode` 模型以存储邮箱验证码，并为 `User` 模型增加 `IsEmailVerified`, `FailedLoginAttempts`, `LockedUntil` 字段，实现防爆破锁定机制。
+  2. **后端服务**: 集成 `base64Captcha` 生成图形验证码，集成 `gomail.v2` 发送邮箱验证码（并提供 Mock 兜底）。强化了 `/login` 和 `/register` 接口的安全逻辑，新增 `/reset-password` 重置密码接口。
+  3. **前端交互**: 在 `Login.tsx` 中使用单卡片状态机实现了登录、注册、重置密码的无缝切换。增加了图形验证码展示、倒计时获取邮箱验证码、以及密码强度实时计算条。
+  4. **文档同步**: 更新了 `InkWords_API.md` 和 `InkWords_Database.md`，补全了相关接口与表结构说明。
+- **踩坑记录 / 架构调整**:
+  - 在前端实现多模式单卡片切换时，需要精细控制状态（如 `loginNeedsCaptcha`），并在操作成功/失败后准确重置表单，避免状态残留导致 UI 错乱。密码强度的正则表达式检测需考虑边界情况。
+
 ### [2026-04-05] Feature - 增强内容生成兜底与 UI 滚动优化
 - **开发模块**: [后端生成与续写 API, 前端 UI 状态管理, Markdown 编辑器]
 - **完成事项**:
@@ -532,3 +542,12 @@
   - 增加 `Dashboard` 组件使用 `recharts` 渲染柱状图。
   - 侧边栏增加“个人中心”入口。
   - 修复 `nginx.conf` 与 `vite.config.ts` 代理 `/uploads/` 静态文件服务。
+
+### [2026-04-07] 增加第三方微信登录入口 (WeChat OAuth)
+- **开发模块**: [认证模块 Frontend + Backend]
+- **完成事项**:
+  1. **前端入口**: `Login.tsx` 中增加“使用微信登录”的按钮，引入了微信 SVG 图标，点击后重定向至 `/api/v1/auth/oauth/wechat`。
+  2. **后端配置与授权地址**: `backend/internal/service/auth.go` 中，定制了微信特有的 OAuth 授权 URL 生成逻辑，支持追加 `#wechat_redirect` 及使用 `appid` 参数。
+  3. **后端回调处理**: 实现了自定义的 `handleWechatCallback`，分别请求微信的 access_token 与 userinfo 接口。
+  4. **数据库存储**: 依赖现有的 `wechat_openid` 字段，解析微信 OpenID 与用户信息并实现新用户注册与老用户登录更新。
+  5. **环境变量**: `backend/.env` 增加了 `WECHAT_APP_ID`, `WECHAT_APP_SECRET`, `WECHAT_REDIRECT_URL` 配置项。
