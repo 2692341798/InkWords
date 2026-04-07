@@ -24,6 +24,7 @@ func InitDB(dsn string) error {
 	// 执行自动迁移
 	err = DB.AutoMigrate(
 		&model.User{},
+		&model.VerificationCode{},
 		&model.Blog{},
 		&model.OAuthToken{},
 	)

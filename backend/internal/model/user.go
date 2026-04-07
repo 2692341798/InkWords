@@ -15,10 +15,13 @@ type User struct {
 	PasswordHash     string         `gorm:"type:varchar(255)" json:"-"`
 	GithubID         *string        `gorm:"type:varchar(255)" json:"github_id"`
 	WechatOpenID     *string        `gorm:"type:varchar(255)" json:"wechat_openid"`
-	AvatarURL        string         `gorm:"type:varchar(1024)" json:"avatar_url"`
-	SubscriptionTier int16          `gorm:"type:smallint;default:0" json:"subscription_tier"`
-	TokensUsed       int            `gorm:"type:integer;default:0" json:"tokens_used"`
-	CreatedAt        time.Time      `json:"created_at"`
+	AvatarURL           string         `gorm:"type:varchar(1024)" json:"avatar_url"`
+	SubscriptionTier    int16          `gorm:"type:smallint;default:0" json:"subscription_tier"`
+	TokensUsed          int            `gorm:"type:integer;default:0" json:"tokens_used"`
+	IsEmailVerified     bool           `gorm:"default:false" json:"is_email_verified"`
+	FailedLoginAttempts int            `gorm:"default:0" json:"-"`
+	LockedUntil         *time.Time     `json:"-"`
+	CreatedAt           time.Time      `json:"created_at"`
 	UpdatedAt        time.Time      `json:"updated_at"`
 	DeletedAt        gorm.DeletedAt `gorm:"index" json:"-"`
 }
