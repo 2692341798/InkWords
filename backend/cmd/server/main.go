@@ -33,6 +33,9 @@ func main() {
 	// 创建一个默认的 Gin 引擎
 	r := gin.Default()
 
+	// 开放 uploads 目录以供静态资源访问
+	r.Static("/uploads", "./uploads")
+
 	// 基础路由：健康检查
 	r.GET("/api/v1/ping", func(c *gin.Context) {
 		c.JSON(200, gin.H{
