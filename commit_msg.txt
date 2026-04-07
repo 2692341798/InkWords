@@ -1,0 +1,7 @@
+feat(generator): support resume generating series from stopped chapters
+
+- Update Zustand store to filter out `completed` chapters when resuming generation and fallback `generating` to `pending` on abort.
+- Add `parentBlogId` state to track series parent and pass it to backend.
+- Update `GenerateSeries` backend logic to accept `parent_id` and prevent recreating parent blog nodes, avoiding data islands.
+- Update frontend UI to show "继续生成" and hide completed chapters in resume state.
+- Sync all project documentation (API, Architecture, PRD, Logs).

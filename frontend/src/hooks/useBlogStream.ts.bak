@@ -172,20 +172,6 @@ export const useBlogStream = () => {
     }
     const ctrl = new AbortController()
     store.setAbortController(ctrl)
-
-    let pendingUpdates: string = ''
-    let updateTimeout: ReturnType<typeof setTimeout> | null = null
-
-    const flushUpdates = () => {
-      if (pendingUpdates) {
-        store.appendGeneratedContent(pendingUpdates)
-        pendingUpdates = ''
-      }
-      if (updateTimeout) {
-        clearTimeout(updateTimeout)
-        updateTimeout = null
-      }
-    }
     
     try {
       const token = localStorage.getItem('token')
@@ -216,16 +202,11 @@ export const useBlogStream = () => {
         },
         onmessage(msg) {
           if (msg.event === 'chunk') {
-            pendingUpdates += msg.data
-            if (!updateTimeout) {
-              updateTimeout = setTimeout(flushUpdates, 200)
-            }
+            store.appendGeneratedContent(msg.data)
           } else if (msg.event === 'error') {
-            flushUpdates()
             console.error('SSE Error:', msg.data)
             throw new StopStreamError(msg.data)
           } else if (msg.event === 'done') {
-            flushUpdates()
             store.setGenerating(false)
             store.reset() // clear generator state completely
             fetchBlogs() // Refresh to get the saved blog from DB
@@ -233,11 +214,9 @@ export const useBlogStream = () => {
           }
         },
         onclose() {
-          flushUpdates()
           throw new StopStreamError('closed by server')
         },
         onerror(err: unknown) {
-          flushUpdates()
           if (err instanceof StopStreamError) {
             throw err
           }
@@ -279,20 +258,6 @@ export const useBlogStream = () => {
     }
     const ctrl = new AbortController()
     store.setAbortController(ctrl)
-
-    let pendingUpdates: Record<number, string> = {}
-    let updateTimeout: ReturnType<typeof setTimeout> | null = null
-
-    const flushUpdates = () => {
-      if (Object.keys(pendingUpdates).length > 0) {
-        store.appendChapterContents(pendingUpdates)
-        pendingUpdates = {}
-      }
-      if (updateTimeout) {
-        clearTimeout(updateTimeout)
-        updateTimeout = null
-      }
-    }
     
     try {
       const token = localStorage.getItem('token')
@@ -331,46 +296,33 @@ export const useBlogStream = () => {
             try {
               const data = JSON.parse(msg.data)
               if (data.status === 'generating') {
-                flushUpdates()
-                store.clearChapterContent(data.chapter_sort)
+                store.clearGeneratedContent()
                 store.updateChapterStatus(data.chapter_sort, 'generating')
                 if (data.parent_id && !store.parentBlogId) {
                   store.setParentBlogId(data.parent_id)
                 }
               } else if (data.status === 'streaming') {
-                pendingUpdates[data.chapter_sort] = (pendingUpdates[data.chapter_sort] || '') + data.content
-                if (!updateTimeout) {
-                  updateTimeout = setTimeout(flushUpdates, 200) // Buffer updates for 200ms
-                }
+                store.appendGeneratedContent(data.content)
               } else if (data.status === 'completed') {
-                flushUpdates()
                 store.updateChapterStatus(data.chapter_sort, 'completed')
                 fetchBlogs() // Refresh to show the newly completed chapter in history
-              } else if (data.status === 'error') {
-                flushUpdates()
-                store.updateChapterStatus(data.chapter_sort, 'error')
-                store.appendChapterContent(data.chapter_sort, '\n\n**生成失败**：' + (data.message || '未知错误'))
               }
             } catch {
               // Ignore parse error
             }
           } else if (msg.event === 'error') {
-            flushUpdates()
             console.error('SSE Error:', msg.data)
             throw new StopStreamError(msg.data)
           } else if (msg.event === 'done') {
-            flushUpdates()
             store.setGenerating(false)
             fetchBlogs() // Make sure we refresh to get the latest blogs
             throw new StopStreamError('done')
           }
         },
         onclose() {
-          flushUpdates()
           throw new StopStreamError('closed by server')
         },
         onerror(err: unknown) {
-          flushUpdates()
           if (err instanceof StopStreamError) {
             throw err
           }

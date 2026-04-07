@@ -24,6 +24,7 @@ interface StreamState {
   outline: Chapter[] | null
   chapterStatus: Record<number, 'pending' | 'generating' | 'completed' | 'error'>
   generatedContent: string
+  chapterContents: Record<number, string>
   isAnalyzing: boolean
   isGenerating: boolean
   mapReduceProgress: MapReduceProgress | null
@@ -41,7 +42,10 @@ interface StreamState {
   moveChapter: (sort: number, direction: 'up' | 'down') => void
   updateChapterStatus: (sort: number, status: 'pending' | 'generating' | 'completed' | 'error') => void
   appendGeneratedContent: (chunk: string) => void
+  appendChapterContent: (sort: number, content: string) => void
+  appendChapterContents: (updates: Record<number, string>) => void
   clearGeneratedContent: () => void
+  clearChapterContent: (sort: number) => void
   setGenerating: (status: boolean) => void
   setAnalyzing: (status: boolean) => void
   setMapReduceProgress: (progress: MapReduceProgress | null) => void
@@ -61,6 +65,7 @@ export const useStreamStore = create<StreamState>((set, get) => ({
   outline: null,
   chapterStatus: {},
   generatedContent: '',
+  chapterContents: {},
   isAnalyzing: false,
   isGenerating: false,
   mapReduceProgress: null,
@@ -73,7 +78,8 @@ export const useStreamStore = create<StreamState>((set, get) => ({
   setSeriesTitle: (title) => set({ seriesTitle: title }),
   setOutline: (outline) => set({ 
     outline,
-    chapterStatus: outline.reduce((acc, ch) => ({ ...acc, [ch.sort]: 'pending' }), {})
+    chapterStatus: outline.reduce((acc, ch) => ({ ...acc, [ch.sort]: 'pending' }), {}),
+    chapterContents: outline.reduce((acc, ch) => ({ ...acc, [ch.sort]: '' }), {})
   }),
   updateChapter: (sort, field, value) => set((state) => ({
     outline: state.outline?.map(ch => 
@@ -96,7 +102,11 @@ export const useStreamStore = create<StreamState>((set, get) => ({
     const newOutline = state.outline
       .filter(ch => ch.sort !== sort)
       .map((ch, index) => ({ ...ch, sort: index + 1 }));
-    return { outline: newOutline };
+    const newStatus = { ...state.chapterStatus };
+    const newContents = { ...state.chapterContents };
+    delete newStatus[sort];
+    delete newContents[sort];
+    return { outline: newOutline, chapterStatus: newStatus, chapterContents: newContents };
   }),
   moveChapter: (sort, direction) => set((state) => {
     if (!state.outline) return state;
@@ -122,7 +132,30 @@ export const useStreamStore = create<StreamState>((set, get) => ({
       }
     })),
   appendGeneratedContent: (chunk) => set((state) => ({ generatedContent: state.generatedContent + chunk })),
+  appendChapterContent: (sort, chunk) =>
+    set((state) => ({
+      chapterContents: {
+        ...state.chapterContents,
+        [sort]: (state.chapterContents[sort] || '') + chunk
+      }
+    })),
+  appendChapterContents: (updates) =>
+    set((state) => {
+      const newContents = { ...state.chapterContents };
+      for (const [sort, chunk] of Object.entries(updates)) {
+        const key = Number(sort);
+        newContents[key] = (newContents[key] || '') + chunk;
+      }
+      return { chapterContents: newContents };
+    }),
   clearGeneratedContent: () => set({ generatedContent: '' }),
+  clearChapterContent: (sort) =>
+    set((state) => ({
+      chapterContents: {
+        ...state.chapterContents,
+        [sort]: ''
+      }
+    })),
   setGenerating: (status) => set({ isGenerating: status }),
   setAnalyzing: (status) => set({ isAnalyzing: status }),
   setMapReduceProgress: (progress) => set((state) => {
@@ -176,6 +209,7 @@ export const useStreamStore = create<StreamState>((set, get) => ({
       outline: null,
       chapterStatus: {},
       generatedContent: '',
+      chapterContents: {},
       isAnalyzing: false,
       isGenerating: false,
       mapReduceProgress: null,

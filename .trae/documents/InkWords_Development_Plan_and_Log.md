@@ -509,3 +509,15 @@
   2. **并发安全限制**: 增加了最小并发数 5 和最大并发数 20 的硬性限制，既保证了低配机器的分析效率，又避免了因并发过高触发 LLM (DeepSeek) API 的并发限流报错。
 - **决策/踩坑记录**:
   - LLM API 请求属于典型的网络 I/O 密集型操作，纯依赖 CPU 核心数可能无法打满带宽和 API 并发度，因此采用 `CPU核心数 * 2` 的策略，并结合 `semaphore.NewWeighted` 和带有缓冲的 `workerPool` Channel 来实现安全调度。
+
+## [2026-04-07] 并发生成文章功能重构
+**What (做了什么):**
+- 将 `backend/internal/service/decomposition.go` 中的 `GenerateSeries` 方法从串行生成改为并发生成。
+- 使用 `golang.org/x/sync/semaphore` 限制最大并发数为 3，避免 API 限流。
+- 后端修改：针对每个并发生成的章节，单独向 `progressChan` 推送 `streaming` 和 `error` 状态（带上 `chapter_sort`）。
+- 前端修改：`streamStore.ts` 引入 `chapterContents: Record<number, string>`，并在 `Generator.tsx` 中为多个章节同时展示生成卡片和独立打字机效果。
+
+**Why (为什么这么做):**
+- 原有串行生成模式速度过慢。通过并发调用 DeepSeek API，大幅缩短长系列文章的整体生成时间。
+- 限制并发数为 3 以平衡速度与 API 限制。
+- 前端卡片式流式渲染能让用户直观看到多个章节的同时进度，符合业务直觉。

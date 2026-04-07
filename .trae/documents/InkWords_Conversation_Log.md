@@ -479,3 +479,29 @@
   - 前端涉及破坏性操作（如删除）的 `onClick` 事件，不仅需要 `window.confirm`，还必须考虑 React 异步状态更新期间用户连续点击造成的重复触发问题，通过 `useRef` 和原生 `e.detail` 进行双重防御。
 
 | 2026-04-06 | Fix Worker UI & Add Outline Collapse & Stop Generation Feature | 修复了并发生成期间 Worker 卡片被 `max-w-sm` 挤压变形的问题；新增大纲“手风琴式”折叠功能，在生成时自动折叠大纲面板以优化阅读体验；新增“停止生成”按钮，通过前端 `AbortController` 和后端绑定 `Context` 结合，实现中断流式生成且立即释放大模型资源；更新 Docker 规范，要求使用 `docker compose down && docker compose up -d --build` 一键重启并测试验证，确认前端入口为 `http://localhost`。 |
+
+## [2026-04-07] 用户请求重构并发生成文章功能
+- **需求**：将文章生成从串行改为并发生成，速度要快且质量不变。要求用Go协程和技能提问明确需求。
+- **过程**：
+  1. 调用 `brainstorming` 技能，分析了需求并使用多选项向用户提问，明确了并发数为3、前端使用多章节独立流式显示卡片效果、以及独立失败不影响全局的策略。
+  2. 后端修改：`GenerateSeries` 中引入 `semaphore` 和 `sync.WaitGroup` 实现协程并发，并让每个协程通过 `progressChan` 向前端发送带有 `chapter_sort` 的独立 `streaming` 和 `error` 事件。
+  3. 前端修改：`streamStore` 中引入 `chapterContents` 字典独立管理不同章节的文本；在 `Generator.tsx` 中新增了一个基于 Grid 布局的流式卡片展示列表，多个卡片独立展示生成效果与实时进度。
+  4. 测试与验证：执行 `docker compose up -d --build` 验证通过。
+
+## [2026-04-07] 修复并发生成时页面卡顿问题
+- **现象**：当并发生成文章到中后期时，页面严重卡顿，点击其他按钮无响应。
+- **原因分析**：SSE 流式事件推送非常频繁（可能每几十毫秒一次），如果每次推送都触发 React 状态更新并重新进行全量的 Markdown 渲染，随着文章变长，渲染压力和 DOM 重绘开销会呈指数级上升，导致主线程阻塞。
+- **解决方案（与用户确认后）**：
+  1. **批量更新 Store (Throttle / Debounce)**：在 `useBlogStream.ts` 中引入了基于 `setTimeout` 的 200ms 缓冲队列。收到 SSE `chunk` 事件时不再立即调用 `store.appendChapterContent`，而是暂存到本地变量 `pendingUpdates`，定时器到期后一次性调用新增加的批量更新方法 `store.appendChapterContents` 刷新状态。
+  2. 极大地减少了 React 和 MarkdownEngine 的重新渲染次数。
+- **验证**：执行 `docker compose up -d --build` 更新前端镜像。
+
+## [2026-04-07] 修复 GitHub 登录回调失败问题
+- **现象**：用户在 Safari 中登录 GitHub 后，页面重定向到 `localhost:5173/api/v1/auth/callback/github` 时提示“无法连接服务器”。
+- **原因分析**：项目改用 Docker Compose 启动后，Nginx 前端服务运行在容器的 80 端口（映射宿主机 80 端口），但 GitHub OAuth App 中配置的回调地址以及 `.env` 中依然保留的是之前本地开发时的 5173 端口。因为宿主机没有监听 5173 端口，所以浏览器连接失败。
+- **解决方案**：在 `docker-compose.yml` 的 `frontend` 容器中，将宿主机的 `5173` 端口映射到容器的 `80` 端口 (`- "5173:80"`)。这样：
+  1. 浏览器访问 `http://localhost:5173/api/v1/auth/callback/github` 会被正确路由到 Nginx。
+  2. Nginx 将其代理给后端的 OAuth 回调接口。
+  3. 后端处理完成后，读取 `FRONTEND_URL` 环境变量（配置为 `http://localhost`），无缝将用户重定向回正常的项目首页（带上 Token）。
+  这是一种平滑且对用户透明的修复方式，无需去 GitHub 平台修改 OAuth App 的设置。
+- **验证**：通过 `docker compose up -d` 重新加载端口映射，`curl -v http://localhost:5173/api/v1/auth/callback/github` 已能正常返回 307 Redirect 到 `http://localhost`。

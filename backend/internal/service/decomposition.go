@@ -257,7 +257,7 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 	}
 	// --- FIX END ---
 
-	// --- FIX START: Save the parent node so that History Blogs can query it ---
+	// Save the parent node so that History Blogs can query it
 	parentTitle := "Git 源码解析系列"
 	if sourceType == "file" {
 		parentTitle = "文件解析系列"
@@ -280,7 +280,10 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 			fmt.Printf("Failed to create parent blog: %v\n", err)
 		}
 	}
-	// --- FIX END ---
+
+	// 限制并发数为 3
+	sem := semaphore.NewWeighted(3)
+	var wg sync.WaitGroup
 
 	for i, chapter := range outline {
 		select {
@@ -290,7 +293,17 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 		default:
 		}
 
-		// Limit the content sent per chapter to avoid token overflow
+		if err := sem.Acquire(ctx, 1); err != nil {
+			errChan <- err
+			return
+		}
+
+		wg.Add(1)
+		go func(i int, chapter Chapter) {
+			defer sem.Release(1)
+			defer wg.Done()
+
+			// Limit the content sent per chapter to avoid token overflow
 		var chapterSourceContent string
 		if sourceType == "git" && tempDir != "" && len(chapter.Files) > 0 {
 			var builder strings.Builder
@@ -523,7 +536,13 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 		}
 
 		if streamErr != nil {
-			errChan <- fmt.Errorf("chapter %d generation failed after %d attempts: %w", chapter.Sort, maxRetries, streamErr)
+			errMsg := map[string]interface{}{
+				"status":       "error",
+				"chapter_sort": chapter.Sort,
+				"message":      fmt.Sprintf("chapter %d generation failed after %d attempts: %v", chapter.Sort, maxRetries, streamErr),
+			}
+			errBytes, _ := json.Marshal(errMsg)
+			progressChan <- string(errBytes)
 			return
 		}
 
@@ -537,12 +556,18 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 			SourceType:  sourceType,
 			Status:      1, // 1 for completed
 		}
-		
+
 		if err := db.DB.WithContext(ctx).Create(blog).Error; err != nil {
-			errChan <- fmt.Errorf("failed to save chapter %d to db: %w", chapter.Sort, err)
+			errMsg := map[string]interface{}{
+				"status":       "error",
+				"chapter_sort": chapter.Sort,
+				"message":      fmt.Sprintf("failed to save chapter %d to db: %v", chapter.Sort, err),
+			}
+			errBytes, _ := json.Marshal(errMsg)
+			progressChan <- string(errBytes)
 			return
 		}
-		
+
 		// Send progress: completed
 		endMsg := map[string]interface{}{
 			"status":       "completed",
@@ -551,7 +576,10 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 		}
 		endBytes, _ := json.Marshal(endMsg)
 		progressChan <- string(endBytes)
+	}(i, chapter)
 	}
+
+	wg.Wait()
 }
 // GenerateOutline evaluates project text and generates a JSON outline
 func (s *DecompositionService) GenerateOutline(ctx context.Context, sourceContent string) (*OutlineResult, error) {
