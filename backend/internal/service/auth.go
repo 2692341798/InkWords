@@ -169,11 +169,22 @@ func (s *AuthService) fetchGithubUser(ctx context.Context, accessToken string) (
 }
 
 // Register 注册新用户，使用邮箱和密码
-func (s *AuthService) Register(email, username, password string) (string, *model.User, error) {
+func (s *AuthService) Register(email, username, password, code string) (string, *model.User, error) {
+	// 校验验证码
+	var vc model.VerificationCode
+	if err := db.DB.Where("email = ? AND code = ? AND type = ? AND expires_at > ?", email, code, "register", time.Now()).First(&vc).Error; err != nil {
+		return "", nil, errors.New("验证码错误或已过期")
+	}
+
+	// 校验密码强度
+	if len(password) < 8 {
+		return "", nil, errors.New("密码长度必须大于或等于8位")
+	}
+
 	// 检查邮箱是否已存在
 	var existingUser model.User
 	if err := db.DB.Where("email = ?", email).First(&existingUser).Error; err == nil {
-		return "", nil, errors.New("email already exists")
+		return "", nil, errors.New("邮箱已被注册")
 	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return "", nil, err
 	}
@@ -185,15 +196,19 @@ func (s *AuthService) Register(email, username, password string) (string, *model
 	}
 
 	user := &model.User{
-		ID:           uuid.New(),
-		Email:        email,
-		Username:     username,
-		PasswordHash: string(hashedPassword),
+		ID:              uuid.New(),
+		Email:           email,
+		Username:        username,
+		PasswordHash:    string(hashedPassword),
+		IsEmailVerified: true,
 	}
 
 	if err := db.DB.Create(user).Error; err != nil {
 		return "", nil, fmt.Errorf("failed to create user: %w", err)
 	}
+
+	// 验证成功后删除验证码
+	db.DB.Delete(&vc)
 
 	// 生成 JWT Token
 	jwtToken, err := jwt.GenerateToken(user.ID, 24*time.Hour)
@@ -205,24 +220,47 @@ func (s *AuthService) Register(email, username, password string) (string, *model
 }
 
 // Login 用户登录，返回 JWT Token 和用户信息
-func (s *AuthService) Login(email, password string) (string, *model.User, error) {
+func (s *AuthService) Login(email, password, captchaID, captchaValue string) (string, *model.User, error) {
 	var user model.User
 	if err := db.DB.Where("email = ?", email).First(&user).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return "", nil, errors.New("invalid email or password")
+			return "", nil, errors.New("邮箱或密码错误")
 		}
 		return "", nil, err
 	}
 
+	// 检查锁定状态
+	if user.LockedUntil != nil && user.LockedUntil.After(time.Now()) {
+		return "", nil, errors.New("账号已锁定，请稍后再试")
+	}
+
 	// 检查用户是否有密码（可能是仅通过第三方登录注册的用户）
 	if user.PasswordHash == "" {
-		return "", nil, errors.New("user has no password set, please login with third-party provider")
+		return "", nil, errors.New("请使用第三方登录或重置密码")
+	}
+
+	// 如果失败次数 >= 3，强制要求 Captcha
+	if user.FailedLoginAttempts >= 3 {
+		if captchaID == "" || !s.VerifyCaptcha(captchaID, captchaValue) {
+			return "", nil, errors.New("请输入正确的图形验证码")
+		}
 	}
 
 	// 验证密码
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
-		return "", nil, errors.New("invalid email or password")
+		user.FailedLoginAttempts++
+		if user.FailedLoginAttempts >= 5 {
+			lockTime := time.Now().Add(15 * time.Minute)
+			user.LockedUntil = &lockTime
+		}
+		db.DB.Save(&user)
+		return "", nil, errors.New("邮箱或密码错误")
 	}
+
+	// 成功则重置状态
+	user.FailedLoginAttempts = 0
+	user.LockedUntil = nil
+	db.DB.Save(&user)
 
 	// 生成 JWT Token
 	jwtToken, err := jwt.GenerateToken(user.ID, 24*time.Hour)
@@ -231,6 +269,37 @@ func (s *AuthService) Login(email, password string) (string, *model.User, error)
 	}
 
 	return jwtToken, &user, nil
+}
+
+// ResetPassword 重置密码
+func (s *AuthService) ResetPassword(email, code, newPassword string) error {
+	var vc model.VerificationCode
+	if err := db.DB.Where("email = ? AND code = ? AND type = ? AND expires_at > ?", email, code, "reset_password", time.Now()).First(&vc).Error; err != nil {
+		return errors.New("验证码错误或已过期")
+	}
+
+	if len(newPassword) < 8 {
+		return errors.New("密码长度必须大于或等于8位")
+	}
+
+	var user model.User
+	if err := db.DB.Where("email = ?", email).First(&user).Error; err != nil {
+		return errors.New("用户不存在")
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("failed to hash password: %w", err)
+	}
+
+	user.PasswordHash = string(hashedPassword)
+	user.FailedLoginAttempts = 0
+	user.LockedUntil = nil
+
+	db.DB.Save(&user)
+	db.DB.Delete(&vc)
+
+	return nil
 }
 
 // GenerateCaptcha 生成图形验证码

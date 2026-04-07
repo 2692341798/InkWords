@@ -72,7 +72,8 @@ func (a *AuthAPI) Register(c *gin.Context) {
 	var req struct {
 		Username string `json:"username" binding:"required"`
 		Email    string `json:"email" binding:"required,email"`
-		Password string `json:"password" binding:"required,min=6"`
+		Password string `json:"password" binding:"required,min=8"`
+		Code     string `json:"code" binding:"required"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -84,7 +85,7 @@ func (a *AuthAPI) Register(c *gin.Context) {
 		return
 	}
 
-	token, user, err := a.authService.Register(req.Email, req.Username, req.Password)
+	token, user, err := a.authService.Register(req.Email, req.Username, req.Password, req.Code)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code":    http.StatusBadRequest,
@@ -189,8 +190,10 @@ func (a *AuthAPI) SendCode(c *gin.Context) {
 // Login 用户登录
 func (a *AuthAPI) Login(c *gin.Context) {
 	var req struct {
-		Email    string `json:"email" binding:"required,email"`
-		Password string `json:"password" binding:"required"`
+		Email        string `json:"email" binding:"required,email"`
+		Password     string `json:"password" binding:"required"`
+		CaptchaID    string `json:"captcha_id"`
+		CaptchaValue string `json:"captcha_value"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -202,7 +205,7 @@ func (a *AuthAPI) Login(c *gin.Context) {
 		return
 	}
 
-	token, user, err := a.authService.Login(req.Email, req.Password)
+	token, user, err := a.authService.Login(req.Email, req.Password, req.CaptchaID, req.CaptchaValue)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"code":    http.StatusUnauthorized,
@@ -225,5 +228,39 @@ func (a *AuthAPI) Login(c *gin.Context) {
 				"tokens_used":       user.TokensUsed,
 			},
 		},
+	})
+}
+
+// ResetPassword 重置密码
+func (a *AuthAPI) ResetPassword(c *gin.Context) {
+	var req struct {
+		Email       string `json:"email" binding:"required,email"`
+		Code        string `json:"code" binding:"required"`
+		NewPassword string `json:"new_password" binding:"required,min=8"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    http.StatusBadRequest,
+			"message": err.Error(),
+			"data":    nil,
+		})
+		return
+	}
+
+	err := a.authService.ResetPassword(req.Email, req.Code, req.NewPassword)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    http.StatusBadRequest,
+			"message": err.Error(),
+			"data":    nil,
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":    http.StatusOK,
+		"message": "密码重置成功",
+		"data":    nil,
 	})
 }

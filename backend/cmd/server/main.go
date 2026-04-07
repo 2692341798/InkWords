@@ -60,6 +60,7 @@ func main() {
 		{
 			authGroup.POST("/register", authAPI.Register)
 			authGroup.POST("/login", authAPI.Login)
+			authGroup.POST("/reset-password", authAPI.ResetPassword)
 			authGroup.GET("/captcha", authAPI.GetCaptcha)
 			authGroup.POST("/send-code", authAPI.SendCode)
 			authGroup.GET("/oauth/:provider", authAPI.OAuthRedirect)
