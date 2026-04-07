@@ -2,12 +2,15 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/datatypes"
+	"gorm.io/gorm"
 
 	"inkwords-backend/internal/db"
 	"inkwords-backend/internal/llm"
@@ -91,7 +94,10 @@ func (s *GeneratorService) GenerateBlogStream(ctx context.Context, userID uuid.U
 					return
 				}
 				if !timer.Stop() {
-					select { case <-timer.C: default: }
+					select {
+					case <-timer.C:
+					default:
+					}
 				}
 				timer.Reset(idleTimeout)
 
@@ -105,13 +111,13 @@ func (s *GeneratorService) GenerateBlogStream(ctx context.Context, userID uuid.U
 	go func() {
 		defer close(internalChunkChan)
 		defer close(internalErrChan)
-		
+
 		for {
 			tempChunkChan := make(chan string)
 			var assistantContent string
 			var wg sync.WaitGroup
 			wg.Add(1)
-			
+
 			go func() {
 				defer wg.Done()
 				for chunk := range tempChunkChan {
@@ -122,12 +128,12 @@ func (s *GeneratorService) GenerateBlogStream(ctx context.Context, userID uuid.U
 
 			finishReason, err := s.llmClient.GenerateStream(streamCtx, modelType, messages, tempChunkChan)
 			wg.Wait() // Ensure all chunks are collected
-			
+
 			if err != nil {
 				internalErrChan <- err
 				return
 			}
-			
+
 			// Append what the assistant just generated
 			messages = append(messages, llm.Message{
 				Role:    "assistant",
@@ -137,7 +143,7 @@ func (s *GeneratorService) GenerateBlogStream(ctx context.Context, userID uuid.U
 			if finishReason != "length" {
 				return
 			}
-			
+
 			// Auto-continue if it stopped due to length limit
 			// We append the prompt to strictly continue without conversational filler
 			continueMsg := llm.Message{
@@ -151,11 +157,29 @@ func (s *GeneratorService) GenerateBlogStream(ctx context.Context, userID uuid.U
 
 // saveToDB persists the generated markdown to PostgreSQL
 func (s *GeneratorService) saveToDB(ctx context.Context, userID uuid.UUID, sourceType string, content string) {
-	// Extract a simple title from the first line or default
 	title := "文件解析生成的博客"
-	if len(content) > 0 {
-		// Attempt to grab the first H1 or just first line
-		// (A simplistic approach: we can just leave it as default or let user edit it)
+
+	// Calculate word count
+	wordCount := len([]rune(content))
+
+	// Extract Tech Stacks using LLM
+	var techStacks datatypes.JSON
+	extractPrompt := "请从以下文章内容中提取出涉及的核心技术栈名称（如 React, Go, Docker 等），以 JSON 数组格式返回，不要有任何其他多余字符：\n\n" + content
+	messages := []llm.Message{
+		{Role: "user", Content: extractPrompt},
+	}
+	modelType := "deepseek-chat"
+	if envModel := os.Getenv("DEEPSEEK_MODEL"); envModel != "" {
+		modelType = envModel
+	}
+
+	extractedJSON, err := s.llmClient.Generate(ctx, modelType, messages)
+	if err == nil && len(extractedJSON) > 0 {
+		// basic validation that it is a json array
+		var parsed []string
+		if json.Unmarshal([]byte(extractedJSON), &parsed) == nil {
+			techStacks = datatypes.JSON(extractedJSON)
+		}
 	}
 
 	blog := &model.Blog{
@@ -165,11 +189,17 @@ func (s *GeneratorService) saveToDB(ctx context.Context, userID uuid.UUID, sourc
 		SourceType:  sourceType,
 		Status:      1, // completed
 		ChapterSort: 1,
+		WordCount:   wordCount,
+		TechStacks:  techStacks,
 	}
 
 	if err := db.DB.WithContext(ctx).Create(blog).Error; err != nil {
 		fmt.Printf("Failed to save generated blog to DB: %v\n", err)
 	} else {
-		fmt.Printf("Saved generated blog to DB (ID: %s, Length: %d)\n", blog.ID, len(content))
+		fmt.Printf("Saved generated blog to DB (ID: %s, Length: %d, TechStacks: %s)\n", blog.ID, len(content), string(techStacks))
+		
+		// Update user tokens used (rough estimation: 1 token ≈ 1.5 chars, let's just use rune count for simplicity)
+		estimatedTokens := len([]rune(content)) * 2
+		db.DB.Model(&model.User{}).Where("id = ?", userID).UpdateColumn("tokens_used", gorm.Expr("tokens_used + ?", estimatedTokens))
 	}
 }
