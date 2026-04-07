@@ -47,7 +47,7 @@ func (a *AuthAPI) OAuthCallback(c *gin.Context) {
 	if frontendURL == "" {
 		frontendURL = "http://localhost:5173"
 	}
-	
+
 	// Ensure no trailing slash for the base URL to prevent double slashes
 	if len(frontendURL) > 0 && frontendURL[len(frontendURL)-1] == '/' {
 		frontendURL = frontendURL[:len(frontendURL)-1]
@@ -151,4 +151,3 @@ func (a *AuthAPI) Login(c *gin.Context) {
 		},
 	})
 }
-

@@ -505,3 +505,12 @@
   3. 后端处理完成后，读取 `FRONTEND_URL` 环境变量（配置为 `http://localhost`），无缝将用户重定向回正常的项目首页（带上 Token）。
   这是一种平滑且对用户透明的修复方式，无需去 GitHub 平台修改 OAuth App 的设置。
 - **验证**：通过 `docker compose up -d` 重新加载端口映射，`curl -v http://localhost:5173/api/v1/auth/callback/github` 已能正常返回 307 Redirect 到 `http://localhost`。
+
+## [2026-04-07] 回答用户问题并优化并发限制机制
+- **用户问题**：最佳的并发数该如何计算？
+- **回答与改进**：对于调用 LLM API 等外部服务，这是典型的 **I/O 密集型任务**，主要瓶颈在网络延迟和大模型 API 的限流规则（如 DeepSeek 的 429 Too Many Requests 和 RPM/TPM 限制），而不在于本地的 CPU 核心数。使用 `runtime.NumCPU()` 是计算 CPU 密集型任务（如视频编解码、复杂计算）的合适方式，但不适用于此。
+- **优化方案**：修改了 `decomposition.go` 中的计算方式：
+  1. 移除了 `runtime.NumCPU()`，改用保守的硬编码默认值 `3`。
+  2. 增加了环境变量 `LLM_MAX_CONCURRENCY` 的读取支持，方便在不修改代码的情况下动态调整并发。
+  3. 保留了一个绝对硬上限（如 8），防止环境变量配置错误导致 OOM 或被 API 封停。
+- **执行**：已修复代码并执行 `docker compose up -d --build backend` 热更新了后端服务。

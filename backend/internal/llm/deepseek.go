@@ -189,7 +189,7 @@ func (c *DeepSeekClient) GenerateStream(ctx context.Context, model string, messa
 			if content != "" {
 				chunkChan <- content
 			}
-			
+
 			if chunk.Choices[0].FinishReason != nil {
 				finalFinishReason = *chunk.Choices[0].FinishReason
 				if finalFinishReason == "stop" || finalFinishReason == "length" {

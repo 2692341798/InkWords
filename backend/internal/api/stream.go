@@ -31,8 +31,8 @@ func NewStreamAPI() *StreamAPI {
 type GenerateRequest struct {
 	SourceContent string            `json:"source_content"`
 	SourceType    string            `json:"source_type"`
-	Outline       []service.Chapter `json:"outline"` // Optional outline for series generation
-	GitURL        string            `json:"git_url"` // For analyze stream
+	Outline       []service.Chapter `json:"outline"`      // Optional outline for series generation
+	GitURL        string            `json:"git_url"`      // For analyze stream
 	SeriesTitle   string            `json:"series_title"` // Series title for parent blog
 	ParentID      string            `json:"parent_id"`    // Optional parent ID for resuming series
 }

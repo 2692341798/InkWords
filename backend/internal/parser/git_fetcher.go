@@ -139,7 +139,7 @@ func (f *GitFetcher) Fetch(repoURL string) (string, []FileChunk, error) {
 	for dir, builder := range dirContents {
 		content := builder.String()
 		runes := []rune(content)
-		
+
 		// If the directory content is still too large, split it
 		if len(runes) > maxChunkChars {
 			numChunks := (len(runes) + maxChunkChars - 1) / maxChunkChars

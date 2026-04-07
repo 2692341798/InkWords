@@ -246,16 +246,16 @@ export function Dashboard() {
                     innerRadius={80}
                     outerRadius={140}
                     paddingAngle={2}
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
                     labelLine={true}
                   >
-                    {stats.tech_stack_stats.map((entry, index) => (
+                    {stats.tech_stack_stats.map((_, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
                   <Tooltip 
                     contentStyle={{ borderRadius: '8px', border: '1px solid #e4e4e7', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}
-                    formatter={(value: number, name: string) => [`${value} 篇`, name]}
+                    formatter={(value: any, name: any) => [`${value} 篇`, name]}
                   />
                   <Legend verticalAlign="bottom" height={36} />
                 </PieChart>
