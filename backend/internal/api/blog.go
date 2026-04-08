@@ -28,7 +28,7 @@ func (a *BlogAPI) GetUserBlogs(c *gin.Context) {
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"code":    http.StatusUnauthorized,
-			"message": "unauthorized",
+			"message": "未授权的访问",
 			"data":    nil,
 		})
 		return
@@ -38,7 +38,7 @@ func (a *BlogAPI) GetUserBlogs(c *gin.Context) {
 	if !ok {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    http.StatusInternalServerError,
-			"message": "invalid user id type",
+			"message": "用户 ID 类型错误",
 			"data":    nil,
 		})
 		return
@@ -81,7 +81,7 @@ func (a *BlogAPI) BatchDeleteBlogs(c *gin.Context) {
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"code":    http.StatusUnauthorized,
-			"message": "unauthorized",
+			"message": "未授权的访问",
 			"data":    nil,
 		})
 		return
@@ -91,7 +91,7 @@ func (a *BlogAPI) BatchDeleteBlogs(c *gin.Context) {
 	if !ok {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    http.StatusInternalServerError,
-			"message": "invalid user id type",
+			"message": "用户 ID 类型错误",
 			"data":    nil,
 		})
 		return
@@ -101,7 +101,7 @@ func (a *BlogAPI) BatchDeleteBlogs(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code":    http.StatusBadRequest,
-			"message": "invalid request body",
+			"message": "请求参数格式错误",
 			"data":    nil,
 		})
 		return
@@ -110,7 +110,7 @@ func (a *BlogAPI) BatchDeleteBlogs(c *gin.Context) {
 	if len(req.BlogIDs) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code":    http.StatusBadRequest,
-			"message": "blog_ids cannot be empty",
+			"message": "blog_ids 不能为空",
 			"data":    nil,
 		})
 		return
@@ -138,7 +138,7 @@ func (a *BlogAPI) UpdateBlog(c *gin.Context) {
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"code":    http.StatusUnauthorized,
-			"message": "unauthorized",
+			"message": "未授权的访问",
 			"data":    nil,
 		})
 		return
@@ -148,7 +148,7 @@ func (a *BlogAPI) UpdateBlog(c *gin.Context) {
 	if !ok {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    http.StatusInternalServerError,
-			"message": "invalid user id type",
+			"message": "用户 ID 类型错误",
 			"data":    nil,
 		})
 		return
@@ -159,7 +159,7 @@ func (a *BlogAPI) UpdateBlog(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code":    http.StatusBadRequest,
-			"message": "invalid blog id",
+			"message": "无效的博客 ID",
 			"data":    nil,
 		})
 		return
@@ -169,7 +169,7 @@ func (a *BlogAPI) UpdateBlog(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code":    http.StatusBadRequest,
-			"message": "invalid request body",
+			"message": "请求参数格式错误",
 			"data":    nil,
 		})
 		return
@@ -197,7 +197,7 @@ func (a *BlogAPI) ExportSeries(c *gin.Context) {
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"code":    http.StatusUnauthorized,
-			"message": "unauthorized",
+			"message": "未授权的访问",
 			"data":    nil,
 		})
 		return
@@ -207,7 +207,7 @@ func (a *BlogAPI) ExportSeries(c *gin.Context) {
 	if !ok {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    http.StatusInternalServerError,
-			"message": "invalid user id type",
+			"message": "用户 ID 类型错误",
 			"data":    nil,
 		})
 		return
@@ -218,7 +218,7 @@ func (a *BlogAPI) ExportSeries(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code":    http.StatusBadRequest,
-			"message": "invalid blog id",
+			"message": "无效的博客 ID",
 			"data":    nil,
 		})
 		return
@@ -237,7 +237,7 @@ func (a *BlogAPI) ExportSeries(c *gin.Context) {
 	if len(blogs) == 0 {
 		c.JSON(http.StatusNotFound, gin.H{
 			"code":    http.StatusNotFound,
-			"message": "series not found",
+			"message": "找不到该系列博客",
 			"data":    nil,
 		})
 		return
@@ -279,7 +279,7 @@ func (a *BlogAPI) ExportSeries(c *gin.Context) {
 	if err := zw.Close(); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    http.StatusInternalServerError,
-			"message": "failed to create zip",
+			"message": "创建 ZIP 包失败",
 			"data":    nil,
 		})
 		return

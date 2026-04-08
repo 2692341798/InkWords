@@ -17,21 +17,24 @@ import (
 	"golang.org/x/oauth2/github"
 	"gorm.io/gorm"
 
-	"inkwords-backend/internal/db"
 	"inkwords-backend/internal/model"
 	"inkwords-backend/pkg/jwt"
 )
 
 var (
-	ErrUnsupportedProvider = errors.New("unsupported oauth provider")
-	ErrOAuthCallback       = errors.New("oauth callback failed")
-	store                  = base64Captcha.DefaultMemStore
+	ErrUnsupportedProvider     = errors.New("unsupported oauth provider")
+	ErrOAuthCallback           = errors.New("oauth callback failed")
+	ErrEmailExistsBindRequired = errors.New("email exists, bind required")
+	store                      = base64Captcha.DefaultMemStore
 )
 
-type AuthService struct{}
+type AuthService struct {
+	db *gorm.DB
+}
 
-func NewAuthService() *AuthService {
-	return &AuthService{}
+// NewAuthService 创建 AuthService 实例并注入数据库依赖
+func NewAuthService(db *gorm.DB) *AuthService {
+	return &AuthService{db: db}
 }
 
 // getOAuthConfig 获取 OAuth 配置
@@ -81,6 +84,9 @@ func (s *AuthService) HandleCallback(ctx context.Context, provider, code string)
 	if provider == "github" {
 		user, err = s.fetchGithubUser(ctx, token.AccessToken)
 		if err != nil {
+			if errors.Is(err, ErrEmailExistsBindRequired) {
+				return "", user, err
+			}
 			return "", nil, err
 		}
 	}
@@ -134,8 +140,8 @@ func (s *AuthService) fetchGithubUser(ctx context.Context, accessToken string) (
 	}
 
 	var user model.User
-	// 使用 GORM 的 FirstOrCreate 实现 UPSERT
-	err = db.DB.Where("github_id = ?", ghIDStr).Or("email = ?", email).First(&user).Error
+	// 查询是否已存在对应的 GithubID 或邮箱
+	err = s.db.Where("github_id = ?", ghIDStr).Or("email = ?", email).First(&user).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			// 创建新用户
@@ -146,20 +152,32 @@ func (s *AuthService) fetchGithubUser(ctx context.Context, accessToken string) (
 				GithubID:  &ghIDStr,
 				AvatarURL: ghUser.AvatarURL,
 			}
-			if err := db.DB.Create(&user).Error; err != nil {
+			if err := s.db.Create(&user).Error; err != nil {
 				return nil, err
 			}
-		} else {
-			return nil, err
+			return &user, nil
 		}
-	} else {
-		// 更新用户信息
-		user.Username = ghUser.Login
-		user.AvatarURL = ghUser.AvatarURL
-		user.GithubID = &ghIDStr
-		if err := db.DB.Save(&user).Error; err != nil {
-			return nil, err
+		return nil, err
+	}
+
+	// 如果找到的用户 GithubID 不匹配（即通过 Email 找到的，且尚未绑定）
+	if user.GithubID == nil || *user.GithubID != ghIDStr {
+		// 不自动绑定，返回需要绑定的错误
+		// 临时将从 Github 获取的信息放在 user 结构体里返回（不上库），供前端展示使用
+		tempUser := &model.User{
+			Email:     email,
+			Username:  ghUser.Login,
+			AvatarURL: ghUser.AvatarURL,
+			GithubID:  &ghIDStr,
 		}
+		return tempUser, ErrEmailExistsBindRequired
+	}
+
+	// 如果已绑定，则更新基本信息
+	user.Username = ghUser.Login
+	user.AvatarURL = ghUser.AvatarURL
+	if err := s.db.Save(&user).Error; err != nil {
+		return nil, err
 	}
 
 	return &user, nil
@@ -185,7 +203,7 @@ func (s *AuthService) Register(req struct {
 
 	// 检查邮箱或用户名是否已存在
 	var count int64
-	db.DB.Model(&model.User{}).Where("email = ? OR username = ?", req.Email, req.Username).Count(&count)
+	s.db.Model(&model.User{}).Where("email = ? OR username = ?", req.Email, req.Username).Count(&count)
 	if count > 0 {
 		return "", errors.New("邮箱或用户名已被注册")
 	}
@@ -204,7 +222,7 @@ func (s *AuthService) Register(req struct {
 		PasswordHash: string(hashedPassword),
 	}
 
-	if err := db.DB.Create(&user).Error; err != nil {
+	if err := s.db.Create(&user).Error; err != nil {
 		return "", errors.New("创建用户失败，请稍后重试")
 	}
 
@@ -220,7 +238,7 @@ func (s *AuthService) Register(req struct {
 // Login 用户登录，返回 JWT Token 和用户信息
 func (s *AuthService) Login(email, password, captchaID, captchaValue string) (string, *model.User, error) {
 	var user model.User
-	if err := db.DB.Where("email = ?", email).First(&user).Error; err != nil {
+	if err := s.db.Where("email = ?", email).First(&user).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return "", nil, errors.New("邮箱或密码错误")
 		}
@@ -251,14 +269,14 @@ func (s *AuthService) Login(email, password, captchaID, captchaValue string) (st
 			lockTime := time.Now().Add(15 * time.Minute)
 			user.LockedUntil = &lockTime
 		}
-		db.DB.Save(&user)
+		s.db.Save(&user)
 		return "", nil, errors.New("邮箱或密码错误")
 	}
 
 	// 成功则重置状态
 	user.FailedLoginAttempts = 0
 	user.LockedUntil = nil
-	db.DB.Save(&user)
+	s.db.Save(&user)
 
 	// 生成 JWT Token
 	jwtToken, err := jwt.GenerateToken(user.ID, 24*time.Hour)
@@ -269,7 +287,46 @@ func (s *AuthService) Login(email, password, captchaID, captchaValue string) (st
 	return jwtToken, &user, nil
 }
 
-// GenerateCaptcha 生成图形验证码
+// BindGithub 验证密码并绑定 GitHub 账号
+func (s *AuthService) BindGithub(email, password, ghIDStr, username, avatarURL string) (string, *model.User, error) {
+	var user model.User
+	if err := s.db.Where("email = ?", email).First(&user).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return "", nil, errors.New("用户不存在")
+		}
+		return "", nil, err
+	}
+
+	// 验证密码
+	if user.PasswordHash == "" {
+		return "", nil, errors.New("该账号未设置本地密码，无法绑定")
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
+		return "", nil, errors.New("密码错误")
+	}
+
+	// 更新用户信息
+	user.GithubID = &ghIDStr
+	if username != "" {
+		user.Username = username
+	}
+	if avatarURL != "" {
+		user.AvatarURL = avatarURL
+	}
+
+	if err := s.db.Save(&user).Error; err != nil {
+		return "", nil, err
+	}
+
+	// 生成 JWT Token
+	jwtToken, err := jwt.GenerateToken(user.ID, 24*time.Hour)
+	if err != nil {
+		return "", nil, fmt.Errorf("生成 JWT 失败: %w", err)
+	}
+
+	return jwtToken, &user, nil
+}
 func (s *AuthService) GenerateCaptcha() (string, string, error) {
 	driver := base64Captcha.NewDriverDigit(80, 240, 5, 0.7, 80)
 	c := base64Captcha.NewCaptcha(driver, store)

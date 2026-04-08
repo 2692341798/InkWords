@@ -10,6 +10,7 @@ import (
 	"inkwords-backend/internal/api"
 	"inkwords-backend/internal/db"
 	"inkwords-backend/internal/middleware"
+	"inkwords-backend/internal/service"
 )
 
 // init 初始化环境变量
@@ -46,10 +47,12 @@ func main() {
 	})
 
 	// 初始化 API Handler
-	authAPI := api.NewAuthAPI()
-	userAPI := api.NewUserAPI()
-	streamAPI := api.NewStreamAPI()
-	projectAPI := api.NewProjectAPI()
+	authService := service.NewAuthService(db.DB)
+	userService := service.NewUserService(db.DB)
+	authAPI := api.NewAuthAPI(authService)
+	userAPI := api.NewUserAPI(userService)
+	streamAPI := api.NewStreamAPI(userService)
+	projectAPI := api.NewProjectAPI(userService)
 	blogAPI := api.NewBlogAPI()
 
 	// v1 路由组
@@ -60,6 +63,7 @@ func main() {
 		{
 			authGroup.POST("/register", authAPI.Register)
 			authGroup.POST("/login", authAPI.Login)
+			authGroup.POST("/bind-github", authAPI.BindGithub)
 			authGroup.GET("/captcha", authAPI.GetCaptcha)
 			authGroup.GET("/oauth/:provider", authAPI.OAuthRedirect)
 			authGroup.GET("/callback/:provider", authAPI.OAuthCallback)

@@ -17,13 +17,15 @@ import (
 type StreamAPI struct {
 	generatorService     *service.GeneratorService
 	decompositionService *service.DecompositionService
+	userService          *service.UserService
 }
 
 // NewStreamAPI creates a new StreamAPI instance
-func NewStreamAPI() *StreamAPI {
+func NewStreamAPI(userService *service.UserService) *StreamAPI {
 	return &StreamAPI{
 		generatorService:     service.NewGeneratorService(),
 		decompositionService: service.NewDecompositionService(),
+		userService:          userService,
 	}
 }
 
@@ -39,6 +41,15 @@ type GenerateRequest struct {
 
 // AnalyzeStreamHandler handles the /api/v1/stream/analyze endpoint
 func (api *StreamAPI) AnalyzeStreamHandler(c *gin.Context) {
+	if userID, exists := c.Get("user_id"); exists {
+		if uid, ok := userID.(uuid.UUID); ok {
+			if err := api.userService.CheckQuota(uid); err != nil {
+				c.JSON(http.StatusPaymentRequired, gin.H{"error": err.Error()})
+				return
+			}
+		}
+	}
+
 	var req GenerateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
@@ -122,6 +133,15 @@ func (api *StreamAPI) AnalyzeStreamHandler(c *gin.Context) {
 
 // GenerateBlogStreamHandler handles the /api/v1/stream/generate endpoint
 func (api *StreamAPI) GenerateBlogStreamHandler(c *gin.Context) {
+	if userID, exists := c.Get("user_id"); exists {
+		if uid, ok := userID.(uuid.UUID); ok {
+			if err := api.userService.CheckQuota(uid); err != nil {
+				c.JSON(http.StatusPaymentRequired, gin.H{"error": err.Error()})
+				return
+			}
+		}
+	}
+
 	var req GenerateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
@@ -213,6 +233,15 @@ func (api *StreamAPI) GenerateBlogStreamHandler(c *gin.Context) {
 
 // ContinueBlogStreamHandler handles the /api/v1/blogs/:id/continue endpoint
 func (api *StreamAPI) ContinueBlogStreamHandler(c *gin.Context) {
+	if userID, exists := c.Get("user_id"); exists {
+		if uid, ok := userID.(uuid.UUID); ok {
+			if err := api.userService.CheckQuota(uid); err != nil {
+				c.JSON(http.StatusPaymentRequired, gin.H{"error": err.Error()})
+				return
+			}
+		}
+	}
+
 	blogIDStr := c.Param("id")
 	blogID, err := uuid.Parse(blogIDStr)
 	if err != nil {

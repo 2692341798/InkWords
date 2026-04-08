@@ -19,7 +19,7 @@ const GithubIcon = ({ className }: { className?: string }) => (
   </svg>
 )
 
-type AuthMode = 'login' | 'register'
+type AuthMode = 'login' | 'register' | 'bind'
 
 const getPasswordStrength = (pwd: string) => {
   if (!pwd) return 0
@@ -44,6 +44,8 @@ export function Login() {
     name: '',
     email: '',
     password: '',
+    githubId: '',
+    avatarUrl: ''
   })
 
   const fetchCaptcha = async () => {
@@ -67,9 +69,21 @@ export function Login() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const errorMsg = params.get('error')
+    const bindRequired = params.get('bind_required')
+
     if (errorMsg) {
       setError(decodeURIComponent(errorMsg))
-      // 清除 URL 中的 error 参数，防止刷新后再次提示
+      window.history.replaceState({}, document.title, window.location.pathname)
+    } else if (bindRequired === 'true') {
+      setMode('bind')
+      setFormData(prev => ({
+        ...prev,
+        email: decodeURIComponent(params.get('email') || ''),
+        githubId: decodeURIComponent(params.get('github_id') || ''),
+        name: decodeURIComponent(params.get('username') || ''),
+        avatarUrl: decodeURIComponent(params.get('avatar_url') || '')
+      }))
+      setError('该 GitHub 邮箱已被注册过常规账号，请输入您的本地密码以绑定。')
       window.history.replaceState({}, document.title, window.location.pathname)
     }
   }, [])
@@ -84,10 +98,18 @@ export function Login() {
     setError('')
     setIsLoading(true)
 
-    const endpoint = mode === 'login' ? '/api/v1/auth/login' : '/api/v1/auth/register'
-    const payload = mode === 'login'
-      ? { email: formData.email, password: formData.password, captcha_id: captcha.id, captcha_value: captcha.value, remember_me: rememberMe }
-      : { username: formData.name, email: formData.email, password: formData.password, captcha_id: captcha.id, captcha_value: captcha.value }
+    let endpoint = '/api/v1/auth/login'
+    let payload: any = {}
+
+    if (mode === 'login') {
+      payload = { email: formData.email, password: formData.password, captcha_id: captcha.id, captcha_value: captcha.value, remember_me: rememberMe }
+    } else if (mode === 'register') {
+      endpoint = '/api/v1/auth/register'
+      payload = { username: formData.name, email: formData.email, password: formData.password, captcha_id: captcha.id, captcha_value: captcha.value }
+    } else if (mode === 'bind') {
+      endpoint = '/api/v1/auth/bind-github'
+      payload = { email: formData.email, password: formData.password, github_id: formData.githubId, username: formData.name, avatar_url: formData.avatarUrl }
+    }
 
     try {
       const response = await fetch(endpoint, {
@@ -136,10 +158,10 @@ export function Login() {
             墨
           </div>
           <h1 className="text-2xl font-semibold mb-2 text-zinc-900">
-            {mode === 'login' ? '欢迎回来' : '创建账号'}
+            {mode === 'login' ? '欢迎回来' : mode === 'register' ? '创建账号' : '绑定账号'}
           </h1>
           <p className="text-zinc-500 text-sm">
-            {mode === 'login' ? '登录以继续使用墨言博客助手' : '注册并随时随地开启智能写作'}
+            {mode === 'login' ? '登录以继续使用墨言博客助手' : mode === 'register' ? '注册并随时随地开启智能写作' : '验证本地密码以绑定 GitHub 账号'}
           </p>
         </div>
 
@@ -176,7 +198,8 @@ export function Login() {
                 value={formData.email}
                 onChange={handleInputChange}
                 required
-                className="w-full pl-10 pr-3 py-2 border border-zinc-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/20 focus:border-zinc-900 transition-colors"
+                readOnly={mode === 'bind'}
+                className={`w-full pl-10 pr-3 py-2 border border-zinc-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/20 focus:border-zinc-900 transition-colors ${mode === 'bind' ? 'bg-zinc-100 text-zinc-500 cursor-not-allowed' : ''}`}
                 placeholder="name@example.com"
               />
             </div>
@@ -297,34 +320,38 @@ export function Login() {
               <Loader2 className="w-5 h-5 animate-spin" />
             ) : (
               <>
-                {mode === 'login' ? '登录' : '注册'}
+                {mode === 'login' ? '登录' : mode === 'register' ? '注册' : '确认绑定'}
                 <ArrowRight className="w-4 h-4 ml-2" />
               </>
             )}
           </Button>
         </form>
 
-        <div className="relative mb-6">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-zinc-200"></div>
-          </div>
-          <div className="relative flex justify-center text-sm">
-            <span className="px-2 bg-white text-zinc-500">或通过以下方式</span>
-          </div>
-        </div>
+        {mode !== 'bind' && (
+          <>
+            <div className="relative mb-6">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-zinc-200"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-white text-zinc-500">或通过以下方式</span>
+              </div>
+            </div>
 
-        <Button
-          type="button"
-          variant="outline"
-          onClick={handleGithubLogin}
-          className="w-full h-11 text-base font-medium border-zinc-200 hover:bg-zinc-50"
-        >
-          <GithubIcon className="w-5 h-5 mr-2" />
-          使用 GitHub {mode === 'login' ? '登录' : '注册'}
-        </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleGithubLogin}
+              className="w-full h-11 text-base font-medium border-zinc-200 hover:bg-zinc-50"
+            >
+              <GithubIcon className="w-5 h-5 mr-2" />
+              使用 GitHub {mode === 'login' ? '登录' : '注册'}
+            </Button>
+          </>
+        )}
 
         <div className="mt-8 text-center text-sm text-zinc-500">
-          {mode === 'login' ? '还没有账号？' : '已有账号？'}{' '}
+          {mode === 'login' ? '还没有账号？' : mode === 'register' ? '已有账号？' : '返回登录？'}{' '}
           <button
             type="button"
             onClick={() => {
@@ -333,7 +360,7 @@ export function Login() {
             }}
             className="text-zinc-900 font-medium hover:underline focus:outline-none"
           >
-            {mode === 'login' ? '立即注册' : '返回登录'}
+            {mode === 'login' ? '立即注册' : mode === 'register' ? '返回登录' : '返回登录'}
           </button>
         </div>
       </div>

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -15,9 +16,10 @@ type AuthAPI struct {
 	authService *service.AuthService
 }
 
-func NewAuthAPI() *AuthAPI {
+// NewAuthAPI 创建 AuthAPI 实例
+func NewAuthAPI(authService *service.AuthService) *AuthAPI {
 	return &AuthAPI{
-		authService: service.NewAuthService(),
+		authService: authService,
 	}
 }
 
@@ -58,8 +60,22 @@ func (a *AuthAPI) OAuthCallback(c *gin.Context) {
 		return
 	}
 
-	token, _, err := a.authService.HandleCallback(c.Request.Context(), provider, code)
+	token, user, err := a.authService.HandleCallback(c.Request.Context(), provider, code)
 	if err != nil {
+		if errors.Is(err, service.ErrEmailExistsBindRequired) && user != nil {
+			ghID := ""
+			if user.GithubID != nil {
+				ghID = *user.GithubID
+			}
+			redirectURL := fmt.Sprintf("%s/?bind_required=true&email=%s&github_id=%s&avatar_url=%s&username=%s",
+				frontendURL,
+				url.QueryEscape(user.Email),
+				url.QueryEscape(ghID),
+				url.QueryEscape(user.AvatarURL),
+				url.QueryEscape(user.Username))
+			c.Redirect(http.StatusTemporaryRedirect, redirectURL)
+			return
+		}
 		c.Redirect(http.StatusTemporaryRedirect, fmt.Sprintf("%s/?error=%s", frontendURL, url.QueryEscape(err.Error())))
 		return
 	}
@@ -91,7 +107,50 @@ func (a *AuthAPI) Register(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 200, "message": "注册成功", "data": gin.H{"token": token}})
 }
 
-// GetCaptcha 获取图形验证码
+// BindGithub 绑定 GitHub 账号
+func (a *AuthAPI) BindGithub(c *gin.Context) {
+	var req struct {
+		Email     string `json:"email" binding:"required,email"`
+		Password  string `json:"password" binding:"required"`
+		GithubID  string `json:"github_id" binding:"required"`
+		Username  string `json:"username"`
+		AvatarURL string `json:"avatar_url"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    http.StatusBadRequest,
+			"message": "参数格式错误",
+			"data":    nil,
+		})
+		return
+	}
+
+	token, user, err := a.authService.BindGithub(req.Email, req.Password, req.GithubID, req.Username, req.AvatarURL)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"code":    http.StatusUnauthorized,
+			"message": err.Error(),
+			"data":    nil,
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":    http.StatusOK,
+		"message": "绑定成功",
+		"data": gin.H{
+			"token": token,
+			"user": gin.H{
+				"id":                user.ID,
+				"username":          user.Username,
+				"avatar_url":        user.AvatarURL,
+				"subscription_tier": user.SubscriptionTier,
+				"tokens_used":       user.TokensUsed,
+			},
+		},
+	})
+}
 func (a *AuthAPI) GetCaptcha(c *gin.Context) {
 	id, b64s, err := a.authService.GenerateCaptcha()
 	if err != nil {

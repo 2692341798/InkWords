@@ -17,6 +17,7 @@
 ### 2.2 后端 (Backend)
 - **核心语言**: Go 1.21+
 - **Web 框架**: Gin (`github.com/gin-gonic/gin`)
+- **依赖注入**: 后端通过明确的构造函数（如 `NewAuthAPI(authService)`）进行依赖注入，降低 `api` 层和 `service` 层、全局变量之间的耦合，便于单元测试。
 - **数据库 ORM**: GORM (`gorm.io/gorm` + `gorm.io/driver/postgres`)
 - **认证与安全**: 
   - JWT Token (长短效签发) + GitHub OAuth (`golang.org/x/oauth2`)

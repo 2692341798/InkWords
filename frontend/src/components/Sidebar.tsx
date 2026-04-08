@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import JSZip from 'jszip'
 import { useStreamStore } from '@/store/streamStore'
 import { useBlogStore } from '@/store/blogStore'
@@ -17,6 +17,21 @@ export function Sidebar() {
   const [isExporting, setIsExporting] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false)
+
+  const blogMap = useMemo(() => {
+    const map = new Map<string, { node: BlogNode; parentId: string | null }>()
+    const traverse = (nodes: BlogNode[], parentId: string | null = null) => {
+      nodes.forEach(node => {
+        const key = `${node.title}_${node.chapter_sort}`
+        map.set(key, { node, parentId })
+        if (node.children) {
+          traverse(node.children, node.id)
+        }
+      })
+    }
+    traverse(blogs)
+    return map
+  }, [blogs])
 
   useEffect(() => {
     fetchBlogs()
@@ -240,32 +255,15 @@ export function Sidebar() {
                     )}
                     onClick={() => {
                       if (status === 'completed') {
-                        let found: BlogNode | null = null
-                        let parentIdToExpand: string | null = null
-
-                        const searchNested = (nodes: BlogNode[], parentId: string | null = null) => {
-                          for (const node of nodes) {
-                            if (node.title === ch.title && node.chapter_sort === ch.sort) {
-                              found = node
-                              parentIdToExpand = parentId
-                              return
-                            }
-                            if (node.children && node.children.length > 0) {
-                              searchNested(node.children, node.id)
-                              if (found) return
-                            }
-                          }
-                        }
-
-                        searchNested(blogs)
-
+                        const key = `${ch.title}_${ch.sort}`
+                        const found = blogMap.get(key)
                         if (found) {
-                          if (parentIdToExpand) {
+                          if (found.parentId) {
                             const newExpanded = new Set(expandedNodes)
-                            newExpanded.add(parentIdToExpand)
+                            newExpanded.add(found.parentId)
                             setExpandedNodes(newExpanded)
                           }
-                          selectBlog(found)
+                          selectBlog(found.node)
                         }
                       }
                     }}

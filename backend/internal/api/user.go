@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -12,14 +11,18 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"inkwords-backend/internal/db"
-	"inkwords-backend/internal/model"
+	"inkwords-backend/internal/service"
 )
 
-type UserAPI struct{}
+type UserAPI struct {
+	userService *service.UserService
+}
 
-func NewUserAPI() *UserAPI {
-	return &UserAPI{}
+// NewUserAPI 创建 UserAPI 实例
+func NewUserAPI(userService *service.UserService) *UserAPI {
+	return &UserAPI{
+		userService: userService,
+	}
 }
 
 // GetProfile 获取个人中心配置与额度
@@ -28,7 +31,7 @@ func (a *UserAPI) GetProfile(c *gin.Context) {
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"code":    http.StatusUnauthorized,
-			"message": "unauthorized",
+			"message": "未授权的访问",
 			"data":    nil,
 		})
 		return
@@ -38,24 +41,27 @@ func (a *UserAPI) GetProfile(c *gin.Context) {
 	if !ok {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    http.StatusInternalServerError,
-			"message": "invalid user id type",
+			"message": "用户 ID 类型错误",
 			"data":    nil,
 		})
 		return
 	}
 
-	var user model.User
-	if err := db.DB.First(&user, "id = ?", uid).Error; err != nil {
+	user, err := a.userService.GetUserByID(uid)
+	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{
 			"code":    http.StatusNotFound,
-			"message": "user not found",
+			"message": "用户不存在",
 			"data":    nil,
 		})
 		return
 	}
 
-	// 假定默认额度
-	tokenLimit := 100000
+	// 读取数据库中的 TokenLimit，如果没有设置，则默认 100000
+	tokenLimit := user.TokenLimit
+	if tokenLimit == 0 {
+		tokenLimit = 100000
+	}
 
 	// 连接平台逻辑
 	connectedPlatforms := make([]string, 0)
@@ -90,12 +96,17 @@ func (a *UserAPI) UpdateProfile(c *gin.Context) {
 		Username string `json:"username"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "invalid request body", "data": nil})
+		c.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "请求参数格式错误", "data": nil})
 		return
 	}
 
-	if err := db.DB.Model(&model.User{}).Where("id = ?", uid).Update("username", req.Username).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "failed to update profile", "data": nil})
+	if len(req.Username) < 2 || len(req.Username) > 20 {
+		c.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "用户名长度必须在 2 到 20 个字符之间", "data": nil})
+		return
+	}
+
+	if err := a.userService.UpdateUsername(uid, req.Username); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "更新配置失败", "data": nil})
 		return
 	}
 
@@ -109,13 +120,13 @@ func (a *UserAPI) UploadAvatar(c *gin.Context) {
 
 	file, err := c.FormFile("avatar")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "no file uploaded", "data": nil})
+		c.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "未上传文件", "data": nil})
 		return
 	}
 
 	// 2MB limit
 	if file.Size > 2*1024*1024 {
-		c.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "file too large, max 2MB", "data": nil})
+		c.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "文件过大，最大限制 2MB", "data": nil})
 		return
 	}
 
@@ -123,19 +134,19 @@ func (a *UserAPI) UploadAvatar(c *gin.Context) {
 	filename := fmt.Sprintf("%s_%d%s", uid.String(), time.Now().Unix(), ext)
 	uploadDir := "./uploads/avatars"
 	if err := os.MkdirAll(uploadDir, os.ModePerm); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "failed to create upload directory", "data": nil})
+		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "创建上传目录失败", "data": nil})
 		return
 	}
 
 	savePath := filepath.Join(uploadDir, filename)
 	if err := c.SaveUploadedFile(file, savePath); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "failed to save file", "data": nil})
+		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "保存文件失败", "data": nil})
 		return
 	}
 
 	avatarURL := "/uploads/avatars/" + filename
-	if err := db.DB.Model(&model.User{}).Where("id = ?", uid).Update("avatar_url", avatarURL).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "failed to update user avatar", "data": nil})
+	if err := a.userService.UpdateAvatarURL(uid, avatarURL); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "更新用户头像失败", "data": nil})
 		return
 	}
 
@@ -153,39 +164,16 @@ func (a *UserAPI) GetUserStats(c *gin.Context) {
 	userID, _ := c.Get("user_id")
 	uid := userID.(uuid.UUID)
 
-	var user model.User
-	if err := db.DB.First(&user, "id = ?", uid).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"code": http.StatusNotFound, "message": "user not found", "data": nil})
+	user, err := a.userService.GetUserByID(uid)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"code": http.StatusNotFound, "message": "用户不存在", "data": nil})
 		return
 	}
 
-	var totalArticles int64
-	var totalWords int64
-
-	// Exclude parent nodes (where parent_id is null) when counting articles
-	db.DB.Model(&model.Blog{}).Where("user_id = ? AND status = 1 AND parent_id IS NOT NULL", uid).Count(&totalArticles)
-
-	type Result struct {
-		TotalWords int64
-	}
-	var res Result
-	db.DB.Model(&model.Blog{}).Select("sum(word_count) as total_words").Where("user_id = ? AND status = 1 AND parent_id IS NOT NULL", uid).Scan(&res)
-	totalWords = res.TotalWords
-
-	var blogs []model.Blog
-	// Exclude parent nodes when aggregating tech stacks
-	db.DB.Where("user_id = ? AND status = 1 AND parent_id IS NOT NULL AND tech_stacks IS NOT NULL", uid).Find(&blogs)
-
-	stackMap := make(map[string]int)
-	for _, blog := range blogs {
-		var stacks []string
-		if len(blog.TechStacks) > 0 {
-			if err := json.Unmarshal(blog.TechStacks, &stacks); err == nil {
-				for _, stack := range stacks {
-					stackMap[stack]++
-				}
-			}
-		}
+	totalArticles, totalWords, stackMap, err := a.userService.GetUserStats(uid)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "获取统计数据失败", "data": nil})
+		return
 	}
 
 	var techStackStats []TechStackStat
@@ -201,12 +189,7 @@ func (a *UserAPI) GetUserStats(c *gin.Context) {
 		techStackStats = techStackStats[:20]
 	}
 
-
 	// 计算预估费用
-	// 根据 DeepSeek V3 (deepseek-chat) 收费标准，粗略估算输入和输出混合：
-	// 输入：缓存命中 0.2元/百万token，未命中 2元/百万token
-	// 输出：3元/百万token
-	// 此处采用一个平均经验值，比如假设 70% 是输入（未命中占大头），30% 是输出，综合单价约为：2.3元/百万token
 	estimatedCost := (float64(user.TokensUsed) / 1000000.0) * 2.3
 
 	c.JSON(http.StatusOK, gin.H{

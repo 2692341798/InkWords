@@ -21,8 +21,12 @@
 | `email` | VARCHAR(255) | Unique | 用户邮箱 (普通注册) |
 | `password` | VARCHAR(255) | | Bcrypt 哈希密码 |
 | `github_id` | VARCHAR(255) | Unique | GitHub OAuth ID |
+| `wechat_openid` | VARCHAR(255) | Unique | 第三方授权微信OpenID |
 | `avatar_url` | VARCHAR(255) | | 头像地址 |
 | `name` | VARCHAR(255) | | 用户昵称/显示名 |
+| `subscription_tier` | SMALLINT | Default 0 | 订阅等级 (0=Free, 1=Pro) |
+| `tokens_used` | INTEGER | Default 0 | 当前已消耗的 Token 数量 |
+| `token_limit` | INTEGER | Default 100000 | 用户的最大 Token 额度 |
 | `failed_login_attempts` | INTEGER | Default 0 | 连续登录失败次数 |
 | `locked_until` | TIMESTAMP | Nullable | 账号锁定到期时间 |
 
