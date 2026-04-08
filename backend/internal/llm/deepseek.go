@@ -23,9 +23,10 @@ type Message struct {
 
 // ChatRequest represents the request payload for DeepSeek API
 type ChatRequest struct {
-	Model    string    `json:"model"`
-	Messages []Message `json:"messages"`
-	Stream   bool      `json:"stream"`
+        Model     string    `json:"model"`
+        Messages  []Message `json:"messages"`
+        Stream    bool      `json:"stream"`
+        MaxTokens int       `json:"max_tokens,omitempty"`
 }
 
 // ChatCompletionChunk represents a single chunk from the stream
@@ -61,11 +62,12 @@ func NewDeepSeekClient(apiKey string) *DeepSeekClient {
 
 // Generate calls the DeepSeek API with stream=false and returns the full response content
 func (c *DeepSeekClient) Generate(ctx context.Context, model string, messages []Message) (string, error) {
-	reqBody := ChatRequest{
-		Model:    model,
-		Messages: messages,
-		Stream:   false,
-	}
+        reqBody := ChatRequest{
+                Model:     model,
+                Messages:  messages,
+                Stream:    false,
+                MaxTokens: 8192,
+        }
 
 	jsonData, err := json.Marshal(reqBody)
 	if err != nil {
@@ -119,9 +121,10 @@ func (c *DeepSeekClient) Generate(ctx context.Context, model string, messages []
 func (c *DeepSeekClient) GenerateStream(ctx context.Context, model string, messages []Message, chunkChan chan<- string) (string, error) {
 	defer close(chunkChan)
 	reqBody := ChatRequest{
-		Model:    model,
-		Messages: messages,
-		Stream:   true,
+		Model:     model,
+		Messages:  messages,
+		Stream:    true,
+		MaxTokens: 8192,
 	}
 
 	jsonData, err := json.Marshal(reqBody)

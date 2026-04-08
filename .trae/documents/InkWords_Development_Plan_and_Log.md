@@ -577,3 +577,15 @@
   4. **文档同步**: 更新了 `InkWords_API.md`、`InkWords_Database.md`、`InkWords_PRD.md`、`InkWords_Architecture.md` 和 `README.md`，去除了与邮件验证码和重置密码相关的描述。
 - **踩坑记录 / 架构调整**:
   - 简化认证流程可以大幅降低用户的注册门槛，同时保留图形验证码和密码强度校验依然能提供足够的防爆破保护。
+
+### [2026-04-07] Feature - Dashboard 词云替换为饼图并限制分类数量
+- **开发模块**: [前端 UI 仪表盘, recharts]
+- **完成事项**:
+  1. **数据处理**: 在 `Dashboard.tsx` 中使用 `useMemo` 对 `stats.tech_stack_stats` 进行降序排列，截取前 14 项，将其余项的 `count` 求和合并为“其它”分类，总计最多 15 项。
+  2. **图表重构**: 移除了原有的 `react-wordcloud` 词云组件，改用 `recharts` 库绘制现代化的 Donut 环形饼图。
+  3. **交互增强**: 为环形图配置了 Hover 时的 Tooltip（显示分类名和数量）以及底部的 Legend 图例，颜色沿用项目预设的 `COLORS` 调色盘。
+  4. **依赖清理**: 在 `package.json` 中移除了不再使用的 `react-wordcloud` 依赖。
+- **踩坑记录 / 架构调整**:
+  - 词云组件虽然视觉上较为花哨，但当分类数据（如技术栈）过多且差异悬殊时，极易显得杂乱无章，难以直观反映比例关系。改用带“其它”合并逻辑的环形饼图，不仅限制了视觉复杂度（最多15个图块），还大幅提升了数据的可读性和仪表盘的专业感。
+
+| 2026-04-08 | Fix Auth Expiration Handling & MaxTokens Limit | 修复了当用户 Token 过期时（401 Unauthorized），前端 SSE 流式请求与普通请求未能正确拦截的问题，导致只提示笼统的“请求失败”。修改了 `useBlogStream.ts` 和 `blogStore.ts`，增加状态码校验，过期时自动清理 `localStorage` 并重载页面提示用户；同时发现调用 DeepSeek 分析超大 Git 仓库生成大纲时，由于默认长度限制会导致 JSON 被截断，引发 `failed to unmarshal llm output` 错误，在 `deepseek.go` 中显式设置了 `MaxTokens: 8192` 解决。 |

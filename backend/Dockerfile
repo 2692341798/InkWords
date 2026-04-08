@@ -3,8 +3,12 @@ FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
 
-# 安装必要的系统依赖
-RUN apk add --no-cache git tzdata
+# 安装必要的系统依赖 (使用阿里云镜像加速)
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories && \
+    apk add --no-cache git tzdata
+
+# 设置 Go 代理加速
+ENV GOPROXY=https://goproxy.cn,direct
 
 # 下载依赖
 COPY go.mod go.sum ./
@@ -19,8 +23,9 @@ FROM alpine:3.19
 
 WORKDIR /app
 
-# 设置时区为上海，并安装 git 供拉取代码使用
-RUN apk add --no-cache tzdata ca-certificates git && \
+# 设置时区为上海，并安装 git 供拉取代码使用 (使用阿里云镜像加速)
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories && \
+    apk add --no-cache tzdata ca-certificates git && \
     cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
     echo "Asia/Shanghai" > /etc/timezone
 

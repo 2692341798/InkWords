@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -191,6 +192,15 @@ func (a *UserAPI) GetUserStats(c *gin.Context) {
 	for k, v := range stackMap {
 		techStackStats = append(techStackStats, TechStackStat{Name: k, Count: v})
 	}
+
+	sort.Slice(techStackStats, func(i, j int) bool {
+		return techStackStats[i].Count > techStackStats[j].Count
+	})
+
+	if len(techStackStats) > 20 {
+		techStackStats = techStackStats[:20]
+	}
+
 
 	// 计算预估费用
 	// 根据 DeepSeek V3 (deepseek-chat) 收费标准，粗略估算输入和输出混合：

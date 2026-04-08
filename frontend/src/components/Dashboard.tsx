@@ -1,12 +1,5 @@
-import { useEffect, useState } from 'react'
-import {
-  PieChart,
-  Pie,
-  Cell,
-  Tooltip,
-  ResponsiveContainer,
-  Legend
-} from 'recharts'
+import { useEffect, useState, useMemo } from 'react'
+import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { Coins, FileText, Hash, User, Loader2, Upload, BookOpen } from 'lucide-react'
 
 interface TechStackStat {
@@ -128,6 +121,29 @@ export function Dashboard() {
     }
   }
 
+  const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#d946ef', '#f43f5e', '#f43f5e', '#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16', '#22c55e', '#10b981', '#14b8a6', '#06b6d4', '#0ea5e9', '#3b82f6', '#0284c7']
+
+  const processedChartData = useMemo(() => {
+    if (!stats?.tech_stack_stats || stats.tech_stack_stats.length === 0) {
+      return [];
+    }
+
+    // Sort descending by count
+    const sortedStats = [...stats.tech_stack_stats].sort((a, b) => b.count - a.count);
+    
+    // If more than 8 items, group the rest into "Other"
+    if (sortedStats.length > 8) {
+      const top8 = sortedStats.slice(0, 8);
+      const others = sortedStats.slice(8);
+      const otherCount = others.reduce((sum, item) => sum + item.count, 0);
+      
+      top8.push({ name: '其他', count: otherCount });
+      return top8;
+    }
+    
+    return sortedStats;
+  }, [stats]);
+
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center">
@@ -135,8 +151,6 @@ export function Dashboard() {
       </div>
     )
   }
-
-  const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#d946ef', '#f43f5e', '#f43f5e', '#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16', '#22c55e', '#10b981', '#14b8a6', '#06b6d4', '#0ea5e9', '#3b82f6', '#0284c7']
 
   return (
     <div className="flex-1 flex flex-col overflow-y-auto bg-zinc-50 p-8 custom-scrollbar">
@@ -234,28 +248,27 @@ export function Dashboard() {
           <h2 className="text-lg font-semibold text-zinc-800 mb-6">技术栈涉及频率分布</h2>
           
           <div className="h-[400px] w-full">
-            {stats?.tech_stack_stats && stats.tech_stack_stats.length > 0 ? (
+            {processedChartData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={stats.tech_stack_stats.sort((a, b) => b.count - a.count)}
-                    dataKey="count"
-                    nameKey="name"
+                    data={processedChartData}
                     cx="50%"
                     cy="50%"
                     innerRadius={80}
-                    outerRadius={140}
+                    outerRadius={130}
                     paddingAngle={2}
+                    dataKey="count"
+                    nameKey="name"
                     label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
-                    labelLine={true}
                   >
-                    {stats.tech_stack_stats.map((_, index) => (
+                    {processedChartData.map((_, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
                   <Tooltip 
-                    contentStyle={{ borderRadius: '8px', border: '1px solid #e4e4e7', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}
-                    formatter={(value: any, name: any) => [`${value} 篇`, name]}
+                    formatter={(value: any, name: any) => [value, name]}
+                    contentStyle={{ borderRadius: '8px', border: '1px solid #e4e4e7', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                   />
                   <Legend verticalAlign="bottom" height={36} />
                 </PieChart>

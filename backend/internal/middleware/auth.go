@@ -31,6 +31,7 @@ func AuthMiddleware() gin.HandlerFunc {
 				c.Next()
 				return
 			}
+			log.Printf("AuthMiddleware: empty header, gin.Mode()=%s", gin.Mode())
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"code":    http.StatusUnauthorized,
 				"message": "authorization header is not provided",
@@ -41,6 +42,7 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		fields := strings.Fields(authorizationHeader)
 		if len(fields) < 2 {
+			log.Printf("AuthMiddleware: invalid header format: %s", authorizationHeader)
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"code":    http.StatusUnauthorized,
 				"message": "invalid authorization header format",
@@ -51,6 +53,7 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		authorizationType := strings.ToLower(fields[0])
 		if authorizationType != authorizationTypeBearer {
+			log.Printf("AuthMiddleware: unsupported auth type: %s", authorizationType)
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"code":    http.StatusUnauthorized,
 				"message": "unsupported authorization type",
@@ -62,6 +65,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		accessToken := fields[1]
 		claims, err := jwt.ParseToken(accessToken)
 		if err != nil {
+			log.Printf("AuthMiddleware: ParseToken failed: %v", err)
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"code":    http.StatusUnauthorized,
 				"message": err.Error(),

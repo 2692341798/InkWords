@@ -558,3 +558,30 @@
   5. 更新了 `.trae/documents/InkWords_Development_Plan_and_Log.md` 和本文件，记录了本次认证流程降级的决策和操作。
 - **决策/变更**：
   - 简化了认证流程，去除了复杂的邮件验证机制，降低了用户注册门槛，同时保留图形验证码和密码强度校验以维持基本的防爆破安全性。
+
+### 对话 46：Dashboard 词云替换为饼图并限制分类数量
+- **用户需求**：用户反馈 Dashboard 页面中的“饼图组件（实际为技术栈词云）”显示内容太杂乱，希望只显示最高的 15 类，并要求 AI 通过提问明确需求。
+- **AI 动作**：
+  1. 调用 `brainstorming` 技能，通过选项与用户明确了：将现有的词云（react-wordcloud）替换为真实的饼图（recharts），并且数据处理上采取“展示排名前 14 项，剩余项合并为‘其它’（共 15 项）”的方案。
+  2. 编写了设计文档 `docs/superpowers/specs/2026-04-07-dashboard-piechart-design.md` 并获得用户同意。
+  3. 调用 `writing-plans` 技能生成了实施计划 `docs/superpowers/plans/2026-04-07-dashboard-piechart.md`。
+  4. 使用 subagent 修改了 `frontend/src/components/Dashboard.tsx`，实现了基于 `recharts` 的 Donut 环形图，包含 Hover Tooltip 和 Legend 图例。
+  5. 移除了 `react-wordcloud` 依赖并更新了 `package.json`。
+  6. 同步更新了《对话记录》与《开发日志》。
+- **决策/变更**：
+  - 当数据类别（如技术栈）过多时，词云容易导致视觉混乱且难以对比真实比例。改用带“其它”合并逻辑的环形饼图（最多 15 项），能显著提升仪表盘的数据可读性和现代感。
+
+## 2026-04-08 (Bug修复与版本发布)
+
+### 修复请求失败与大模型截断问题
+- **用户需求**：排查在浏览器上请求分析 GitHub 仓库失败的问题，并上传至 GitHub。
+- **AI 动作**：
+  1. 通过排查容器日志和代码，发现 `401 Unauthorized` 状态码（Token 过期）未被前端正确拦截，导致只提示笼统的“请求失败”。
+  2. 修改 `frontend/src/hooks/useBlogStream.ts` 和 `frontend/src/store/blogStore.ts`，增加 401 状态码的全局拦截，自动清理 Token 并提示重新登录。
+  3. 修复了前端解析错误信息的逻辑，优先读取 `data.message` 而非仅读取 `data.error`。
+  4. 发现分析大仓库时后端存在大模型生成长文本截断导致 JSON 解析失败的潜在 Bug（`unexpected end of JSON input`），在 `backend/internal/llm/deepseek.go` 中显式设置 `MaxTokens: 8192` 以放宽限制。
+  5. 重启前后端容器验证修复。
+  6. 更新开发文档和对话日志，准备提交并推送代码至 GitHub。
+- **决策/变更**：
+  - 增强前端对鉴权失效的健壮性处理，提升用户体验。
+  - 显式配置 LLM 的 `MaxTokens` 参数，避免大纲生成被截断。

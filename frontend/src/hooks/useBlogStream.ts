@@ -44,7 +44,12 @@ export const useBlogStream = () => {
           }
           if (response.headers.get('content-type')?.includes('application/json')) {
             const data = await response.json();
-            throw new StopStreamError(data.error || '请求失败');
+            if (response.status === 401) {
+              localStorage.removeItem('token');
+              window.location.reload();
+              throw new StopStreamError('登录已过期，请重新登录');
+            }
+            throw new StopStreamError(data.message || data.error || '请求失败');
           }
           const text = await response.text();
           throw new StopStreamError(text || `请求失败: ${response.status} ${response.statusText}`);
@@ -102,13 +107,15 @@ export const useBlogStream = () => {
         }
       })
     } catch (err: unknown) {
-      if (err instanceof StopStreamError) {
-        if (err.message !== 'done' && err.message !== 'aborted') {
-          alert(`分析失败: ${err.message}`)
-          throw err
+        if (err instanceof StopStreamError) {
+          if (err.message !== 'done' && err.message !== 'aborted') {
+            store.setAnalyzing(false)
+            store.setAnalysisStep(-1)
+            alert(`分析失败: ${err.message}`)
+            throw err
+          }
+          return
         }
-        return
-      }
       const e = err as any
       if (e?.name === 'AbortError' || e?.message?.includes('AbortError')) return
       console.error(err)
@@ -141,6 +148,12 @@ export const useBlogStream = () => {
         body: formData
       })
       
+      if (response.status === 401) {
+        localStorage.removeItem('token')
+        window.location.reload()
+        throw new Error('登录已过期，请重新登录')
+      }
+
       const res = await response.json()
       if (res.code === 200 && res.data) {
         store.setSource('file', res.data.source_content)
@@ -209,7 +222,12 @@ export const useBlogStream = () => {
           }
           if (response.headers.get('content-type')?.includes('application/json')) {
             const data = await response.json();
-            throw new StopStreamError(data.error || '请求失败');
+            if (response.status === 401) {
+              localStorage.removeItem('token');
+              window.location.reload();
+              throw new StopStreamError('登录已过期，请重新登录');
+            }
+            throw new StopStreamError(data.message || data.error || '请求失败');
           }
           const text = await response.text();
           throw new StopStreamError(text || `请求失败: ${response.status} ${response.statusText}`);
@@ -254,13 +272,13 @@ export const useBlogStream = () => {
         }
       })
     } catch (err: unknown) {
-      if (err instanceof StopStreamError) {
-        if (err.message !== 'done' && err.message !== 'aborted') {
-          store.setGenerating(false)
-          alert(`生成失败: ${err.message}`)
+        if (err instanceof StopStreamError) {
+          if (err.message !== 'done' && err.message !== 'aborted') {
+            store.setGenerating(false)
+            alert(`生成失败: ${err.message}`)
+          }
+          return
         }
-        return
-      }
       const e = err as any
       if (e?.name === 'AbortError' || e?.message?.includes('AbortError') || e?.message?.includes('aborted')) return
       console.error(err)
@@ -321,7 +339,12 @@ export const useBlogStream = () => {
           }
           if (response.headers.get('content-type')?.includes('application/json')) {
             const data = await response.json();
-            throw new StopStreamError(data.error || '请求失败');
+            if (response.status === 401) {
+              localStorage.removeItem('token');
+              window.location.reload();
+              throw new StopStreamError('登录已过期，请重新登录');
+            }
+            throw new StopStreamError(data.message || data.error || '请求失败');
           }
           const text = await response.text();
           throw new StopStreamError(text || `请求失败: ${response.status} ${response.statusText}`);
@@ -387,12 +410,13 @@ export const useBlogStream = () => {
         }
       })
     } catch (err: unknown) {
-      if (err instanceof StopStreamError) {
-        if (err.message !== 'done' && err.message !== 'aborted') {
-          alert(`生成失败: ${err.message}`)
+        if (err instanceof StopStreamError) {
+          if (err.message !== 'done' && err.message !== 'aborted') {
+            store.setGenerating(false)
+            alert(`生成失败: ${err.message}`)
+          }
+          return
         }
-        return
-      }
       const e = err as any
       if (e?.name === 'AbortError' || e?.message?.includes('AbortError') || e?.message?.includes('aborted')) return
       console.error(err)
