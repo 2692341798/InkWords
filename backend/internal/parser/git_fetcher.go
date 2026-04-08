@@ -16,6 +16,38 @@ type FileChunk struct {
 	Content string
 }
 
+func isIgnoredPath(path string, info os.FileInfo) bool {
+	// 忽略常见依赖和构建产物目录
+	ignoredDirs := []string{
+		"node_modules", "vendor", "dist", "build", "out", "target", "bin",
+		".git", ".svn", ".idea", ".vscode", "__pycache__", "testdata", "docs", "examples", "scripts", "assets",
+	}
+
+	for _, dir := range ignoredDirs {
+		if strings.Contains(path, "/"+dir+"/") || strings.HasPrefix(path, dir+"/") {
+			return true
+		}
+	}
+
+	if !info.IsDir() {
+		name := strings.ToLower(info.Name())
+		// 忽略测试文件
+		if strings.HasSuffix(name, "_test.go") || strings.HasSuffix(name, ".test.js") || strings.HasSuffix(name, ".spec.js") || strings.HasSuffix(name, ".test.ts") || strings.HasSuffix(name, ".spec.ts") {
+			return true
+		}
+		// 忽略非代码的静态资源与文档
+		ignoredExts := []string{
+			".png", ".jpg", ".jpeg", ".gif", ".ico", ".svg", ".mp4", ".mp3", ".wav", ".zip", ".tar", ".gz", ".rar", ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".ttf", ".woff", ".woff2", ".eot",
+		}
+		for _, ext := range ignoredExts {
+			if strings.HasSuffix(name, ext) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // GitFetcher is responsible for cloning a Git repository, extracting text from its files,
 // and then deleting the cloned repository.
 type GitFetcher struct{}
@@ -59,12 +91,20 @@ func (f *GitFetcher) Fetch(repoURL string) (string, []FileChunk, error) {
 			return err
 		}
 
-		// Skip directories that we want to ignore
-		if info.IsDir() {
-			dirName := info.Name()
-			if dirName == ".git" || dirName == "node_modules" || dirName == "dist" || dirName == "build" || dirName == ".idea" || dirName == ".vscode" || dirName == "vendor" {
+		relPath, _ := filepath.Rel(tempDir, path)
+		if relPath == "." {
+			return nil
+		}
+
+		if isIgnoredPath(relPath, info) {
+			if info.IsDir() {
 				return filepath.SkipDir
 			}
+			return nil
+		}
+
+		// Skip directories that we want to ignore
+		if info.IsDir() {
 			return nil
 		}
 
@@ -85,7 +125,6 @@ func (f *GitFetcher) Fetch(repoURL string) (string, []FileChunk, error) {
 			return nil
 		}
 
-		relPath, _ := filepath.Rel(tempDir, path)
 		treeBuilder.WriteString("- " + relPath + "\n")
 
 		// Read file content

@@ -23,7 +23,10 @@
   - JWT Token (长短效签发) + GitHub OAuth (`golang.org/x/oauth2`)
   - 图形验证码防刷 (`github.com/mojocn/base64Captcha`)
   - 密码强度与连续登录失败防爆破锁定 (`LockedUntil`)
-- **并发控制**: `golang.org/x/sync/semaphore` + `sync.WaitGroup` 限制请求 DeepSeek API 的 Goroutine 数量。
+- **并发架构**: 引入了 Go 原生的 Goroutine 池与 `x/sync/semaphore` 信号量控制（动态范围 3~8），保障并发生成稳定且不超限。
+- **特大型项目保护 (Map-Reduce)**:
+  - **Map 阶段**: 按目录分块并发提炼局部摘要，当遇到 LLM 限流时启用带随机抖动的**指数退避 (Exponential Backoff)**。
+  - **Reduce 阶段**: 当局部摘要过多（>20个）时，自动触发 **Tree Reduce** 多级树状汇总，将局部摘要分组提炼成中间层摘要后，再进行全局大纲合并，彻底消除大模型 128k Token 上限导致的崩溃。
 - **数据推送**: 基于标准 HTTP `text/event-stream` 实现 SSE 推送机制。
 
 ### 2.3 基础设施 (Infrastructure)

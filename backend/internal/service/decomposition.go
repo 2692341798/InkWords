@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -22,6 +23,17 @@ import (
 	"inkwords-backend/internal/model"
 	"inkwords-backend/internal/parser"
 )
+
+// exponentialBackoff 返回退避时间： 2^retryCount 秒 + 随机抖动
+func exponentialBackoff(retryCount int) time.Duration {
+	base := float64(2) // 基础等待2秒
+	for i := 0; i < retryCount; i++ {
+		base *= 2
+	}
+	// 加上 0~1000 毫秒的随机抖动，防止惊群效应
+	jitter := rand.Intn(1000)
+	return time.Duration(base)*time.Second + time.Duration(jitter)*time.Millisecond
+}
 
 // Chapter represents a single chapter in the generated outline
 type Chapter struct {
@@ -98,6 +110,50 @@ func (s *DecompositionService) AnalyzeStream(ctx context.Context, gitURL string,
 	} else {
 		sendProgress(2, fmt.Sprintf("开启 Map-Reduce 分析，共 %d 个分块", len(chunks)), nil)
 		summaries := s.mapReduceAnalyze(ctx, chunks, sendProgress)
+
+		// Tree Reduce: 如果局部摘要数量过多，先进行中间层汇总
+		if len(summaries) > 20 {
+			sendProgress(2, fmt.Sprintf("局部摘要数量较多 (%d)，正在进行中间层 Tree Reduce 汇总...", len(summaries)), nil)
+			var intermediateSummaries []string
+			batchSize := 10
+			for i := 0; i < len(summaries); i += batchSize {
+				end := i + batchSize
+				if end > len(summaries) {
+					end = len(summaries)
+				}
+				batchContent := strings.Join(summaries[i:end], "\n\n")
+
+				// 生成中间层摘要
+				prompt := fmt.Sprintf(`你是一个高级架构师。以下是一个大型项目部分模块的局部摘要集合。
+请将这些局部摘要融合成一个中级摘要，提炼出这些模块共同负责的核心功能、数据流和架构逻辑。
+忽略过于细节的代码实现，重点关注模块间的关系和整体职责。字数控制在 800 字以内。
+
+模块摘要如下：
+%s`, batchContent)
+
+				req := []llm.Message{
+					{Role: "system", Content: "你是一个专业的架构师，擅长将零散的模块信息归纳为系统化的高层架构描述。"},
+					{Role: "user", Content: prompt},
+				}
+
+				modelStr := "deepseek-chat"
+				if envModel := os.Getenv("DEEPSEEK_MODEL"); envModel != "" {
+					modelStr = envModel
+				}
+
+				ctxTimeout, cancel := context.WithTimeout(ctx, 3*time.Minute)
+				interSummary, err := s.llmClient.Generate(ctxTimeout, modelStr, req)
+				cancel()
+				if err != nil {
+					// 容错处理：如果中间层汇总失败，保留原文
+					intermediateSummaries = append(intermediateSummaries, summaries[i:end]...)
+				} else {
+					intermediateSummaries = append(intermediateSummaries, interSummary)
+				}
+			}
+			summaries = intermediateSummaries
+		}
+
 		finalContent.WriteString(treeContent)
 		finalContent.WriteString("\n=== Local Summaries ===\n")
 		for _, summary := range summaries {
@@ -229,7 +285,7 @@ func (s *DecompositionService) generateLocalSummaryWithRetry(ctx context.Context
 			"worker_id": workerID,
 		})
 
-		time.Sleep(time.Second * time.Duration(attempt*2)) // backoff
+		time.Sleep(exponentialBackoff(attempt))
 	}
 
 	sendProgress(2, fmt.Sprintf("分块 %d/%d 分析最终失败，已跳过", idx, total), map[string]interface{}{
@@ -534,7 +590,7 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 				break
 			}
 
-			time.Sleep(time.Second * time.Duration(attempt*2))
+			time.Sleep(exponentialBackoff(attempt))
 		}
 
 		if streamErr != nil {

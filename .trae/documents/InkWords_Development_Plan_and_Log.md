@@ -590,6 +590,15 @@
 
 | 2026-04-08 | Fix Auth Expiration Handling & MaxTokens Limit | 修复了当用户 Token 过期时（401 Unauthorized），前端 SSE 流式请求与普通请求未能正确拦截的问题，导致只提示笼统的“请求失败”。修改了 `useBlogStream.ts` 和 `blogStore.ts`，增加状态码校验，过期时自动清理 `localStorage` 并重载页面提示用户；同时发现调用 DeepSeek 分析超大 Git 仓库生成大纲时，由于默认长度限制会导致 JSON 被截断，引发 `failed to unmarshal llm output` 错误，在 `deepseek.go` 中显式设置了 `MaxTokens: 8192` 解决。 |
 
+### [2026-04-09] 特大型 Git 仓库并发分析健壮性增强
+- **开发模块**: [后端并发分析, Token 容量保护, 智能过滤]
+- **完成事项**:
+  1. **智能过滤 (Smart Filtering)**: 优化 `git_fetcher.go` 的遍历逻辑，自动剔除包含 `vendor`, `testdata`, `docs` 的依赖目录以及所有 `*_test.go` 等测试文件，大幅削减大仓库的无效分析文件体积。
+  2. **指数退避重试 (Exponential Backoff)**: 针对 Map 阶段由于 LLM API 并发过高触发的 429 限流错误，引入基于 `math/rand` 的指数退避等待机制（带随机抖动 Jitter），避免了原本简单的 `Sleep(2s)` 导致的惊群效应与频繁重试失败。
+  3. **多级树状汇总 (Tree Reduce)**: 在 Reduce 阶段，一旦检测到局部摘要 (Summaries) 数量超过 20 个，自动切入中间层合并模式。将长数组每 10 个一组进行 `Tree Reduce` 中级归纳，最后再合并生成全局大纲，彻底解决了像 `golang/go` 这样切分出 700+ chunk 的超大型项目在最终合并时引发的 `128k Token` 容量超限错误。
+- **踩坑记录 / 架构调整**:
+  - LLM 在处理动辄上百个局部摘要时的注意力会严重分散，甚至超限罢工。引入 Map-Reduce 的经典变种 Tree Reduce 是应对无限增长上下文的标准工程解法。
+  - 对于大模型并发，简单的线性休眠在遇到严格的云端 API 限流时往往无效。带随机抖动的指数退避能让各并发请求“错峰苏醒”，大幅提高极端高压下的最终成功率。
 ### [2026-04-09] 架构优化与商业闭环增强
 - **开发模块**: [后端 DI 架构, 商业计费拦截, OAuth 账号劫持防御, 前端渲染性能优化]
 - **完成事项**:

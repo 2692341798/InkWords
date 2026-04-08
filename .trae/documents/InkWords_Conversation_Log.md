@@ -586,6 +586,17 @@
   - 增强前端对鉴权失效的健壮性处理，提升用户体验。
   - 显式配置 LLM 的 `MaxTokens` 参数，避免大纲生成被截断。
 
+### 2026-04-09 特大型 Git 仓库并发分析健壮性增强
+- **用户需求**: “还是偶尔会有分析失败的现象发生，尤其是在分析 `golang/go` 这种特大型项目的时候，请询问我来明确需求”。
+- **AI 提议**:
+  1. 智能过滤 (Smart Filtering)：主动排除测试文件、文档及依赖库以减轻并发压力。
+  2. 指数退避 (Exponential Backoff)：解决重试期间的高频 API 轰炸。
+  3. 多级树状汇总 (Tree Reduce)：解决 Reduce 阶段上百份 Chunk 合并导致的 Context 溢出。
+- **决策与执行**:
+  - 用户确认采用以上所有推荐的健壮性策略。
+  - 通过 `brainstorming` 和 `writing-plans` 输出了 `2026-04-09-large-repo-optimization-design.md` 和对应的 plan。
+  - 修改 `git_fetcher.go` 和 `decomposition.go`，完美落地了包含抖动因子的退避算法以及 Tree Reduce 分组中间层合并逻辑。
+
 ### 2026-04-09 架构优化与商业闭环增强
 - **用户需求**: “看看我这项目还有什么不足之处”，并要求针对不足进行优化。
 - **AI 提议**:
