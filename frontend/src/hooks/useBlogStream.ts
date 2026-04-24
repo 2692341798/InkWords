@@ -126,16 +126,117 @@ export const useBlogStream = () => {
     }
   }, [store])
 
+  const analyzeFileContent = useCallback(async (sourceContent: string) => {
+    store.setAnalyzing(true)
+    store.setAnalysisStep(-1)
+    store.setAnalysisMessage('准备生成大纲...')
+    
+    if (store.abortController) {
+      store.abortController.abort()
+    }
+    const ctrl = new AbortController()
+    store.setAbortController(ctrl)
+    
+    try {
+      const token = localStorage.getItem('token')
+      
+      await fetchEventSource('/api/v1/stream/analyze', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': token ? `Bearer ${token}` : ''
+        },
+        signal: ctrl.signal,
+        openWhenHidden: true,
+        body: JSON.stringify({ source_content: sourceContent, source_type: 'file' }),
+        async onopen(response) {
+          if (response.ok && response.headers.get('content-type')?.startsWith('text/event-stream')) {
+            return;
+          }
+          if (response.headers.get('content-type')?.includes('application/json')) {
+            const data = await response.json();
+            if (response.status === 401) {
+              localStorage.removeItem('token');
+              window.location.reload();
+              throw new StopStreamError('登录已过期，请重新登录');
+            }
+            throw new StopStreamError(data.message || data.error || '请求失败');
+          }
+          const text = await response.text();
+          throw new StopStreamError(text || `请求失败: ${response.status} ${response.statusText}`);
+        },
+        onmessage(msg) {
+          if (msg.event === 'chunk') {
+            try {
+              const data = JSON.parse(msg.data)
+              if (data.step !== undefined) {
+                store.setAnalysisStep(data.step)
+                store.setAnalysisMessage(data.message || '')
+              }
+              if (data.data?.outline) {
+                store.setSource('file', data.data.source_content)
+                store.setOutline(data.data.outline)
+                if (data.data.series_title) {
+                  store.setSeriesTitle(data.data.series_title)
+                }
+              }
+            } catch {
+              // Ignore parse error
+            }
+          } else if (msg.event === 'error') {
+            console.error('SSE Error:', msg.data)
+            throw new StopStreamError(msg.data)
+          } else if (msg.event === 'done') {
+            store.setAnalyzing(false)
+            store.setAnalysisStep(-1)
+            throw new StopStreamError('done')
+          }
+        },
+        onclose() {
+          throw new StopStreamError('closed by server')
+        },
+        onerror(err: unknown) {
+          if (err instanceof StopStreamError) {
+            throw err
+          }
+          if (err instanceof DOMException && err.name === 'AbortError') {
+            throw new StopStreamError('aborted')
+          }
+          const e = err as any
+          if (e?.name === 'AbortError' || e?.message?.includes('AbortError') || e?.message?.includes('aborted') || e?.message?.includes('Failed to fetch')) {
+            throw new StopStreamError('aborted')
+          }
+          console.error('SSE Connection Error:', err)
+          store.setAnalyzing(false)
+          store.setAnalysisStep(-1)
+          throw err
+        }
+      })
+    } catch (err: unknown) {
+        if (err instanceof StopStreamError) {
+          if (err.message !== 'done' && err.message !== 'aborted') {
+            store.setAnalyzing(false)
+            store.setAnalysisStep(-1)
+            alert(`分析失败: ${err.message}`)
+            throw err
+          }
+          return
+        }
+      const e = err as any
+      if (e?.name === 'AbortError' || e?.message?.includes('AbortError')) return
+      console.error(err)
+      store.setAnalyzing(false)
+      store.setAnalysisStep(-1)
+      alert(`分析出错: ${e?.message || '未知错误'}`)
+      throw err 
+    }
+  }, [store])
+
   const parseFile = useCallback(async (file: File) => {
     store.setAnalyzing(true)
     store.setAnalysisStep(0)
+    store.setAnalysisMessage('正在解析文件内容...')
     
-    // For file, we simulate progress visually since it's usually fast
-    const timer1 = setTimeout(() => store.setAnalysisStep(1), 300)
-    const timer2 = setTimeout(() => store.setAnalysisStep(2), 800)
-    const timer3 = setTimeout(() => store.setAnalysisStep(3), 1300)
-    const timer4 = setTimeout(() => store.setAnalysisStep(4), 1800)
-
     try {
       const formData = new FormData()
       formData.append('file', file)
@@ -156,9 +257,8 @@ export const useBlogStream = () => {
 
       const res = await response.json()
       if (res.code === 200 && res.data) {
-        store.setSource('file', res.data.source_content)
-        // file doesn't have an outline by default, but we can set an empty outline to trigger single generation UI
-        store.setOutline([])
+        // Now automatically start analyzing the content to generate outline
+        await analyzeFileContent(res.data.source_content)
       } else {
         throw new Error(res.message || '文件解析失败')
       }
@@ -168,14 +268,12 @@ export const useBlogStream = () => {
       alert(errMsg)
       throw err
     } finally {
-      clearTimeout(timer1)
-      clearTimeout(timer2)
-      clearTimeout(timer3)
-      clearTimeout(timer4)
-      store.setAnalyzing(false)
-      store.setAnalysisStep(-1)
+      // Only reset analyzing state if we errored out before analyzeFileContent could finish,
+      // because analyzeFileContent handles its own state
+      // Actually, analyzeFileContent handles its own `setAnalyzing(false)` when done or error.
+      // So we just catch here. If it was a parse error, we need to reset.
     }
-  }, [store])
+  }, [store, analyzeFileContent])
 
   const generateSingle = useCallback(async (sourceContent: string) => {
     store.setGenerating(true)

@@ -39,12 +39,10 @@ export function Generator() {
   }
 
   const handleGenerate = () => {
-    if (store.sourceType === 'file') {
-      if (store.sourceContent) {
-        generateSingle(store.sourceContent)
-      }
-    } else {
+    if (store.outline && store.outline.length > 0) {
       generateSeries()
+    } else if (store.sourceContent) {
+      generateSingle(store.sourceContent)
     }
   }
 
@@ -192,20 +190,20 @@ export function Generator() {
               <div className="flex items-center gap-3">
                 <div className={`w-2 h-2 rounded-full ${store.analysisStep >= 0 ? 'bg-indigo-600' : 'bg-zinc-200'}`}></div>
                 <span className={store.analysisStep >= 0 ? 'text-zinc-800 font-medium' : 'text-zinc-400'}>
-                  {analyzingType === 'file' ? '读取并提取文件文本...' : (store.analysisStep === 0 ? store.analysisMessage : '正在克隆并拉取仓库...')}
+                  {store.analysisStep === 0 ? store.analysisMessage : (analyzingType === 'file' ? '读取并提取文件文本...' : '正在克隆并拉取仓库...')}
                 </span>
               </div>
               <div className="flex items-center gap-3">
                 <div className={`w-2 h-2 rounded-full ${store.analysisStep >= 1 ? 'bg-indigo-600' : 'bg-zinc-200'}`}></div>
                 <span className={store.analysisStep >= 1 ? 'text-zinc-800 font-medium' : 'text-zinc-400'}>
-                  {analyzingType === 'file' ? '解析文件内容结构...' : (store.analysisStep === 1 ? store.analysisMessage : '分析仓库源码与结构...')}
+                  {store.analysisStep === 1 ? store.analysisMessage : (analyzingType === 'file' ? '解析文件内容结构...' : '分析仓库源码与结构...')}
                 </span>
               </div>
               <div className="flex items-center gap-3">
                 <div className={`w-2 h-2 rounded-full ${store.analysisStep >= 2 ? 'bg-indigo-600' : 'bg-zinc-200'}`}></div>
                 <div className="flex-1 flex flex-col">
                   <span className={store.analysisStep >= 2 ? 'text-zinc-800 font-medium' : 'text-zinc-400'}>
-                    {analyzingType === 'file' ? '准备进行生成任务...' : (store.analysisStep === 2 ? store.analysisMessage : '并发分析代码分块...')}
+                    {store.analysisStep === 2 ? store.analysisMessage : (analyzingType === 'file' ? '生成大纲中...' : '并发分析代码分块...')}
                   </span>
                   {store.analysisStep === 2 && Object.keys(store.workers).length > 0 && (
                     <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
@@ -256,13 +254,13 @@ export function Generator() {
               <div className="flex items-center gap-3">
                 <div className={`w-2 h-2 rounded-full ${store.analysisStep >= 3 ? 'bg-indigo-600' : 'bg-zinc-200'}`}></div>
                 <span className={store.analysisStep >= 3 ? 'text-zinc-800 font-medium' : 'text-zinc-400'}>
-                  {analyzingType === 'file' ? '读取并渲染内容...' : (store.analysisStep === 3 ? store.analysisMessage : '生成项目全局大纲...')}
+                  {store.analysisStep === 3 ? store.analysisMessage : (analyzingType === 'file' ? '评估大纲结构...' : '生成项目全局大纲...')}
                 </span>
               </div>
               <div className="flex items-center gap-3">
                 <div className={`w-2 h-2 rounded-full ${store.analysisStep >= 4 ? 'bg-indigo-600' : 'bg-zinc-200'}`}></div>
                 <span className={store.analysisStep >= 4 ? 'text-zinc-800 font-medium' : 'text-zinc-400'}>
-                  {analyzingType === 'file' ? '完成' : (store.analysisStep === 4 ? store.analysisMessage : '正在完成最后处理...')}
+                  {store.analysisStep === 4 ? store.analysisMessage : (analyzingType === 'file' ? '完成' : '正在完成最后处理...')}
                 </span>
               </div>
             </div>
@@ -288,7 +286,9 @@ export function Generator() {
               {(() => {
                 const allCompleted = store.outline.length > 0 && store.outline.every(ch => store.chapterStatus[ch.sort] === 'completed');
                 if (allCompleted) return '系列博客生成完毕';
-                return store.sourceType === 'file' ? '文件解析成功' : '项目大纲已生成';
+                return store.sourceType === 'file' 
+                  ? (store.outline && store.outline.length > 0 ? '文件大纲已生成' : '文件解析成功') 
+                  : '项目大纲已生成';
               })()}
             </h2>
             <p className="text-zinc-500 mb-8">
@@ -296,7 +296,7 @@ export function Generator() {
                 const allCompleted = store.outline.length > 0 && store.outline.every(ch => store.chapterStatus[ch.sort] === 'completed');
                 if (allCompleted) return '所有的章节已经成功生成并保存到数据库。您可以在左侧边栏点击生成的章节查看完整内容。';
                 return store.sourceType === 'file'
-                  ? '我们已经成功提取了您的文件内容。点击“开始生成”以编写单篇博客。'
+                  ? (store.outline && store.outline.length > 0 ? '我们已经分析了您的文件内容并生成了以下系列博客大纲。点击“开始生成”以编写该系列博客。' : '我们已经成功提取了您的文件内容。点击“开始生成”以编写单篇博客。')
                   : '我们已经分析了您的代码库并生成了以下系列博客大纲。点击“开始生成”以编写该系列博客。';
               })()}
             </p>
@@ -311,7 +311,7 @@ export function Generator() {
 
               return (
                 <>
-                  {store.sourceType !== 'file' && visibleOutline.length > 0 && (
+                  {visibleOutline.length > 0 && (
                     <div className="mb-8">
                       <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-3">
@@ -416,9 +416,9 @@ export function Generator() {
                       <div>
                         <h3 className="font-semibold text-indigo-900">{isResume ? '继续生成' : '准备生成'}</h3>
                         <p className="text-sm text-indigo-700 mt-1">
-                          {store.sourceType === 'file'
-                            ? '系统将根据文件内容生成一篇详细的技术博客。'
-                            : `系统将并发生成 ${visibleOutline.length} 篇博客章节。`}
+                          {visibleOutline.length > 0
+                            ? `系统将并发生成 ${visibleOutline.length} 篇博客章节。`
+                            : '系统将根据文件内容生成一篇详细的技术博客。'}
                         </p>
                       </div>
                       <div className="flex items-center gap-3">

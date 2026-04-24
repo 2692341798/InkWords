@@ -57,8 +57,8 @@ func (api *StreamAPI) AnalyzeStreamHandler(c *gin.Context) {
 		return
 	}
 
-	if req.GitURL == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "git_url is required"})
+	if req.SourceType != "file" && req.GitURL == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "git_url is required for git source type"})
 		return
 	}
 
@@ -74,7 +74,11 @@ func (api *StreamAPI) AnalyzeStreamHandler(c *gin.Context) {
 
 	go func() {
 		defer wg.Done()
-		api.decompositionService.AnalyzeStream(bgCtx, req.GitURL, req.SubDir, progressChan, errChan)
+		if req.SourceType == "file" {
+			api.decompositionService.AnalyzeFileStream(bgCtx, req.SourceContent, progressChan, errChan)
+		} else {
+			api.decompositionService.AnalyzeStream(bgCtx, req.GitURL, req.SubDir, progressChan, errChan)
+		}
 	}()
 
 	// Set headers for SSE

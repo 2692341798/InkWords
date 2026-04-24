@@ -27,7 +27,7 @@
 ## 4. 流式生成模块 (StreamAPI)
 | 接口地址 | 请求方法 | 功能描述 | 参数 |
 | -------- | -------- | -------- | ---- |
-| `/api/v1/stream/analyze` | POST | 实时流式拉取 Git 并解析项目生成大纲 | `{ git_url, sub_dir }` -> SSE Stream |
+| `/api/v1/stream/analyze` | POST | 实时流式拉取 Git 或解析长文本文件生成大纲 | `{ git_url, sub_dir, source_type, source_content }` -> SSE Stream |
 | `/api/v1/stream/generate` | POST | 根据大纲或内容流式生成博客章节 | `{ source_content, source_type, git_url, sub_dir, outline, series_title, parent_id }` -> SSE Stream |
 | `/api/v1/blogs/:id/continue` | POST | 继续生成被截断的单篇博客 (Legacy) | 无 -> SSE Stream |
 
