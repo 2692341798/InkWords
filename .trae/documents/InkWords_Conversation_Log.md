@@ -630,3 +630,16 @@
 - **决策/变更**：
   - 移除笨重的本地 Embedding 服务（Ollama），全面转向大模型原生的上下文前缀缓存，不仅大幅降低了部署包体积与内存开销，还获得了更优的计费与响应速度。
   - 对于特大型 Git 仓库，增加 `sub_dir` 的定向解析能力，让用户能按需分析核心模块，避免超出 Token 上限或浪费算力。
+
+### 对话 47：修复大文件上传导致解析失败的 Bug
+- **用户需求**：用户反馈在上传 15.5MB 的 PDF 文件时，前端出现 `Unexpected token '<', "<html> <h"... is not valid JSON` 的错误，要求找出原因并修正，同时将代码提交到 GitHub。
+- **AI 动作**：
+  1. 分析定位到错误原因是 Nginx 默认的 `client_max_body_size` 限制为 1MB，导致上传大文件时被 Nginx 拦截并返回了 413 HTML 错误页。
+  2. 调用 `AskUserQuestion` 向用户询问期望的最大文件上传限制，用户选择了 100MB。
+  3. 修改了 `frontend/nginx.conf`，设置 `client_max_body_size 100M`。
+  4. 修改了 `backend/cmd/server/main.go`，将 Gin 的 `MaxMultipartMemory` 提升至 100MB。
+  5. 修改了 `frontend/src/components/Generator.tsx`，在前端拖拽和选择文件时增加了 100MB 的文件大小前置校验拦截。
+  6. 执行 `docker compose down && docker compose up -d --build` 验证了修复并重启了服务。
+  7. 更新了项目的 7 大基准文档，并调用 `git-commit` 技能准备提交代码到 GitHub。
+- **决策/变更**：
+  - 在前后端分离架构中，上传大文件时必须在网关层（Nginx）、应用框架层（Gin）以及前端 UI 层（React）保持一致的体积限制配置，避免因底层拦截返回非预期格式（如 HTML）导致前端 JSON 解析崩溃。

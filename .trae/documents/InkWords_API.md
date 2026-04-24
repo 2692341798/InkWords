@@ -22,7 +22,7 @@
 | 接口地址 | 请求方法 | 功能描述 | 参数 |
 | -------- | -------- | -------- | ---- |
 | `/api/v1/project/analyze` | POST | 解析 Git 仓库生成大纲 (Legacy) | `{ git_url, sub_dir }` |
-| `/api/v1/project/parse` | POST | 解析本地文件生成大纲 | `multipart/form-data` -> `file` |
+| `/api/v1/project/parse` | POST | 解析本地文件生成大纲 | `multipart/form-data` -> `file` (最大支持 100MB) |
 
 ## 4. 流式生成模块 (StreamAPI)
 | 接口地址 | 请求方法 | 功能描述 | 参数 |

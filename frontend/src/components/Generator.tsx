@@ -63,6 +63,10 @@ export function Generator() {
     setIsDragging(false)
     const file = e.dataTransfer.files[0]
     if (file) {
+      if (file.size > 100 * 1024 * 1024) {
+        alert('文件大小不能超过 100MB')
+        return
+      }
       setAnalyzingType('file')
       try {
         await parseFile(file)
@@ -77,6 +81,13 @@ export function Generator() {
   const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
+      if (file.size > 100 * 1024 * 1024) {
+        alert('文件大小不能超过 100MB')
+        if (fileInputRef.current) {
+          fileInputRef.current.value = ''
+        }
+        return
+      }
       setAnalyzingType('file')
       try {
         await parseFile(file)

@@ -31,7 +31,7 @@
 
 ### 2.3 基础设施 (Infrastructure)
 - **数据库**: PostgreSQL 14 (Docker volume 挂载持久化)
-- **代理与网关**: Nginx (构建前端静态页面并反向代理后端 `/api/` 路径)
+- **代理与网关**: Nginx (构建前端静态页面并反向代理后端 `/api/` 路径，配置 `client_max_body_size 100M` 以支持大文件解析)
 - **大语言模型**: DeepSeek-V4-Flash API (支持 128k 输出及 1M Token 上下文)
 
 ## 3. 并发生成架构
