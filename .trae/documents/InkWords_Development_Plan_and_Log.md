@@ -651,3 +651,13 @@
 - **架构调整原因**:
   - 由于我们已经全面拥抱了 DeepSeek V4 的 API 级别原生前缀缓存 (Prompt Caching)，并且对输入指令顺序进行了针对性优化，原生缓存不仅能实现更高效、更低延迟的缓存命中，还能大幅降低 Token 计费。
   - 原先为了节省调用成本而引入的本地 Ollama 模型（用于生成 Prompt 向量特征进行 KNN 匹配）变得冗余，反而大大增加了系统的部署包体积（Ollama 镜像 3.2GB）和运行内存开销。移除后，系统架构变得更加轻量级。
+
+### [2026-04-24] UI/UX Fix - 增强 Markdown 预览标题层级 (Tailwind CSS v4)
+- **开发模块**: [前端 UI, Tailwind CSS, MarkdownEngine]
+- **完成事项**:
+  1. **安装依赖**: 添加了 `@tailwindcss/typography` 插件以支持 `.prose` 类。
+  2. **样式配置**: 在 `index.css` 中引入了 `@plugin "@tailwindcss/typography";`。
+  3. **特异性 (Specificity) 提升**: 将 `index.css` 中的自定义 Markdown 标题样式选择器从低特异性的 `.prose :where(h1)` 升级为 `div.prose h1`（特异性 `0,1,2`）。
+- **架构调整原因**:
+  - Tailwind CSS v4 中的 Typography 插件默认使用了 `:where()` 选择器，但因为响应式修饰符（如 `md:prose-base`）的存在，会导致插件默认的字体大小和边距覆盖掉我们自定义的样式。
+  - 通过提升选择器的特异性（加入 `div` 标签限定），确保了一二级标题的加粗、下划线和字号放大效果能够稳定覆盖默认样式，显著提升了长篇博客的阅读体验。
