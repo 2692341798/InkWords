@@ -29,6 +29,7 @@ func NewProjectAPI(userService *service.UserService) *ProjectAPI {
 
 type AnalyzeRequest struct {
 	GitURL string `json:"git_url" binding:"required"`
+	SubDir string `json:"sub_dir"`
 }
 
 // Analyze handles the /api/v1/project/analyze endpoint
@@ -59,7 +60,7 @@ func (api *ProjectAPI) Analyze(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	// 1. Fetch Git content
-	treeContent, chunks, err := api.gitFetcher.Fetch(req.GitURL)
+	treeContent, chunks, err := api.gitFetcher.FetchWithSubDir(req.GitURL, req.SubDir)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    http.StatusInternalServerError,

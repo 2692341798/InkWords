@@ -19,36 +19,33 @@ import (
 
 // GeneratorService handles the blog generation process
 type GeneratorService struct {
-	llmClient *llm.DeepSeekClient
+	llmClient     *llm.DeepSeekClient
 }
 
 // NewGeneratorService creates a new generator service
 func NewGeneratorService() *GeneratorService {
 	apiKey := os.Getenv("DEEPSEEK_API_KEY")
 	return &GeneratorService{
-		llmClient: llm.NewDeepSeekClient(apiKey),
+		llmClient:     llm.NewDeepSeekClient(apiKey),
 	}
 }
 
 // GenerateBlogStream assembles the prompt, calls the LLM, and pushes chunks to the channel
 func (s *GeneratorService) GenerateBlogStream(ctx context.Context, userID uuid.UUID, sourceContent string, sourceType string, chunkChan chan<- string, errChan chan<- error) {
-	prompt := fmt.Sprintf(`你是一个高级全栈架构师和技术博主。请根据以下提供的源内容，将其转化为一篇“小白友好、图文并茂、可独立复现”的高质量技术博客。
+	instruction := `你是一个高级全栈架构师和技术博主。请根据前面提供的源内容，将其转化为一篇“小白友好、图文并茂、可独立复现”的高质量技术博客。
 要求：
 1. **字数充足，内容详实**：不要只写干瘪的总结。必须深入分析实现原理。
 2. **代码级剖析**：对于每个技术点都添加更多的代码样例和图片来解释的更加详细。如果源内容包含代码，请引用核心代码并逐行解释其作用。
 3. **可复现的步骤**：如果是实战或教程相关，请给出明确的执行步骤。
 4. **小白友好**：在解释抽象的理论概念时，必须提供对应的代码示例或生活化比喻。
-5. 所有生成的 Mermaid 图表代码块绝对禁止包含自定义样式关键字（如 style, classDef, linkStyle 等），必须使用基础语法。
-
-源内容：
-%s`, sourceContent)
+5. 所有生成的 Mermaid 图表代码块绝对禁止包含自定义样式关键字（如 style, classDef, linkStyle 等），必须使用基础语法。`
 
 	messages := []llm.Message{
-		{Role: "system", Content: "你是一个高级技术博客作者。"},
-		{Role: "user", Content: prompt},
+		{Role: "system", Content: "项目源内容如下：\n" + sourceContent},
+		{Role: "user", Content: instruction},
 	}
 
-	modelType := "deepseek-chat" // or deepseek-reasoner depending on env/config
+	modelType := "deepseek-v4-flash" // or deepseek-v4-pro depending on env/config
 	if envModel := os.Getenv("DEEPSEEK_MODEL"); envModel != "" {
 		modelType = envModel
 	}
@@ -168,7 +165,7 @@ func (s *GeneratorService) saveToDB(ctx context.Context, userID uuid.UUID, sourc
 	messages := []llm.Message{
 		{Role: "user", Content: extractPrompt},
 	}
-	modelType := "deepseek-chat"
+	modelType := "deepseek-v4-flash"
 	if envModel := os.Getenv("DEEPSEEK_MODEL"); envModel != "" {
 		modelType = envModel
 	}
@@ -197,7 +194,7 @@ func (s *GeneratorService) saveToDB(ctx context.Context, userID uuid.UUID, sourc
 		fmt.Printf("Failed to save generated blog to DB: %v\n", err)
 	} else {
 		fmt.Printf("Saved generated blog to DB (ID: %s, Length: %d, TechStacks: %s)\n", blog.ID, len(content), string(techStacks))
-		
+
 		// Update user tokens used (rough estimation: 1 token ≈ 1.5 chars, let's just use rune count for simplicity)
 		estimatedTokens := len([]rune(content)) * 2
 		db.DB.Model(&model.User{}).Where("id = ?", userID).UpdateColumn("tokens_used", gorm.Expr("tokens_used + ?", estimatedTokens))

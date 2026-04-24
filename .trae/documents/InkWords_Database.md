@@ -26,7 +26,7 @@
 | `name` | VARCHAR(255) | | 用户昵称/显示名 |
 | `subscription_tier` | SMALLINT | Default 0 | 订阅等级 (0=Free, 1=Pro) |
 | `tokens_used` | INTEGER | Default 0 | 当前已消耗的 Token 数量 |
-| `token_limit` | INTEGER | Default 100000 | 用户的最大 Token 额度 |
+| `token_limit` | INTEGER | Default 1000000000 | 用户的最大 Token 额度 |
 | `failed_login_attempts` | INTEGER | Default 0 | 连续登录失败次数 |
 | `locked_until` | TIMESTAMP | Nullable | 账号锁定到期时间 |
 

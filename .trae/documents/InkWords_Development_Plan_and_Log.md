@@ -612,3 +612,42 @@
 - **踩坑记录 / 架构调整**:
   - OAuth 第三方登录虽然便捷，但如果“仅凭邮箱相同就静默绑定”，是极其危险的越权行为。引入中间态（前端二次密码验证）是业界标准的安全实践。
   - React 的性能优化不仅在于减少渲染次数，将深层遍历转化为扁平的 Map 字典（哪怕只在点击时触发）也是前端架构中处理大型树状结构（如无限级评论、复杂目录）的标准动作。
+
+### 2026-04-24 语义缓存 (Semantic Cache) 引入
+- **目标**：解决项目 Token 消耗过高的问题，实现全局缓存命中。
+- **改动**：
+  1. 在 `docker-compose.yml` 中引入 `redis-stack-server` (提供向量检索功能) 和 `ollama` (提供本地轻量级 Embedding)。
+  2. 后端新增 `internal/cache` 包，初始化 Redis 连接并使用 `FT.CREATE` 建立向量索引。
+  3. 后端新增 `internal/llm/ollama.go` 客户端，用于调用本地 `nomic-embed-text` 模型获取 prompt 向量。
+  4. 在大纲生成和博客流式生成的调用前增加语义缓存拦截（基于 COSINE 距离匹配），命中时直接返回缓存并模拟流式推送。
+- **状态**：已完成。
+
+### [2026-04-24] Feature - DeepSeek V4 能力升级适配
+- **开发模块**: [后端并发调度, LLM 客户端, 大纲生成]
+- **完成事项**:
+  1. **模型切换**: 将代码中硬编码的 `deepseek-chat` 升级为 `deepseek-v4-flash`。
+  2. **上下文扩容**: 针对 V4 的 1M Token 上下文，将源码提取的字符截断限制从 300,000 字符提升至 2,000,000 字符。
+  3. **输出长度提升**: 将 API 请求的 `max_tokens` 参数从 8192 提升至 128,000。
+  4. **并发能力增强**: 使用环境变量 `MAX_CONCURRENT_WORKERS` 控制生成大纲等任务的并发数，默认值由 3 提升至 10，上限提升至 50，以充分利用模型性能。
+- **踩坑记录 / 架构调整**:
+  - DeepSeek V4 带来了更大的上下文和输出能力，因此需要解除原先硬编码的种种限制（如截断长度和最大并发数）。通过引入环境变量控制并发，提升了系统对不同 API 额度和性能要求的适应性。
+
+### [2026-04-24] Optimization - 提升 DeepSeek 原生缓存命中率
+- **开发模块**: [后端生成逻辑, LLM Prompt 结构]
+- **完成事项**:
+  1. **大纲生成 Prompt 优化**: 在 `decomposition.go` 中，将巨量的 `sourceContent` 提取到 `system` 消息中置于请求最前，将“大纲生成”指令放入 `user` 消息置于请求最后。
+  2. **博客生成 Prompt 优化**: 在 `generator.go` 中，同理将源内容分离并置于 `system` 消息，生成博客的具体指令放入 `user` 消息。
+  3. **应用层缓存兼容**: 更新了内部 SemanticCache 的向量特征计算依赖（提取 instruction 和内容的前 5000 字符拼接作为特征），确保内部拦截缓存和外部原生缓存能无缝兼容。
+- **架构调整原因**:
+  - DeepSeek API 层面原生支持“上下文前缀缓存（Prompt Caching）”，当长文本（数百万字源码）在消息体开头保持不变时，模型服务端能够自动命中前缀缓存（命中后输入价格从 1.0 元大幅降低到 0.2 元 / 百万 Token），同时极大地减少了首字生成延迟 (TTFT)。将易变的指令置于尾部是发挥原生缓存能力的关键。
+
+### [2026-04-24] Refactor - 移除本地 Ollama 依赖及自定义语义缓存
+- **开发模块**: [后端缓存模块, LLM 客户端, 服务层依赖, Docker 环境]
+- **完成事项**:
+  1. **移除代码依赖**: 彻底删除了 `backend/internal/llm/ollama.go` 和 `backend/internal/cache/semantic.go`。
+  2. **清理服务层**: 在 `generator.go` 和 `decomposition.go` 中删除了所有涉及到 `ollamaClient` 和 `semanticCache` 的声明、初始化以及调用逻辑。
+  3. **清理 Redis 向量索引**: 删除了 `backend/internal/cache/redis.go` 中的 Redis 向量索引创建逻辑 (`ensureVectorIndex`)，现 Redis 仅作为常规键值/队列缓存。
+  4. **清理环境配置**: 从 `docker-compose.yml` 中移除了 `ollama` 容器的启动配置，并且去除了后端的 `depends_on: ollama` 依赖。
+- **架构调整原因**:
+  - 由于我们已经全面拥抱了 DeepSeek V4 的 API 级别原生前缀缓存 (Prompt Caching)，并且对输入指令顺序进行了针对性优化，原生缓存不仅能实现更高效、更低延迟的缓存命中，还能大幅降低 Token 计费。
+  - 原先为了节省调用成本而引入的本地 Ollama 模型（用于生成 Prompt 向量特征进行 KNN 匹配）变得冗余，反而大大增加了系统的部署包体积（Ollama 镜像 3.2GB）和运行内存开销。移除后，系统架构变得更加轻量级。

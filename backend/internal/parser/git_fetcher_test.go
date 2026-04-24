@@ -90,3 +90,64 @@ func TestGitFetcher_Fetch(t *testing.T) {
 	assert.NotContains(t, allText, "image.png")
 	assert.NotContains(t, content, "node_modules")
 }
+
+func TestGitFetcher_FetchWithSubDir(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "inkwords-test-repo-subdir-*")
+	require.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	cmd := exec.Command("git", "init")
+	cmd.Dir = tempDir
+	err = cmd.Run()
+	require.NoError(t, err)
+
+	err = os.MkdirAll(filepath.Join(tempDir, "src", "net", "http"), 0755)
+	require.NoError(t, err)
+
+	err = os.WriteFile(filepath.Join(tempDir, "src", "net", "http", "server.go"), []byte("package http\n\nfunc Serve() {}\n"), 0644)
+	require.NoError(t, err)
+
+	err = os.WriteFile(filepath.Join(tempDir, "other.go"), []byte("package other\n\nfunc Other() {}\n"), 0644)
+	require.NoError(t, err)
+
+	cmd = exec.Command("git", "add", ".")
+	cmd.Dir = tempDir
+	err = cmd.Run()
+	require.NoError(t, err)
+
+	cmd = exec.Command("git", "commit", "-m", "Initial commit")
+	cmd.Dir = tempDir
+	cmd.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME=Test",
+		"GIT_AUTHOR_EMAIL=test@example.com",
+		"GIT_COMMITTER_NAME=Test",
+		"GIT_COMMITTER_EMAIL=test@example.com",
+	)
+	err = cmd.Run()
+	require.NoError(t, err)
+
+	fetcher := NewGitFetcher()
+	repoURL := "file://" + filepath.ToSlash(tempDir)
+
+	tree, chunks, err := fetcher.FetchWithSubDir(repoURL, "src/net/http")
+	require.NoError(t, err)
+	assert.NotEmpty(t, chunks)
+
+	assert.Contains(t, tree, "- src/net/http/server.go")
+	assert.NotContains(t, tree, "- other.go")
+
+	var fullContent strings.Builder
+	for _, c := range chunks {
+		fullContent.WriteString(c.Content)
+	}
+	allText := fullContent.String()
+
+	assert.Contains(t, allText, "--- File: src/net/http/server.go ---")
+	assert.NotContains(t, allText, "--- File: other.go ---")
+}
+
+func TestGitFetcher_FetchWithSubDir_UsesSparseCheckout(t *testing.T) {
+	data, err := os.ReadFile("git_fetcher.go")
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "sparse-checkout")
+}

@@ -8,13 +8,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"golang.org/x/sync/semaphore"
+	"golang.org/x/time/rate"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 
@@ -35,6 +36,22 @@ func exponentialBackoff(retryCount int) time.Duration {
 	return time.Duration(base)*time.Second + time.Duration(jitter)*time.Millisecond
 }
 
+func maxWorkersFromEnv(taskCount int) int {
+	maxWorkers := 10
+	if v := os.Getenv("MAX_CONCURRENT_WORKERS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			maxWorkers = n
+		}
+	}
+	if maxWorkers > 50 {
+		maxWorkers = 50
+	}
+	if taskCount > 0 && taskCount < maxWorkers {
+		maxWorkers = taskCount
+	}
+	return maxWorkers
+}
+
 // Chapter represents a single chapter in the generated outline
 type Chapter struct {
 	Title   string   `json:"title"`
@@ -51,21 +68,32 @@ type OutlineResult struct {
 
 // DecompositionService handles the logic to evaluate project text and generate an outline
 type DecompositionService struct {
-	llmClient  *llm.DeepSeekClient
-	gitFetcher *parser.GitFetcher
+	llmClient     *llm.DeepSeekClient
+	gitFetcher    *parser.GitFetcher
+	limiter       *rate.Limiter
 }
 
 // NewDecompositionService creates a new decomposition service
 func NewDecompositionService() *DecompositionService {
 	apiKey := os.Getenv("DEEPSEEK_API_KEY")
+
+	rpmLimit := 60
+	if v := os.Getenv("LLM_API_RPM_LIMIT"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			rpmLimit = n
+		}
+	}
+	limit := rate.Limit(float64(rpmLimit) / 60.0)
+
 	return &DecompositionService{
-		llmClient:  llm.NewDeepSeekClient(apiKey),
-		gitFetcher: parser.NewGitFetcher(),
+		llmClient:     llm.NewDeepSeekClient(apiKey),
+		gitFetcher:    parser.NewGitFetcher(),
+		limiter:       rate.NewLimiter(limit, 1),
 	}
 }
 
 // AnalyzeStream handles the full analysis pipeline with streaming progress
-func (s *DecompositionService) AnalyzeStream(ctx context.Context, gitURL string, progressChan chan<- string, errChan chan<- error) {
+func (s *DecompositionService) AnalyzeStream(ctx context.Context, gitURL string, subDir string, progressChan chan<- string, errChan chan<- error) {
 	defer close(progressChan)
 	defer close(errChan)
 
@@ -89,8 +117,8 @@ func (s *DecompositionService) AnalyzeStream(ctx context.Context, gitURL string,
 	}
 
 	sendProgress(0, "正在克隆并拉取仓库 (depth=1)...", nil)
-	
-	treeContent, chunks, err := s.gitFetcher.Fetch(gitURL)
+
+	treeContent, chunks, err := s.gitFetcher.FetchWithSubDir(gitURL, subDir)
 	if err != nil {
 		errChan <- fmt.Errorf("拉取仓库失败: %w", err)
 		return
@@ -114,44 +142,73 @@ func (s *DecompositionService) AnalyzeStream(ctx context.Context, gitURL string,
 		// Tree Reduce: 如果局部摘要数量过多，先进行中间层汇总
 		if len(summaries) > 20 {
 			sendProgress(2, fmt.Sprintf("局部摘要数量较多 (%d)，正在进行中间层 Tree Reduce 汇总...", len(summaries)), nil)
-			var intermediateSummaries []string
 			batchSize := 10
-			for i := 0; i < len(summaries); i += batchSize {
-				end := i + batchSize
+			numBatches := (len(summaries) + batchSize - 1) / batchSize
+			intermediateSummaries := make([]string, numBatches)
+
+			modelStr := "deepseek-v4-flash"
+			if envModel := os.Getenv("DEEPSEEK_MODEL"); envModel != "" {
+				modelStr = envModel
+			}
+
+			maxWorkers := maxWorkersFromEnv(numBatches)
+			treeSem := semaphore.NewWeighted(int64(maxWorkers))
+
+			var treeWg sync.WaitGroup
+			for start := 0; start < len(summaries); start += batchSize {
+				end := start + batchSize
 				if end > len(summaries) {
 					end = len(summaries)
 				}
-				batchContent := strings.Join(summaries[i:end], "\n\n")
+				batchIdx := start / batchSize
+				batchSummaries := summaries[start:end]
+				batchContent := strings.Join(batchSummaries, "\n\n")
 
-				// 生成中间层摘要
-				prompt := fmt.Sprintf(`你是一个高级架构师。以下是一个大型项目部分模块的局部摘要集合。
+				treeWg.Add(1)
+				go func(batchIndex int, originalBatchSummaries []string, originalBatchContent string) {
+					defer treeWg.Done()
+					if err := treeSem.Acquire(ctx, 1); err != nil {
+						return
+					}
+					defer treeSem.Release(1)
+
+					prompt := fmt.Sprintf(`你是一个高级架构师。以下是一个大型项目部分模块的局部摘要集合。
 请将这些局部摘要融合成一个中级摘要，提炼出这些模块共同负责的核心功能、数据流和架构逻辑。
 忽略过于细节的代码实现，重点关注模块间的关系和整体职责。字数控制在 800 字以内。
 
 模块摘要如下：
-%s`, batchContent)
+%s`, originalBatchContent)
 
-				req := []llm.Message{
-					{Role: "system", Content: "你是一个专业的架构师，擅长将零散的模块信息归纳为系统化的高层架构描述。"},
-					{Role: "user", Content: prompt},
-				}
+					req := []llm.Message{
+						{Role: "system", Content: "你是一个专业的架构师，擅长将零散的模块信息归纳为系统化的高层架构描述。"},
+						{Role: "user", Content: prompt},
+					}
 
-				modelStr := "deepseek-chat"
-				if envModel := os.Getenv("DEEPSEEK_MODEL"); envModel != "" {
-					modelStr = envModel
-				}
+					ctxTimeout, cancel := context.WithTimeout(ctx, 3*time.Minute)
+					defer cancel()
 
-				ctxTimeout, cancel := context.WithTimeout(ctx, 3*time.Minute)
-				interSummary, err := s.llmClient.Generate(ctxTimeout, modelStr, req)
-				cancel()
-				if err != nil {
-					// 容错处理：如果中间层汇总失败，保留原文
-					intermediateSummaries = append(intermediateSummaries, summaries[i:end]...)
-				} else {
-					intermediateSummaries = append(intermediateSummaries, interSummary)
+					if err := s.limiter.Wait(ctxTimeout); err != nil {
+						intermediateSummaries[batchIndex] = originalBatchContent
+						return
+					}
+
+					interSummary, err := s.llmClient.Generate(ctxTimeout, modelStr, req)
+					if err != nil {
+						intermediateSummaries[batchIndex] = originalBatchContent
+						return
+					}
+					intermediateSummaries[batchIndex] = interSummary
+				}(batchIdx, batchSummaries, batchContent)
+			}
+
+			treeWg.Wait()
+
+			summaries = nil
+			for _, s := range intermediateSummaries {
+				if s != "" {
+					summaries = append(summaries, s)
 				}
 			}
-			summaries = intermediateSummaries
 		}
 
 		finalContent.WriteString(treeContent)
@@ -182,19 +239,7 @@ func (s *DecompositionService) mapReduceAnalyze(ctx context.Context, chunks []pa
 	var summaries []string
 	var mu sync.Mutex
 
-	// 根据系统 CPU 核心数动态调整并发数，优化动态范围（限制在 3~8 之间），避免过多导致 UI 杂乱和 LLM 并发限流
-	numCPU := runtime.NumCPU()
-	maxWorkers := numCPU
-	if maxWorkers < 3 {
-		maxWorkers = 3
-	}
-	if maxWorkers > 8 {
-		maxWorkers = 8
-	}
-	// 避免 Worker 数量大于任务数
-	if len(chunks) < maxWorkers {
-		maxWorkers = len(chunks)
-	}
+	maxWorkers := maxWorkersFromEnv(len(chunks))
 
 	sem := semaphore.NewWeighted(int64(maxWorkers))
 	var wg sync.WaitGroup
@@ -257,7 +302,7 @@ func (s *DecompositionService) generateLocalSummaryWithRetry(ctx context.Context
 		{Role: "user", Content: prompt},
 	}
 
-	modelStr := "deepseek-chat"
+	modelStr := "deepseek-v4-flash"
 	if envModel := os.Getenv("DEEPSEEK_MODEL"); envModel != "" {
 		modelStr = envModel
 	}
@@ -270,7 +315,11 @@ func (s *DecompositionService) generateLocalSummaryWithRetry(ctx context.Context
 		}
 
 		attemptCtx, cancel := context.WithTimeout(ctx, 3*time.Minute)
-		summary, err := s.llmClient.Generate(attemptCtx, modelStr, messages)
+		err := s.limiter.Wait(attemptCtx)
+		var summary string
+		if err == nil {
+			summary, err = s.llmClient.Generate(attemptCtx, modelStr, messages)
+		}
 		cancel()
 
 		if err == nil {
@@ -339,8 +388,9 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 		}
 	}
 
-	// 限制并发数为 3
-	sem := semaphore.NewWeighted(3)
+	// 使用环境变量配置限制并发数，默认 10
+	maxWorkers := maxWorkersFromEnv(len(outline))
+	sem := semaphore.NewWeighted(int64(maxWorkers))
 	var wg sync.WaitGroup
 
 	for i, chapter := range outline {
@@ -362,68 +412,68 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 			defer wg.Done()
 
 			// Limit the content sent per chapter to avoid token overflow
-		var chapterSourceContent string
-		if sourceType == "git" && tempDir != "" && len(chapter.Files) > 0 {
-			var builder strings.Builder
-			for _, fPath := range chapter.Files {
-				fullPath := filepath.Join(tempDir, fPath)
-				// Prevent path traversal
-				if !strings.HasPrefix(filepath.Clean(fullPath), filepath.Clean(tempDir)) {
-					continue
-				}
-				info, err := os.Stat(fullPath)
-				if err != nil {
-					continue
-				}
-				if info.IsDir() {
-					filepath.Walk(fullPath, func(p string, i os.FileInfo, err error) error {
-						if err != nil || i.IsDir() || !i.Mode().IsRegular() {
+			var chapterSourceContent string
+			if sourceType == "git" && tempDir != "" && len(chapter.Files) > 0 {
+				var builder strings.Builder
+				for _, fPath := range chapter.Files {
+					fullPath := filepath.Join(tempDir, fPath)
+					// Prevent path traversal
+					if !strings.HasPrefix(filepath.Clean(fullPath), filepath.Clean(tempDir)) {
+						continue
+					}
+					info, err := os.Stat(fullPath)
+					if err != nil {
+						continue
+					}
+					if info.IsDir() {
+						filepath.Walk(fullPath, func(p string, i os.FileInfo, err error) error {
+							if err != nil || i.IsDir() || !i.Mode().IsRegular() {
+								return nil
+							}
+							ext := strings.ToLower(filepath.Ext(p))
+							if parser.IsBinaryExt(ext) {
+								return nil
+							}
+							data, err := os.ReadFile(p)
+							if err == nil {
+								relPath, _ := filepath.Rel(tempDir, p)
+								builder.WriteString(fmt.Sprintf("--- File: %s ---\n%s\n\n", relPath, string(data)))
+							}
 							return nil
-						}
-						ext := strings.ToLower(filepath.Ext(p))
-						if parser.IsBinaryExt(ext) {
-							return nil
-						}
-						data, err := os.ReadFile(p)
+						})
+					} else {
+						data, err := os.ReadFile(fullPath)
 						if err == nil {
-							relPath, _ := filepath.Rel(tempDir, p)
-							builder.WriteString(fmt.Sprintf("--- File: %s ---\n%s\n\n", relPath, string(data)))
+							builder.WriteString(fmt.Sprintf("--- File: %s ---\n%s\n\n", fPath, string(data)))
 						}
-						return nil
-					})
-				} else {
-					data, err := os.ReadFile(fullPath)
-					if err == nil {
-						builder.WriteString(fmt.Sprintf("--- File: %s ---\n%s\n\n", fPath, string(data)))
 					}
 				}
-			}
-			if builder.Len() > 0 {
-				chapterSourceContent = builder.String()
+				if builder.Len() > 0 {
+					chapterSourceContent = builder.String()
+				} else {
+					chapterSourceContent = sourceContent
+				}
 			} else {
 				chapterSourceContent = sourceContent
 			}
-		} else {
-			chapterSourceContent = sourceContent
-		}
 
-		runes := []rune(chapterSourceContent)
-		if len(runes) > 100000 {
-			chapterSourceContent = string(runes[:100000]) + "\n\n... [Content Truncated due to length limits] ..."
-		}
+			runes := []rune(chapterSourceContent)
+			if len(runes) > 100000 {
+				chapterSourceContent = string(runes[:100000]) + "\n\n... [Content Truncated due to length limits] ..."
+			}
 
-		extraRequirements := ""
-		reqIndex := 7
-		if gitURL != "" {
-			extraRequirements += fmt.Sprintf("%d. **源码仓库引用**：请在文章开头或合适的位置，引用本项目的 Git 仓库地址：%s\n", reqIndex, gitURL)
-			reqIndex++
-		}
-		if i+1 < len(outline) {
-			extraRequirements += fmt.Sprintf("%d. **下期预告**：请在文章结尾处，明确预告下一篇文章的内容：“下期预告：%s”\n", reqIndex, outline[i+1].Title)
-			reqIndex++
-		}
+			extraRequirements := ""
+			reqIndex := 7
+			if gitURL != "" {
+				extraRequirements += fmt.Sprintf("%d. **源码仓库引用**：请在文章开头或合适的位置，引用本项目的 Git 仓库地址：%s\n", reqIndex, gitURL)
+				reqIndex++
+			}
+			if i+1 < len(outline) {
+				extraRequirements += fmt.Sprintf("%d. **下期预告**：请在文章结尾处，明确预告下一篇文章的内容：“下期预告：%s”\n", reqIndex, outline[i+1].Title)
+				reqIndex++
+			}
 
-		prompt := fmt.Sprintf(`你是一个高级全栈架构师和技术博主。请根据以下提供的源内容，以及本章节的大纲，将其转化为一篇“小白友好、图文并茂、可独立复现”的高质量技术博客章节。
+			prompt := fmt.Sprintf(`你是一个高级全栈架构师和技术博主。请根据以下提供的源内容，以及本章节的大纲，将其转化为一篇“小白友好、图文并茂、可独立复现”的高质量技术博客章节。
 要求：
 1. **字数和篇幅适中**：为了保证生成完整性，单篇文章内容不要过于冗长（控制在 1000-1500 字左右）。不要一次性铺陈太多知识点，聚焦于本章节的核心目标即可。
 2. **代码级剖析**：引用源内容中的核心代码，并逐行解释其作用。如果源内容因为截断而缺少具体代码，请基于目录结构和你的架构经验进行合理补充推演。
@@ -441,240 +491,244 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 - 排序: %d
 `, extraRequirements, chapterSourceContent, chapter.Title, chapter.Summary, chapter.Sort)
 
-		messages := []llm.Message{
-			{Role: "system", Content: "你是一个高级技术博客作者。"},
-			{Role: "user", Content: prompt},
-		}
-
-		llmModel := "deepseek-chat"
-		if envModel := os.Getenv("DEEPSEEK_MODEL"); envModel != "" {
-			llmModel = envModel
-		}
-
-		var streamErr error
-		var content string
-		maxRetries := 3
-
-		for attempt := 1; attempt <= maxRetries; attempt++ {
-			select {
-			case <-ctx.Done():
-				errChan <- ctx.Err()
-				return
-			default:
+			messages := []llm.Message{
+				{Role: "system", Content: "你是一个高级技术博客作者。"},
+				{Role: "user", Content: prompt},
 			}
 
-			if attempt > 1 {
-				retryMsg := map[string]interface{}{
-					"status":       "retrying",
-					"chapter_sort": chapter.Sort,
-					"attempt":      attempt,
-					"parent_id":    parentID.String(),
-				}
-				retryBytes, _ := json.Marshal(retryMsg)
-				progressChan <- string(retryBytes)
-			} else {
-				startMsg := map[string]interface{}{
-					"status":       "generating",
-					"chapter_sort": chapter.Sort,
-					"title":        chapter.Title,
-					"parent_id":    parentID.String(),
-				}
-				startBytes, _ := json.Marshal(startMsg)
-				progressChan <- string(startBytes)
+			llmModel := "deepseek-v4-flash"
+			if envModel := os.Getenv("DEEPSEEK_MODEL"); envModel != "" {
+				llmModel = envModel
 			}
 
-			streamCtx, streamCancel := context.WithCancel(ctx)
-			chapterChunkChan := make(chan string)
-			chapterErrChan := make(chan error)
-			
-			var fullContentBuilder strings.Builder
-			
-			// Generator loop (handles auto-continuation)
-			go func() {
-				defer close(chapterChunkChan)
-				defer close(chapterErrChan)
-				
-				currentMessages := make([]llm.Message, len(messages))
-				copy(currentMessages, messages)
+			var streamErr error
+			maxRetries := 3
+			var content string
 
-				for {
-					tempChunkChan := make(chan string)
-					var assistantContent string
-					var wg sync.WaitGroup
-					wg.Add(1)
+			for attempt := 1; attempt <= maxRetries; attempt++ {
+					select {
+					case <-ctx.Done():
+						errChan <- ctx.Err()
+						return
+					default:
+					}
 
+					if attempt > 1 {
+						retryMsg := map[string]interface{}{
+							"status":       "retrying",
+							"chapter_sort": chapter.Sort,
+							"attempt":      attempt,
+							"parent_id":    parentID.String(),
+						}
+						retryBytes, _ := json.Marshal(retryMsg)
+						progressChan <- string(retryBytes)
+					} else {
+						startMsg := map[string]interface{}{
+							"status":       "generating",
+							"chapter_sort": chapter.Sort,
+							"title":        chapter.Title,
+							"parent_id":    parentID.String(),
+						}
+						startBytes, _ := json.Marshal(startMsg)
+						progressChan <- string(startBytes)
+					}
+
+					streamCtx, streamCancel := context.WithCancel(ctx)
+					chapterChunkChan := make(chan string)
+					chapterErrChan := make(chan error)
+
+					var fullContentBuilder strings.Builder
+
+					// Generator loop (handles auto-continuation)
 					go func() {
-						defer wg.Done()
-						for chunk := range tempChunkChan {
-							assistantContent += chunk
-							chapterChunkChan <- chunk
+						defer close(chapterChunkChan)
+						defer close(chapterErrChan)
+
+						currentMessages := make([]llm.Message, len(messages))
+						copy(currentMessages, messages)
+
+						for {
+							tempChunkChan := make(chan string)
+							var assistantContent string
+							var wg sync.WaitGroup
+							wg.Add(1)
+
+							go func() {
+								defer wg.Done()
+								for chunk := range tempChunkChan {
+									assistantContent += chunk
+									chapterChunkChan <- chunk
+								}
+							}()
+
+							finishReason, err := s.llmClient.GenerateStream(streamCtx, llmModel, currentMessages, tempChunkChan)
+							wg.Wait()
+
+							if err != nil {
+								chapterErrChan <- err
+								return
+							}
+
+							currentMessages = append(currentMessages, llm.Message{
+								Role:    "assistant",
+								Content: assistantContent,
+							})
+
+							if finishReason != "length" {
+								return
+							}
+
+							// Auto-continue
+							continueMsg := llm.Message{
+								Role:    "user",
+								Content: "刚才你的回答被截断了，请严格从上文最后一个字符开始无缝续写。绝对不要输出“好的，我们继续”等任何过渡性废话，直接输出后续的Markdown或代码内容。",
+							}
+							currentMessages = append(currentMessages, continueMsg)
 						}
 					}()
 
-					finishReason, err := s.llmClient.GenerateStream(streamCtx, llmModel, currentMessages, tempChunkChan)
-					wg.Wait()
+					idleTimeout := 60 * time.Second
+					timer := time.NewTimer(idleTimeout)
 
-					if err != nil {
-						chapterErrChan <- err
-						return
+					streamErr = nil
+					done := false
+
+					for !done {
+						select {
+						case <-ctx.Done():
+							streamCancel()
+							timer.Stop()
+							errChan <- ctx.Err()
+							return
+						case <-timer.C:
+							streamCancel()
+							streamErr = fmt.Errorf("AI generation idle timeout (no data for %v)", idleTimeout)
+							done = true
+						case err, ok := <-chapterErrChan:
+							if ok && err != nil {
+								streamErr = err
+								done = true
+							} else if !ok {
+								chapterErrChan = nil
+							}
+						case chunk, ok := <-chapterChunkChan:
+							if !ok {
+								done = true
+							} else {
+								if !timer.Stop() {
+									select {
+									case <-timer.C:
+									default:
+									}
+								}
+								timer.Reset(idleTimeout)
+
+								fullContentBuilder.WriteString(chunk)
+								streamMsg := map[string]interface{}{
+									"status":       "streaming",
+									"chapter_sort": chapter.Sort,
+									"content":      chunk,
+								}
+								streamBytes, _ := json.Marshal(streamMsg)
+								progressChan <- string(streamBytes)
+							}
+						}
 					}
 
-					currentMessages = append(currentMessages, llm.Message{
-						Role:    "assistant",
-						Content: assistantContent,
-					})
-
-					if finishReason != "length" {
-						return
-					}
-
-					// Auto-continue
-					continueMsg := llm.Message{
-						Role:    "user",
-						Content: "刚才你的回答被截断了，请严格从上文最后一个字符开始无缝续写。绝对不要输出“好的，我们继续”等任何过渡性废话，直接输出后续的Markdown或代码内容。",
-					}
-					currentMessages = append(currentMessages, continueMsg)
-				}
-			}()
-
-			idleTimeout := 60 * time.Second
-			timer := time.NewTimer(idleTimeout)
-
-			streamErr = nil
-			done := false
-
-			for !done {
-				select {
-				case <-ctx.Done():
-					streamCancel()
 					timer.Stop()
-					errChan <- ctx.Err()
-					return
-				case <-timer.C:
 					streamCancel()
-					streamErr = fmt.Errorf("AI generation idle timeout (no data for %v)", idleTimeout)
-					done = true
-				case err, ok := <-chapterErrChan:
-					if ok && err != nil {
-						streamErr = err
-						done = true
-					} else if !ok {
-						chapterErrChan = nil
-					}
-				case chunk, ok := <-chapterChunkChan:
-					if !ok {
-						done = true
-					} else {
-						if !timer.Stop() {
-							select { case <-timer.C: default: }
-						}
-						timer.Reset(idleTimeout)
 
-						fullContentBuilder.WriteString(chunk)
-						streamMsg := map[string]interface{}{
-							"status":       "streaming",
-							"chapter_sort": chapter.Sort,
-							"content":      chunk,
-						}
-						streamBytes, _ := json.Marshal(streamMsg)
-						progressChan <- string(streamBytes)
+					if streamErr == nil {
+						content = fullContentBuilder.String()
+						break
 					}
+
+					time.Sleep(exponentialBackoff(attempt))
+				}
+
+				if streamErr != nil {
+					errMsg := map[string]interface{}{
+						"status":       "error",
+						"chapter_sort": chapter.Sort,
+						"message":      fmt.Sprintf("chapter %d generation failed after %d attempts: %v", chapter.Sort, maxRetries, streamErr),
+					}
+					errBytes, _ := json.Marshal(errMsg)
+					progressChan <- string(errBytes)
+					return
+				}
+
+			// Calculate word count
+			wordCount := len([]rune(content))
+
+			// Extract Tech Stacks using LLM
+			var techStacks datatypes.JSON
+			extractPrompt := "请从以下文章内容中提取出涉及的核心技术栈名称（如 React, Go, Docker 等），以 JSON 数组格式返回，不要有任何其他多余字符：\n\n" + content
+			extractMessages := []llm.Message{
+				{Role: "user", Content: extractPrompt},
+			}
+
+			extractedJSON, err := s.llmClient.Generate(ctx, llmModel, extractMessages)
+			if err == nil && len(extractedJSON) > 0 {
+				// basic validation that it is a json array
+				var parsed []string
+				if json.Unmarshal([]byte(extractedJSON), &parsed) == nil {
+					techStacks = datatypes.JSON(extractedJSON)
 				}
 			}
 
-			timer.Stop()
-			streamCancel()
-
-			if streamErr == nil {
-				content = fullContentBuilder.String()
-				break
+			// Save to database
+			blog := &model.Blog{
+				UserID:      userID,
+				ParentID:    &parentID,
+				ChapterSort: chapter.Sort,
+				Title:       chapter.Title,
+				Content:     content,
+				SourceType:  sourceType,
+				Status:      1, // 1 for completed
+				WordCount:   wordCount,
+				TechStacks:  techStacks,
 			}
 
-			time.Sleep(exponentialBackoff(attempt))
-		}
+			if err := db.DB.WithContext(ctx).Create(blog).Error; err != nil {
+				errMsg := map[string]interface{}{
+					"status":       "error",
+					"chapter_sort": chapter.Sort,
+					"message":      fmt.Sprintf("failed to save chapter %d to db: %v", chapter.Sort, err),
+				}
+				errBytes, _ := json.Marshal(errMsg)
+				progressChan <- string(errBytes)
+				return
+			} else {
+				// Update user tokens used
+				estimatedTokens := len([]rune(content)) * 2
+				db.DB.Model(&model.User{}).Where("id = ?", userID).UpdateColumn("tokens_used", gorm.Expr("tokens_used + ?", estimatedTokens))
+			}
 
-		if streamErr != nil {
-			errMsg := map[string]interface{}{
-				"status":       "error",
+			// Send progress: completed
+			endMsg := map[string]interface{}{
+				"status":       "completed",
 				"chapter_sort": chapter.Sort,
-				"message":      fmt.Sprintf("chapter %d generation failed after %d attempts: %v", chapter.Sort, maxRetries, streamErr),
+				"title":        chapter.Title,
 			}
-			errBytes, _ := json.Marshal(errMsg)
-			progressChan <- string(errBytes)
-			return
-		}
-
-		// Calculate word count
-		wordCount := len([]rune(content))
-
-		// Extract Tech Stacks using LLM
-		var techStacks datatypes.JSON
-		extractPrompt := "请从以下文章内容中提取出涉及的核心技术栈名称（如 React, Go, Docker 等），以 JSON 数组格式返回，不要有任何其他多余字符：\n\n" + content
-		extractMessages := []llm.Message{
-			{Role: "user", Content: extractPrompt},
-		}
-
-		extractedJSON, err := s.llmClient.Generate(ctx, llmModel, extractMessages)
-		if err == nil && len(extractedJSON) > 0 {
-			// basic validation that it is a json array
-			var parsed []string
-			if json.Unmarshal([]byte(extractedJSON), &parsed) == nil {
-				techStacks = datatypes.JSON(extractedJSON)
-			}
-		}
-
-		// Save to database
-		blog := &model.Blog{
-			UserID:      userID,
-			ParentID:    &parentID,
-			ChapterSort: chapter.Sort,
-			Title:       chapter.Title,
-			Content:     content,
-			SourceType:  sourceType,
-			Status:      1, // 1 for completed
-			WordCount:   wordCount,
-			TechStacks:  techStacks,
-		}
-
-		if err := db.DB.WithContext(ctx).Create(blog).Error; err != nil {
-			errMsg := map[string]interface{}{
-				"status":       "error",
-				"chapter_sort": chapter.Sort,
-				"message":      fmt.Sprintf("failed to save chapter %d to db: %v", chapter.Sort, err),
-			}
-			errBytes, _ := json.Marshal(errMsg)
-			progressChan <- string(errBytes)
-			return
-		} else {
-			// Update user tokens used
-			estimatedTokens := len([]rune(content)) * 2
-			db.DB.Model(&model.User{}).Where("id = ?", userID).UpdateColumn("tokens_used", gorm.Expr("tokens_used + ?", estimatedTokens))
-		}
-
-		// Send progress: completed
-		endMsg := map[string]interface{}{
-			"status":       "completed",
-			"chapter_sort": chapter.Sort,
-			"title":        chapter.Title,
-		}
-		endBytes, _ := json.Marshal(endMsg)
-		progressChan <- string(endBytes)
-	}(i, chapter)
+			endBytes, _ := json.Marshal(endMsg)
+			progressChan <- string(endBytes)
+		}(i, chapter)
 	}
 
 	wg.Wait()
 }
+
 // GenerateOutline evaluates project text and generates a JSON outline
 func (s *DecompositionService) GenerateOutline(ctx context.Context, sourceContent string) (*OutlineResult, error) {
-	// DeepSeek max context is ~128k tokens. 
-	// Limit source content to ~300,000 characters to avoid API 400 errors (invalid_request_error).
-	// 300,000 characters is roughly 75k - 100k tokens, leaving plenty of room for system prompts and the completion.
+	// DeepSeek V4 max context is 1M tokens.
+	// Limit source content to ~2,000,000 characters to utilize the long context while keeping a safe margin.
+	// 2,000,000 characters is roughly 500k - 700k tokens, leaving plenty of room for system prompts and the completion.
 	runes := []rune(sourceContent)
-	if len(runes) > 300000 {
-		sourceContent = string(runes[:300000]) + "\n\n... [Content Truncated due to length limits] ..."
+	if len(runes) > 2000000 {
+		sourceContent = string(runes[:2000000]) + "\n\n... [Content Truncated due to length limits] ..."
 	}
 
-	prompt := fmt.Sprintf(`你是一个高级架构师。请评估以下项目文本，并生成一个系列博客的大纲。
+	instruction := `你是一个高级架构师。请评估前面提供的项目文本，并生成一个系列博客的大纲。
 对于大型项目、源码仓库或复杂内容，**强制拆分为细粒度系列博客**。
 要求一个技术点分为一个博客，博客篇数上不封顶，只要有需要，技术点可以拆的更加详细。
 输出必须是纯JSON格式，包含 series_title 和 chapters 两个字段，不包含任何Markdown标记或其他文字。
@@ -689,17 +743,14 @@ JSON 格式如下：
       "files": ["强相关的具体文件路径或目录（必须是相对路径）"]
     }
   ]
-}
-
-项目文本：
-%s`, sourceContent)
+}`
 
 	messages := []llm.Message{
-		{Role: "system", Content: "你是一个高级架构师，只输出符合要求的纯JSON对象。"},
-		{Role: "user", Content: prompt},
+		{Role: "system", Content: "项目文本内容如下：\n" + sourceContent},
+		{Role: "user", Content: instruction},
 	}
 
-	model := "deepseek-chat"
+	model := "deepseek-v4-flash"
 	if envModel := os.Getenv("DEEPSEEK_MODEL"); envModel != "" {
 		model = envModel
 	}
@@ -742,7 +793,7 @@ func (s *DecompositionService) ContinueGeneration(ctx context.Context, userID uu
 		{Role: "user", Content: prompt},
 	}
 
-	llmModel := "deepseek-chat"
+	llmModel := "deepseek-v4-flash"
 	if envModel := os.Getenv("DEEPSEEK_MODEL"); envModel != "" {
 		llmModel = envModel
 	}
@@ -756,7 +807,7 @@ func (s *DecompositionService) ContinueGeneration(ctx context.Context, userID uu
 	go func() {
 		defer close(internalChunkChan)
 		defer close(internalErrChan)
-		
+
 		currentMessages := make([]llm.Message, len(messages))
 		copy(currentMessages, messages)
 
@@ -835,7 +886,10 @@ func (s *DecompositionService) ContinueGeneration(ctx context.Context, userID uu
 				return
 			}
 			if !timer.Stop() {
-				select { case <-timer.C: default: }
+				select {
+				case <-timer.C:
+				default:
+				}
 			}
 			timer.Reset(idleTimeout)
 

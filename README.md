@@ -27,6 +27,7 @@
   - Map-Reduce 并发调度引擎 (`x/sync/semaphore`)
   - SSE (Server-Sent Events) 打字机流式推送与空闲超时打断机制
   - GORM + PostgreSQL 14+
+  - DeepSeek V4 API 原生前缀缓存 (Prompt Caching)
   - JWT & OAuth2.0 无状态鉴权
 - **运维与测试**：
   - Docker & Docker Compose (多阶段构建)

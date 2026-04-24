@@ -27,6 +27,7 @@ services:
     environment:
       # 覆盖 .env 中的本地数据库连接，强制使用 Docker 内部网络连接 db 容器
       - DATABASE_URL=postgres://inkwords:inkwords_password@db:5432/inkwords_db?sslmode=disable
+      - REDIS_URL=redis://redis:6379/0
       - FRONTEND_URL=http://localhost
     ports:
       - "8081:8080"
@@ -35,6 +36,19 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  redis:
+    image: redis/redis-stack-server:latest
+    container_name: inkwords-redis
+    ports:
+      - "6379:6379"
+    environment:
+      - REDIS_ARGS=--maxmemory 1gb --maxmemory-policy allkeys-lru
+    volumes:
+      - redisdata:/data
     restart: unless-stopped
 
   frontend:
@@ -52,3 +66,4 @@ services:
 volumes:
   pgdata:
   uploads:
+  redisdata:

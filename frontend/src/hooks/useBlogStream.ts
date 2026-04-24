@@ -9,7 +9,7 @@ export const useBlogStream = () => {
   const store = useStreamStore()
   const { fetchBlogs } = useBlogStore()
 
-  const analyzeGit = useCallback(async (gitUrl: string) => {
+  const analyzeGit = useCallback(async (gitUrl: string, subDir?: string) => {
     // 基础拦截，防止用户输入非法的 git URL
     if (!gitUrl.startsWith('http://') && !gitUrl.startsWith('https://') && !gitUrl.startsWith('git@') && !gitUrl.startsWith('file://')) {
       alert('请输入有效的 Git 仓库链接 (以 http://, https://, git@ 或 file:// 开头)')
@@ -37,7 +37,7 @@ export const useBlogStream = () => {
         },
         signal: ctrl.signal,
         openWhenHidden: true, // Prevents fetch-event-source from aborting when tab is hidden
-        body: JSON.stringify({ git_url: gitUrl }),
+        body: JSON.stringify({ git_url: gitUrl, sub_dir: subDir?.trim() || '' }),
         async onopen(response) {
           if (response.ok && response.headers.get('content-type')?.startsWith('text/event-stream')) {
             return; // everything's good

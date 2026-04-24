@@ -32,7 +32,7 @@
 ### 2.3 基础设施 (Infrastructure)
 - **数据库**: PostgreSQL 14 (Docker volume 挂载持久化)
 - **代理与网关**: Nginx (构建前端静态页面并反向代理后端 `/api/` 路径)
-- **大语言模型**: DeepSeek-Chat API
+- **大语言模型**: DeepSeek-V4-Flash API (支持 128k 输出及 1M Token 上下文)
 
 ## 3. 并发生成架构
 在处理项目到系列博客的生成时，后端采取如下架构：
@@ -51,3 +51,8 @@
 - **后端镜像**: 采用多阶段构建（Go 官方镜像编译，Alpine 运行）。使用 `FRONTEND_URL` 和 `DATABASE_URL` 环境变量控制运行逻辑。
 - **数据库**: PostgreSQL，初始化 `inkwords_db`。
 - **容器互联**: 全部服务处于 `inkwords_default` 内部网络，后端连接数据库通过服务名 `db:5432` 互通。
+
+## 5. 全局缓存机制 (Prompt Caching)
+- **目标**：降低 DeepSeek Token 消耗，提高首字响应速度 (TTFT)。
+- **原生支持**：全面拥抱 DeepSeek V4 API 级别的原生前缀缓存 (Prompt Caching)。
+- **Prompt 结构重构**：将数百万字的巨量源码 `sourceContent` 提取至 `system` 消息并置于请求最前，将易变的“指令”置于 `user` 消息并置于请求尾部，以最大化原生缓存的命中率，将长文本输入成本降低 80% 以上。

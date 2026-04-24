@@ -57,10 +57,10 @@ func (a *UserAPI) GetProfile(c *gin.Context) {
 		return
 	}
 
-	// 读取数据库中的 TokenLimit，如果没有设置，则默认 100000
+	// 读取数据库中的 TokenLimit，如果没有设置，则默认 1000000000
 	tokenLimit := user.TokenLimit
 	if tokenLimit == 0 {
-		tokenLimit = 100000
+		tokenLimit = 1000000000
 	}
 
 	// 连接平台逻辑

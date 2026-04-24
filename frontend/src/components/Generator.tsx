@@ -12,6 +12,8 @@ export function Generator() {
   const store = useStreamStore()
   const { analyzeGit, parseFile, generateSeries, generateSingle, stopAnalyzing, stopGenerating } = useBlogStream()
   const [gitUrl, setGitUrl] = useState('')
+  const [subDir, setSubDir] = useState('')
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const [analyzingType, setAnalyzingType] = useState<'git' | 'file'>('git')
   const [isOutlineExpanded, setIsOutlineExpanded] = useState(true)
@@ -30,7 +32,7 @@ export function Generator() {
     if (!gitUrl) return
     setAnalyzingType('git')
     try {
-      await analyzeGit(gitUrl)
+      await analyzeGit(gitUrl, subDir)
     } catch (err) {
       setGitUrl('')
     }
@@ -88,23 +90,52 @@ export function Generator() {
 
   return (
     <div className="flex-1 flex flex-col bg-white">
-      <div className="h-16 border-b border-zinc-200 flex items-center px-6 gap-4">
-        <input 
-          type="text" 
-          className="flex-1 max-w-xl px-4 py-2 bg-zinc-50 border border-zinc-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          placeholder="请粘贴 GitHub 仓库链接 (例如: https://github.com/gin-gonic/gin)"
-          value={gitUrl}
-          onChange={(e) => setGitUrl(e.target.value)}
-          disabled={store.isAnalyzing || store.isGenerating}
-        />
-        <Button 
-          onClick={handleAnalyze} 
-          disabled={!gitUrl || store.isAnalyzing || store.isGenerating}
-          className="bg-zinc-900 text-white hover:bg-zinc-800"
-        >
-          {store.isAnalyzing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-          {store.isAnalyzing ? '分析中...' : '分析仓库'}
-        </Button>
+      <div className="border-b border-zinc-200 px-6 py-4">
+        <div className="flex items-center gap-4">
+          <input 
+            type="text" 
+            className="flex-1 max-w-xl px-4 py-2 bg-zinc-50 border border-zinc-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            placeholder="请粘贴 GitHub 仓库链接 (例如: https://github.com/gin-gonic/gin)"
+            value={gitUrl}
+            onChange={(e) => setGitUrl(e.target.value)}
+            disabled={store.isAnalyzing || store.isGenerating}
+          />
+          <Button 
+            onClick={handleAnalyze} 
+            disabled={!gitUrl || store.isAnalyzing || store.isGenerating}
+            className="bg-zinc-900 text-white hover:bg-zinc-800"
+          >
+            {store.isAnalyzing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+            {store.isAnalyzing ? '分析中...' : '分析仓库'}
+          </Button>
+        </div>
+
+        <div className="mt-2">
+          <button
+            type="button"
+            onClick={() => setShowAdvanced(v => !v)}
+            disabled={store.isAnalyzing || store.isGenerating}
+            className="flex items-center text-sm text-zinc-500 hover:text-zinc-700 disabled:opacity-50 disabled:hover:text-zinc-500"
+          >
+            高级选项
+            {showAdvanced ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />}
+          </button>
+
+          {showAdvanced && (
+            <div className="mt-3 p-4 bg-zinc-50 rounded-lg border border-zinc-100">
+              <label className="block text-sm font-medium text-zinc-700 mb-1">指定解析子目录 (可选)</label>
+              <input
+                type="text"
+                placeholder="如：src/net/http"
+                className="w-full p-2 text-sm border border-zinc-200 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
+                value={subDir}
+                onChange={(e) => setSubDir(e.target.value)}
+                disabled={store.isAnalyzing || store.isGenerating}
+              />
+              <p className="text-xs text-zinc-500 mt-2">针对特大型仓库，建议指定具体模块路径以加速解析并避免超限。</p>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-8">

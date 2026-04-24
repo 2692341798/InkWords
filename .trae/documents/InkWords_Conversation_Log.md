@@ -609,3 +609,24 @@
   - 通过 `brainstorming` 和 `writing-plans` 技能输出了详细的设计和实现计划。
   - 成功执行了 DI 重构、Token 额度检查器（`CheckQuota`）和 `bind-github` 流程的实现。
   - 修复了 React 的渲染性能隐患。
+
+### 2026-04-24 语义缓存方案探讨与实施
+- **需求**：用户反馈项目 Token 消耗过高，要求添加缓存方案。
+- **互动过程**：
+  1. 向用户提供了匹配策略、存储介质、隔离级别、过期策略等选项，用户选择了“语义缓存”、“Redis 分布式缓存”、“全局共享”和“LRU 淘汰”。
+  2. 由于 DeepSeek API 没有官方 Embedding 接口，向用户询问 Embedding 方案。用户选择了“本地自建服务”。
+  3. 提交详细的 Kickoff 计划（引入 Redis Stack Server + Ollama），用户确认执行。
+- **实施结果**：修改 `docker-compose.yml` 添加容器；在 Go 后端通过 `go-redis` 结合 RediSearch 的 `FT.SEARCH` 实现基于 `nomic-embed-text` 的语义向量匹配。
+
+### 2026-04-24 移除本地语义缓存并拥抱原生 Prompt Caching 与子目录解析
+- **需求**：将项目最近的更改（包含移除 Ollama/Redis 语义缓存、升级大模型能力、添加 Git 子目录解析等）更新到文档，并提交项目到 GitHub。
+- **AI 动作**：
+  1. 通过读取 `.git_diff.txt` 和 `.git_status.txt` 分析了最新的变更。
+  2. 发现项目移除了 `backend/internal/cache/semantic.go` 和 `backend/internal/llm/ollama.go`，并在 `docker-compose.yml` 移除了 Ollama 服务。
+  3. 发现 `deepseek-chat` 升级为 `deepseek-v4-flash`，上下文长度支持至 1M Token (2,000,000 字符限制)。
+  4. 发现引入了 DeepSeek 原生前缀缓存（Prompt Caching），将 `sourceContent` 移至 `system` 消息以大幅降低 Token 费用并提高 TTFT 响应速度。
+  5. 发现 `GitFetcher` 和前端 `GitSourceInput` 增加了 `sub_dir` 子目录解析功能（基于 `git sparse-checkout`）。
+  6. 同步更新了 `InkWords_Architecture.md`, `InkWords_API.md`, `InkWords_PRD.md`, `InkWords_Database.md` 及 `README.md`。
+- **决策/变更**：
+  - 移除笨重的本地 Embedding 服务（Ollama），全面转向大模型原生的上下文前缀缓存，不仅大幅降低了部署包体积与内存开销，还获得了更优的计费与响应速度。
+  - 对于特大型 Git 仓库，增加 `sub_dir` 的定向解析能力，让用户能按需分析核心模块，避免超出 Token 上限或浪费算力。

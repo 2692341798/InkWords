@@ -45,10 +45,10 @@ func (s *UserService) CheckQuota(uid uuid.UUID) error {
 	if err != nil {
 		return err
 	}
-	
+
 	limit := user.TokenLimit
 	if limit == 0 {
-		limit = 100000
+		limit = 1000000000
 	}
 
 	if user.TokensUsed >= limit {

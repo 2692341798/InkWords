@@ -35,6 +35,7 @@ type GenerateRequest struct {
 	SourceType    string            `json:"source_type"`
 	Outline       []service.Chapter `json:"outline"`      // Optional outline for series generation
 	GitURL        string            `json:"git_url"`      // For analyze stream
+	SubDir        string            `json:"sub_dir"`      // For analyze stream
 	SeriesTitle   string            `json:"series_title"` // Series title for parent blog
 	ParentID      string            `json:"parent_id"`    // Optional parent ID for resuming series
 }
@@ -73,7 +74,7 @@ func (api *StreamAPI) AnalyzeStreamHandler(c *gin.Context) {
 
 	go func() {
 		defer wg.Done()
-		api.decompositionService.AnalyzeStream(bgCtx, req.GitURL, progressChan, errChan)
+		api.decompositionService.AnalyzeStream(bgCtx, req.GitURL, req.SubDir, progressChan, errChan)
 	}()
 
 	// Set headers for SSE

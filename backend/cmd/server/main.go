@@ -8,6 +8,7 @@ import (
 	"github.com/joho/godotenv"
 
 	"inkwords-backend/internal/api"
+	"inkwords-backend/internal/cache"
 	"inkwords-backend/internal/db"
 	"inkwords-backend/internal/middleware"
 	"inkwords-backend/internal/service"
@@ -29,6 +30,11 @@ func main() {
 	}
 	if err := db.InitDB(dsn); err != nil {
 		log.Fatalf("Database initialization failed: %v", err)
+	}
+
+	// 初始化 Redis 缓存
+	if err := cache.InitRedis(); err != nil {
+		log.Printf("Redis initialization failed (cache will be disabled): %v", err)
 	}
 
 	// 创建一个默认的 Gin 引擎

@@ -58,6 +58,9 @@ func NewGitFetcher() *GitFetcher {
 }
 
 const maxChunkChars = 300000
+const maxTotalChunks = 15
+
+const largeRepoTruncationHint = "【系统提示】由于该项目体量极其庞大，系统已执行优雅降级，自动截断了后续文件（仅保留了前15个核心模块的分块）。请你在生成的博客引言或开头中，自然地向读者说明：由于项目过于庞大，本文仅抽取分析了其核心的若干模块代码，并未包含全量内容。"
 
 // Fetch clones the git repository to a temporary directory, extracts text from all non-ignored files,
 // aggregates them by directory into chunks, and then deletes the temporary directory.
@@ -84,7 +87,7 @@ func (f *GitFetcher) Fetch(repoURL string) (string, []FileChunk, error) {
 	var treeBuilder strings.Builder
 	treeBuilder.WriteString("=== Repository Structure ===\n")
 
-	dirContents := make(map[string]strings.Builder)
+	dirContents := make(map[string]*strings.Builder)
 
 	err = filepath.Walk(tempDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -156,7 +159,7 @@ func (f *GitFetcher) Fetch(repoURL string) (string, []FileChunk, error) {
 		// Create a new builder if it doesn't exist
 		builder, exists := dirContents[dir]
 		if !exists {
-			builder = strings.Builder{}
+			builder = &strings.Builder{}
 		}
 
 		// Check if adding this file will exceed the limit for the directory chunk
@@ -199,6 +202,181 @@ func (f *GitFetcher) Fetch(repoURL string) (string, []FileChunk, error) {
 				Content: content,
 			})
 		}
+	}
+
+	if len(chunks) > maxTotalChunks {
+		chunks = chunks[:maxTotalChunks]
+		treeBuilder.WriteString("\n\n" + largeRepoTruncationHint)
+	}
+
+	return treeBuilder.String(), chunks, nil
+}
+
+func (f *GitFetcher) FetchWithSubDir(repoURL string, subDir string) (string, []FileChunk, error) {
+	if strings.TrimSpace(subDir) == "" {
+		return f.Fetch(repoURL)
+	}
+
+	tempDir, err := os.MkdirTemp("", "inkwords-git-*")
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to create temp directory: %w", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	subDir = filepath.ToSlash(filepath.Clean(strings.TrimSpace(subDir)))
+	subDir = strings.TrimPrefix(subDir, "/")
+
+	var stderr bytes.Buffer
+	cmd := exec.Command("git", "clone", "--filter=blob:none", "--no-checkout", "--depth", "1", repoURL, tempDir)
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		stderr.Reset()
+		cmd = exec.Command("git", "clone", "--no-checkout", "--depth", "1", repoURL, tempDir)
+		cmd.Stderr = &stderr
+		if err := cmd.Run(); err != nil {
+			return "", nil, fmt.Errorf("failed to clone repository: %w, stderr: %s", err, stderr.String())
+		}
+	}
+
+	stderr.Reset()
+	cmd = exec.Command("git", "sparse-checkout", "init", "--cone")
+	cmd.Dir = tempDir
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return "", nil, fmt.Errorf("failed to init sparse-checkout: %w, stderr: %s", err, stderr.String())
+	}
+
+	stderr.Reset()
+	cmd = exec.Command("git", "sparse-checkout", "set", subDir)
+	cmd.Dir = tempDir
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return "", nil, fmt.Errorf("failed to set sparse-checkout: %w, stderr: %s", err, stderr.String())
+	}
+
+	stderr.Reset()
+	cmd = exec.Command("git", "checkout")
+	cmd.Dir = tempDir
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return "", nil, fmt.Errorf("failed to checkout repository: %w, stderr: %s", err, stderr.String())
+	}
+
+	walkDir := filepath.Join(tempDir, filepath.FromSlash(filepath.Clean(subDir)))
+	if _, err := os.Stat(walkDir); err != nil {
+		if os.IsNotExist(err) {
+			return "", nil, fmt.Errorf("指定的子目录不存在: %s", subDir)
+		}
+		return "", nil, fmt.Errorf("failed to stat sub directory: %w", err)
+	}
+
+	var treeBuilder strings.Builder
+	treeBuilder.WriteString("=== Repository Structure ===\n")
+
+	dirContents := make(map[string]*strings.Builder)
+
+	err = filepath.Walk(walkDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		relPath, _ := filepath.Rel(tempDir, path)
+		if relPath == "." {
+			return nil
+		}
+
+		if isIgnoredPath(relPath, info) {
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		if info.IsDir() {
+			return nil
+		}
+
+		if !info.Mode().IsRegular() {
+			return nil
+		}
+
+		fileName := info.Name()
+		if fileName == "package-lock.json" || fileName == "yarn.lock" || fileName == "pnpm-lock.yaml" || fileName == "go.sum" || fileName == "Cargo.lock" {
+			return nil
+		}
+
+		ext := strings.ToLower(filepath.Ext(path))
+		if IsBinaryExt(ext) {
+			return nil
+		}
+
+		treeBuilder.WriteString("- " + relPath + "\n")
+
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil
+		}
+
+		if !utf8.Valid(data) || bytes.Contains(data, []byte{0}) {
+			return nil
+		}
+
+		dir := filepath.Dir(relPath)
+		if dir == "." {
+			dir = "/"
+		}
+
+		contentStr := string(data)
+		runes := []rune(contentStr)
+		if len(runes) > maxChunkChars {
+			contentStr = string(runes[:maxChunkChars]) + "\n\n... [File Content Truncated due to length limits] ..."
+		}
+
+		fileContent := fmt.Sprintf("--- File: %s ---\n%s\n\n", relPath, contentStr)
+
+		builder, exists := dirContents[dir]
+		if !exists {
+			builder = &strings.Builder{}
+		}
+
+		builder.WriteString(fileContent)
+		dirContents[dir] = builder
+
+		return nil
+	})
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to traverse repository files: %w", err)
+	}
+
+	var chunks []FileChunk
+	for dir, builder := range dirContents {
+		content := builder.String()
+		runes := []rune(content)
+
+		if len(runes) > maxChunkChars {
+			numChunks := (len(runes) + maxChunkChars - 1) / maxChunkChars
+			for i := 0; i < numChunks; i++ {
+				start := i * maxChunkChars
+				end := (i + 1) * maxChunkChars
+				if end > len(runes) {
+					end = len(runes)
+				}
+				chunks = append(chunks, FileChunk{
+					Dir:     fmt.Sprintf("%s (Part %d/%d)", dir, i+1, numChunks),
+					Content: string(runes[start:end]),
+				})
+			}
+		} else {
+			chunks = append(chunks, FileChunk{
+				Dir:     dir,
+				Content: content,
+			})
+		}
+	}
+
+	if len(chunks) > maxTotalChunks {
+		chunks = chunks[:maxTotalChunks]
+		treeBuilder.WriteString("\n\n" + largeRepoTruncationHint)
 	}
 
 	return treeBuilder.String(), chunks, nil
