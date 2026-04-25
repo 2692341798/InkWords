@@ -93,12 +93,16 @@ func (api *StreamAPI) AnalyzeStreamHandler(c *gin.Context) {
 			// Client disconnected or request timed out
 			// Drain channels in background so the generation task doesn't block
 			go func() {
-				for {
+				progressOpen, errOpen := true, true
+				for progressOpen || errOpen {
 					select {
-					case <-progressChan:
-					case err, ok := <-errChan:
-						if !ok || err != nil {
-							return
+					case _, ok := <-progressChan:
+						if !ok {
+							progressOpen = false
+						}
+					case _, ok := <-errChan:
+						if !ok {
+							errOpen = false
 						}
 					}
 				}
@@ -120,8 +124,8 @@ func (api *StreamAPI) AnalyzeStreamHandler(c *gin.Context) {
 			}
 			c.SSEvent("chunk", msg)
 			return true
-		case <-time.After(15 * time.Second):
-			// Keep-alive ping to prevent proxy timeout (e.g. Vite proxy times out after 120s)
+		case <-time.After(10 * time.Second):
+			// Keep-alive ping to prevent proxy timeout
 			c.SSEvent("ping", "keepalive")
 			return true
 		}
@@ -200,12 +204,16 @@ func (api *StreamAPI) GenerateBlogStreamHandler(c *gin.Context) {
 			// Client disconnected
 			// Drain channels in background so the generation task doesn't block
 			go func() {
-				for {
+				chunkOpen, errOpen := true, true
+				for chunkOpen || errOpen {
 					select {
-					case <-chunkChan:
-					case err, ok := <-errChan:
-						if !ok || err != nil {
-							return
+					case _, ok := <-chunkChan:
+						if !ok {
+							chunkOpen = false
+						}
+					case _, ok := <-errChan:
+						if !ok {
+							errOpen = false
 						}
 					}
 				}
@@ -228,7 +236,7 @@ func (api *StreamAPI) GenerateBlogStreamHandler(c *gin.Context) {
 			}
 			c.SSEvent("chunk", chunk)
 			return true
-		case <-time.After(15 * time.Second):
+		case <-time.After(10 * time.Second):
 			// Keep-alive ping
 			c.SSEvent("ping", "keepalive")
 			return true
@@ -282,12 +290,16 @@ func (api *StreamAPI) ContinueBlogStreamHandler(c *gin.Context) {
 		case <-ctx.Done():
 			// Client disconnected
 			go func() {
-				for {
+				chunkOpen, errOpen := true, true
+				for chunkOpen || errOpen {
 					select {
-					case <-chunkChan:
-					case err, ok := <-errChan:
-						if !ok || err != nil {
-							return
+					case _, ok := <-chunkChan:
+						if !ok {
+							chunkOpen = false
+						}
+					case _, ok := <-errChan:
+						if !ok {
+							errOpen = false
 						}
 					}
 				}
@@ -309,7 +321,7 @@ func (api *StreamAPI) ContinueBlogStreamHandler(c *gin.Context) {
 			}
 			c.SSEvent("chunk", chunk)
 			return true
-		case <-time.After(15 * time.Second):
+		case <-time.After(10 * time.Second):
 			// Keep-alive ping
 			c.SSEvent("ping", "keepalive")
 			return true

@@ -37,14 +37,14 @@ func exponentialBackoff(retryCount int) time.Duration {
 }
 
 func maxWorkersFromEnv(taskCount int) int {
-	maxWorkers := 10
+	maxWorkers := 50 // Increased default to 50 for max deepseek v4 performance
 	if v := os.Getenv("MAX_CONCURRENT_WORKERS"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			maxWorkers = n
 		}
 	}
-	if maxWorkers > 50 {
-		maxWorkers = 50
+	if maxWorkers > 100 {
+		maxWorkers = 100
 	}
 	if taskCount > 0 && taskCount < maxWorkers {
 		maxWorkers = taskCount
@@ -77,7 +77,7 @@ type DecompositionService struct {
 func NewDecompositionService() *DecompositionService {
 	apiKey := os.Getenv("DEEPSEEK_API_KEY")
 
-	rpmLimit := 60
+	rpmLimit := 10000 // DeepSeek handles queueing, so we set a very high virtual limit
 	if v := os.Getenv("LLM_API_RPM_LIMIT"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			rpmLimit = n
@@ -184,7 +184,7 @@ func (s *DecompositionService) AnalyzeStream(ctx context.Context, gitURL string,
 						{Role: "user", Content: prompt},
 					}
 
-					ctxTimeout, cancel := context.WithTimeout(ctx, 3*time.Minute)
+					ctxTimeout, cancel := context.WithTimeout(ctx, 10*time.Minute)
 					defer cancel()
 
 					if err := s.limiter.Wait(ctxTimeout); err != nil {
@@ -314,7 +314,7 @@ func (s *DecompositionService) AnalyzeFileStream(ctx context.Context, sourceCont
 						{Role: "user", Content: prompt},
 					}
 
-					ctxTimeout, cancel := context.WithTimeout(ctx, 3*time.Minute)
+					ctxTimeout, cancel := context.WithTimeout(ctx, 10*time.Minute)
 					defer cancel()
 
 					if err := s.limiter.Wait(ctxTimeout); err != nil {
@@ -482,7 +482,7 @@ func (s *DecompositionService) generateFileLocalSummaryWithRetry(ctx context.Con
 		default:
 		}
 
-		attemptCtx, cancel := context.WithTimeout(ctx, 3*time.Minute)
+		attemptCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 		err := s.limiter.Wait(attemptCtx)
 		var summary string
 		if err == nil {
@@ -595,7 +595,7 @@ func (s *DecompositionService) generateLocalSummaryWithRetry(ctx context.Context
 		default:
 		}
 
-		attemptCtx, cancel := context.WithTimeout(ctx, 3*time.Minute)
+		attemptCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 		err := s.limiter.Wait(attemptCtx)
 		var summary string
 		if err == nil {
@@ -675,16 +675,14 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 	var wg sync.WaitGroup
 
 	for i, chapter := range outline {
-		select {
-		case <-ctx.Done():
+		if ctx.Err() != nil {
 			errChan <- ctx.Err()
-			return
-		default:
+			break
 		}
 
 		if err := sem.Acquire(ctx, 1); err != nil {
 			errChan <- err
-			return
+			break
 		}
 
 		wg.Add(1)
@@ -815,8 +813,8 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 					}
 
 					streamCtx, streamCancel := context.WithCancel(ctx)
-					chapterChunkChan := make(chan string)
-					chapterErrChan := make(chan error)
+					chapterChunkChan := make(chan string, 100)
+					chapterErrChan := make(chan error, 1)
 
 					var fullContentBuilder strings.Builder
 
@@ -1082,8 +1080,8 @@ func (s *DecompositionService) ContinueGeneration(ctx context.Context, userID uu
 	streamCtx, streamCancel := context.WithCancel(ctx)
 	defer streamCancel()
 
-	internalChunkChan := make(chan string)
-	internalErrChan := make(chan error)
+	internalChunkChan := make(chan string, 100)
+	internalErrChan := make(chan error, 1)
 
 	go func() {
 		defer close(internalChunkChan)

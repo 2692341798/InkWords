@@ -89,6 +89,16 @@
   - 当使用 Nginx 作为反向代理，且前端使用 `fetch` 期待返回 JSON 时，如果触发了 Nginx 的内置限制（如 `client_max_body_size`），Nginx 会直接拦截并返回 HTML 格式的错误页（如 413 Request Entity Too Large）。这会导致前端 `response.json()` 解析时抛出 `Unexpected token '<', "<html> <h"... is not valid JSON` 的错误。
   - **最佳实践**：在前后端分离架构中，不仅要在网关层（Nginx）和框架层（Gin）放宽限制，还必须在前端 UI 层进行一致的阈值校验，将错误拦截在用户发起请求之前。
 
+### [2026-04-25] Bugfix - 修复 Mermaid 暗色模式背景与 Vite 代理端口问题
+- **开发模块**: [前端 Markdown 渲染, 前端代理配置, 本地环境]
+- **完成事项**:
+  1. **图表背景白化**: 修改 `frontend/src/components/MarkdownEngine.tsx`，在 `mermaid.initialize` 配置中加入 `darkMode: false` 和 `themeVariables: { background: '#ffffff' }`，同时为图表外层容器添加纯白背景与圆角阴影的样式，防止系统级暗色模式导致线条和文本看不清。
+  2. **Vite 代理修复**: 修改 `frontend/vite.config.ts` 中的 `proxy`，将代理目标端口从 `8080` 改为 `8081`，以匹配当前基于 `docker-compose` 暴露的后端端口。
+  3. **环境排障**: 排查出前端 OAuth 登录回调报 `404 page not found` 的原因，是因为本地有一个旧的 `go run` 进程长期占用了 `8080` 端口，拦截了前端 Vite 发往 `8080` 端口的代理请求，导致根本没有访问到新代码。使用 `kill -9` 清理了该进程。
+- **踩坑记录 / 架构调整**:
+  - 对于第三方动态渲染库（如 Mermaid），如果其内置的暗色模式不够成熟，强行跟随系统暗色会导致严重的对比度问题。采用“纯白卡片容器 + 强制浅色主题”是最稳妥的视觉隔离策略。
+  - 在前端进行本地开发时，网络代理必须与后端的实际部署架构（原生/Docker）严格对齐，且要随时注意本地是否有未回收的僵尸进程抢占了关键端口。
+
 ### [2026-04-07] Feature - 优化大批量并发生成文章时的前端性能
 - **开发模块**: [前端并发动画与性能优化]
 - **完成事项**:

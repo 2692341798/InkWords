@@ -51,8 +51,8 @@ func (s *GeneratorService) GenerateBlogStream(ctx context.Context, userID uuid.U
 	}
 
 	// Create an intermediate channel to intercept chunks for saving
-	internalChunkChan := make(chan string)
-	internalErrChan := make(chan error)
+	internalChunkChan := make(chan string, 100)
+	internalErrChan := make(chan error, 1)
 
 	streamCtx, streamCancel := context.WithCancel(ctx)
 
