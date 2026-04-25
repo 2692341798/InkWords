@@ -71,12 +71,21 @@ const MermaidBlock: React.FC<{ chart: string }> = ({ chart }) => {
           if (containerRef.current) {
             containerRef.current.innerHTML = svg;
           }
-        } catch {
+        } catch (err: unknown) {
           // Do not log the error to the console during streaming as it's expected
           // that incomplete mermaid syntax will throw errors until fully generated.
-          // Hide errors completely to avoid cluttering the UI with "Syntax error in text"
+          // If the stream is finished and it still fails, show a fallback code block
+          console.debug('Mermaid rendering failed:', err);
           if (containerRef.current) {
-            containerRef.current.innerHTML = '';
+            containerRef.current.innerHTML = `
+              <div class="w-full">
+                <div class="text-xs text-red-500 mb-2 font-semibold flex items-center gap-1">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                  Mermaid 渲染失败: 语法错误
+                </div>
+                <pre class="text-xs text-zinc-600 overflow-auto p-4 bg-zinc-50 rounded-lg border border-zinc-200"><code>${chart.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code></pre>
+              </div>
+            `;
           }
         }
       };
@@ -84,7 +93,7 @@ const MermaidBlock: React.FC<{ chart: string }> = ({ chart }) => {
     }
   }, [chart]);
 
-  return <div className="mermaid-container flex justify-center my-6 bg-white p-6 rounded-xl border border-zinc-200 shadow-sm overflow-x-auto" ref={containerRef} />;
+  return <div className="mermaid-container flex justify-center bg-white p-6 rounded-xl border border-zinc-200 shadow-sm overflow-x-auto" ref={containerRef} />;
 };
 
 interface MarkdownEngineProps {
@@ -98,6 +107,16 @@ export const MarkdownEngine: React.FC<MarkdownEngineProps> = ({ content }) => {
         remarkPlugins={[remarkGfm, remarkStripMermaidStyles]}
         rehypePlugins={[rehypeSourceLine]}
         components={{
+          // Override pre to remove the default prose black background
+          pre(props) {
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
+            const { node, className, children, ...rest } = props as any;
+            return (
+              <div className={`not-prose my-6 ${className || ''}`} {...rest}>
+                {children}
+              </div>
+            );
+          },
           code(props) {
             const { children, className, ref, ...rest } = props;
             const match = /language-(\w+)/.exec(className || '');
@@ -118,6 +137,7 @@ export const MarkdownEngine: React.FC<MarkdownEngineProps> = ({ content }) => {
                 children={String(children).replace(/\n$/, '')}
                 language={match[1]}
                 style={oneLight}
+                className="rounded-xl border border-zinc-200 shadow-sm text-sm !my-0"
               />
             ) : (
               <code ref={ref} {...rest} className={className}>
