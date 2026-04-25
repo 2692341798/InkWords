@@ -423,7 +423,6 @@ export function Editor() {
           className="flex-1 bg-white overflow-y-auto print:block print:w-full print:overflow-visible relative"
         >
           <div className="max-w-3xl mx-auto p-8 print:p-0">
-            <h1 className="text-3xl font-bold text-zinc-900 mb-8">{title}</h1>
             <MarkdownEngine content={content} />
           </div>
         </div>
