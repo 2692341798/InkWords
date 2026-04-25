@@ -12,6 +12,10 @@ mermaid.initialize({
   theme: 'default',
   securityLevel: 'loose',
   suppressErrorRendering: true, // Prevent "Syntax error in text" from rendering on the page
+  darkMode: false,
+  themeVariables: {
+    background: '#ffffff',
+  }
 });
 
 // Remark plugin to strip style and classDef from mermaid blocks
@@ -80,7 +84,7 @@ const MermaidBlock: React.FC<{ chart: string }> = ({ chart }) => {
     }
   }, [chart]);
 
-  return <div className="mermaid-container flex justify-center my-6" ref={containerRef} />;
+  return <div className="mermaid-container flex justify-center my-6 bg-white p-6 rounded-xl border border-zinc-200 shadow-sm overflow-x-auto" ref={containerRef} />;
 };
 
 interface MarkdownEngineProps {
