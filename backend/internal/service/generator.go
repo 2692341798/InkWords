@@ -38,7 +38,7 @@ func (s *GeneratorService) GenerateBlogStream(ctx context.Context, userID uuid.U
 2. **代码级剖析**：对于每个技术点都添加更多的代码样例和图片来解释的更加详细。如果源内容包含代码，请引用核心代码并逐行解释其作用。
 3. **可复现的步骤**：如果是实战或教程相关，请给出明确的执行步骤。
 4. **小白友好**：在解释抽象的理论概念时，必须提供对应的代码示例或生活化比喻。
-5. 所有生成的 Mermaid 图表代码块绝对禁止包含自定义样式关键字（如 style, classDef, linkStyle 等），必须使用基础语法。`
+5. 所有生成的 Mermaid 图表代码块绝对禁止包含自定义样式关键字（如 style, classDef, linkStyle 等），必须使用基础语法。在 Mermaid 图表中，如果节点文本包含特殊字符（如括号、幂符号等，例如 O(1), O(n^2)），必须使用双引号将节点文本包裹起来，例如 A["O(1)"] 而不是 A[O(1)]。`
 
 	messages := []llm.Message{
 		{Role: "system", Content: "项目源内容如下：\n" + sourceContent},
