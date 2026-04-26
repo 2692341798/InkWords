@@ -59,7 +59,21 @@ export const useSeriesGenerator = () => {
           if (msg.event === 'done') {
             store.setGenerating(false)
             store.setProgress('生成完成')
-            fetchBlogs()
+            fetchBlogs().then(() => {
+              const { blogs, selectBlog } = useBlogStore.getState()
+              const parentId = store.parentBlogId
+              if (parentId) {
+                const parentBlog = blogs.find(b => b.id === parentId)
+                if (parentBlog) {
+                  selectBlog(parentBlog)
+                }
+              }
+            })
+            
+            // Auto close/transition after 2 seconds
+            setTimeout(() => {
+              store.reset()
+            }, 2000)
             return
           }
           
@@ -69,11 +83,31 @@ export const useSeriesGenerator = () => {
 
           if (msg.event === 'chapter') {
             store.setCurrentChapterTitle(msg.data)
-            store.setContent('')
           } else if (msg.event === 'progress') {
             store.setProgress(msg.data)
           } else if (msg.event === 'chunk') {
-            store.appendContent(msg.data)
+            try {
+              const data = JSON.parse(msg.data)
+              const sort = data.chapter_sort
+              
+              if (data.status === 'generating') {
+                store.updateChapterStatus(sort, 'generating')
+                if (data.title) {
+                  store.setCurrentChapterTitle(data.title)
+                }
+              } else if (data.status === 'streaming') {
+                store.appendChapterContent(sort, data.content)
+              } else if (data.status === 'completed') {
+                store.updateChapterStatus(sort, 'completed')
+              } else if (data.status === 'error') {
+                store.updateChapterStatus(sort, 'error')
+              } else if (data.status === 'retrying') {
+                store.updateChapterStatus(sort, 'pending') // or maybe a special retrying state, but pending is fine
+              }
+            } catch (e) {
+              // If it's not JSON, maybe it's just raw text (for single blog generation)
+              store.appendContent(msg.data)
+            }
           }
         },
         onclose() {

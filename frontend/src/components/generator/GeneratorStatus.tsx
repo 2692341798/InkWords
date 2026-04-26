@@ -117,15 +117,91 @@ export function GeneratorStatus() {
             </div>
           </div>
         ) : (
-          <div className="bg-white dark:bg-zinc-900 p-6 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm min-h-[400px]">
-            {store.content ? (
-              <MarkdownEngine content={store.content} />
+          <div className="flex flex-col gap-4">
+            {store.outline && store.outline.length > 0 ? (
+              <div className="space-y-3 pb-8">
+                {[...store.outline].sort((a,b)=>a.sort-b.sort).map(chapter => {
+                  const status = store.chapterStatus[chapter.sort] || 'pending';
+                  const content = store.chapterContents[chapter.sort] || '';
+                  const snippet = content.length > 80 ? '...' + content.slice(-80) : content;
+                  return (
+                    <div key={chapter.sort} className={cn(
+                      "p-4 rounded-xl border flex flex-col gap-3 transition-all duration-300 shadow-sm",
+                      status === 'completed' ? "bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 opacity-80" :
+                      status === 'generating' ? "bg-blue-50/50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-800/50 scale-[1.02]" :
+                      "bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-700 opacity-60"
+                    )}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          {status === 'generating' ? <Loader2 className="w-5 h-5 text-blue-500 animate-spin" /> : 
+                           status === 'completed' ? <CheckCircle2 className="w-5 h-5 text-green-500" /> : 
+                           <div className="w-5 h-5 rounded-full border-2 border-zinc-300 dark:border-zinc-600" />}
+                          <span className={cn(
+                            "font-medium",
+                            status === 'generating' ? "text-blue-900 dark:text-blue-100" :
+                            status === 'completed' ? "text-zinc-700 dark:text-zinc-300" :
+                            "text-zinc-500 dark:text-zinc-400"
+                          )}>{chapter.title}</span>
+                        </div>
+                        <span className="text-xs px-2 py-1 rounded-md bg-zinc-100 dark:bg-zinc-800/80 text-zinc-500 dark:text-zinc-400 capitalize">
+                          {status === 'generating' ? '生成中' : status === 'completed' ? '已完成' : status === 'pending' ? '等待中' : status}
+                        </span>
+                      </div>
+                      {snippet && (
+                        <div className="text-sm text-zinc-500 dark:text-zinc-400 font-mono bg-zinc-100/50 dark:bg-zinc-900/50 p-3 rounded-lg border border-zinc-100 dark:border-zinc-800/50 line-clamp-2 leading-relaxed">
+                          {snippet}
+                          {status === 'generating' && <span className="inline-block w-1.5 h-3 ml-1 align-middle bg-blue-500 animate-pulse" />}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+                {/* Render series intro chapter if it exists */}
+                {store.chapterStatus[0] && (
+                  <div className={cn(
+                    "p-4 rounded-xl border flex flex-col gap-3 transition-all duration-300 shadow-sm",
+                    store.chapterStatus[0] === 'completed' ? "bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 opacity-80" :
+                    store.chapterStatus[0] === 'generating' ? "bg-blue-50/50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-800/50 scale-[1.02]" :
+                    "bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-700 opacity-60"
+                  )}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        {store.chapterStatus[0] === 'generating' ? <Loader2 className="w-5 h-5 text-blue-500 animate-spin" /> : 
+                         store.chapterStatus[0] === 'completed' ? <CheckCircle2 className="w-5 h-5 text-green-500" /> : 
+                         <div className="w-5 h-5 rounded-full border-2 border-zinc-300 dark:border-zinc-600" />}
+                        <span className={cn(
+                          "font-medium",
+                          store.chapterStatus[0] === 'generating' ? "text-blue-900 dark:text-blue-100" :
+                          store.chapterStatus[0] === 'completed' ? "text-zinc-700 dark:text-zinc-300" :
+                          "text-zinc-500 dark:text-zinc-400"
+                        )}>系列导读</span>
+                      </div>
+                      <span className="text-xs px-2 py-1 rounded-md bg-zinc-100 dark:bg-zinc-800/80 text-zinc-500 dark:text-zinc-400 capitalize">
+                        {store.chapterStatus[0] === 'generating' ? '生成中' : store.chapterStatus[0] === 'completed' ? '已完成' : store.chapterStatus[0] === 'pending' ? '等待中' : store.chapterStatus[0]}
+                      </span>
+                    </div>
+                    {store.chapterContents[0] && (
+                      <div className="text-sm text-zinc-500 dark:text-zinc-400 font-mono bg-zinc-100/50 dark:bg-zinc-900/50 p-3 rounded-lg border border-zinc-100 dark:border-zinc-800/50 line-clamp-2 leading-relaxed">
+                        {store.chapterContents[0].length > 80 ? '...' + store.chapterContents[0].slice(-80) : store.chapterContents[0]}
+                        {store.chapterStatus[0] === 'generating' && <span className="inline-block w-1.5 h-3 ml-1 align-middle bg-blue-500 animate-pulse" />}
+                      </div>
+                    )}
+                  </div>
+                )}
+                <div ref={contentEndRef} />
+              </div>
             ) : (
-              <div className="h-full flex items-center justify-center text-zinc-400 py-12">
-                {isWorking ? '等待大模型响应中...' : '暂无生成内容'}
+              <div className="bg-white dark:bg-zinc-900 p-6 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm min-h-[400px]">
+                {store.content ? (
+                  <MarkdownEngine content={store.content} />
+                ) : (
+                  <div className="h-full flex items-center justify-center text-zinc-400 py-12">
+                    {isWorking ? '等待大模型响应中...' : '暂无生成内容'}
+                  </div>
+                )}
+                <div ref={contentEndRef} />
               </div>
             )}
-            <div ref={contentEndRef} />
           </div>
         )}
       </div>
