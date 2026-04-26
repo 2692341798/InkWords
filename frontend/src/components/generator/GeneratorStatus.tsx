@@ -16,11 +16,19 @@ export function GeneratorStatus() {
     return null
   }
 
-  const isParsing = store.isScanning || store.isAnalyzing
+  const isParsing = store.isAnalyzing || store.isScanning
   const isWorking = isParsing || store.isGenerating
   const title = isParsing ? '解析进度' : '生成进度'
-  const currentStatusMessage = isParsing ? store.analysisMessage : store.progress
+  const currentStatusMessage = store.isScanning ? store.analysisMessage : (isParsing ? store.analysisMessage : store.progress)
 
+  // Also hide if there is no parsing/generating progress and no content to show
+  // Hide the whole status box when only scanning (since scanning progress is shown inside GeneratorInput/GeneratorModules)
+  if ((store.isScanning && !store.isAnalyzing) || (!isWorking && !store.content && !currentStatusMessage)) {
+    return null
+  }
+
+  // Only render GeneratorStatus if we are actually doing work or have content.
+  // We avoid rendering the loading UI multiple times.
   return (
     <div className="bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col h-[600px]">
       <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50 flex items-center justify-between">

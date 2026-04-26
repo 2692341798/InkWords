@@ -751,7 +751,13 @@
 - **踩坑记录 / 架构调整**:
   - 在大体量且模块众多的 Git 仓库下（特别是带有庞大二进制文件历史的），`git clone` 或者 `sparse-checkout` 的网络请求极其脆弱。单单重试不能彻底解决 TCP 级别的早期 EOF，必须结合更宽松的吞吐时间容忍度与更大的 Buffer，以此保证网络环境波动时的稳定性。
 
-### [2026-04-26] Bugfix - 修复解析取消后残留旧项目模块数据的 Bug
+### [2026-04-26] Bugfix - 修复解析项目进度重复显示问题
+- **开发模块**: [前端 UI 交互]
+- **完成事项**:
+  1. **状态精简**: 修改了 `frontend/src/components/generator/GeneratorStatus.tsx`，当状态处于 `store.isScanning` 且尚未进入 `store.isAnalyzing` 时（即仅处于扫描目录阶段），显式返回 `null` 隐藏整个进度面板。
+  2. **消除重复**: 扫描阶段仅在 `GeneratorInput` 中的“扫描目录”按钮上显示 loading，并去除了页面下方与 `GeneratorStatus` 产生冲突的重复大区块 Loading 面板，提升界面简洁度。
+- **踩坑记录 / 架构调整**:
+  - 原有的条件渲染语句由于把 `isScanning` 和 `isAnalyzing` 都视为 `isParsing`，导致在极快的扫描流程中也会硬生生弹出一个带有冗余“正在扫描”文字的进度面板。通过将 `GeneratorStatus` 的生命周期严格延后到 `analyze` 及 `generate` 阶段，有效解决了由于面板嵌套导致的进度冗余问题。
 - **开发模块**: [前端 UI 交互, 状态管理]
 - **完成事项**:
   1. **扫描时重置模块数据**: 修改了 `frontend/src/hooks/generator/useProjectScanner.ts`，在执行 `scanGit` 开始全新的仓库扫描前，主动清空旧的 `modules`、`selectedModules`、`outline` 和 `parentBlogId`，防止旧仓库分析结果带入新分析流程。

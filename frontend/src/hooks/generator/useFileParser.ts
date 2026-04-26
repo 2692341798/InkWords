@@ -101,6 +101,7 @@ export const useFileParser = () => {
                 store.setSource('file', outlineResult.series_title || file.name)
                 store.setOutline(outlineResult.chapters)
                 store.setAnalyzing(false)
+                store.setAnalysisMessage('')
               }
             } catch (e) {
               console.error('Failed to parse analysis progress:', e)

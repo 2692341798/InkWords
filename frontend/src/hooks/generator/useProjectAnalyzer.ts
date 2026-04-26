@@ -75,15 +75,23 @@ export const useProjectAnalyzer = () => {
                 store.setAnalysisStep(3)
               } else if (data.status === 'complete') {
                 store.setAnalysisStep(4)
-                const outlineResult = JSON.parse(data.content)
+                
+                // data.content might be an object directly now due to the backend change,
+                // or it might still be a JSON string. Let's handle both.
+                let outlineResult = data.content;
+                if (typeof data.content === 'string') {
+                  outlineResult = JSON.parse(data.content);
+                }
+                
                 store.setSource('git', outlineResult.series_title || '', gitUrl)
-                store.setOutline(outlineResult.chapters)
-                if (data.parent_id) {
-                  store.setParentBlogId(data.parent_id)
+                store.setOutline(outlineResult.outline || outlineResult.chapters)
+                if (outlineResult.parent_id || data.parent_id) {
+                  store.setParentBlogId(outlineResult.parent_id || data.parent_id)
                 } else {
                   store.setParentBlogId(null)
                 }
                 store.setAnalyzing(false)
+                store.setAnalysisMessage('')
               }
             } catch (e) {
               console.error('Failed to parse analysis progress:', e)

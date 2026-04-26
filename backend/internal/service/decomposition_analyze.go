@@ -17,6 +17,23 @@ import (
 	"golang.org/x/sync/semaphore"
 )
 
+func getStatusFromStep(step int) string {
+	switch step {
+	case 0:
+		return "cloning"
+	case 1:
+		return "scanning"
+	case 2:
+		return "analyzing"
+	case 3:
+		return "outline"
+	case 4:
+		return "complete"
+	default:
+		return "unknown"
+	}
+}
+
 // AnalyzeStream handles the full analysis pipeline with streaming progress
 func (s *DecompositionService) AnalyzeStream(ctx context.Context, userID uuid.UUID, gitURL string, selectedModules []string, progressChan chan<- string, errChan chan<- error) {
 	defer close(progressChan)
@@ -25,10 +42,14 @@ func (s *DecompositionService) AnalyzeStream(ctx context.Context, userID uuid.UU
 	sendProgress := func(step int, message string, data interface{}) {
 		msg := map[string]interface{}{
 			"step":    step,
+			"status":  getStatusFromStep(step),
 			"message": message,
 		}
 		if data != nil {
 			msg["data"] = data
+			if step == 4 {
+				msg["content"] = data // For frontend compatibility expecting 'content' in step 4
+			}
 		}
 		bytes, _ := json.Marshal(msg)
 		progressChan <- string(bytes)
@@ -201,10 +222,14 @@ func (s *DecompositionService) AnalyzeFileStream(ctx context.Context, userID uui
 	sendProgress := func(step int, message string, data interface{}) {
 		msg := map[string]interface{}{
 			"step":    step,
+			"status":  getStatusFromStep(step),
 			"message": message,
 		}
 		if data != nil {
 			msg["data"] = data
+			if step == 4 {
+				msg["content"] = data
+			}
 		}
 		bytes, _ := json.Marshal(msg)
 		progressChan <- string(bytes)

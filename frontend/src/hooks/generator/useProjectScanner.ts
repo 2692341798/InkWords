@@ -17,8 +17,11 @@ export const useProjectScanner = () => {
     store.setParentBlogId(null)
     
     store.setScanning(true)
-    store.setAnalysisStep(0)
-    store.setAnalysisMessage('正在扫描仓库目录与核心模块...')
+    // Only use analysis steps if not already analyzing
+    if (!store.isAnalyzing) {
+      store.setAnalysisStep(0)
+      store.setAnalysisMessage('正在扫描仓库目录与核心模块...')
+    }
     
     if (store.abortController) {
       store.abortController.abort()
@@ -51,19 +54,22 @@ export const useProjectScanner = () => {
       }
 
       // 扫描成功
-      store.setAnalysisStep(2)
-      store.setAnalysisMessage('扫描完成，请选择要分析的模块')
+      if (!store.isAnalyzing) {
+        store.setAnalysisStep(2)
+        store.setAnalysisMessage('扫描完成，请选择要分析的模块')
+      }
       store.setSource('git', '', gitUrl)
       store.setModules(data.data.modules || [])
       store.setSelectedModules([])
       store.setScanning(false)
       
-    } catch (err: any) {
+    } catch (err: unknown) {
       store.setScanning(false)
-      if (err.name !== 'AbortError') {
-        alert(err.message || '扫描失败')
+      const error = err as Error
+      if (error.name !== 'AbortError') {
+        alert(error.message || '扫描失败')
       }
-      throw err
+      throw error
     }
   }, [store])
 

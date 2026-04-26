@@ -99,6 +99,10 @@ func (api *StreamAPI) AnalyzeStreamHandler(c *gin.Context) {
 	c.Writer.Header().Set("Connection", "keep-alive")
 
 	// Read from channels until done or error
+	// Flush headers immediately so client knows connection is open
+	w := c.Writer
+	w.Flush()
+	
 	c.Stream(func(w io.Writer) bool {
 		select {
 		case <-ctx.Done():
@@ -135,6 +139,9 @@ func (api *StreamAPI) AnalyzeStreamHandler(c *gin.Context) {
 				return false
 			}
 			c.SSEvent("chunk", msg)
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
 			return true
 		case <-time.After(10 * time.Second):
 			// Keep-alive ping to prevent proxy timeout
