@@ -753,7 +753,16 @@
   - **Flex 布局下的滚动溢出**: 当外层容器使用 `h-screen overflow-hidden` 锁死高度时，其内部的 Flex 子项如果不显式指定 `overflow-y-auto` 和高度限制，超出部分将直接不可见且无法滚动。这是构建类似桌面端应用的常见 CSS 陷阱，需要为内容区显式划分滚动边界。
   - **进度历史的留存**: 在长时间运行的流式任务中，如果只展示当前正在进行的步骤，用户很难感知到系统已经完成了多少工作量。通过保留并列表化展示历史步骤（卡片化），不仅提升了界面的丰富度，也大幅增强了用户的掌控感和对 AI 的信任感。
 
-### [2026-04-26] 修复大型项目 Git Clone 超时断开 (RPC failed) 的问题
+### [2026-04-26] UI/UX 优化 - 彻底重构拉取仓库（Scan / Clone）的交互体验，使进度实时可视化
+- **开发模块**: [前端 UI 交互, 后端进度流式推送]
+- **完成事项**:
+  1. **重启容器生效 UI**: 用户反馈“拉取仓库的过程并不够直观”时，界面上仍显示的是旧版的 `setTimeout` 假进度。排查发现，之前修改的 UI 未能反映在用户端是因为 Docker 容器未触发重新构建。现已执行 `docker compose down && docker compose up -d --build` 将上一个版本的卡片化解析历史 UI 成功部署到本地环境。
+  2. **后端拉取进度真实回传**: 修改了 `backend/internal/parser/git_fetcher.go`，劫持并解析 `git clone` 的 stderr 输出（过滤并分割 `\r` 进度符号），以及 GitHub API 拉取时的步骤。通过传入 `progressCallback` 闭包，将底层网络传输和文件检出的实时日志打通。
+  3. **“扫描目录”变更为 SSE 流式接口**: 原本 `/api/v1/project/scan` 接口为普通的同步 HTTP POST 请求，导致扫描大型仓库时前端长达数十秒的死等。本次新增了 `/api/v1/stream/scan` SSE 接口，结合 `@microsoft/fetch-event-source` 实现了在扫描目录阶段也能逐条推送进度（`msg.event === 'progress'`）。
+  4. **前端状态层卡片原地刷新**: 在 `store/streamStore.ts` 中优化了 `appendAnalysisHistory` 逻辑：当连续接收到状态为 `cloning`、`scanning` 或 `analyzing` 的进度日志时，不再无脑向列表中追加新卡片导致卡片泛滥，而是**原地更新**列表最后一张卡片的文本。这样就在单张卡片内形成了一个高频刷新的微型进度条，极大地提升了真实感与直观性。
+- **验证结果**:
+  - 全量重新编译 Go 与 React 并重启 Docker 容器。
+  - 用户在输入 Git URL 后，立刻会看到真实的网络传输进度（例如 "Receiving objects: 10%..."，"API: 发现 100 个待拉取文件..."）在单张卡片内飞速滚动，彻底告别了黑盒式的假进度等待体验。
 - **开发模块**: [后端 Git Parser]
 - **完成事项**:
   1. **缓冲区与限速容忍增强**: 在 `backend/internal/parser/git_fetcher.go` 中，修改了所有执行 `git clone` 和 `git checkout` 的命令，将 `http.postBuffer` 提升至 1GB (`1048576000`)。

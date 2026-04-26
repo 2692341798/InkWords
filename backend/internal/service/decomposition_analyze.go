@@ -62,7 +62,7 @@ func (s *DecompositionService) AnalyzeStream(ctx context.Context, userID uuid.UU
 	default:
 	}
 
-	sendProgress(0, "正在克隆并拉取仓库 (depth=1)...", nil)
+	sendProgress(0, "正在获取仓库目录与源码内容...", nil)
 
 	var treeContent string
 	var chunks []parser.FileChunk
@@ -72,7 +72,9 @@ func (s *DecompositionService) AnalyzeStream(ctx context.Context, userID uuid.UU
 		var allChunks []parser.FileChunk
 		var treeBuilder strings.Builder
 		for _, mod := range selectedModules {
-			tree, modChunks, fetchErr := s.gitFetcher.FetchWithSubDir(gitURL, mod)
+			tree, modChunks, fetchErr := s.gitFetcher.FetchWithSubDir(gitURL, mod, func(msg string) {
+				sendProgress(0, fmt.Sprintf("[%s] %s", mod, msg), nil)
+			})
 			if fetchErr != nil {
 				errChan <- fmt.Errorf("拉取仓库模块 %s 失败: %w", mod, fetchErr)
 				return
@@ -83,7 +85,9 @@ func (s *DecompositionService) AnalyzeStream(ctx context.Context, userID uuid.UU
 		treeContent = treeBuilder.String()
 		chunks = allChunks
 	} else {
-		treeContent, chunks, err = s.gitFetcher.FetchWithSubDir(gitURL, "")
+		treeContent, chunks, err = s.gitFetcher.FetchWithSubDir(gitURL, "", func(msg string) {
+			sendProgress(0, msg, nil)
+		})
 		if err != nil {
 			errChan <- fmt.Errorf("拉取仓库失败: %w", err)
 			return

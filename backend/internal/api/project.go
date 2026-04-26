@@ -111,7 +111,7 @@ func (api *ProjectAPI) Analyze(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	// 1. Fetch Git content
-	treeContent, chunks, err := api.gitFetcher.FetchWithSubDir(req.GitURL, req.SubDir)
+	treeContent, chunks, err := api.gitFetcher.FetchWithSubDir(req.GitURL, req.SubDir, nil)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    http.StatusInternalServerError,

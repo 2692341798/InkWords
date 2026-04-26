@@ -1,4 +1,5 @@
 import { useCallback } from 'react'
+import { fetchEventSource } from '@microsoft/fetch-event-source'
 import { useStreamStore } from '@/store/streamStore'
 
 export const useProjectScanner = () => {
@@ -20,7 +21,9 @@ export const useProjectScanner = () => {
     // Only use analysis steps if not already analyzing
     if (!store.isAnalyzing) {
       store.setAnalysisStep(0)
-      store.setAnalysisMessage('正在扫描仓库目录与核心模块...')
+      store.setAnalysisMessage('正在建立连接...')
+      store.clearAnalysisHistory?.()
+      store.appendAnalysisHistory?.({ message: '正在建立连接...', status: 'scanning' })
     }
     
     if (store.abortController) {
@@ -31,8 +34,9 @@ export const useProjectScanner = () => {
     
     try {
       const token = localStorage.getItem('token')
+      let modulesResult: any = null;
       
-      const response = await fetch('/api/v1/project/scan', {
+      await fetchEventSource('/api/v1/stream/scan', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -40,28 +44,52 @@ export const useProjectScanner = () => {
         },
         signal: ctrl.signal,
         body: JSON.stringify({ git_url: gitUrl }),
+        async onopen(response) {
+          if (response.status === 401) {
+            localStorage.removeItem('token')
+            window.location.reload()
+            throw new Error('登录已过期，请重新登录')
+          }
+          if (!response.ok) {
+            throw new Error('请求失败')
+          }
+        },
+        onmessage(msg) {
+          if (msg.event === 'error') {
+            throw new Error(msg.data)
+          }
+          if (msg.event === 'progress') {
+            store.setAnalysisMessage(msg.data)
+            store.appendAnalysisHistory?.({ message: msg.data, status: 'scanning' })
+          }
+          if (msg.event === 'result') {
+            modulesResult = JSON.parse(msg.data)
+          }
+          if (msg.event === 'done') {
+            // Stream finished
+          }
+        },
+        onclose() {
+          // Do nothing
+        },
+        onerror(err) {
+          throw err
+        }
       })
 
-      if (response.status === 401) {
-        localStorage.removeItem('token')
-        window.location.reload()
-        throw new Error('登录已过期，请重新登录')
+      if (modulesResult) {
+        // 扫描成功
+        if (!store.isAnalyzing) {
+          store.setAnalysisStep(2)
+          store.setAnalysisMessage('扫描完成，请选择要分析的模块')
+        }
+        store.setSource('git', '', gitUrl)
+        store.setModules(modulesResult.data?.modules || modulesResult.modules || modulesResult || [])
+        store.setSelectedModules([])
+        store.setScanning(false)
+      } else {
+        throw new Error('未收到扫描结果')
       }
-
-      const data = await response.json()
-      if (!response.ok || data.code !== 0) {
-        throw new Error(data.message || data.error || '请求失败')
-      }
-
-      // 扫描成功
-      if (!store.isAnalyzing) {
-        store.setAnalysisStep(2)
-        store.setAnalysisMessage('扫描完成，请选择要分析的模块')
-      }
-      store.setSource('git', '', gitUrl)
-      store.setModules(data.data.modules || [])
-      store.setSelectedModules([])
-      store.setScanning(false)
       
     } catch (err: unknown) {
       store.setScanning(false)

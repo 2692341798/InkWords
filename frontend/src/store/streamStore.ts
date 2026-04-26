@@ -209,9 +209,18 @@ export const useStreamStore = create<StreamState>((set, get) => ({
   }),
   setAnalysisStep: (step) => set({ analysisStep: step }),
   setAnalysisMessage: (msg) => set({ analysisMessage: msg }),
-  appendAnalysisHistory: (item) => set((state) => ({
-    analysisHistory: [...state.analysisHistory, { id: Date.now() + Math.random(), ...item }]
-  })),
+  appendAnalysisHistory: (item) => set((state) => {
+    const history = [...state.analysisHistory]
+    if (history.length > 0) {
+      const last = history[history.length - 1]
+      // If the status is the same and it's cloning/scanning/analyzing progress, update the last message
+      if (last.status === item.status && (item.status === 'cloning' || item.status === 'scanning' || item.status === 'analyzing')) {
+        last.message = item.message
+        return { analysisHistory: history }
+      }
+    }
+    return { analysisHistory: [...history, { id: Date.now() + Math.random(), ...item }] }
+  }),
   clearAnalysisHistory: () => set({ analysisHistory: [] }),
   setProgress: (msg) => set({ progress: msg }),
   setContent: (content) => set({ content }),

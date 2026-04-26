@@ -64,7 +64,7 @@ func TestGitFetcher_Fetch(t *testing.T) {
 
 	// Using the local directory path as a file:// URL works with git clone
 	repoURL := "file://" + filepath.ToSlash(tempDir)
-	content, chunks, err := fetcher.Fetch(repoURL)
+	content, chunks, err := fetcher.Fetch(repoURL, nil)
 	require.NoError(t, err)
 	assert.NotEmpty(t, chunks)
 
@@ -129,7 +129,7 @@ func TestGitFetcher_FetchWithSubDir(t *testing.T) {
 	fetcher := NewGitFetcher()
 	repoURL := "file://" + filepath.ToSlash(tempDir)
 
-	tree, chunks, err := fetcher.FetchWithSubDir(repoURL, "src/net/http")
+	tree, chunks, err := fetcher.FetchWithSubDir(repoURL, "src/net/http", nil)
 	require.NoError(t, err)
 	assert.NotEmpty(t, chunks)
 
