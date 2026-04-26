@@ -11,7 +11,7 @@ export const useSeriesGenerator = () => {
 
   const generateSeries = useCallback(async () => {
     store.setContent('')
-    store.setProgress('')
+    store.setProgress('准备生成环境...')
     store.setGenerating(true)
     
     if (store.abortController) {
@@ -86,6 +86,9 @@ export const useSeriesGenerator = () => {
           } else if (msg.event === 'progress') {
             store.setProgress(msg.data)
           } else if (msg.event === 'chunk') {
+            if (useStreamStore.getState().progress === '准备生成环境...') {
+              store.setProgress('')
+            }
             try {
               const data = JSON.parse(msg.data)
               const sort = data.chapter_sort
@@ -95,6 +98,8 @@ export const useSeriesGenerator = () => {
                 if (data.title) {
                   store.setCurrentChapterTitle(data.title)
                 }
+              } else if (data.status === 'progress') {
+                store.setProgress(data.message)
               } else if (data.status === 'streaming') {
                 store.appendChapterContent(sort, data.content)
               } else if (data.status === 'completed') {
@@ -130,7 +135,7 @@ export const useSeriesGenerator = () => {
 
   const generateSingle = useCallback(async (content: string) => {
     store.setContent('')
-    store.setProgress('')
+    store.setProgress('准备生成环境...')
     store.setGenerating(true)
     
     if (store.abortController) {
@@ -186,6 +191,9 @@ export const useSeriesGenerator = () => {
           if (msg.event === 'progress') {
             store.setProgress(msg.data)
           } else if (msg.event === 'chunk') {
+            if (useStreamStore.getState().progress === '准备生成环境...') {
+              store.setProgress('')
+            }
             store.appendContent(msg.data)
           }
         },

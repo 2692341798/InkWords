@@ -26,17 +26,32 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 	defer close(progressChan)
 	defer close(errChan)
 
+	sendSystemProgress := func(msg string) {
+		progressMsg := map[string]interface{}{
+			"status":  "progress",
+			"message": msg,
+		}
+		bytes, _ := json.Marshal(progressMsg)
+		progressChan <- string(bytes)
+	}
+
+	sendSystemProgress("正在准备环境...")
+
 	// --- FIX START: Clone repo to precisely feed files ---
 	var tempDir string
 	if sourceType == "git" && gitURL != "" {
+		sendSystemProgress("正在克隆 GitHub 仓库代码...")
 		dir, err := os.MkdirTemp("", "inkwords-gen-*")
 		if err == nil {
 			tempDir = dir
 			defer os.RemoveAll(tempDir)
-			cmd := exec.Command("git", "clone", "--depth", "1", gitURL, tempDir)
+			cmd := exec.Command("git", "clone", "--depth", "1", "--single-branch", gitURL, tempDir)
+			cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0") // 禁用交互式提示，防止仓库需要密码时进程挂起
 			cmd.Run()
 		}
 	}
+
+	sendSystemProgress("正在初始化数据库与生成队列...")
 
 	parentTitle := "Git 源码解析系列"
 	if sourceType == "file" {
@@ -89,6 +104,7 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 		db.DB.WithContext(ctx).Where("parent_id = ? AND user_id = ?", parentID, userID).Delete(&model.Blog{})
 	}
 
+	sendSystemProgress("开始生成系列博客内容...")
 	for i, chapter := range outline {
 		if ctx.Err() != nil {
 			errChan <- ctx.Err()

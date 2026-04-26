@@ -40,7 +40,8 @@ type ChatCompletionChunk struct {
 	Choices []struct {
 		Index int `json:"index"`
 		Delta struct {
-			Content string `json:"content"`
+			Content          string `json:"content"`
+			ReasoningContent string `json:"reasoning_content,omitempty"`
 		} `json:"delta"`
 		FinishReason *string `json:"finish_reason"`
 	} `json:"choices"`
@@ -212,6 +213,9 @@ func (c *DeepSeekClient) GenerateStream(ctx context.Context, model string, messa
 
 	reader := bufio.NewReader(resp.Body)
 	var finalFinishReason string
+	var isFirstReasoning = true
+	var hasReasoning = false
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -247,9 +251,25 @@ func (c *DeepSeekClient) GenerateStream(ctx context.Context, model string, messa
 		}
 
 		if len(chunk.Choices) > 0 {
-			content := chunk.Choices[0].Delta.Content
-			if content != "" {
-				chunkChan <- content
+			delta := chunk.Choices[0].Delta
+
+			if delta.ReasoningContent != "" {
+				if isFirstReasoning {
+					chunkChan <- "> 💭 **思考过程**：\n> \n> "
+					isFirstReasoning = false
+					hasReasoning = true
+				}
+				// Replace newlines to maintain blockquote format
+				text := strings.ReplaceAll(delta.ReasoningContent, "\n", "\n> ")
+				chunkChan <- text
+			}
+
+			if delta.Content != "" {
+				if hasReasoning {
+					chunkChan <- "\n\n---\n\n"
+					hasReasoning = false // Only separate once
+				}
+				chunkChan <- delta.Content
 			}
 
 			if chunk.Choices[0].FinishReason != nil {

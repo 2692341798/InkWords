@@ -24,14 +24,14 @@ func exponentialBackoff(retryCount int) time.Duration {
 }
 
 func maxWorkersFromEnv(taskCount int) int {
-	maxWorkers := 50
+	maxWorkers := 3 // 稳健并发，降低并发量以防止大模型 API 出现 429 或挂起
 	if v := os.Getenv("MAX_CONCURRENT_WORKERS"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			maxWorkers = n
 		}
 	}
-	if maxWorkers > 100 {
-		maxWorkers = 100
+	if maxWorkers > 10 {
+		maxWorkers = 10
 	}
 	if taskCount > 0 && taskCount < maxWorkers {
 		maxWorkers = taskCount
