@@ -131,7 +131,7 @@ func (api *ProjectAPI) Analyze(c *gin.Context) {
 	content := fullContentBuilder.String()
 
 	// 2. Generate Outline
-	outline, err := api.decompositionService.GenerateOutline(ctx, content)
+	outline, err := api.decompositionService.GenerateOutline(ctx, content, nil, nil)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    http.StatusInternalServerError,

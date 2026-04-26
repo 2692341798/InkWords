@@ -78,6 +78,11 @@ export const useProjectAnalyzer = () => {
                 const outlineResult = JSON.parse(data.content)
                 store.setSource('git', outlineResult.series_title || '', gitUrl)
                 store.setOutline(outlineResult.chapters)
+                if (data.parent_id) {
+                  store.setParentBlogId(data.parent_id)
+                } else {
+                  store.setParentBlogId(null)
+                }
                 store.setAnalyzing(false)
               }
             } catch (e) {

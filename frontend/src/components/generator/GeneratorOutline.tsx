@@ -77,33 +77,47 @@ export function GeneratorOutline({
                 className="bg-white dark:bg-zinc-800 p-5 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-sm hover:shadow-md transition-shadow group relative"
               >
                 <div className="flex items-start gap-4">
-                  <div className="flex-shrink-0 w-8 h-8 bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 rounded-full flex items-center justify-center font-medium">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-sm font-medium text-zinc-500 dark:text-zinc-400">
                     {index + 1}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <input
-                      type="text"
-                      className="w-full bg-transparent text-base font-medium text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded px-2 py-1 -ml-2 mb-2"
-                      value={chapter.title}
-                      onChange={(e) => {
-                        if (!store.outline) return;
-                        const newOutline = [...store.outline]
-                        newOutline[index].title = e.target.value
-                        store.setOutline(newOutline)
-                      }}
-                      disabled={store.isGenerating}
-                    />
+                    <div className="flex items-center gap-2 mb-1">
+                      <input
+                        type="text"
+                        className="flex-1 bg-transparent text-base font-medium text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded px-2 py-1 -ml-2"
+                        value={chapter.title}
+                        onChange={(e) => {
+                          if (!store.outline) return;
+                          const newOutline = [...store.outline]
+                          newOutline[index].title = e.target.value
+                          store.setOutline(newOutline)
+                        }}
+                        disabled={store.isGenerating}
+                      />
+                      {chapter.action === 'new' && (
+                        <span className="px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border border-green-200 dark:border-green-800">新增</span>
+                      )}
+                      {chapter.action === 'regenerate' && (
+                        <span className="px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-800">更新</span>
+                      )}
+                      {chapter.action === 'skip' && (
+                        <span className="px-2 py-0.5 rounded text-xs font-medium bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700">保留</span>
+                      )}
+                    </div>
                     <textarea
-                      className="w-full bg-transparent text-sm text-zinc-600 dark:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded px-2 py-1 -ml-2 resize-none h-20"
-                      value={chapter.summary}
-                      onChange={(e) => {
-                        if (!store.outline) return;
-                        const newOutline = [...store.outline]
-                        newOutline[index].summary = e.target.value
-                        store.setOutline(newOutline)
-                      }}
-                      disabled={store.isGenerating}
-                    />
+                        className="w-full bg-transparent text-sm text-zinc-600 dark:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded px-2 py-1 -ml-2 resize-none h-20"
+                        value={chapter.summary}
+                        onChange={(e) => {
+                          if (!store.outline) return;
+                          const newOutline = [...store.outline]
+                          newOutline[index].summary = e.target.value
+                          if (newOutline[index].action === 'skip') {
+                            newOutline[index].action = 'regenerate'
+                          }
+                          store.setOutline(newOutline)
+                        }}
+                        disabled={store.isGenerating}
+                      />
                   </div>
                   <div className="flex-shrink-0 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                     <Button
@@ -166,7 +180,8 @@ export function GeneratorOutline({
                     title: '新章节标题',
                     summary: '请在此输入章节概要，指导 AI 生成内容...',
                     sort: store.outline.length + 1,
-                    files: []
+                    files: [],
+                    action: 'new'
                   }
                 ])
               }}

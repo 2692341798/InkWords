@@ -36,7 +36,8 @@ export const useSeriesGenerator = () => {
           git_url: store.gitUrl,
           source_content: store.sourceContent,
           series_title: store.seriesTitle,
-          outline: store.outline 
+          outline: store.outline,
+          parent_id: store.parentBlogId
         }),
         async onopen(response) {
           if (response.ok && response.headers.get('content-type')?.startsWith('text/event-stream')) {

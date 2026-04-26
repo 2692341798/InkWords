@@ -41,16 +41,19 @@ func maxWorkersFromEnv(taskCount int) int {
 
 // Chapter represents a single chapter in the generated outline
 type Chapter struct {
+	ID      string   `json:"id,omitempty"`     // Existing chapter ID
 	Title   string   `json:"title"`
 	Summary string   `json:"summary"`
 	Sort    int      `json:"sort"`
 	Files   []string `json:"files"`
+	Action  string   `json:"action,omitempty"` // "new", "regenerate", "skip"
 }
 
 // OutlineResult represents the overall generated outline result
 type OutlineResult struct {
 	SeriesTitle string    `json:"series_title"`
 	Chapters    []Chapter `json:"chapters"`
+	ParentID    string    `json:"parent_id,omitempty"` // Existing parent ID
 }
 
 // ModuleCard represents a single module/directory extracted from the repository

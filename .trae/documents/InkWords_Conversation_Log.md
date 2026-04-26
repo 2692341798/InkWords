@@ -707,3 +707,18 @@
 - 进行了 GitHub 仓库解析的两步流重构。
 - 后端：新增了 /api/v1/project/scan 接口以获取项目模块列表。修改 /api/v1/stream/analyze 支持 selected_modules 参数。修改 GenerateSeries 添加了生成系列导读的功能。
 - 前端：更新 Generator 组件，在分析仓库前先展示可选模块列表。用户勾选后再并发分析所选模块并串联生成文章。
+
+### 对话 51：根据开发计划，执行 GitHub 扫描两步流功能开发
+- **用户需求**：要求根据计划文档 `2026-04-26-github-scan-and-series-plan.md`，开发 GitHub 扫描和系列文章生成的功能。
+- **AI 动作**：
+  1. 调用 `executing-plans` 技能加载并审查了实施计划。
+  2. 检查 `backend/internal/model/blog.go` 发现 `ParentID` 和 `IsSeries` 字段已经被用户在前面的提交中添加。
+  3. 检查后端预扫描逻辑，发现 `ScanProjectModules` 和 `ScanGithubRepo` 接口已在之前的重构中实现并绑定到 `POST /api/v1/project/scan`。
+  4. 检查前端交互，发现 `frontend/src/hooks/generator/useProjectScanner.ts` 中错误地使用了 `fetchEventSource('/api/v1/stream/scan')`。
+  5. 修改了 `useProjectScanner.ts`，将其恢复为标准的 `fetch('/api/v1/project/scan')` POST 请求，并手动模拟了分析步骤状态以对接现有 UI。
+  6. 检查 `Analyze` 接口和 `GenerateSeries` 逻辑，发现它们也已经支持了 `selected_modules` 数组和自动生成“系列导读”文章的逻辑。
+  7. 运行 `docker compose down && docker compose up -d --build` 进行本地验证。
+  8. 更新了开发日志和本对话记录。
+- **决策/变更**：
+  - 用户的部分开发计划已在近期的代码重构中自行完成，但在前端提取职能 Hooks 时，误将标准 REST API 当作 SSE 接口调用。
+  - 通过修正前端网络请求方式，彻底打通了预扫描提取目录、用户勾选、并发生成单篇及导读文章的完整闭环。

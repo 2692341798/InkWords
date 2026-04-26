@@ -1,10 +1,12 @@
 import { create } from 'zustand'
 
 export interface Chapter {
+  id?: string
   title: string
   summary: string
   sort: number
   files?: string[]
+  action?: 'new' | 'regenerate' | 'skip' | string
 }
 
 export interface MapReduceProgress {
@@ -120,7 +122,8 @@ export const useStreamStore = create<StreamState>((set, get) => ({
       sort: maxSort + 1,
       title: '新章节标题',
       summary: '请填写章节摘要...',
-      files: []
+      files: [],
+      action: 'new'
     };
     return { outline: [...state.outline, newChapter] };
   }),

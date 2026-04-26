@@ -54,11 +54,17 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 			Title:      parentTitle,
 			Content:    "正在生成系列导读...",
 			SourceType: sourceType,
+			SourceURL:  gitURL,
 			IsSeries:   true,
 			Status:     0,
 		}
 		if err := db.DB.WithContext(ctx).Create(parentBlog).Error; err != nil {
 			fmt.Printf("Failed to create parent blog: %v\n", err)
+		}
+	} else {
+		// Update SourceURL if empty
+		if existingParent.SourceURL == "" && gitURL != "" {
+			db.DB.WithContext(ctx).Model(&existingParent).Update("source_url", gitURL)
 		}
 	}
 
@@ -66,10 +72,45 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 	sem := semaphore.NewWeighted(int64(maxWorkers))
 	var wg sync.WaitGroup
 
+	// To keep track of valid children IDs for deletion later
+	var validChildrenIDs []uuid.UUID
+	for _, chapter := range outline {
+		if chapter.ID != "" {
+			if id, err := uuid.Parse(chapter.ID); err == nil {
+				validChildrenIDs = append(validChildrenIDs, id)
+			}
+		}
+	}
+
+	// Delete obsolete children before generating new ones
+	if len(validChildrenIDs) > 0 {
+		db.DB.WithContext(ctx).Where("parent_id = ? AND user_id = ? AND id NOT IN ?", parentID, userID, validChildrenIDs).Delete(&model.Blog{})
+	} else {
+		db.DB.WithContext(ctx).Where("parent_id = ? AND user_id = ?", parentID, userID).Delete(&model.Blog{})
+	}
+
 	for i, chapter := range outline {
 		if ctx.Err() != nil {
 			errChan <- ctx.Err()
 			break
+		}
+
+		if chapter.Action == "skip" && chapter.ID != "" {
+			if blogID, err := uuid.Parse(chapter.ID); err == nil {
+				// Update sort and title for existing skipped chapter
+				db.DB.WithContext(ctx).Model(&model.Blog{}).Where("id = ? AND user_id = ?", blogID, userID).Updates(map[string]interface{}{
+					"chapter_sort": chapter.Sort,
+					"title":        chapter.Title,
+				})
+			}
+			endMsg := map[string]interface{}{
+				"status":       "completed",
+				"chapter_sort": chapter.Sort,
+				"title":        chapter.Title,
+			}
+			endBytes, _ := json.Marshal(endMsg)
+			progressChan <- string(endBytes)
+			continue
 		}
 
 		if err := sem.Acquire(ctx, 1); err != nil {
@@ -344,32 +385,56 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 				}
 			}
 
-			blog := &model.Blog{
-				UserID:      userID,
-				ParentID:    &parentID,
-				ChapterSort: chapter.Sort,
-				Title:       chapter.Title,
-				Content:     content,
-				SourceType:  sourceType,
-				Status:      1,
-				WordCount:   wordCount,
-				TechStacks:  techStacks,
-			}
-
-			if err := db.DB.WithContext(ctx).Create(blog).Error; err != nil {
-				errMsg := map[string]interface{}{
-					"status":       "error",
-					"chapter_sort": chapter.Sort,
-					"message":      fmt.Sprintf("failed to save chapter %d to db: %v", chapter.Sort, err),
+			var updated bool
+			if chapter.ID != "" {
+				if blogID, err := uuid.Parse(chapter.ID); err == nil {
+					if err := db.DB.WithContext(ctx).Model(&model.Blog{}).Where("id = ? AND user_id = ?", blogID, userID).Updates(map[string]interface{}{
+						"chapter_sort": chapter.Sort,
+						"title":        chapter.Title,
+						"content":      content,
+						"word_count":   wordCount,
+						"tech_stacks":  techStacks,
+					}).Error; err != nil {
+						errMsg := map[string]interface{}{
+							"status":       "error",
+							"chapter_sort": chapter.Sort,
+							"message":      fmt.Sprintf("failed to update chapter %d in db: %v", chapter.Sort, err),
+						}
+						errBytes, _ := json.Marshal(errMsg)
+						progressChan <- string(errBytes)
+						return
+					}
+					updated = true
 				}
-				errBytes, _ := json.Marshal(errMsg)
-				progressChan <- string(errBytes)
-				return
-			} else {
-
-				estimatedTokens := len([]rune(content)) * 2
-				db.DB.Model(&model.User{}).Where("id = ?", userID).UpdateColumn("tokens_used", gorm.Expr("tokens_used + ?", estimatedTokens))
 			}
+			
+			if !updated {
+				blog := &model.Blog{
+					UserID:      userID,
+					ParentID:    &parentID,
+					ChapterSort: chapter.Sort,
+					Title:       chapter.Title,
+					Content:     content,
+					SourceType:  sourceType,
+					Status:      1,
+					WordCount:   wordCount,
+					TechStacks:  techStacks,
+				}
+
+				if err := db.DB.WithContext(ctx).Create(blog).Error; err != nil {
+					errMsg := map[string]interface{}{
+						"status":       "error",
+						"chapter_sort": chapter.Sort,
+						"message":      fmt.Sprintf("failed to save chapter %d to db: %v", chapter.Sort, err),
+					}
+					errBytes, _ := json.Marshal(errMsg)
+					progressChan <- string(errBytes)
+					return
+				}
+			}
+
+			estimatedTokens := len([]rune(content)) * 2
+			db.DB.Model(&model.User{}).Where("id = ?", userID).UpdateColumn("tokens_used", gorm.Expr("tokens_used + ?", estimatedTokens))
 
 			endMsg := map[string]interface{}{
 				"status":       "completed",
@@ -506,7 +571,7 @@ func (s *DecompositionService) generateSeriesIntro(ctx context.Context, userID u
 }
 
 // GenerateOutline evaluates project text and generates a JSON outline
-func (s *DecompositionService) GenerateOutline(ctx context.Context, sourceContent string) (*OutlineResult, error) {
+func (s *DecompositionService) GenerateOutline(ctx context.Context, sourceContent string, existingParent *model.Blog, existingChildren []model.Blog) (*OutlineResult, error) {
 
 	runes := []rune(sourceContent)
 	if len(runes) > 2000000 {
@@ -515,17 +580,41 @@ func (s *DecompositionService) GenerateOutline(ctx context.Context, sourceConten
 
 	instruction := `你是一个高级架构师。请评估前面提供的项目文本，并生成一个系列博客的大纲。
 对于大型项目、源码仓库或复杂内容，**强制拆分为细粒度系列博客**。
-要求一个技术点分为一个博客，博客篇数上不封顶，只要有需要，技术点可以拆的更加详细。
+要求一个技术点分为一个博客，博客篇数上不封顶，只要有需要，技术点可以拆的更加详细。`
+
+	if existingParent != nil {
+		var existingOutlineBuilder strings.Builder
+		existingOutlineBuilder.WriteString(fmt.Sprintf("原系列标题: %s\n原章节列表:\n", existingParent.Title))
+		for _, child := range existingChildren {
+			existingOutlineBuilder.WriteString(fmt.Sprintf("- 章节ID: %s, 序号: %d, 标题: %s\n", child.ID.String(), child.ChapterSort, child.Title))
+		}
+
+		instruction += fmt.Sprintf(`
+
+**注意：用户已经拥有该项目旧版本的博客系列大纲如下**：
+%s
+
+由于项目可能发生了更新，你需要对比最新源码与已有博客大纲，生成一个**更新后**的系列博客大纲。
+- 对于内容没有发生变化的章节，你可以保留原样，并将 "action" 标记为 "skip"（跳过生成），并**务必填入对应的 "id"**。
+- 对于需要根据最新代码更新的旧章节，将 "action" 标记为 "regenerate"（重新生成），并**务必填入对应的 "id"**。
+- 对于根据新功能/新模块产生的新章节，将 "action" 标记为 "new"（新增），不要填 "id"。
+- 对于已经废弃的功能对应的章节，直接在新的大纲中将其移除即可。
+`, existingOutlineBuilder.String())
+	}
+
+	instruction += `
 输出必须是纯JSON格式，包含 series_title 和 chapters 两个字段，不包含任何Markdown标记或其他文字。
 JSON 格式如下：
 {
   "series_title": "系列博客的标题",
   "chapters": [
     {
+      "id": "章节的 UUID（如果有）",
       "title": "章节标题",
       "summary": "该章节的详细摘要或内容要点（指导后续生成的具体方向）",
       "sort": 1,
-      "files": ["强相关的具体文件路径或目录（必须是相对路径）"]
+      "files": ["强相关的具体文件路径或目录（必须是相对路径）"],
+      "action": "new 或 regenerate 或 skip"
     }
   ]
 }`

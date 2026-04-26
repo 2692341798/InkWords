@@ -72,13 +72,24 @@ func (api *StreamAPI) AnalyzeStreamHandler(c *gin.Context) {
 	// We use a WaitGroup to ensure the goroutine finishes before we return from the handler
 	var wg sync.WaitGroup
 	wg.Add(1)
+// Start generation in a goroutine
+	var userID uuid.UUID
+	if v, exists := c.Get("user_id"); exists {
+		if id, ok := v.(uuid.UUID); ok {
+			userID = id
+		}
+	}
+	if userID == uuid.Nil {
+		// Fallback to a dummy UUID if auth middleware is not applied on this route yet
+		userID = uuid.New()
+	}
 
 	go func() {
 		defer wg.Done()
 		if req.SourceType == "file" {
-			api.decompositionService.AnalyzeFileStream(bgCtx, req.SourceContent, progressChan, errChan)
+			api.decompositionService.AnalyzeFileStream(bgCtx, userID, req.SourceContent, progressChan, errChan)
 		} else {
-			api.decompositionService.AnalyzeStream(bgCtx, req.GitURL, req.SelectedModules, progressChan, errChan)
+			api.decompositionService.AnalyzeStream(bgCtx, userID, req.GitURL, req.SelectedModules, progressChan, errChan)
 		}
 	}()
 

@@ -76,7 +76,7 @@ func (f *GitFetcher) Fetch(repoURL string) (string, []FileChunk, error) {
 	defer os.RemoveAll(tempDir)
 
 	// Clone the repository with depth 1 to speed up fetching
-	cmd := exec.Command("git", "clone", "--depth", "1", repoURL, tempDir)
+	cmd := exec.Command("git", "-c", "http.postBuffer=524288000", "-c", "http.maxRequestBuffer=100M", "-c", "core.compression=0", "clone", "--depth", "1", repoURL, tempDir)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
@@ -227,11 +227,12 @@ func (f *GitFetcher) FetchWithSubDir(repoURL string, subDir string) (string, []F
 	subDir = strings.TrimPrefix(subDir, "/")
 
 	var stderr bytes.Buffer
-	cmd := exec.Command("git", "clone", "--filter=blob:none", "--no-checkout", "--depth", "1", repoURL, tempDir)
+	// 加入重试机制和增大 http 缓冲区，防止大仓库拉取时因网络波动或缓冲区过小导致的 RPC failed (如 curl 56 OpenSSL SSL_read error)
+	cmd := exec.Command("git", "-c", "http.postBuffer=524288000", "-c", "http.maxRequestBuffer=100M", "-c", "core.compression=0", "clone", "--filter=blob:none", "--no-checkout", "--depth", "1", repoURL, tempDir)
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
 		stderr.Reset()
-		cmd = exec.Command("git", "clone", "--no-checkout", "--depth", "1", repoURL, tempDir)
+		cmd = exec.Command("git", "-c", "http.postBuffer=524288000", "-c", "http.maxRequestBuffer=100M", "-c", "core.compression=0", "clone", "--no-checkout", "--depth", "1", repoURL, tempDir)
 		cmd.Stderr = &stderr
 		if err := cmd.Run(); err != nil {
 			return "", nil, fmt.Errorf("failed to clone repository: %w, stderr: %s", err, stderr.String())
@@ -255,11 +256,22 @@ func (f *GitFetcher) FetchWithSubDir(repoURL string, subDir string) (string, []F
 	}
 
 	stderr.Reset()
-	cmd = exec.Command("git", "checkout")
-	cmd.Dir = tempDir
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return "", nil, fmt.Errorf("failed to checkout repository: %w, stderr: %s", err, stderr.String())
+	// 重试机制：对于大型仓库，checkout 可能会因网络拉取 blob 失败而报错，因此增加重试和 http 配置
+	var checkoutErr error
+	var checkoutStderr string
+	for i := 0; i < 3; i++ {
+		cmd = exec.Command("git", "-c", "http.postBuffer=524288000", "-c", "http.maxRequestBuffer=100M", "-c", "core.compression=0", "checkout")
+		cmd.Dir = tempDir
+		cmd.Stderr = &stderr
+		checkoutErr = cmd.Run()
+		if checkoutErr == nil {
+			break
+		}
+		checkoutStderr = stderr.String()
+		stderr.Reset()
+	}
+	if checkoutErr != nil {
+		return "", nil, fmt.Errorf("failed to checkout repository after retries: %w, stderr: %s", checkoutErr, checkoutStderr)
 	}
 
 	walkDir := filepath.Join(tempDir, filepath.FromSlash(filepath.Clean(subDir)))

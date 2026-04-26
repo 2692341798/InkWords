@@ -17,6 +17,7 @@ type Blog struct {
 	Title       string         `gorm:"type:varchar(255);not null" json:"title"`
 	Content     string         `gorm:"type:text;not null" json:"content"`
 	SourceType  string         `gorm:"type:varchar(50);not null" json:"source_type"`
+	SourceURL   string         `gorm:"type:varchar(512)" json:"source_url"`
 	IsSeries    bool           `gorm:"type:boolean;default:false" json:"is_series"`
 	Status      int16          `gorm:"type:smallint;default:0" json:"status"`
 	WordCount   int            `gorm:"type:integer;default:0" json:"word_count"`

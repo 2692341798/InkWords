@@ -44,6 +44,7 @@
 | `title` | VARCHAR(255) | | 博客/章节标题 |
 | `content` | TEXT | | Markdown 格式正文内容 |
 | `source_type` | VARCHAR(50) | | 来源类型 (`file`, `git`) |
+| `source_url` | VARCHAR(512)| | 来源URL (`git` 类型对应的仓库地址) |
 | `status` | INTEGER | Default 0 | 状态 (0:生成中, 1:已完成, -1:失败) |
 | `word_count` | INTEGER | Default 0 | 生成博客的总字数统计 |
 | `tech_stacks` | JSONB | Nullable | 自动提取的涉及技术栈列表 |

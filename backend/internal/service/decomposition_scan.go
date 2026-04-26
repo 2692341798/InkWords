@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"inkwords-backend/internal/llm"
@@ -23,9 +24,12 @@ func (s *DecompositionService) ScanProjectModules(ctx context.Context, gitURL st
 	}
 	defer os.RemoveAll(tempDir)
 
-	cmd := exec.Command("git", "clone", "--depth", "1", gitURL, tempDir)
+	var stderr bytes.Buffer
+	// 加入重试机制和增大 http 缓冲区，防止大仓库拉取时因网络波动或缓冲区过小导致的 RPC failed
+	cmd := exec.Command("git", "-c", "http.postBuffer=524288000", "-c", "http.maxRequestBuffer=100M", "-c", "core.compression=0", "clone", "--depth", "1", gitURL, tempDir)
+	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("failed to clone repository: %w", err)
+		return nil, fmt.Errorf("failed to clone repository: %w, stderr: %s", err, stderr.String())
 	}
 
 	var modules []ModuleCard

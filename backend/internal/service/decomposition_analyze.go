@@ -4,18 +4,21 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"inkwords-backend/internal/db"
 	"inkwords-backend/internal/llm"
+	"inkwords-backend/internal/model"
 	"inkwords-backend/internal/parser"
 	"os"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"golang.org/x/sync/semaphore"
 )
 
 // AnalyzeStream handles the full analysis pipeline with streaming progress
-func (s *DecompositionService) AnalyzeStream(ctx context.Context, gitURL string, selectedModules []string, progressChan chan<- string, errChan chan<- error) {
+func (s *DecompositionService) AnalyzeStream(ctx context.Context, userID uuid.UUID, gitURL string, selectedModules []string, progressChan chan<- string, errChan chan<- error) {
 	defer close(progressChan)
 	defer close(errChan)
 
@@ -161,21 +164,37 @@ func (s *DecompositionService) AnalyzeStream(ctx context.Context, gitURL string,
 
 	sendProgress(3, "评估大模型并生成项目全局大纲...", nil)
 
-	outlineResult, err := s.GenerateOutline(ctx, finalContent.String())
+	var existingParent *model.Blog
+	var existingChildren []model.Blog
+	if gitURL != "" {
+		var p model.Blog
+		if err := db.DB.WithContext(ctx).Where("user_id = ? AND source_type = 'git' AND source_url = ? AND parent_id IS NULL", userID, gitURL).First(&p).Error; err == nil {
+			existingParent = &p
+			db.DB.WithContext(ctx).Where("parent_id = ?", p.ID).Order("chapter_sort asc").Find(&existingChildren)
+			sendProgress(3, "检测到已有该项目的博客系列，正在生成增量更新大纲...", nil)
+		}
+	}
+
+	outlineResult, err := s.GenerateOutline(ctx, finalContent.String(), existingParent, existingChildren)
 	if err != nil {
 		errChan <- fmt.Errorf("生成大纲失败: %w", err)
 		return
+	}
+
+	if existingParent != nil {
+		outlineResult.ParentID = existingParent.ID.String()
 	}
 
 	sendProgress(4, "正在完成最后处理...", map[string]interface{}{
 		"series_title":   outlineResult.SeriesTitle,
 		"outline":        outlineResult.Chapters,
 		"source_content": finalContent.String(),
+		"parent_id":      outlineResult.ParentID,
 	})
 }
 
 // AnalyzeFileStream handles the analysis pipeline for a single file's content
-func (s *DecompositionService) AnalyzeFileStream(ctx context.Context, sourceContent string, progressChan chan<- string, errChan chan<- error) {
+func (s *DecompositionService) AnalyzeFileStream(ctx context.Context, userID uuid.UUID, sourceContent string, progressChan chan<- string, errChan chan<- error) {
 	defer close(progressChan)
 	defer close(errChan)
 
@@ -292,7 +311,7 @@ func (s *DecompositionService) AnalyzeFileStream(ctx context.Context, sourceCont
 
 	sendProgress(3, "评估大模型并生成全局大纲...", nil)
 
-	outlineResult, err := s.GenerateOutline(ctx, finalContent.String())
+	outlineResult, err := s.GenerateOutline(ctx, finalContent.String(), nil, nil)
 	if err != nil {
 		errChan <- fmt.Errorf("生成大纲失败: %w", err)
 		return
