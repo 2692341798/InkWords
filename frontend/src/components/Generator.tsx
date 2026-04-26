@@ -12,7 +12,7 @@ import { GeneratorStatus } from './generator/GeneratorStatus'
 export function Generator() {
   const store = useStreamStore()
   const { scanGit, analyzeGit, parseFile, generateSeries, generateSingle, stopAnalyzing, stopGenerating } = useBlogStream()
-  const [gitUrl, setGitUrl] = useState('')
+  const [gitUrl, setGitUrl] = useState(store.gitUrl)
   const [isDragging, setIsDragging] = useState(false)
   const [analyzingType, setAnalyzingType] = useState<'git' | 'file'>('git')
   const [isOutlineExpanded, setIsOutlineExpanded] = useState(true)
@@ -27,6 +27,24 @@ export function Generator() {
       setTimeout(() => setIsOutlineExpanded(true), 0)
     }
   }, [store.isGenerating])
+
+  useEffect(() => {
+    // If the global store gitUrl is reset (e.g. by "新建工作区"), sync the local input
+    if (store.gitUrl === '' && gitUrl !== '') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setGitUrl('')
+    }
+  }, [store.gitUrl, gitUrl])
+
+  useEffect(() => {
+    // Clear modules if the user changes the git URL in the input box
+    if (gitUrl !== store.gitUrl && store.modules) {
+      store.setModules(null)
+      store.setSelectedModules([])
+      store.setOutline(null)
+      store.setParentBlogId(null)
+    }
+  }, [gitUrl, store.gitUrl, store.modules, store])
 
   const handleScan = async () => {
     if (!gitUrl) return

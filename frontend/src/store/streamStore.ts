@@ -50,7 +50,7 @@ interface StreamState {
   setSource: (type: 'git' | 'file', content: string, gitUrl?: string) => void
   setSourceContent: (content: string) => void
   setSeriesTitle: (title: string) => void
-  setOutline: (outline: Chapter[]) => void
+  setOutline: (outline: Chapter[] | null) => void
   updateChapter: (sort: number, field: 'title' | 'summary', value: string) => void
   addChapter: () => void
   removeChapter: (sort: number) => void
@@ -107,8 +107,8 @@ export const useStreamStore = create<StreamState>((set, get) => ({
   setSeriesTitle: (title) => set({ seriesTitle: title }),
   setOutline: (outline) => set({ 
     outline,
-    chapterStatus: outline.reduce((acc, ch) => ({ ...acc, [ch.sort]: 'pending' }), {}),
-    chapterContents: outline.reduce((acc, ch) => ({ ...acc, [ch.sort]: '' }), {})
+    chapterStatus: outline ? outline.reduce((acc, ch) => ({ ...acc, [ch.sort]: 'pending' }), {}) : {},
+    chapterContents: outline ? outline.reduce((acc, ch) => ({ ...acc, [ch.sort]: '' }), {}) : {}
   }),
   updateChapter: (sort, field, value) => set((state) => ({
     outline: state.outline?.map(ch => 

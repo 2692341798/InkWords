@@ -10,6 +10,12 @@ export const useProjectScanner = () => {
       throw new Error('invalid url')
     }
 
+    // Clear previous state before starting a new scan
+    store.setModules(null)
+    store.setSelectedModules([])
+    store.setOutline(null)
+    store.setParentBlogId(null)
+    
     store.setScanning(true)
     store.setAnalysisStep(0)
     store.setAnalysisMessage('正在扫描仓库目录与核心模块...')
