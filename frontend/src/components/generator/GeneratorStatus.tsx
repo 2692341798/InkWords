@@ -2,6 +2,9 @@ import { useRef, useEffect } from 'react'
 import { MarkdownEngine } from '@/components/MarkdownEngine'
 import { useStreamStore } from '@/store/streamStore'
 
+import { CheckCircle2, Loader2 } from 'lucide-react'
+import { cn } from '@/lib/utils'
+
 export function GeneratorStatus() {
   const store = useStreamStore()
   const contentEndRef = useRef<HTMLDivElement>(null)
@@ -10,7 +13,7 @@ export function GeneratorStatus() {
     if (contentEndRef.current) {
       contentEndRef.current.scrollIntoView({ behavior: 'smooth' })
     }
-  }, [store.progress, store.currentChapterTitle])
+  }, [store.progress, store.currentChapterTitle, store.analysisHistory.length])
 
   if (!store.isScanning && !store.isAnalyzing && !store.isGenerating && !store.progress && !store.currentChapterTitle && !store.analysisMessage) {
     return null
@@ -43,41 +46,75 @@ export function GeneratorStatus() {
           )}
         </div>
         <div className="flex-1 overflow-y-auto p-6 bg-zinc-50/30 dark:bg-zinc-900/30 prose dark:prose-invert max-w-none custom-scrollbar">
-        {currentStatusMessage && (
+        {!isParsing && currentStatusMessage && (
           <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 rounded-lg border border-blue-100 dark:border-blue-800/50 font-mono text-sm shadow-sm flex items-center gap-3">
             {isWorking && (
-              <svg className="w-5 h-5 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
+              <Loader2 className="w-5 h-5 animate-spin flex-shrink-0" />
             )}
             <span className="break-all">{currentStatusMessage}</span>
           </div>
         )}
         
         {isParsing ? (
-          <div className="bg-white dark:bg-zinc-900 p-6 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm min-h-[400px] flex flex-col items-center justify-center text-zinc-500">
-            <svg className="w-12 h-12 mb-4 text-blue-500 animate-spin" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            <p className="text-sm">正在深度解析项目结构与内容，请耐心等待...</p>
+          <div className="flex flex-col gap-4">
              {store.analysisStep >= 0 && (
-               <div className="mt-6 w-full max-w-md">
-                 <div className="flex justify-between text-xs mb-2">
-                   <span className={store.analysisStep >= 0 ? "text-blue-500" : ""}>{store.sourceType === 'file' ? '上传' : '克隆'}</span>
-                   <span className={store.analysisStep >= 1 ? "text-blue-500" : ""}>{store.sourceType === 'file' ? '解析' : '扫描'}</span>
-                   <span className={store.analysisStep >= 2 ? "text-blue-500" : ""}>分析</span>
-                   <span className={store.analysisStep >= 3 ? "text-blue-500" : ""}>大纲</span>
+               <div className="w-full bg-white dark:bg-zinc-900 p-6 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
+                 <div className="flex justify-between text-sm font-medium mb-3">
+                   <span className={cn("transition-colors", store.analysisStep >= 0 ? "text-blue-600 dark:text-blue-400" : "text-zinc-400")}>{store.sourceType === 'file' ? '上传文件' : '克隆代码'}</span>
+                   <span className={cn("transition-colors", store.analysisStep >= 1 ? "text-blue-600 dark:text-blue-400" : "text-zinc-400")}>{store.sourceType === 'file' ? '解析内容' : '扫描结构'}</span>
+                   <span className={cn("transition-colors", store.analysisStep >= 2 ? "text-blue-600 dark:text-blue-400" : "text-zinc-400")}>深度分析</span>
+                   <span className={cn("transition-colors", store.analysisStep >= 3 ? "text-blue-600 dark:text-blue-400" : "text-zinc-400")}>生成大纲</span>
                  </div>
-                 <div className="w-full bg-zinc-200 dark:bg-zinc-700 rounded-full h-1.5">
+                 <div className="w-full bg-zinc-100 dark:bg-zinc-800 rounded-full h-2 overflow-hidden">
                   <div 
-                    className="bg-blue-500 h-1.5 rounded-full transition-all duration-500"
+                    className="bg-blue-500 h-full rounded-full transition-all duration-500 relative overflow-hidden"
                     style={{ width: `${Math.min(100, Math.max(5, (store.analysisStep + 1) * 25))}%` }}
-                  ></div>
+                  >
+                    <div className="absolute inset-0 bg-white/20 animate-pulse -skew-x-12" style={{ backgroundImage: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent)' }}></div>
+                  </div>
                 </div>
               </div>
             )}
+            
+            <div className="space-y-3">
+              {store.analysisHistory.map((item, index) => {
+                const isLast = index === store.analysisHistory.length - 1;
+                const isCompleted = !isLast || store.analysisStep >= 4;
+                return (
+                  <div 
+                    key={item.id} 
+                    className={cn(
+                      "p-4 rounded-xl border flex items-start gap-4 transition-all duration-300 shadow-sm",
+                      isCompleted
+                        ? "bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 opacity-80" 
+                        : "bg-blue-50/50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-800/50 scale-[1.02]"
+                    )}
+                  >
+                    <div className="mt-0.5 flex-shrink-0">
+                      {isCompleted ? (
+                        <CheckCircle2 className="w-5 h-5 text-green-500 dark:text-green-400" />
+                      ) : (
+                        <Loader2 className="w-5 h-5 text-blue-500 dark:text-blue-400 animate-spin" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className={cn(
+                        "text-sm font-medium break-all",
+                        isCompleted ? "text-zinc-700 dark:text-zinc-300" : "text-blue-900 dark:text-blue-100"
+                      )}>
+                        {item.message}
+                      </div>
+                      {item.status && (
+                        <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1.5 flex items-center gap-2">
+                          <span className="px-2 py-0.5 bg-zinc-100 dark:bg-zinc-800 rounded-md capitalize">{item.status}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+              <div ref={contentEndRef} />
+            </div>
           </div>
         ) : (
           <div className="bg-white dark:bg-zinc-900 p-6 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm min-h-[400px]">

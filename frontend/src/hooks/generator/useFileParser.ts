@@ -10,7 +10,9 @@ export const useFileParser = () => {
   const parseFile = useCallback(async (file: File) => {
     store.setAnalyzing(true)
     store.setAnalysisStep(0)
+    store.clearAnalysisHistory()
     store.setAnalysisMessage('正在上传并解析文件...')
+    store.appendAnalysisHistory({ message: '正在上传并解析文件...' })
     store.setSource('file', file.name)
     store.setOutline([])
     
@@ -91,6 +93,7 @@ export const useFileParser = () => {
             try {
               const data = JSON.parse(msg.data)
               store.setAnalysisMessage(data.message)
+              store.appendAnalysisHistory({ message: data.message, status: data.status })
               if (data.status === 'analyzing') {
                 store.setAnalysisStep(2)
               } else if (data.status === 'outline') {

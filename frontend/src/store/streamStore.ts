@@ -42,6 +42,7 @@ interface StreamState {
   workers: Record<number, MapReduceProgress>
   analysisStep: number
   analysisMessage: string
+  analysisHistory: { id: number; message: string; status?: string }[]
   progress: string
   content: string
   currentChapterTitle: string
@@ -67,6 +68,8 @@ interface StreamState {
   setMapReduceProgress: (progress: MapReduceProgress | null) => void
   setAnalysisStep: (step: number) => void
   setAnalysisMessage: (msg: string) => void
+  appendAnalysisHistory: (item: { message: string; status?: string }) => void
+  clearAnalysisHistory: () => void
   setProgress: (msg: string) => void
   setContent: (content: string) => void
   appendContent: (chunk: string) => void
@@ -98,6 +101,7 @@ export const useStreamStore = create<StreamState>((set, get) => ({
   workers: {},
   analysisStep: -1,
   analysisMessage: '',
+  analysisHistory: [],
   progress: '',
   content: '',
   currentChapterTitle: '',
@@ -205,6 +209,10 @@ export const useStreamStore = create<StreamState>((set, get) => ({
   }),
   setAnalysisStep: (step) => set({ analysisStep: step }),
   setAnalysisMessage: (msg) => set({ analysisMessage: msg }),
+  appendAnalysisHistory: (item) => set((state) => ({
+    analysisHistory: [...state.analysisHistory, { id: Date.now() + Math.random(), ...item }]
+  })),
+  clearAnalysisHistory: () => set({ analysisHistory: [] }),
   setProgress: (msg) => set({ progress: msg }),
   setContent: (content) => set({ content }),
   appendContent: (chunk) => set((state) => ({ content: state.content + chunk })),
@@ -271,6 +279,7 @@ export const useStreamStore = create<StreamState>((set, get) => ({
       workers: {},
       analysisStep: -1,
       analysisMessage: '',
+      analysisHistory: [],
       progress: '',
       content: '',
       currentChapterTitle: '',

@@ -118,7 +118,8 @@ export function Generator() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-12">
+    <div className="flex-1 h-full overflow-y-auto custom-scrollbar">
+      <div className="max-w-5xl mx-auto px-4 py-12">
       <div className="text-center mb-12">
         <h1 className="text-4xl font-bold text-zinc-900 dark:text-zinc-100 mb-4 tracking-tight">智能生成博客</h1>
         <p className="text-lg text-zinc-500 dark:text-zinc-400">一键将开源项目或本地文档转化为高质量技术博客</p>
@@ -170,6 +171,7 @@ export function Generator() {
         cancelText="取消"
         isDestructive={true}
       />
+    </div>
     </div>
   )
 }

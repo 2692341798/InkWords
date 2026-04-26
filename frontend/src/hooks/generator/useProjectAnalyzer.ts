@@ -15,7 +15,9 @@ export const useProjectAnalyzer = () => {
 
     store.setAnalyzing(true)
     store.setAnalysisStep(-1)
+    store.clearAnalysisHistory()
     store.setAnalysisMessage('正在建立连接...')
+    store.appendAnalysisHistory({ message: '正在建立连接...' })
     
     if (store.abortController) {
       store.abortController.abort()
@@ -65,6 +67,7 @@ export const useProjectAnalyzer = () => {
             try {
               const data = JSON.parse(msg.data)
               store.setAnalysisMessage(data.message)
+              store.appendAnalysisHistory({ message: data.message, status: data.status })
               if (data.status === 'cloning') {
                 store.setAnalysisStep(0)
               } else if (data.status === 'scanning') {
