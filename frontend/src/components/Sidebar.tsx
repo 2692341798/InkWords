@@ -143,7 +143,7 @@ export function Sidebar() {
         <div
           className={cn(
             "flex items-center py-2 px-3 hover:bg-zinc-100 rounded-md cursor-pointer text-sm gap-2 transition-colors",
-            isSelected && !isBatchMode ? "bg-indigo-50 text-indigo-700 font-medium" : "text-zinc-700"
+            isSelected && !hasChildren && !isBatchMode ? "bg-indigo-50 text-indigo-700 font-medium" : "text-zinc-700"
           )}
           style={{ paddingLeft: `${level * 16 + 12}px` }}
           onClick={() => {
@@ -168,12 +168,10 @@ export function Sidebar() {
           )}
           {hasChildren ? (
             <div 
-              className="w-4 h-4 flex items-center justify-center text-zinc-400"
+              className="w-4 h-4 flex items-center justify-center text-zinc-400 hover:text-zinc-600 rounded-sm hover:bg-zinc-200"
               onClick={(e) => {
-                if (isBatchMode) {
-                  e.stopPropagation()
-                  toggleNode(node.id)
-                }
+                e.stopPropagation()
+                toggleNode(node.id)
               }}
             >
               {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
@@ -181,11 +179,31 @@ export function Sidebar() {
           ) : (
             <BookOpen className={cn("w-4 h-4", isSelected && !isBatchMode ? "text-indigo-500" : "text-zinc-400")} />
           )}
-          <span className="truncate flex-1 min-w-0">{node.title || '无标题'}</span>
+          <span className="truncate flex-1 min-w-0" title={node.title || '无标题'}>{node.title || '无标题'}</span>
         </div>
         
         {hasChildren && isExpanded && (
           <div className="flex flex-col">
+            {/* If node is a parent, manually inject the parent node itself as the first "Series Guide" child in the UI */}
+            {node.parent_id === null && (
+              <div
+                className={cn(
+                  "flex items-center py-2 px-3 hover:bg-zinc-100 rounded-md cursor-pointer text-sm gap-2 transition-colors",
+                  selectedBlog?.id === node.id && !isBatchMode ? "bg-indigo-50 text-indigo-700 font-medium" : "text-zinc-700"
+                )}
+                style={{ paddingLeft: `${(level + 1) * 16 + 12}px` }}
+                onClick={() => {
+                  if (isBatchMode) {
+                    toggleNodeSelection(node)
+                  } else {
+                    selectBlog(node)
+                  }
+                }}
+              >
+                <BookOpen className={cn("w-4 h-4", selectedBlog?.id === node.id && !isBatchMode ? "text-indigo-500" : "text-zinc-400")} />
+                <span className="truncate flex-1 min-w-0" title="系列导读 (概览)">系列导读 (概览)</span>
+              </div>
+            )}
             {node.children.map(child => renderBlogNode(child, level + 1))}
           </div>
         )}
@@ -240,6 +258,51 @@ export function Sidebar() {
               </Button>
             </div>
             <div className="space-y-3 max-h-[30vh] overflow-y-auto custom-scrollbar">
+              {/* 系列导读 */}
+              {streamStore.chapterStatus[0] && (
+                  <div 
+                    key={0} 
+                    className={cn(
+                      "p-3 rounded-lg border flex items-start gap-3 transition-colors",
+                      streamStore.chapterStatus[0] === 'completed'
+                        ? "bg-green-50/50 border-green-100 hover:bg-green-50 cursor-pointer" 
+                        : streamStore.chapterStatus[0] === 'generating'
+                          ? "bg-indigo-50 border-indigo-200"
+                          : "bg-zinc-50 border-zinc-100"
+                    )}
+                    onClick={() => {
+                      if (streamStore.chapterStatus[0] === 'completed') {
+                        const parentBlogId = streamStore.parentBlogId
+                        if (parentBlogId) {
+                          const found = blogs.find(b => b.id === parentBlogId)
+                          if (found) {
+                            selectBlog(found)
+                          } else {
+                            fetchBlogs().then(() => {
+                               const updatedBlogs = useBlogStore.getState().blogs
+                               const newFound = updatedBlogs.find(b => b.id === parentBlogId)
+                               if (newFound) selectBlog(newFound)
+                            })
+                          }
+                        }
+                      }
+                    }}
+                  >
+                    <div className="mt-0.5">
+                      {streamStore.chapterStatus[0] === 'completed' ? (
+                        <CheckCircle2 className="w-4 h-4 text-green-500" />
+                      ) : streamStore.chapterStatus[0] === 'generating' ? (
+                        <Loader2 className="w-4 h-4 text-indigo-500 animate-spin" />
+                      ) : (
+                        <CircleDashed className="w-4 h-4 text-zinc-400" />
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-sm font-medium text-zinc-800">系列导读</div>
+                      <div className="text-xs text-zinc-500 mt-1 line-clamp-2">全系列的引言与总结概览</div>
+                    </div>
+                  </div>
+              )}
               {streamStore.outline.map((ch) => {
                 const status = streamStore.chapterStatus[ch.sort]
                 return (
