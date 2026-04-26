@@ -21,14 +21,15 @@
 ## 3. 项目解析模块 (ProjectAPI)
 | 接口地址 | 请求方法 | 功能描述 | 参数 |
 | -------- | -------- | -------- | ---- |
+| `/api/v1/project/scan` | POST | 扫描 Git 仓库一级目录提取模块卡片 | `{ git_url }` -> 返回 `modules` 列表 |
 | `/api/v1/project/analyze` | POST | 解析 Git 仓库生成大纲 (Legacy) | `{ git_url, sub_dir }` |
 | `/api/v1/project/parse` | POST | 解析本地文件生成大纲 | `multipart/form-data` -> `file` (最大支持 100MB) |
 
 ## 4. 流式生成模块 (StreamAPI)
 | 接口地址 | 请求方法 | 功能描述 | 参数 |
 | -------- | -------- | -------- | ---- |
-| `/api/v1/stream/analyze` | POST | 实时流式拉取 Git 或解析长文本文件生成大纲 | `{ git_url, sub_dir, source_type, source_content }` -> SSE Stream |
-| `/api/v1/stream/generate` | POST | 根据大纲或内容流式生成博客章节 | `{ source_content, source_type, git_url, sub_dir, outline, series_title, parent_id }` -> SSE Stream |
+| `/api/v1/stream/analyze` | POST | 实时流式拉取 Git 或解析长文本文件生成大纲 | `{ git_url, selected_modules, source_type, source_content }` -> SSE Stream |
+| `/api/v1/stream/generate` | POST | 根据大纲或内容流式生成博客章节 | `{ source_content, source_type, git_url, outline, series_title, parent_id }` -> SSE Stream |
 | `/api/v1/blogs/:id/continue` | POST | 继续生成被截断的单篇博客 (Legacy) | 无 -> SSE Stream |
 
 ## 5. 博客管理模块 (BlogAPI)
