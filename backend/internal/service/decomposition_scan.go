@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"inkwords-backend/internal/llm"
 	"inkwords-backend/internal/parser"
 )
 
@@ -62,9 +63,11 @@ func (s *DecompositionService) ScanProjectModulesWithProgress(ctx context.Contex
 		}
 	}
 
+	var tempDir string
 	// 2. Fallback to git partial clone if API failed or not a GitHub URL
 	if len(dirNames) == 0 {
-		tempDir, err := os.MkdirTemp("", "inkwords-scan-*")
+		var err error
+		tempDir, err = os.MkdirTemp("", "inkwords-scan-*")
 		if err != nil {
 			return nil, fmt.Errorf("failed to create temp dir: %w", err)
 		}
@@ -95,6 +98,81 @@ func (s *DecompositionService) ScanProjectModulesWithProgress(ctx context.Contex
 		dirNames = strings.Split(strings.TrimSpace(string(outBytes)), "\n")
 	}
 
+	// 3. Attempt to fetch README to generate intelligent descriptions
+	var readmeContent string
+
+	if owner, repo, ok := parser.ParseGithubOwnerRepo(gitURL); ok {
+		readmeAPI := fmt.Sprintf("https://api.github.com/repos/%s/%s/readme", owner, repo)
+		client := &http.Client{Timeout: 10 * time.Second}
+		req, _ := http.NewRequestWithContext(ctx, "GET", readmeAPI, nil)
+		req.Header.Set("Accept", "application/vnd.github.v3.raw")
+		if token := os.Getenv("GITHUB_TOKEN"); token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		resp, err := client.Do(req)
+		if err == nil && resp.StatusCode == http.StatusOK {
+			buf := new(bytes.Buffer)
+			buf.ReadFrom(resp.Body)
+			readmeContent = buf.String()
+			resp.Body.Close()
+		} else if resp != nil {
+			resp.Body.Close()
+		}
+	}
+
+	if readmeContent == "" && tempDir != "" {
+		for _, name := range []string{"README.md", "README", "readme.md", "Readme.md"} {
+			cmd := exec.Command("git", "show", "HEAD:"+name)
+			cmd.Dir = tempDir
+			if out, err := cmd.Output(); err == nil {
+				readmeContent = string(out)
+				break
+			}
+		}
+	}
+
+	var dirDescriptions map[string]string
+
+	if len(dirNames) > 0 && readmeContent != "" {
+		if progressCallback != nil {
+			progressCallback <- "正在根据 README 智能提取目录描述..."
+		}
+
+		if len(readmeContent) > 20000 {
+			readmeContent = readmeContent[:20000]
+		}
+
+		dirNamesJson, _ := json.Marshal(dirNames)
+		prompt := fmt.Sprintf("你是一个高级技术架构师。以下是一个项目的根目录列表：\n%s\n\n请结合以下项目的 README 内容，为每个目录提供一句简短的中文描述（10-20个字左右），说明该目录的用途。如果 README 中未提及，请根据开源项目常见命名规范进行推测。\n\n输出格式必须是一个 JSON 对象，键为目录名，值为描述。不要包含任何 markdown 代码块标记，纯 JSON 输出。\n\nREADME 内容：\n%s", string(dirNamesJson), readmeContent)
+
+		messages := []llm.Message{
+			{Role: "user", Content: prompt},
+		}
+
+		modelStr := "deepseek-v4-flash"
+		if envModel := os.Getenv("DEEPSEEK_MODEL"); envModel != "" {
+			modelStr = envModel
+		}
+
+		ctxTimeout, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+
+		if err := s.limiter.Wait(ctxTimeout); err == nil {
+			if jsonStr, err := s.llmClient.GenerateJSON(ctxTimeout, modelStr, messages); err == nil {
+				jsonStr = strings.TrimPrefix(strings.TrimSpace(jsonStr), "```json")
+				jsonStr = strings.TrimPrefix(jsonStr, "```")
+				jsonStr = strings.TrimSuffix(jsonStr, "```")
+				jsonStr = strings.TrimSpace(jsonStr)
+
+				_ = json.Unmarshal([]byte(jsonStr), &dirDescriptions)
+			}
+		}
+	}
+
+	if dirDescriptions == nil {
+		dirDescriptions = make(map[string]string)
+	}
+
 	var modules []ModuleCard
 	ignoredDirs := map[string]bool{
 		".git": true, "node_modules": true, "vendor": true, "dist": true,
@@ -108,10 +186,15 @@ func (s *DecompositionService) ScanProjectModulesWithProgress(ctx context.Contex
 			continue
 		}
 		
+		desc := dirDescriptions[dirName]
+		if desc == "" {
+			desc = "代码目录模块 (点击解析后查看大纲)"
+		}
+
 		modules = append(modules, ModuleCard{
 			Path:        dirName,
 			Name:        dirName,
-			Description: "代码目录模块 (点击解析后查看大纲)", // 统一使用默认描述
+			Description: desc,
 		})
 	}
 
