@@ -142,7 +142,7 @@ func (s *DecompositionService) AnalyzeStream(ctx context.Context, userID uuid.UU
 
 					prompt := fmt.Sprintf(`你是一个高级架构师。以下是一个大型项目部分模块的局部摘要集合。
 请将这些局部摘要融合成一个中级摘要，提炼出这些模块共同负责的核心功能、数据流和架构逻辑。
-忽略过于细节的代码实现（如辅助函数、工具类或简单的增删改查），重点关注模块间的关系和整体系统职责。字数控制在 800 字以内。
+**请尽量保留各个核心模块、类、或关键函数的细节，不要过度精简导致后续无法为它们单独生成博客**。字数可以放宽至 1500 字左右。
 
 模块摘要如下：
 %s`, originalBatchContent)
@@ -291,7 +291,7 @@ func (s *DecompositionService) AnalyzeFileStream(ctx context.Context, userID uui
 
 					prompt := fmt.Sprintf(`你是一个高级内容架构师。以下是一个大型文档的部分局部摘要集合。
 请将这些局部摘要融合成一个中级摘要，提炼出这些章节共同负责的核心主题、业务流程和主要论点。
-重点关注章节间的逻辑连贯性和核心价值，**丢弃琐碎、重复或不重要的信息**。字数控制在 800 字以内。
+重点关注章节间的逻辑连贯性和核心价值，**尽可能保留所有具有独立价值的功能点或模块细节，不要过度压缩导致重要信息丢失**。字数可以放宽至 1500 字左右。
 
 局部摘要如下：
 %s`, originalBatchContent)
@@ -446,8 +446,8 @@ func (s *DecompositionService) mapReduceAnalyzeFile(ctx context.Context, chunks 
 
 func (s *DecompositionService) generateFileLocalSummaryWithRetry(ctx context.Context, chunk parser.FileChunk, maxRetries int, sendProgress func(int, string, interface{}), idx int, total int, workerID int) string {
 	prompt := fmt.Sprintf(`你是一个高级内容架构师。请阅读以下长文档的分块内容，并提取其核心主题、关键论点和上下文逻辑。
-要求输出一份300-500字的精简局部摘要，仅保留核心结构和要点，帮助后续拼接大纲。
-特别注意：**忽略琐碎的说明性文字、废话和过度详细的无关紧要步骤**，只保留有技术含量或核心指导意义的内容。
+要求输出一份局部摘要，尽量详细地保留核心结构和要点，帮助后续拼接大纲。
+特别注意：**请保留有独立价值的技术论点或重要步骤**，不需要过度压缩导致信息丢失。
 不需要过多的寒暄。
 分块标识：%s
 文本内容：
@@ -561,8 +561,8 @@ func (s *DecompositionService) mapReduceAnalyze(ctx context.Context, chunks []pa
 
 func (s *DecompositionService) generateLocalSummaryWithRetry(ctx context.Context, chunk parser.FileChunk, maxRetries int, sendProgress func(int, string, interface{}), idx int, total int, workerID int) string {
 	prompt := fmt.Sprintf(`你是一个高级全栈架构师。请分析以下代码块，提取其核心功能、主要接口和数据结构。
-你的输出应该是一份精简的局部摘要（不需要过多的寒暄，直接列出关键信息）。
-特别注意：**忽略过于底层、琐碎的辅助函数和私有方法**，只提炼对理解系统架构和核心业务流程有帮助的关键内容。
+你的输出应该是一份具有独立价值的局部摘要（不需要过多的寒暄，直接列出关键信息）。
+特别注意：**请详细记录下核心的类名、函数名以及重要架构设计，尽量不要丢弃有价值的技术细节**，以便后续能为它们单独生成博客解析。
 目录位置：%s
 代码内容：
 %s`, chunk.Dir, chunk.Content)
