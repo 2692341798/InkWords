@@ -81,6 +81,13 @@
   - `git clone` 作为后台进程运行时，极容易因为需要用户终端输入（密码/提示）而永久假死（Zombie Process）。`GIT_TERMINAL_PROMPT=0` 是服务端的标配方案。
   - 对于大模型 API 而言，“高并发”并不等于“高吞吐”。过多的并发不仅容易被风控，还会因为服务端资源切片导致每一个流的首次响应时间（TTFT）呈指数级上升。稳健的少量并发结合良好的进度动画，能提供更好的体感速度。
 
+### [2026-04-26] Refactor - 重构 Git 拉取机制：实现无状态的持久化全局缓存（解决二次拉取问题）
+- **开发模块**: [后端 Git 抓取模块, 生成服务]
+- **完成事项**:
+  1. **完全移除按需拉取时的临时文件夹和 Sparse-Checkout**：原先的 `FetchWithSubDir` 会由于采用了 `sparse-checkout` 每次为不同的模块创建一个全新的临时文件夹，而 `GenerateSeries` 也会再次进行克隆，造成同一次任务对同一个仓库重复克隆的问题。
+  2. **引入基于 MD5 的全局本地缓存**：实现了 `GetCachedRepoPath`，以 `gitURL` 的哈希值为名，在系统的 `TempDir/inkwords_repos` 中建立本地 Git 仓库缓存池。使用 `git clone --filter=blob:none --no-checkout --depth 1` 进行极致压缩的树克隆（只下载目录结构）。
+  3. **利用 Git 原生机制无盘访问文件**：通过使用 `git ls-tree -r --name-only HEAD <subDir>` 和 `git show HEAD:<file>` 在**不需要工作区（working tree）和任何文件 checkout**的情况下，完美且并发安全地实现了文件遍历和内容读取。这使得 `GenerateSeries` 阶段不再需要进行第二次克隆，可以直接秒级复用前置阶段建立好的缓存仓库！
+
 ### [2026-04-26] Feature - 重构 GitHub 仓库解析为两步流并支持模块选择
 - **开发模块**: [API 接口, 后端服务, 前端 UI]
 - **完成事项**:

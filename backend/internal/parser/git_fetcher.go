@@ -3,6 +3,7 @@ package parser
 import (
 	"bytes"
 	"context"
+	"crypto/md5"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -24,7 +25,7 @@ type FileChunk struct {
 	Content string
 }
 
-func isIgnoredPath(path string, info os.FileInfo) bool {
+func isIgnoredPath(path string) bool {
 	// 忽略常见依赖和构建产物目录
 	ignoredDirs := []string{
 		"node_modules", "vendor", "dist", "build", "out", "target", "bin",
@@ -37,23 +38,76 @@ func isIgnoredPath(path string, info os.FileInfo) bool {
 		}
 	}
 
-	if !info.IsDir() {
-		name := strings.ToLower(info.Name())
-		// 忽略测试文件
-		if strings.HasSuffix(name, "_test.go") || strings.HasSuffix(name, ".test.js") || strings.HasSuffix(name, ".spec.js") || strings.HasSuffix(name, ".test.ts") || strings.HasSuffix(name, ".spec.ts") {
+	name := strings.ToLower(filepath.Base(path))
+	// 忽略测试文件
+	if strings.HasSuffix(name, "_test.go") || strings.HasSuffix(name, ".test.js") || strings.HasSuffix(name, ".spec.js") || strings.HasSuffix(name, ".test.ts") || strings.HasSuffix(name, ".spec.ts") {
+		return true
+	}
+	// 忽略非代码的静态资源与文档
+	ignoredExts := []string{
+		".png", ".jpg", ".jpeg", ".gif", ".ico", ".svg", ".mp4", ".mp3", ".wav", ".zip", ".tar", ".gz", ".rar", ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".ttf", ".woff", ".woff2", ".eot",
+	}
+	for _, ext := range ignoredExts {
+		if strings.HasSuffix(name, ext) {
 			return true
-		}
-		// 忽略非代码的静态资源与文档
-		ignoredExts := []string{
-			".png", ".jpg", ".jpeg", ".gif", ".ico", ".svg", ".mp4", ".mp3", ".wav", ".zip", ".tar", ".gz", ".rar", ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".ttf", ".woff", ".woff2", ".eot",
-		}
-		for _, ext := range ignoredExts {
-			if strings.HasSuffix(name, ext) {
-				return true
-			}
 		}
 	}
 	return false
+}
+
+var repoCacheMu sync.Mutex
+
+func getRepoCacheDir(gitURL string) string {
+	hash := md5.Sum([]byte(gitURL))
+	return filepath.Join(os.TempDir(), "inkwords_repos", fmt.Sprintf("%x", hash))
+}
+
+// GetCachedRepoPath ensures a local partial clone of the repository exists and returns its path.
+func (f *GitFetcher) GetCachedRepoPath(repoURL string, progressCallback func(string)) (string, error) {
+	repoCacheMu.Lock()
+	defer repoCacheMu.Unlock()
+
+	cachePath := getRepoCacheDir(repoURL)
+
+	if _, err := os.Stat(filepath.Join(cachePath, ".git")); err == nil {
+		if progressCallback != nil {
+			progressCallback("使用本地仓库缓存...")
+		}
+		return cachePath, nil
+	}
+
+	if progressCallback != nil {
+		progressCallback("开始拉取仓库数据 (浅克隆)...")
+	}
+
+	os.RemoveAll(cachePath)
+	os.MkdirAll(filepath.Dir(cachePath), 0755)
+
+	var stderr bytes.Buffer
+	var stderrWriter io.Writer = &stderr
+	if progressCallback != nil {
+		stderrWriter = io.MultiWriter(&stderr, &progressWriter{cb: progressCallback})
+	}
+
+	cmd := exec.Command("git", "-c", "http.postBuffer=1048576000", "-c", "http.maxRequestBuffer=100M", "-c", "core.compression=0", "-c", "http.lowSpeedLimit=1000", "-c", "http.lowSpeedTime=60", "clone", "--filter=blob:none", "--no-checkout", "--depth", "1", "--single-branch", repoURL, cachePath)
+	cmd.Stderr = stderrWriter
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+
+	if err := cmd.Run(); err != nil {
+		stderr.Reset()
+		if progressCallback != nil {
+			progressCallback("部分克隆失败，尝试完整浅克隆...")
+		}
+		cmd = exec.Command("git", "-c", "http.postBuffer=1048576000", "-c", "http.maxRequestBuffer=100M", "-c", "core.compression=0", "-c", "http.lowSpeedLimit=1000", "-c", "http.lowSpeedTime=60", "clone", "--no-checkout", "--depth", "1", "--single-branch", repoURL, cachePath)
+		cmd.Stderr = stderrWriter
+		cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+		if err := cmd.Run(); err != nil {
+			os.RemoveAll(cachePath)
+			return "", fmt.Errorf("failed to clone repository: %w, stderr: %s", err, stderr.String())
+		}
+	}
+
+	return cachePath, nil
 }
 
 // GitFetcher is responsible for cloning a Git repository, extracting text from its files,
@@ -146,136 +200,59 @@ func (f *GitFetcher) FetchWithSubDir(repoURL string, subDir string, progressCall
 		fmt.Printf("GitHub API failed for %s/%s: %v. Falling back to git clone...\n", owner, repo, err)
 	}
 
-	// 2. Fallback to git sparse-checkout
-	tempDir, err := os.MkdirTemp("", "inkwords-git-*")
+	// 2. Use Cached Partial Clone
+	cachePath, err := f.GetCachedRepoPath(repoURL, progressCallback)
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to create temp directory: %w", err)
-	}
-	defer os.RemoveAll(tempDir)
-
-	var stderr bytes.Buffer
-	
-	// Create a custom writer to capture stderr and optionally send to progressCallback
-	var stderrWriter io.Writer = &stderr
-	if progressCallback != nil {
-		stderrWriter = io.MultiWriter(&stderr, &progressWriter{cb: progressCallback})
+		return "", nil, err
 	}
 
 	if progressCallback != nil {
-		progressCallback("开始拉取仓库数据 (浅克隆)...")
+		progressCallback("读取文件列表...")
 	}
 
-	// 加入重试机制和增大 http 缓冲区，防止大仓库拉取时因网络波动或缓冲区过小导致的 RPC failed (如 curl 56 OpenSSL SSL_read error)
-	cmd := exec.Command("git", "-c", "http.postBuffer=1048576000", "-c", "http.maxRequestBuffer=100M", "-c", "core.compression=0", "-c", "http.lowSpeedLimit=1000", "-c", "http.lowSpeedTime=60", "clone", "--filter=blob:none", "--no-checkout", "--depth", "1", repoURL, tempDir)
-	cmd.Stderr = stderrWriter
-	if err := cmd.Run(); err != nil {
-		stderr.Reset()
-		if progressCallback != nil {
-			progressCallback("部分克隆失败，尝试完整浅克隆...")
-		}
-		// 如果 partial clone 失败，降级为常规 shallow clone
-		cmd = exec.Command("git", "-c", "http.postBuffer=1048576000", "-c", "http.maxRequestBuffer=100M", "-c", "core.compression=0", "-c", "http.lowSpeedLimit=1000", "-c", "http.lowSpeedTime=60", "clone", "--no-checkout", "--depth", "1", repoURL, tempDir)
-		cmd.Stderr = stderrWriter
-		if err := cmd.Run(); err != nil {
-			return "", nil, fmt.Errorf("failed to clone repository: %w, stderr: %s", err, stderr.String())
-		}
+	args := []string{"ls-tree", "-r", "--name-only", "HEAD"}
+	if subDir != "" && subDir != "." {
+		args = append(args, subDir)
 	}
 
-	stderr.Reset()
-	cmd = exec.Command("git", "sparse-checkout", "init", "--cone")
-	cmd.Dir = tempDir
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return "", nil, fmt.Errorf("failed to init sparse-checkout: %w, stderr: %s", err, stderr.String())
+	cmd := exec.Command("git", args...)
+	cmd.Dir = cachePath
+	outBytes, err := cmd.Output()
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to list files with ls-tree: %w", err)
 	}
 
-	stderr.Reset()
-	cmd = exec.Command("git", "sparse-checkout", "set", subDir)
-	cmd.Dir = tempDir
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return "", nil, fmt.Errorf("failed to set sparse-checkout: %w, stderr: %s", err, stderr.String())
-	}
-
-	stderr.Reset()
-	// 重试机制：对于大型仓库，checkout 可能会因网络拉取 blob 失败而报错，因此增加重试和 http 配置
-	var checkoutErr error
-	var checkoutStderr string
-	for i := 0; i < 3; i++ {
-		cmd = exec.Command("git", "-c", "http.postBuffer=1048576000", "-c", "http.maxRequestBuffer=100M", "-c", "core.compression=0", "-c", "http.lowSpeedLimit=1000", "-c", "http.lowSpeedTime=60", "checkout")
-		cmd.Dir = tempDir
-		cmd.Stderr = &stderr
-		checkoutErr = cmd.Run()
-		if checkoutErr == nil {
-			break
-		}
-		checkoutStderr = stderr.String()
-		stderr.Reset()
-	}
-	if checkoutErr != nil {
-		return "", nil, fmt.Errorf("failed to checkout repository after retries: %w, stderr: %s", checkoutErr, checkoutStderr)
-	}
-
-	walkDir := filepath.Join(tempDir, filepath.FromSlash(filepath.Clean(subDir)))
-	if _, err := os.Stat(walkDir); err != nil {
-		if os.IsNotExist(err) {
-			return "", nil, fmt.Errorf("指定的子目录不存在: %s", subDir)
-		}
-		return "", nil, fmt.Errorf("failed to stat sub directory: %w", err)
-	}
+	files := strings.Split(strings.ReplaceAll(string(outBytes), "\r\n", "\n"), "\n")
 
 	var treeBuilder strings.Builder
 	treeBuilder.WriteString("=== Repository Structure ===\n")
 
 	dirContents := make(map[string]*strings.Builder)
 
-	err = filepath.Walk(walkDir, func(path string, info os.FileInfo, err error) error {
+	for _, path := range files {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			continue
+		}
+
+		if isIgnoredPath(path) {
+			continue
+		}
+
+		treeBuilder.WriteString("- " + path + "\n")
+
+		cmdShow := exec.Command("git", "show", "HEAD:"+path)
+		cmdShow.Dir = cachePath
+		data, err := cmdShow.Output()
 		if err != nil {
-			return err
-		}
-
-		relPath, _ := filepath.Rel(tempDir, path)
-		if relPath == "." {
-			return nil
-		}
-
-		if isIgnoredPath(relPath, info) {
-			if info.IsDir() {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-
-		if info.IsDir() {
-			return nil
-		}
-
-		if !info.Mode().IsRegular() {
-			return nil
-		}
-
-		fileName := info.Name()
-		if fileName == "package-lock.json" || fileName == "yarn.lock" || fileName == "pnpm-lock.yaml" || fileName == "go.sum" || fileName == "Cargo.lock" {
-			return nil
-		}
-
-		ext := strings.ToLower(filepath.Ext(path))
-		if IsBinaryExt(ext) {
-			return nil
-		}
-
-		treeBuilder.WriteString("- " + relPath + "\n")
-
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return nil
+			continue
 		}
 
 		if !utf8.Valid(data) || bytes.Contains(data, []byte{0}) {
-			return nil
+			continue
 		}
 
-		dir := filepath.Dir(relPath)
+		dir := filepath.Dir(path)
 		if dir == "." {
 			dir = "/"
 		}
@@ -286,7 +263,7 @@ func (f *GitFetcher) FetchWithSubDir(repoURL string, subDir string, progressCall
 			contentStr = string(runes[:maxChunkChars]) + "\n\n... [File Content Truncated due to length limits] ..."
 		}
 
-		fileContent := fmt.Sprintf("--- File: %s ---\n%s\n\n", relPath, contentStr)
+		fileContent := fmt.Sprintf("--- File: %s ---\n%s\n\n", path, contentStr)
 
 		builder, exists := dirContents[dir]
 		if !exists {
@@ -295,11 +272,6 @@ func (f *GitFetcher) FetchWithSubDir(repoURL string, subDir string, progressCall
 
 		builder.WriteString(fileContent)
 		dirContents[dir] = builder
-
-		return nil
-	})
-	if err != nil {
-		return "", nil, fmt.Errorf("failed to traverse repository files: %w", err)
 	}
 
 	var chunks []FileChunk
@@ -372,10 +344,8 @@ func (f *GitFetcher) fetchWithGithubAPI(owner, repo, subDir string, progressCall
 	for _, item := range treeResp.Tree {
 		if item.Type == "blob" {
 			if prefix == "" || strings.HasPrefix(item.Path, prefix) {
-				// Fake a FileInfo to use isIgnoredPath
 				name := filepath.Base(item.Path)
-				info := fakeFileInfo{name: name, isDir: false}
-				if !isIgnoredPath(item.Path, info) {
+				if !isIgnoredPath(item.Path) {
 					ext := strings.ToLower(filepath.Ext(item.Path))
 					if !IsBinaryExt(ext) && name != "package-lock.json" && name != "yarn.lock" && name != "pnpm-lock.yaml" && name != "go.sum" && name != "Cargo.lock" {
 						filesToFetch = append(filesToFetch, item.Path)
@@ -519,17 +489,7 @@ func (f *GitFetcher) fetchWithGithubAPI(owner, repo, subDir string, progressCall
 	return treeBuilder.String(), chunks, nil
 }
 
-type fakeFileInfo struct {
-	name  string
-	isDir bool
-}
 
-func (f fakeFileInfo) Name() string       { return f.name }
-func (f fakeFileInfo) Size() int64        { return 0 }
-func (f fakeFileInfo) Mode() os.FileMode  { return 0 }
-func (f fakeFileInfo) ModTime() time.Time { return time.Time{} }
-func (f fakeFileInfo) IsDir() bool        { return f.isDir }
-func (f fakeFileInfo) Sys() interface{}   { return nil }
 
 func IsBinaryExt(ext string) bool {
 	binaryExts := map[string]bool{

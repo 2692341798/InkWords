@@ -38,16 +38,12 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 	sendSystemProgress("正在准备环境...")
 
 	// --- FIX START: Clone repo to precisely feed files ---
-	var tempDir string
+	var cachePath string
 	if sourceType == "git" && gitURL != "" {
-		sendSystemProgress("正在克隆 GitHub 仓库代码...")
-		dir, err := os.MkdirTemp("", "inkwords-gen-*")
+		sendSystemProgress("正在准备环境与代码...")
+		dir, err := s.gitFetcher.GetCachedRepoPath(gitURL, sendSystemProgress)
 		if err == nil {
-			tempDir = dir
-			defer os.RemoveAll(tempDir)
-			cmd := exec.Command("git", "clone", "--depth", "1", "--single-branch", gitURL, tempDir)
-			cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0") // 禁用交互式提示，防止仓库需要密码时进程挂起
-			cmd.Run()
+			cachePath = dir
 		}
 	}
 
@@ -141,38 +137,48 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 
 			// Limit the content sent per chapter to avoid token overflow
 			var chapterSourceContent string
-			if sourceType == "git" && tempDir != "" && len(chapter.Files) > 0 {
+			if sourceType == "git" && cachePath != "" && len(chapter.Files) > 0 {
 				var builder strings.Builder
 				for _, fPath := range chapter.Files {
-					fullPath := filepath.Join(tempDir, fPath)
-
-					if !strings.HasPrefix(filepath.Clean(fullPath), filepath.Clean(tempDir)) {
+					fPath = strings.TrimSpace(fPath)
+					if fPath == "" {
 						continue
 					}
-					info, err := os.Stat(fullPath)
+					// check if it's a directory or a file
+					cmdCheck := exec.Command("git", "cat-file", "-t", "HEAD:"+fPath)
+					cmdCheck.Dir = cachePath
+					objTypeBytes, err := cmdCheck.Output()
 					if err != nil {
 						continue
 					}
-					if info.IsDir() {
-						filepath.Walk(fullPath, func(p string, i os.FileInfo, err error) error {
-							if err != nil || i.IsDir() || !i.Mode().IsRegular() {
-								return nil
-							}
-							ext := strings.ToLower(filepath.Ext(p))
-							if parser.IsBinaryExt(ext) {
-								return nil
-							}
-							data, err := os.ReadFile(p)
-							if err == nil {
-								relPath, _ := filepath.Rel(tempDir, p)
-								builder.WriteString(fmt.Sprintf("--- File: %s ---\n%s\n\n", relPath, string(data)))
-							}
-							return nil
-						})
-					} else {
-						data, err := os.ReadFile(fullPath)
+					objType := strings.TrimSpace(string(objTypeBytes))
+
+					if objType == "tree" {
+						cmdLs := exec.Command("git", "ls-tree", "-r", "--name-only", "HEAD", fPath)
+						cmdLs.Dir = cachePath
+						outBytes, err := cmdLs.Output()
 						if err == nil {
-							builder.WriteString(fmt.Sprintf("--- File: %s ---\n%s\n\n", fPath, string(data)))
+							files := strings.Split(strings.ReplaceAll(string(outBytes), "\r\n", "\n"), "\n")
+							for _, p := range files {
+								p = strings.TrimSpace(p)
+								if p != "" && !parser.IsBinaryExt(strings.ToLower(filepath.Ext(p))) {
+									cmdShow := exec.Command("git", "show", "HEAD:"+p)
+									cmdShow.Dir = cachePath
+									data, err := cmdShow.Output()
+									if err == nil {
+										builder.WriteString(fmt.Sprintf("--- File: %s ---\n%s\n\n", p, string(data)))
+									}
+								}
+							}
+						}
+					} else {
+						if !parser.IsBinaryExt(strings.ToLower(filepath.Ext(fPath))) {
+							cmdShow := exec.Command("git", "show", "HEAD:"+fPath)
+							cmdShow.Dir = cachePath
+							data, err := cmdShow.Output()
+							if err == nil {
+								builder.WriteString(fmt.Sprintf("--- File: %s ---\n%s\n\n", fPath, string(data)))
+							}
 						}
 					}
 				}
