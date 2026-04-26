@@ -708,6 +708,22 @@
 - 后端：新增了 /api/v1/project/scan 接口以获取项目模块列表。修改 /api/v1/stream/analyze 支持 selected_modules 参数。修改 GenerateSeries 添加了生成系列导读的功能。
 - 前端：更新 Generator 组件，在分析仓库前先展示可选模块列表。用户勾选后再并发分析所选模块并串联生成文章。
 
+### 对话 56：修复单篇生成时思考过程泄漏与系列生成标题硬编码问题
+- **用户需求**：修复博客单篇生成时会出现大模型思考过程的问题，修复生成的系列博客文件夹名总是硬编码为“Git源码解析系列”的问题；同时询问生成的博客篇数不稳定的原因，并要求根据项目大小动态调整博客篇数，以及通过设置合适的 Temperature 来稳定 JSON 结构化输出，最后提交到 GitHub。
+- **AI 动作**：
+  1. **拦截思考过程**：修改 `backend/internal/llm/deepseek.go`，在流式响应中丢弃 `ReasoningContent` 相关的文本，在非流式响应中利用字符串操作剥离 `<think>...</think>` 标签。
+  2. **修复硬编码标题**：修改前端 `frontend/src/hooks/generator/useFileParser.ts` 和 `useProjectAnalyzer.ts`，正确解析后端大模型返回的 JSON 中的 `series_title` 字段，并更新到 Zustand 状态库中。
+  3. **分析篇数波动原因**：向用户解释了篇数波动是因为 Prompt 中使用了“不设上限”的指令、Temperature 未作严格限制，以及 Map-Reduce 阶段产生的级联随机性。
+  4. **稳定篇数与 JSON 输出**：
+     - 修改 `deepseek.go` 的 `GenerateJSON` 方法，将 `Temperature` 设置为 `0.1` 以确保 JSON 结构输出的稳定性。
+     - 修改 `decomposition_generate.go` 的 Prompt，移除“不设上限”的指令，明确要求根据项目复杂度动态规划章节数量（小型 1-3 篇，中型 5-8 篇，大型 10+ 篇）。
+     - 修改 `decomposition_analyze.go` 的 Map-Reduce Prompt，明确要求大模型在提取摘要时“丢弃琐碎、重复或不重要的信息”，防止无用细节膨胀导致生成的篇章过多。
+  5. 修复了由于移除思考流逻辑导致的 Go 编译报错（未使用的变量），执行了重启测试。
+  6. 按照规范更新所有项目基准文档，准备使用 Git 提交并推送到 GitHub。
+- **决策/变更**：
+  - **JSON 生成稳定性**：大语言模型在输出严格的结构化数据（如大纲、配置）时，必须使用极低的 Temperature（如 0.1）来消除随机性，保证输出格式的确定性。
+  - **动态篇数规划**：不能盲目要求大模型“拆分越细越好”或“不设上限”，否则容易导致水文泛滥。结合项目实际规模给予具体的篇数参考范围（如 1-3, 5-8, 10+），能有效提升系列博客的质量与含金量。
+
 ### 对话 51：根据开发计划，执行 GitHub 扫描两步流功能开发
 - **用户需求**：要求根据计划文档 `2026-04-26-github-scan-and-series-plan.md`，开发 GitHub 扫描和系列文章生成的功能。
 - **AI 动作**：

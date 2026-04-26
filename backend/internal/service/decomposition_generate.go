@@ -617,9 +617,12 @@ func (s *DecompositionService) GenerateOutline(ctx context.Context, sourceConten
 	}
 
 	instruction := `你是一个高级架构师。请评估前面提供的项目文本，并生成一个系列博客的大纲。
-对于大型项目、源码仓库或复杂内容，**强制拆分为细粒度系列博客**。
-确保每个章节（每篇博客）只聚焦于**一个核心技术点**，切忌在一篇博客中堆砌过多技术点。
-既然大模型上下文和输出能力很强，博客的篇数完全**不设上限**，只要有需要，技术点可以拆得更加详细和深入。`
+对于大型项目、源码仓库或复杂内容，需要拆分为系列博客。
+请根据提供的项目文件数量和内容复杂度，合理动态地规划章节数量：
+- 如果项目非常小（只有一两个核心文件），可以只规划 1-3 篇核心内容。
+- 如果项目属于中小型（例如只有十几个文件，核心模块只有2-3个），请精简为 5-8 篇，只聚焦核心功能。
+- 只有对于特别庞大的框架源码，才需要拆分出 10 篇以上的详细章节。
+不要为了凑数而强行拆分琐碎的细枝末节，确保每一篇博客都具有足够的干货和阅读价值，且每篇博客只聚焦于**一个核心技术点**。`
 
 	if existingParent != nil {
 		var existingOutlineBuilder strings.Builder
@@ -645,7 +648,7 @@ func (s *DecompositionService) GenerateOutline(ctx context.Context, sourceConten
 输出必须是纯JSON格式，包含 series_title 和 chapters 两个字段，不包含任何Markdown标记或其他文字。
 JSON 格式如下：
 {
-  "series_title": "系列博客的标题",
+  "series_title": "系列博客的标题（必须根据项目内容精准概括，例如：React 源码解析系列、Vite 配置实战等，绝不要使用通用或宽泛的占位名称）",
   "chapters": [
     {
       "id": "章节的 UUID（如果有）",

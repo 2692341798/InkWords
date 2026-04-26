@@ -100,9 +100,13 @@ export const useFileParser = () => {
                 store.setAnalysisStep(3)
               } else if (data.status === 'complete') {
                 store.setAnalysisStep(4)
-                const outlineResult = JSON.parse(data.content)
-                store.setSource('file', outlineResult.series_title || file.name)
-                store.setOutline(outlineResult.chapters)
+                let outlineResult = data.content;
+                if (typeof data.content === 'string') {
+                  outlineResult = JSON.parse(data.content);
+                }
+                store.setSource('file', outlineResult.source_content || outlineResult.series_title || file.name)
+                store.setSeriesTitle(outlineResult.series_title || '')
+                store.setOutline(outlineResult.outline || outlineResult.chapters)
                 store.setAnalyzing(false)
                 store.setAnalysisMessage('')
               }

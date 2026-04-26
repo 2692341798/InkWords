@@ -26,6 +26,7 @@ type ChatRequest struct {
 	Model          string            `json:"model"`
 	Messages       []Message         `json:"messages"`
 	Stream         bool              `json:"stream"`
+	Temperature    *float64          `json:"temperature,omitempty"`
 	MaxTokens      int               `json:"max_tokens,omitempty"`
 	Thinking       map[string]string `json:"thinking,omitempty"`
 	ResponseFormat map[string]string `json:"response_format,omitempty"`
@@ -116,15 +117,26 @@ func (c *DeepSeekClient) Generate(ctx context.Context, model string, messages []
 		return "", fmt.Errorf("API returned empty choices")
 	}
 
-	return result.Choices[0].Message.Content, nil
+	content := result.Choices[0].Message.Content
+	// Strip <think>...</think> tags if they exist in the content
+	if startIdx := strings.Index(content, "<think>"); startIdx != -1 {
+		if endIdx := strings.Index(content, "</think>"); endIdx != -1 {
+			content = content[:startIdx] + content[endIdx+len("</think>"):]
+			content = strings.TrimSpace(content)
+		}
+	}
+
+	return content, nil
 }
 
 // GenerateJSON calls the DeepSeek API with stream=false and response_format={"type": "json_object"}
 func (c *DeepSeekClient) GenerateJSON(ctx context.Context, model string, messages []Message) (string, error) {
+	temp := 0.1 // Recommend 0.1 for stable JSON output
 	reqBody := ChatRequest{
 		Model:          model,
 		Messages:       messages,
 		Stream:         false,
+		Temperature:    &temp,
 		Thinking:       map[string]string{"type": "enabled"},
 		ResponseFormat: map[string]string{"type": "json_object"},
 	}
@@ -173,7 +185,16 @@ func (c *DeepSeekClient) GenerateJSON(ctx context.Context, model string, message
 		return "", fmt.Errorf("API returned empty choices")
 	}
 
-	return result.Choices[0].Message.Content, nil
+	content := result.Choices[0].Message.Content
+	// Strip <think>...</think> tags if they exist in the content
+	if startIdx := strings.Index(content, "<think>"); startIdx != -1 {
+		if endIdx := strings.Index(content, "</think>"); endIdx != -1 {
+			content = content[:startIdx] + content[endIdx+len("</think>"):]
+			content = strings.TrimSpace(content)
+		}
+	}
+
+	return content, nil
 }
 
 // GenerateStream calls the DeepSeek API with stream=true and parses the chunks
@@ -213,8 +234,6 @@ func (c *DeepSeekClient) GenerateStream(ctx context.Context, model string, messa
 
 	reader := bufio.NewReader(resp.Body)
 	var finalFinishReason string
-	var isFirstReasoning = true
-	var hasReasoning = false
 
 	for {
 		select {
@@ -253,22 +272,8 @@ func (c *DeepSeekClient) GenerateStream(ctx context.Context, model string, messa
 		if len(chunk.Choices) > 0 {
 			delta := chunk.Choices[0].Delta
 
-			if delta.ReasoningContent != "" {
-				if isFirstReasoning {
-					chunkChan <- "> 💭 **思考过程**：\n> \n> "
-					isFirstReasoning = false
-					hasReasoning = true
-				}
-				// Replace newlines to maintain blockquote format
-				text := strings.ReplaceAll(delta.ReasoningContent, "\n", "\n> ")
-				chunkChan <- text
-			}
-
+			// Skip reasoning content so it doesn't appear in the final blog
 			if delta.Content != "" {
-				if hasReasoning {
-					chunkChan <- "\n\n---\n\n"
-					hasReasoning = false // Only separate once
-				}
 				chunkChan <- delta.Content
 			}
 

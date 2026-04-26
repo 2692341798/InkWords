@@ -30,9 +30,13 @@ func maxWorkersFromEnv(taskCount int) int {
 			maxWorkers = n
 		}
 	}
+	//如果大于十0则并发数为50，如果小于10则并发数为50，如果小于10则并发数为10
 	if maxWorkers > 10 {
+		maxWorkers = 50
+	} else if maxWorkers < 10 {
 		maxWorkers = 10
 	}
+	//如果任务数量小于并发数，则并发数为任务数量
 	if taskCount > 0 && taskCount < maxWorkers {
 		maxWorkers = taskCount
 	}
@@ -41,7 +45,7 @@ func maxWorkersFromEnv(taskCount int) int {
 
 // Chapter represents a single chapter in the generated outline
 type Chapter struct {
-	ID      string   `json:"id,omitempty"`     // Existing chapter ID
+	ID      string   `json:"id,omitempty"` // Existing chapter ID
 	Title   string   `json:"title"`
 	Summary string   `json:"summary"`
 	Sort    int      `json:"sort"`
