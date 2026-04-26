@@ -757,7 +757,7 @@
   1. **状态同步解耦**: 修改了 `frontend/src/components/Generator.tsx` 中的 `useEffect`。移除了 `gitUrl` 作为依赖项，防止因用户在输入框打字或粘贴触发 `gitUrl` 变化时，被 `useEffect` 中的重置逻辑强制覆盖为空，从而解决了输入框被锁死无法粘贴的问题。
   2. **模块清理重构**: 在用于清理旧项目模块数据的 `useEffect` 中，增加了更严格的判断条件 `store.modules && store.modules.length > 0`，避免了无意义的状态刷新。
 - **踩坑记录 / 架构调整**:
-  - React Hooks 的依赖陷阱：当一个 `useEffect` 试图通过监听 A 和 B 来同步状态，但内部逻辑又会触发 `setB(A)` 时，极其容易引起意外的状态覆盖（导致受控组件的值无法变化）。通过剔除 `gitUrl` 依赖项，只侦听 `store.gitUrl` 变化时的单向流动同步，有效保证了组件的受控稳定。
+  - React Hooks 的依赖陷阱：当一个 `useEffect` 试图通过监听 A 和 B 来同步状态，但内部逻辑又会触发 `setB(A)` 时，极其容易引起意外的状态覆盖（导致受控组件的值无法变化）。通过进一步改进条件 `store.gitUrl !== '' && gitUrl !== store.gitUrl && store.gitUrl !== gitUrl.trim()` 确保仅当全局链接发生实质性更改时才回填，避免了任何用户手动输入时的阻断。
 - **开发模块**: [前端 UI 交互]
 - **完成事项**:
   1. **状态精简**: 修改了 `frontend/src/components/generator/GeneratorStatus.tsx`，当状态处于 `store.isScanning` 且尚未进入 `store.isAnalyzing` 时（即仅处于扫描目录阶段），显式返回 `null` 隐藏整个进度面板。
