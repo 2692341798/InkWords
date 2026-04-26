@@ -798,3 +798,35 @@
   3. **JSON 模式**：为 `DeepSeekClient` 添加了 `GenerateJSON` 方法，利用大模型的 `json_object` 响应格式，更稳定地提取技术栈。
   4. **上限放宽与思考模式**：将文件截断上限放宽至 1M - 15M 字符，并为生成请求开启了 DeepSeek 的 `Thinking` 模式，以应对更复杂的源码逻辑推理。
 - **结果**：提升了重写博客的连贯性与质量，显著增强了生成内容的深度与技术细节。
+
+### 2026-04-26 大模型环境并发配置优化 (DeepSeek v4)
+- **需求**：释放 DeepSeek v4 的吞吐能力，提高分析与生成速度。
+- **互动与执行**：
+  1. 将 `.env` 中的 `MAX_CONCURRENT_WORKERS` 提升至 50，`LLM_API_RPM_LIMIT` 提升至 10000。
+  2. 新增全局 `DEEPSEEK_MODEL=deepseek-v4-flash` 配置项。
+  3. 补充根目录的 `.env.example` 模板文件，以便新开发者快速拉起配置。
+- **结果**：大幅放宽了后端解析和生成任务时的本地并发限流器，有效降低大仓库解析时的整体耗时。
+
+### 2026-04-26 大模型环境并发配置优化 (DeepSeek v4)
+- **需求**：释放 DeepSeek v4 的吞吐能力，提高分析与生成速度。
+- **互动与执行**：
+  1. 将 .env 中的 MAX_CONCURRENT_WORKERS 提升至 50，LLM_API_RPM_LIMIT 提升至 10000。
+  2. 新增全局 DEEPSEEK_MODEL=deepseek-v4-flash 配置项。
+  3. 补充根目录的 .env.example 模板文件，以便新开发者快速拉起配置。
+- **结果**：大幅放宽了后端解析和生成任务时的本地并发限流器，有效降低大仓库解析时的整体耗时。
+
+### 2026-04-26 大模型环境并发配置优化 (DeepSeek v4)
+- **需求**：释放 DeepSeek v4 的吞吐能力，提高分析与生成速度。
+- **互动与执行**：
+  1. 将 .env 中的 MAX_CONCURRENT_WORKERS 提升至 50，LLM_API_RPM_LIMIT 提升至 10000。
+  2. 新增全局 DEEPSEEK_MODEL=deepseek-v4-flash 配置项。
+  3. 补充根目录的 .env.example 模板文件，以便新开发者快速拉起配置。
+- **结果**：大幅放宽了后端解析和生成任务时的本地并发限流器，有效降低大仓库解析时的整体耗时。
+
+### 2026-04-26 大模型环境并发配置优化 (DeepSeek v4)
+- **需求**：释放 DeepSeek v4 的吞吐能力，提高分析与生成速度。
+- **互动与执行**：
+  1. 将 .env 中的 MAX_CONCURRENT_WORKERS 提升至 50，LLM_API_RPM_LIMIT 提升至 10000。
+  2. 新增全局 DEEPSEEK_MODEL=deepseek-v4-flash 配置项。
+  3. 补充根目录的 .env.example 模板文件，以便新开发者快速拉起配置。
+- **结果**：大幅放宽了后端解析和生成任务时的本地并发限流器，有效降低大仓库解析时的整体耗时。

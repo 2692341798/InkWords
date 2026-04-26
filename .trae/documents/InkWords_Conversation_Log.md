@@ -746,3 +746,15 @@
 - **决策/变更**：
   - **松散参考重写 (Loose Reference Rewrite)**：在重写旧章节时注入旧内容作为上下文，既节省大模型自行构思的算力，又保留了历史沉淀的业务解释。
   - **单点聚焦**：通过 Prompt 明确要求单篇博客只介绍一个核心技术点，配合不设上限的字数要求，促使模型输出更具深度的内容。
+
+### 对话 54：优化大模型环境配置以全面适配 DeepSeek v4
+- **用户需求**：将限流和并发配置（MAX_CONCURRENT_WORKERS, LLM_API_RPM_LIMIT）调整到适配 DeepSeek v4 模型的性能，并确保全局均使用 `deepseek-v4-flash` 模型，最后提交到 GitHub 并打标签。
+- **AI 动作**：
+  1. 分析 `backend/.env` 中现有的并发配置，将 `MAX_CONCURRENT_WORKERS` 从 `10` 提升到 `50`，将 `LLM_API_RPM_LIMIT` 从 `60` 提升到 `10000`。
+  2. 检索代码库，确认所有 fallback 模型均已设定为 `deepseek-v4-flash`。
+  3. 为了配置的显式可控性，在 `backend/.env` 和新增的 `.env.example` 中增加了 `DEEPSEEK_MODEL=deepseek-v4-flash` 环境变量配置。
+  4. 重启 Docker 容器以应用最新配置，补充了根目录缺失的 `.env.example`。
+  5. 记录并更新了项目基准文档，准备使用 `git-commit` 技能提交代码并打上对应的小版本标签。
+- **决策/变更**：
+  - **释放并发潜能**：DeepSeek v4 (尤其 Flash 模型) 具备极高的并发与吞吐承载力，同时搭配原生 Prompt Caching，大幅放宽本地 Goroutine 并发数和 RPM 限制，能极速缩短大型 Git 仓库并发分析与博客生成任务的整体耗时。
+  - **全局统一定义**：通过显式的环境变量定义 `DEEPSEEK_MODEL`，消除硬编码，提升可维护性。
