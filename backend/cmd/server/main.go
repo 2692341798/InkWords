@@ -112,6 +112,7 @@ func main() {
 		streamGroup := v1.Group("/stream")
 		streamGroup.Use(middleware.AuthMiddleware())
 		{
+			streamGroup.POST("/scan", streamAPI.ScanStreamHandler)
 			streamGroup.POST("/analyze", streamAPI.AnalyzeStreamHandler)
 			streamGroup.POST("/generate", streamAPI.GenerateBlogStreamHandler)
 		}
