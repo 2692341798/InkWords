@@ -721,4 +721,16 @@
   8. 更新了开发日志和本对话记录。
 - **决策/变更**：
   - 用户的部分开发计划已在近期的代码重构中自行完成，但在前端提取职能 Hooks 时，误将标准 REST API 当作 SSE 接口调用。
-  - 通过修正前端网络请求方式，彻底打通了预扫描提取目录、用户勾选、并发生成单篇及导读文章的完整闭环。
+### 对话 52：重构拉取仓库与扫描目录的进度可视化体验
+- **用户需求**：用户反馈拉取仓库的过程不够直观，大纲也不可见。希望复用旧版本的卡片显示分析过程，并解决截断问题。
+- **AI 动作**：
+  1. 修复大纲不可见：在 `Generator.tsx` 外层容器添加了 `flex-1 h-full overflow-y-auto` 开启局部滚动，解决 `App.tsx` 全局 `overflow-hidden` 导致的截断。
+  2. 重构解析历史 UI：在 `streamStore.ts` 中新增 `analysisHistory` 数组，在 `GeneratorStatus.tsx` 中使用动态卡片列表逐条展示解析步骤。
+  3. 真实拉取进度回传：修改 `backend/internal/parser/git_fetcher.go`，拦截 `git clone` 的 `stderr` 输出，并通过 `progressCallback` 实时上报。
+  4. 扫描接口流式化：将原本同步阻塞的 `/api/v1/project/scan` 重构为 SSE 接口 `/api/v1/stream/scan`，并在前端 `useProjectScanner.ts` 中改用 `fetchEventSource` 接收 `progress` 事件。
+  5. 状态卡片原地刷新：优化前端 `appendAnalysisHistory`，当连续接收到 `cloning`/`scanning` 状态时原地更新最后一张卡片文本，避免刷屏。
+  6. 修复路由遗漏：在 `main.go` 中注册了 `/api/v1/stream/scan` 路由。
+  7. 重启 Docker 容器并提交代码。
+- **决策/变更**：
+  - 将耗时较长的“扫描目录”和“拉取仓库”过程彻底白盒化，通过真实的底层日志高频刷新卡片，极大缓解了用户的等待焦虑。
+  - 对于高频的状态更新（如 Git 进度），采用 In-place Update（原地刷新）而非 Append（追加）是防止前端 DOM 节点爆炸的关键策略。
