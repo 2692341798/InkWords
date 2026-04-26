@@ -223,7 +223,7 @@ func (s *DecompositionService) ScanProjectModules(ctx context.Context, gitURL st
 }
 
 // AnalyzeStream handles the full analysis pipeline with streaming progress
-func (s *DecompositionService) AnalyzeStream(ctx context.Context, gitURL string, subDir string, progressChan chan<- string, errChan chan<- error) {
+func (s *DecompositionService) AnalyzeStream(ctx context.Context, gitURL string, selectedModules []string, progressChan chan<- string, errChan chan<- error) {
 	defer close(progressChan)
 	defer close(errChan)
 
@@ -248,10 +248,30 @@ func (s *DecompositionService) AnalyzeStream(ctx context.Context, gitURL string,
 
 	sendProgress(0, "正在克隆并拉取仓库 (depth=1)...", nil)
 
-	treeContent, chunks, err := s.gitFetcher.FetchWithSubDir(gitURL, subDir)
-	if err != nil {
-		errChan <- fmt.Errorf("拉取仓库失败: %w", err)
-		return
+	var treeContent string
+	var chunks []parser.FileChunk
+	var err error
+
+	if len(selectedModules) > 0 {
+		var allChunks []parser.FileChunk
+		var treeBuilder strings.Builder
+		for _, mod := range selectedModules {
+			tree, modChunks, fetchErr := s.gitFetcher.FetchWithSubDir(gitURL, mod)
+			if fetchErr != nil {
+				errChan <- fmt.Errorf("拉取仓库模块 %s 失败: %w", mod, fetchErr)
+				return
+			}
+			treeBuilder.WriteString(fmt.Sprintf("--- 目录结构 (%s) ---\n%s\n", mod, tree))
+			allChunks = append(allChunks, modChunks...)
+		}
+		treeContent = treeBuilder.String()
+		chunks = allChunks
+	} else {
+		treeContent, chunks, err = s.gitFetcher.FetchWithSubDir(gitURL, "")
+		if err != nil {
+			errChan <- fmt.Errorf("拉取仓库失败: %w", err)
+			return
+		}
 	}
 
 	sendProgress(1, "分析仓库源码与结构完成", nil)
@@ -790,9 +810,10 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 			ID:         parentID,
 			UserID:     userID,
 			Title:      parentTitle,
-			Content:    "该节点为系列文章的父节点，请点击展开查看具体的章节。",
+			Content:    "正在生成系列导读...",
 			SourceType: sourceType,
-			Status:     1, // 1 for completed
+			IsSeries:   true,
+			Status:     0, // 0 for generating
 		}
 		if err := db.DB.WithContext(ctx).Create(parentBlog).Error; err != nil {
 			fmt.Printf("Failed to create parent blog: %v\n", err)
@@ -1125,6 +1146,127 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 	}
 
 	wg.Wait()
+
+	if ctx.Err() == nil {
+		// Generate series intro
+		s.generateSeriesIntro(ctx, userID, parentID, seriesTitle, outline, progressChan, errChan)
+	}
+}
+
+func (s *DecompositionService) generateSeriesIntro(ctx context.Context, userID uuid.UUID, parentID uuid.UUID, seriesTitle string, outline []Chapter, progressChan chan<- string, errChan chan<- error) {
+	sendProgress := func(status string, content string, message string) {
+		msg := map[string]interface{}{
+			"status":       status,
+			"chapter_sort": 0, // 0 for parent intro
+			"content":      content,
+			"message":      message,
+			"title":        "系列导读",
+		}
+		bytes, _ := json.Marshal(msg)
+		progressChan <- string(bytes)
+	}
+
+	sendProgress("generating", "", "")
+
+	var outlineStrBuilder strings.Builder
+	for _, ch := range outline {
+		outlineStrBuilder.WriteString(fmt.Sprintf("- %s: %s\n", ch.Title, ch.Summary))
+	}
+
+	prompt := fmt.Sprintf(`你是一个高级技术博客作者。请根据以下系列文章的大纲，编写一篇高质量的“系列导读”或“总结”文章（约500-800字）。
+这篇文章将作为整个系列的入口，吸引读者阅读。
+系列标题：%s
+各章节大纲：
+%s
+
+要求：
+1. 简明扼要地介绍这个系列将要解决的问题和核心价值。
+2. 简述各个章节的精彩看点，引导读者循序渐进地阅读。
+3. 结尾给出学习建议或寄语。
+`, seriesTitle, outlineStrBuilder.String())
+
+	messages := []llm.Message{
+		{Role: "system", Content: "你是一个高级技术博客作者，擅长编写引人入胜的系列导读。"},
+		{Role: "user", Content: prompt},
+	}
+
+	llmModel := "deepseek-v4-flash"
+	if envModel := os.Getenv("DEEPSEEK_MODEL"); envModel != "" {
+		llmModel = envModel
+	}
+
+	streamCtx, streamCancel := context.WithCancel(ctx)
+	defer streamCancel()
+
+	chunkChan := make(chan string, 100)
+	internalErrChan := make(chan error, 1)
+
+	go func() {
+		defer close(chunkChan)
+		defer close(internalErrChan)
+
+		tempChunkChan := make(chan string)
+		var wg sync.WaitGroup
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done()
+			for chunk := range tempChunkChan {
+				chunkChan <- chunk
+			}
+		}()
+
+		_, err := s.llmClient.GenerateStream(streamCtx, llmModel, messages, tempChunkChan)
+		wg.Wait()
+		if err != nil {
+			internalErrChan <- err
+		}
+	}()
+
+	var contentBuilder strings.Builder
+	idleTimeout := 60 * time.Second
+	timer := time.NewTimer(idleTimeout)
+	defer timer.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			errChan <- ctx.Err()
+			return
+		case <-timer.C:
+			streamCancel()
+			errChan <- fmt.Errorf("intro generation idle timeout")
+			return
+		case err, ok := <-internalErrChan:
+			if ok && err != nil {
+				sendProgress("error", "", err.Error())
+				db.DB.WithContext(ctx).Model(&model.Blog{}).Where("id = ?", parentID).Updates(map[string]interface{}{
+					"status": 2, // 2 for error
+				})
+				return
+			}
+		case chunk, ok := <-chunkChan:
+			if !ok {
+				// Done
+				finalContent := contentBuilder.String()
+				db.DB.WithContext(ctx).Model(&model.Blog{}).Where("id = ?", parentID).Updates(map[string]interface{}{
+					"content": finalContent,
+					"status":  1,
+				})
+				sendProgress("completed", "", "")
+				return
+			}
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+			timer.Reset(idleTimeout)
+			contentBuilder.WriteString(chunk)
+			sendProgress("streaming", chunk, "")
+		}
+	}
 }
 
 // GenerateOutline evaluates project text and generates a JSON outline

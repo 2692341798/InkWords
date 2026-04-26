@@ -36,6 +36,7 @@ type GenerateRequest struct {
 	Outline       []service.Chapter `json:"outline"`      // Optional outline for series generation
 	GitURL        string            `json:"git_url"`      // For analyze stream
 	SubDir        string            `json:"sub_dir"`      // For analyze stream
+	SelectedModules []string      `json:"selected_modules"` // For analyze stream
 	SeriesTitle   string            `json:"series_title"` // Series title for parent blog
 	ParentID      string            `json:"parent_id"`    // Optional parent ID for resuming series
 }
@@ -77,7 +78,7 @@ func (api *StreamAPI) AnalyzeStreamHandler(c *gin.Context) {
 		if req.SourceType == "file" {
 			api.decompositionService.AnalyzeFileStream(bgCtx, req.SourceContent, progressChan, errChan)
 		} else {
-			api.decompositionService.AnalyzeStream(bgCtx, req.GitURL, req.SubDir, progressChan, errChan)
+			api.decompositionService.AnalyzeStream(bgCtx, req.GitURL, req.SelectedModules, progressChan, errChan)
 		}
 	}()
 
