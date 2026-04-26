@@ -76,7 +76,7 @@ func (f *GitFetcher) Fetch(repoURL string) (string, []FileChunk, error) {
 	defer os.RemoveAll(tempDir)
 
 	// Clone the repository with depth 1 to speed up fetching
-	cmd := exec.Command("git", "-c", "http.postBuffer=524288000", "-c", "http.maxRequestBuffer=100M", "-c", "core.compression=0", "clone", "--depth", "1", repoURL, tempDir)
+	cmd := exec.Command("git", "-c", "http.postBuffer=1048576000", "-c", "http.maxRequestBuffer=100M", "-c", "core.compression=0", "-c", "http.lowSpeedLimit=1000", "-c", "http.lowSpeedTime=60", "clone", "--depth", "1", repoURL, tempDir)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
@@ -228,11 +228,12 @@ func (f *GitFetcher) FetchWithSubDir(repoURL string, subDir string) (string, []F
 
 	var stderr bytes.Buffer
 	// 加入重试机制和增大 http 缓冲区，防止大仓库拉取时因网络波动或缓冲区过小导致的 RPC failed (如 curl 56 OpenSSL SSL_read error)
-	cmd := exec.Command("git", "-c", "http.postBuffer=524288000", "-c", "http.maxRequestBuffer=100M", "-c", "core.compression=0", "clone", "--filter=blob:none", "--no-checkout", "--depth", "1", repoURL, tempDir)
+	cmd := exec.Command("git", "-c", "http.postBuffer=1048576000", "-c", "http.maxRequestBuffer=100M", "-c", "core.compression=0", "-c", "http.lowSpeedLimit=1000", "-c", "http.lowSpeedTime=60", "clone", "--filter=blob:none", "--no-checkout", "--depth", "1", repoURL, tempDir)
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
 		stderr.Reset()
-		cmd = exec.Command("git", "-c", "http.postBuffer=524288000", "-c", "http.maxRequestBuffer=100M", "-c", "core.compression=0", "clone", "--no-checkout", "--depth", "1", repoURL, tempDir)
+		// 如果 partial clone 失败，降级为常规 shallow clone
+		cmd = exec.Command("git", "-c", "http.postBuffer=1048576000", "-c", "http.maxRequestBuffer=100M", "-c", "core.compression=0", "-c", "http.lowSpeedLimit=1000", "-c", "http.lowSpeedTime=60", "clone", "--no-checkout", "--depth", "1", repoURL, tempDir)
 		cmd.Stderr = &stderr
 		if err := cmd.Run(); err != nil {
 			return "", nil, fmt.Errorf("failed to clone repository: %w, stderr: %s", err, stderr.String())
@@ -260,7 +261,7 @@ func (f *GitFetcher) FetchWithSubDir(repoURL string, subDir string) (string, []F
 	var checkoutErr error
 	var checkoutStderr string
 	for i := 0; i < 3; i++ {
-		cmd = exec.Command("git", "-c", "http.postBuffer=524288000", "-c", "http.maxRequestBuffer=100M", "-c", "core.compression=0", "checkout")
+		cmd = exec.Command("git", "-c", "http.postBuffer=1048576000", "-c", "http.maxRequestBuffer=100M", "-c", "core.compression=0", "-c", "http.lowSpeedLimit=1000", "-c", "http.lowSpeedTime=60", "checkout")
 		cmd.Dir = tempDir
 		cmd.Stderr = &stderr
 		checkoutErr = cmd.Run()
