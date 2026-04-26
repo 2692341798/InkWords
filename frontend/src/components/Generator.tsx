@@ -10,10 +10,8 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 
 export function Generator() {
   const store = useStreamStore()
-  const { analyzeGit, parseFile, generateSeries, generateSingle, stopAnalyzing, stopGenerating } = useBlogStream()
+  const { scanGit, analyzeGit, parseFile, generateSeries, generateSingle, stopAnalyzing, stopGenerating } = useBlogStream()
   const [gitUrl, setGitUrl] = useState('')
-  const [subDir, setSubDir] = useState('')
-  const [showAdvanced, setShowAdvanced] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const [analyzingType, setAnalyzingType] = useState<'git' | 'file'>('git')
   const [isOutlineExpanded, setIsOutlineExpanded] = useState(true)
@@ -28,13 +26,30 @@ export function Generator() {
     }
   }, [store.isGenerating, store.isAnalyzing])
 
-  const handleAnalyze = async () => {
+  const handleScan = async () => {
     if (!gitUrl) return
     setAnalyzingType('git')
     try {
-      await analyzeGit(gitUrl, subDir)
+      await scanGit(gitUrl)
     } catch (err) {
       setGitUrl('')
+    }
+  }
+
+  const handleAnalyze = async () => {
+    if (!gitUrl || store.selectedModules.length === 0) return
+    try {
+      await analyzeGit(gitUrl, store.selectedModules)
+    } catch (err) {
+      // ignore
+    }
+  }
+
+  const toggleModuleSelection = (path: string) => {
+    if (store.selectedModules.includes(path)) {
+      store.setSelectedModules(store.selectedModules.filter(m => m !== path))
+    } else {
+      store.setSelectedModules([...store.selectedModules, path])
     }
   }
 
@@ -110,45 +125,18 @@ export function Generator() {
             disabled={store.isAnalyzing || store.isGenerating}
           />
           <Button 
-            onClick={handleAnalyze} 
+            onClick={handleScan} 
             disabled={!gitUrl || store.isAnalyzing || store.isGenerating}
             className="bg-zinc-900 text-white hover:bg-zinc-800"
           >
-            {store.isAnalyzing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-            {store.isAnalyzing ? '分析中...' : '分析仓库'}
+            {store.isAnalyzing && !store.modules ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+            {store.isAnalyzing && !store.modules ? '扫描中...' : '扫描目录'}
           </Button>
-        </div>
-
-        <div className="mt-2">
-          <button
-            type="button"
-            onClick={() => setShowAdvanced(v => !v)}
-            disabled={store.isAnalyzing || store.isGenerating}
-            className="flex items-center text-sm text-zinc-500 hover:text-zinc-700 disabled:opacity-50 disabled:hover:text-zinc-500"
-          >
-            高级选项
-            {showAdvanced ? <ChevronUp className="w-4 h-4 ml-1" /> : <ChevronDown className="w-4 h-4 ml-1" />}
-          </button>
-
-          {showAdvanced && (
-            <div className="mt-3 p-4 bg-zinc-50 rounded-lg border border-zinc-100">
-              <label className="block text-sm font-medium text-zinc-700 mb-1">指定解析子目录 (可选)</label>
-              <input
-                type="text"
-                placeholder="如：src/net/http"
-                className="w-full p-2 text-sm border border-zinc-200 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
-                value={subDir}
-                onChange={(e) => setSubDir(e.target.value)}
-                disabled={store.isAnalyzing || store.isGenerating}
-              />
-              <p className="text-xs text-zinc-500 mt-2">针对特大型仓库，建议指定具体模块路径以加速解析并避免超限。</p>
-            </div>
-          )}
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-8">
-        {!store.outline && !store.isAnalyzing && (
+        {!store.outline && !store.isAnalyzing && !store.modules && (
           <div className="h-full flex flex-col items-center justify-center text-zinc-400">
             <div
               className={`w-full max-w-2xl border-2 border-dashed rounded-xl p-12 text-center transition-colors cursor-pointer
@@ -183,7 +171,7 @@ export function Generator() {
           </div>
         )}
 
-        {store.isAnalyzing && (
+        {store.isAnalyzing && !store.modules && (
           <div className="h-full flex flex-col items-center justify-center text-zinc-500">
             <Loader2 className="w-8 h-8 mb-6 animate-spin text-indigo-600" />
             <div className="space-y-4 max-w-3xl w-full">
@@ -277,6 +265,78 @@ export function Generator() {
                 停止分析
               </Button>
             </div>
+          </div>
+        )}
+
+        {store.modules && !store.outline && (
+          <div className="max-w-4xl mx-auto">
+            <h2 className="text-2xl font-bold text-zinc-800 mb-2">选择要解析的模块</h2>
+            <p className="text-zinc-500 mb-8">
+              我们扫描了该仓库的根目录，发现了以下核心模块。请勾选您希望生成博客的模块，我们将为您并发解析并串联为系列文章。
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-8">
+              {store.modules.map(mod => {
+                const isSelected = store.selectedModules.includes(mod.path);
+                return (
+                  <div 
+                    key={mod.path}
+                    onClick={() => toggleModuleSelection(mod.path)}
+                    className={`p-4 rounded-xl border cursor-pointer transition-all duration-200 ${
+                      isSelected 
+                        ? 'border-indigo-500 bg-indigo-50/30 shadow-[0_0_10px_rgba(99,102,241,0.1)]' 
+                        : 'border-zinc-200 bg-white hover:border-indigo-300 hover:bg-zinc-50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="font-semibold text-zinc-800 truncate" title={mod.name}>{mod.name}</h3>
+                      <div className={`w-5 h-5 rounded border flex items-center justify-center ${
+                        isSelected ? 'bg-indigo-500 border-indigo-500 text-white' : 'border-zinc-300 bg-white'
+                      }`}>
+                        {isSelected && <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+                      </div>
+                    </div>
+                    <p className="text-xs text-zinc-500 line-clamp-3 leading-relaxed" title={mod.description}>
+                      {mod.description}
+                    </p>
+                  </div>
+                )
+              })}
+            </div>
+            
+            <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-6 mb-8 flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-indigo-900">准备解析</h3>
+                <p className="text-sm text-indigo-700 mt-1">
+                  已选择 {store.selectedModules.length} 个模块
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <Button 
+                  onClick={() => {
+                    store.setModules(null)
+                    store.setSelectedModules([])
+                  }} 
+                  variant="outline"
+                  className="text-zinc-600 border-zinc-300"
+                >
+                  重新扫描
+                </Button>
+                <Button 
+                  onClick={handleAnalyze} 
+                  disabled={store.selectedModules.length === 0 || store.isAnalyzing}
+                  className="bg-indigo-600 text-white hover:bg-indigo-700"
+                >
+                  {store.isAnalyzing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                  {store.isAnalyzing ? '分析中...' : '生成大纲'}
+                </Button>
+              </div>
+            </div>
+            {store.isAnalyzing && (
+              <div className="mt-4 flex flex-col items-center text-zinc-500">
+                <Loader2 className="w-6 h-6 mb-2 animate-spin text-indigo-600" />
+                <span className="text-sm">{store.analysisMessage}</span>
+              </div>
+            )}
           </div>
         )}
 

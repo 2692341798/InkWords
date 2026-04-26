@@ -16,10 +16,18 @@ export interface MapReduceProgress {
   worker_id?: number
 }
 
+export interface ModuleCard {
+  path: string
+  name: string
+  description: string
+}
+
 interface StreamState {
   sourceType: 'git' | 'file' | null
   sourceContent: string
   gitUrl: string
+  modules: ModuleCard[] | null
+  selectedModules: string[]
   seriesTitle: string
   outline: Chapter[] | null
   chapterStatus: Record<number, 'pending' | 'generating' | 'completed' | 'error'>
@@ -53,6 +61,8 @@ interface StreamState {
   setAnalysisMessage: (msg: string) => void
   setAbortController: (ctrl: AbortController | null) => void
   setParentBlogId: (id: string | null) => void
+  setModules: (modules: ModuleCard[] | null) => void
+  setSelectedModules: (paths: string[]) => void
   stopAllStreams: () => void
   reset: () => void
 }
@@ -61,6 +71,8 @@ export const useStreamStore = create<StreamState>((set, get) => ({
   sourceType: null,
   sourceContent: '',
   gitUrl: '',
+  modules: null,
+  selectedModules: [],
   seriesTitle: '',
   outline: null,
   chapterStatus: {},
@@ -175,6 +187,8 @@ export const useStreamStore = create<StreamState>((set, get) => ({
   setAnalysisMessage: (msg) => set({ analysisMessage: msg }),
   setAbortController: (ctrl) => set({ abortController: ctrl }),
   setParentBlogId: (id) => set({ parentBlogId: id }),
+  setModules: (modules) => set({ modules }),
+  setSelectedModules: (paths) => set({ selectedModules: paths }),
   stopAllStreams: () => {
     const ctrl = get().abortController;
     if (ctrl) {
@@ -205,6 +219,8 @@ export const useStreamStore = create<StreamState>((set, get) => ({
       sourceType: null,
       sourceContent: '',
       gitUrl: '',
+      modules: null,
+      selectedModules: [],
       seriesTitle: '',
       outline: null,
       chapterStatus: {},

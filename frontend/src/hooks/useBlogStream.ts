@@ -9,7 +9,50 @@ export const useBlogStream = () => {
   const store = useStreamStore()
   const { fetchBlogs } = useBlogStore()
 
-  const analyzeGit = useCallback(async (gitUrl: string, subDir?: string) => {
+  const scanGit = useCallback(async (gitUrl: string) => {
+    if (!gitUrl.startsWith('http://') && !gitUrl.startsWith('https://') && !gitUrl.startsWith('git@') && !gitUrl.startsWith('file://')) {
+      alert('请输入有效的 Git 仓库链接 (以 http://, https://, git@ 或 file:// 开头)')
+      throw new Error('invalid url')
+    }
+
+    store.setAnalyzing(true)
+    store.setAnalysisStep(-1)
+    store.setAnalysisMessage('正在扫描仓库目录...')
+    
+    try {
+      const response = await fetch('/api/v1/project/scan', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': localStorage.getItem('token') ? `Bearer ${localStorage.getItem('token')}` : ''
+        },
+        body: JSON.stringify({ git_url: gitUrl })
+      })
+      
+      if (response.status === 401) {
+        localStorage.removeItem('token')
+        window.location.reload()
+        throw new Error('登录已过期，请重新登录')
+      }
+
+      const res = await response.json()
+      if (res.code === 0 && res.data) {
+        store.setSource('git', '', gitUrl)
+        store.setModules(res.data.modules)
+        store.setSelectedModules([]) // clear previous selection
+        store.setAnalyzing(false)
+      } else {
+        throw new Error(res.message || '扫描失败')
+      }
+    } catch (err) {
+      store.setAnalyzing(false)
+      const errMsg = err instanceof Error ? err.message : '扫描失败'
+      alert(errMsg)
+      throw err
+    }
+  }, [store])
+
+  const analyzeGit = useCallback(async (gitUrl: string, selectedModules: string[]) => {
     // 基础拦截，防止用户输入非法的 git URL
     if (!gitUrl.startsWith('http://') && !gitUrl.startsWith('https://') && !gitUrl.startsWith('git@') && !gitUrl.startsWith('file://')) {
       alert('请输入有效的 Git 仓库链接 (以 http://, https://, git@ 或 file:// 开头)')
@@ -37,7 +80,7 @@ export const useBlogStream = () => {
         },
         signal: ctrl.signal,
         openWhenHidden: true, // Prevents fetch-event-source from aborting when tab is hidden
-        body: JSON.stringify({ git_url: gitUrl, sub_dir: subDir?.trim() || '' }),
+        body: JSON.stringify({ git_url: gitUrl, selected_modules: selectedModules }),
         async onopen(response) {
           if (response.ok && response.headers.get('content-type')?.startsWith('text/event-stream')) {
             return; // everything's good
@@ -532,6 +575,7 @@ export const useBlogStream = () => {
   }, [store])
 
   return {
+    scanGit,
     analyzeGit,
     parseFile,
     generateSingle,
