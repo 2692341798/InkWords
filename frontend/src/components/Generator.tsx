@@ -12,7 +12,8 @@ import { GeneratorStatus } from './generator/GeneratorStatus'
 export function Generator() {
   const store = useStreamStore()
   const { scanGit, analyzeGit, parseFile, generateSeries, generateSingle, stopAnalyzing, stopGenerating } = useBlogStream()
-  const [gitUrl, setGitUrl] = useState(store.gitUrl)
+  const gitUrl = store.gitUrl
+  const setGitUrl = store.setGitUrl
   const [isDragging, setIsDragging] = useState(false)
   const [analyzingType, setAnalyzingType] = useState<'git' | 'file'>('git')
   const [isOutlineExpanded, setIsOutlineExpanded] = useState(true)
@@ -28,35 +29,7 @@ export function Generator() {
     }
   }, [store.isGenerating])
 
-  useEffect(() => {
-    // If the global store gitUrl is reset (e.g. by "新建工作区"), sync the local input
-    if (store.gitUrl === '' && gitUrl !== '') {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setGitUrl('')
-    } else if (store.gitUrl !== '' && gitUrl !== store.gitUrl && store.gitUrl !== gitUrl.trim()) {
-      // If we just loaded a project or store got updated from outside, sync the local input
-      // Only do this if the store URL is completely different from our local URL.
-      // This prevents overwriting the user's typing if they are typing a URL that matches but isn't exact.
-      // Actually, if we just rely on store.gitUrl changes, we can just do it unconditionally when store.gitUrl changes.
-      // But `useEffect` dependencies trigger even if the primitive value is the same? No, React bails out.
-      // We'll just set it unconditionally if store.gitUrl !== '' to be safe.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setGitUrl(store.gitUrl)
-    }
-  }, [store.gitUrl])
 
-  useEffect(() => {
-    // Clear modules if the user changes the git URL in the input box
-    // But ONLY if we actually have modules AND the input is genuinely different from the store
-    // Also, we ONLY clear if store.gitUrl is not empty (meaning a scan was successful)
-    // and the user has changed the URL since then.
-    if (store.gitUrl && gitUrl !== store.gitUrl && store.modules && store.modules.length > 0) {
-      store.setModules(null)
-      store.setSelectedModules([])
-      store.setOutline(null)
-      store.setParentBlogId(null)
-    }
-  }, [gitUrl, store.gitUrl, store.modules, store])
 
   const handleScan = async () => {
     if (!gitUrl) return

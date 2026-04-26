@@ -73,6 +73,7 @@ interface StreamState {
   setCurrentChapterTitle: (title: string) => void
   setAbortController: (ctrl: AbortController | null) => void
   setParentBlogId: (id: string | null) => void
+  setGitUrl: (url: string) => void
   setModules: (modules: ModuleCard[] | null) => void
   setSelectedModules: (paths: string[]) => void
   stopAllStreams: () => void
@@ -210,6 +211,19 @@ export const useStreamStore = create<StreamState>((set, get) => ({
   setCurrentChapterTitle: (title) => set({ currentChapterTitle: title }),
   setAbortController: (ctrl) => set({ abortController: ctrl }),
   setParentBlogId: (id) => set({ parentBlogId: id }),
+  setGitUrl: (url) => set((state) => {
+    // If the user changes the git URL in the input box and we have modules, clear them
+    if (state.gitUrl && url !== state.gitUrl && state.modules && state.modules.length > 0) {
+      return { 
+        gitUrl: url,
+        modules: null,
+        selectedModules: [],
+        outline: null,
+        parentBlogId: null
+      }
+    }
+    return { gitUrl: url }
+  }),
   setModules: (modules) => set({ modules }),
   setSelectedModules: (paths) => set({ selectedModules: paths }),
   stopAllStreams: () => {
