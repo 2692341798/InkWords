@@ -138,8 +138,10 @@ export const MarkdownEngine: React.FC<MarkdownEngineProps> = ({ content }) => {
             );
           },
           code(props) {
-            const { children, className, ref, ...rest } = props;
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
+            const { children, className, ref, node, ...rest } = props as any;
             const match = /language-(\w+)/.exec(className || '');
+            const isBlock = String(children).includes('\n');
             
             // Render Mermaid blocks using our custom component
             if (match && match[1] === 'mermaid') {
@@ -150,16 +152,20 @@ export const MarkdownEngine: React.FC<MarkdownEngineProps> = ({ content }) => {
               return <MermaidBlock chart={diagramText} />;
             }
 
-            return match ? (
-              <SyntaxHighlighter
-                {...rest}
-                PreTag="div"
-                children={String(children).replace(/\n$/, '')}
-                language={match[1]}
-                style={oneLight}
-                className="rounded-xl border border-zinc-200 shadow-sm text-sm !my-0"
-              />
-            ) : (
+            if (match || isBlock) {
+              return (
+                <SyntaxHighlighter
+                  {...rest}
+                  PreTag="div"
+                  children={String(children).replace(/\n$/, '')}
+                  language={match ? match[1] : 'text'}
+                  style={oneLight}
+                  className="rounded-xl border border-zinc-200 shadow-sm text-sm !my-0"
+                />
+              );
+            }
+
+            return (
               <code ref={ref} {...rest} className={className}>
                 {children}
               </code>
