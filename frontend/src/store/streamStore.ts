@@ -33,15 +33,20 @@ interface StreamState {
   chapterStatus: Record<number, 'pending' | 'generating' | 'completed' | 'error'>
   generatedContent: string
   chapterContents: Record<number, string>
+  isScanning: boolean
   isAnalyzing: boolean
   isGenerating: boolean
   mapReduceProgress: MapReduceProgress | null
   workers: Record<number, MapReduceProgress>
   analysisStep: number
   analysisMessage: string
+  progress: string
+  content: string
+  currentChapterTitle: string
   abortController: AbortController | null
   parentBlogId: string | null
   setSource: (type: 'git' | 'file', content: string, gitUrl?: string) => void
+  setSourceContent: (content: string) => void
   setSeriesTitle: (title: string) => void
   setOutline: (outline: Chapter[]) => void
   updateChapter: (sort: number, field: 'title' | 'summary', value: string) => void
@@ -54,11 +59,16 @@ interface StreamState {
   appendChapterContents: (updates: Record<number, string>) => void
   clearGeneratedContent: () => void
   clearChapterContent: (sort: number) => void
+  setScanning: (status: boolean) => void
   setGenerating: (status: boolean) => void
   setAnalyzing: (status: boolean) => void
   setMapReduceProgress: (progress: MapReduceProgress | null) => void
   setAnalysisStep: (step: number) => void
   setAnalysisMessage: (msg: string) => void
+  setProgress: (msg: string) => void
+  setContent: (content: string) => void
+  appendContent: (chunk: string) => void
+  setCurrentChapterTitle: (title: string) => void
   setAbortController: (ctrl: AbortController | null) => void
   setParentBlogId: (id: string | null) => void
   setModules: (modules: ModuleCard[] | null) => void
@@ -78,15 +88,20 @@ export const useStreamStore = create<StreamState>((set, get) => ({
   chapterStatus: {},
   generatedContent: '',
   chapterContents: {},
+  isScanning: false,
   isAnalyzing: false,
   isGenerating: false,
   mapReduceProgress: null,
   workers: {},
   analysisStep: -1,
   analysisMessage: '',
+  progress: '',
+  content: '',
+  currentChapterTitle: '',
   abortController: null,
   parentBlogId: null,
   setSource: (type, content, gitUrl) => set({ sourceType: type, sourceContent: content, gitUrl: gitUrl || '' }),
+  setSourceContent: (content) => set({ sourceContent: content }),
   setSeriesTitle: (title) => set({ seriesTitle: title }),
   setOutline: (outline) => set({ 
     outline,
@@ -168,6 +183,7 @@ export const useStreamStore = create<StreamState>((set, get) => ({
         [sort]: ''
       }
     })),
+  setScanning: (status) => set({ isScanning: status }),
   setGenerating: (status) => set({ isGenerating: status }),
   setAnalyzing: (status) => set({ isAnalyzing: status }),
   setMapReduceProgress: (progress) => set((state) => {
@@ -185,6 +201,10 @@ export const useStreamStore = create<StreamState>((set, get) => ({
   }),
   setAnalysisStep: (step) => set({ analysisStep: step }),
   setAnalysisMessage: (msg) => set({ analysisMessage: msg }),
+  setProgress: (msg) => set({ progress: msg }),
+  setContent: (content) => set({ content }),
+  appendContent: (chunk) => set((state) => ({ content: state.content + chunk })),
+  setCurrentChapterTitle: (title) => set({ currentChapterTitle: title }),
   setAbortController: (ctrl) => set({ abortController: ctrl }),
   setParentBlogId: (id) => set({ parentBlogId: id }),
   setModules: (modules) => set({ modules }),
@@ -202,6 +222,7 @@ export const useStreamStore = create<StreamState>((set, get) => ({
         }
       });
       return { 
+        isScanning: false,
         isAnalyzing: false, 
         isGenerating: false, 
         analysisStep: -1, 
@@ -226,12 +247,16 @@ export const useStreamStore = create<StreamState>((set, get) => ({
       chapterStatus: {},
       generatedContent: '',
       chapterContents: {},
+      isScanning: false,
       isAnalyzing: false,
       isGenerating: false,
       mapReduceProgress: null,
       workers: {},
       analysisStep: -1,
       analysisMessage: '',
+      progress: '',
+      content: '',
+      currentChapterTitle: '',
       abortController: null,
       parentBlogId: null
     })
