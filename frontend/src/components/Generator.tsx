@@ -33,18 +33,24 @@ export function Generator() {
     if (store.gitUrl === '' && gitUrl !== '') {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setGitUrl('')
+    } else if (store.gitUrl !== '' && gitUrl === '') {
+      // If we just loaded a project or store got updated from outside, sync the local input
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setGitUrl(store.gitUrl)
     }
-  }, [store.gitUrl, gitUrl])
+  }, [store.gitUrl]) // Removing gitUrl from dependency array to prevent typing overwrite
 
   useEffect(() => {
     // Clear modules if the user changes the git URL in the input box
-    if (gitUrl !== store.gitUrl && store.modules) {
+    // But ONLY if we actually have modules AND the input is genuinely different from the store
+    if (gitUrl !== store.gitUrl && store.modules && store.modules.length > 0) {
       store.setModules(null)
       store.setSelectedModules([])
       store.setOutline(null)
       store.setParentBlogId(null)
     }
-  }, [gitUrl, store.gitUrl, store.modules, store])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gitUrl])
 
   const handleScan = async () => {
     if (!gitUrl) return
