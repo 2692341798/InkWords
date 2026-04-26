@@ -27,6 +27,57 @@ func NewProjectAPI(userService *service.UserService) *ProjectAPI {
 	}
 }
 
+type ScanRequest struct {
+	GitURL string `json:"git_url" binding:"required"`
+}
+
+// ScanGithubRepo handles the /api/v1/project/scan endpoint
+func (api *ProjectAPI) ScanGithubRepo(c *gin.Context) {
+	if userID, exists := c.Get("user_id"); exists {
+		if uid, ok := userID.(uuid.UUID); ok {
+			if err := api.userService.CheckQuota(uid); err != nil {
+				c.JSON(http.StatusPaymentRequired, gin.H{
+					"code":    http.StatusPaymentRequired,
+					"message": err.Error(),
+					"data":    nil,
+				})
+				return
+			}
+		}
+	}
+
+	var req ScanRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    http.StatusBadRequest,
+			"message": "请求参数格式错误",
+			"data":    nil,
+		})
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	modules, err := api.decompositionService.ScanProjectModules(ctx, req.GitURL)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    http.StatusInternalServerError,
+			"message": "扫描仓库失败: " + err.Error(),
+			"data":    nil,
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":    0,
+		"message": "success",
+		"data": gin.H{
+			"repo_url": req.GitURL,
+			"modules":  modules,
+		},
+	})
+}
+
 type AnalyzeRequest struct {
 	GitURL string `json:"git_url" binding:"required"`
 	SubDir string `json:"sub_dir"`

@@ -103,6 +103,7 @@ func main() {
 		projectGroup := v1.Group("/project")
 		projectGroup.Use(middleware.AuthMiddleware())
 		{
+			projectGroup.POST("/scan", projectAPI.ScanGithubRepo)
 			projectGroup.POST("/analyze", projectAPI.Analyze)
 			projectGroup.POST("/parse", projectAPI.Parse)
 		}
