@@ -23,10 +23,12 @@ type Message struct {
 
 // ChatRequest represents the request payload for DeepSeek API
 type ChatRequest struct {
-	Model     string    `json:"model"`
-	Messages  []Message `json:"messages"`
-	Stream    bool      `json:"stream"`
-	MaxTokens int       `json:"max_tokens,omitempty"`
+	Model          string            `json:"model"`
+	Messages       []Message         `json:"messages"`
+	Stream         bool              `json:"stream"`
+	MaxTokens      int               `json:"max_tokens,omitempty"`
+	Thinking       map[string]string `json:"thinking,omitempty"`
+	ResponseFormat map[string]string `json:"response_format,omitempty"`
 }
 
 // ChatCompletionChunk represents a single chunk from the stream
@@ -63,10 +65,67 @@ func NewDeepSeekClient(apiKey string) *DeepSeekClient {
 // Generate calls the DeepSeek API with stream=false and returns the full response content
 func (c *DeepSeekClient) Generate(ctx context.Context, model string, messages []Message) (string, error) {
 	reqBody := ChatRequest{
-		Model:     model,
-		Messages:  messages,
-		Stream:    false,
-		MaxTokens: 128000,
+		Model:    model,
+		Messages: messages,
+		Stream:   false,
+		Thinking: map[string]string{"type": "enabled"},
+	}
+
+	jsonData, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal request body: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.APIURL, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.APIKey)
+
+	resp, err := c.Client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to execute request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var result struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+
+	if err := json.Unmarshal(bodyBytes, &result); err != nil {
+		return "", fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	if len(result.Choices) == 0 {
+		return "", fmt.Errorf("API returned empty choices")
+	}
+
+	return result.Choices[0].Message.Content, nil
+}
+
+// GenerateJSON calls the DeepSeek API with stream=false and response_format={"type": "json_object"}
+func (c *DeepSeekClient) GenerateJSON(ctx context.Context, model string, messages []Message) (string, error) {
+	reqBody := ChatRequest{
+		Model:          model,
+		Messages:       messages,
+		Stream:         false,
+		Thinking:       map[string]string{"type": "enabled"},
+		ResponseFormat: map[string]string{"type": "json_object"},
 	}
 
 	jsonData, err := json.Marshal(reqBody)
@@ -121,10 +180,10 @@ func (c *DeepSeekClient) Generate(ctx context.Context, model string, messages []
 func (c *DeepSeekClient) GenerateStream(ctx context.Context, model string, messages []Message, chunkChan chan<- string) (string, error) {
 	defer close(chunkChan)
 	reqBody := ChatRequest{
-		Model:     model,
-		Messages:  messages,
-		Stream:    true,
-		MaxTokens: 128000,
+		Model:    model,
+		Messages: messages,
+		Stream:   true,
+		Thinking: map[string]string{"type": "enabled"},
 	}
 
 	jsonData, err := json.Marshal(reqBody)

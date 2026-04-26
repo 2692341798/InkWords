@@ -100,7 +100,7 @@ func (s *DecompositionService) AnalyzeStream(ctx context.Context, userID uuid.UU
 	var finalContent strings.Builder
 	fullContent := treeContent + "\n=== Repository Content ===\n"
 
-	if len(chunks) == 1 && len([]rune(chunks[0].Content)) < 150000 {
+	if len(chunks) == 1 && len([]rune(chunks[0].Content)) < 1500000 {
 		sendProgress(2, "项目较小，跳过 Map 阶段，直接生成大纲...", nil)
 		finalContent.WriteString(fullContent)
 		finalContent.WriteString(chunks[0].Content)
@@ -252,8 +252,8 @@ func (s *DecompositionService) AnalyzeFileStream(ctx context.Context, userID uui
 	runes := []rune(sourceContent)
 	var finalContent strings.Builder
 
-	if len(runes) > 50000 {
-		chunks := chunkFileContent(sourceContent, 50000)
+	if len(runes) > 1000000 {
+		chunks := chunkFileContent(sourceContent, 1000000)
 		sendProgress(2, fmt.Sprintf("文件较大，开启 Map-Reduce 分析，共 %d 个分块", len(chunks)), nil)
 		summaries := s.mapReduceAnalyzeFile(ctx, chunks, sendProgress)
 

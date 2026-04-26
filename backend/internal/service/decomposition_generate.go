@@ -170,8 +170,8 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 			}
 
 			runes := []rune(chapterSourceContent)
-			if len(runes) > 100000 {
-				chapterSourceContent = string(runes[:100000]) + "\n\n... [Content Truncated due to length limits] ..."
+			if len(runes) > 1000000 {
+				chapterSourceContent = string(runes[:1000000]) + "\n\n... [Content Truncated due to length limits] ..."
 			}
 
 			extraRequirements := ""
@@ -185,26 +185,42 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 				reqIndex++
 			}
 
-			prompt := fmt.Sprintf(`你是一个高级全栈架构师和技术博主。请根据以下提供的源内容，以及本章节的大纲，将其转化为一篇“小白友好、图文并茂、可独立复现”的高质量技术博客章节。
+			var oldContent string
+			if chapter.Action == "regenerate" && chapter.ID != "" {
+				if blogID, err := uuid.Parse(chapter.ID); err == nil {
+					var oldBlog model.Blog
+					if err := db.DB.WithContext(ctx).Select("content").First(&oldBlog, "id = ?", blogID).Error; err == nil {
+						oldContent = oldBlog.Content
+						oldRunes := []rune(oldContent)
+						if len(oldRunes) > 500000 {
+							oldContent = string(oldRunes[:500000]) + "\n\n... [Content Truncated due to length limits] ..."
+						}
+					}
+				}
+			}
+
+			prompt := fmt.Sprintf(`请根据上述源内容，以及本章节的大纲，将其转化为一篇“小白友好、图文并茂、可独立复现”的高质量技术博客章节。
 要求：
-1. **字数和篇幅适中**：为了保证生成完整性，单篇文章内容不要过于冗长（控制在 1000-1500 字左右）。不要一次性铺陈太多知识点，聚焦于本章节的核心目标即可。
-2. **代码级剖析**：引用源内容中的核心代码，并逐行解释其作用。如果源内容因为截断而缺少具体代码，请基于目录结构和你的架构经验进行合理补充推演。
+1. **单点聚焦与深度剖析**：严格保证本篇文章只介绍**一个核心技术点**。请利用充足的上下文，深入剖析其底层原理、设计思想和演进逻辑，不要停留在表面的 API 调用，字数篇幅不设上限，请尽可能详尽。
+2. **丰富的代码示例**：在解释原理和应用时，尽可能多地提供代码示例（不仅仅是源码，还可以是辅助理解的伪代码或最佳实践用例），引用源内容中的核心代码并逐行解释其作用。如果源内容因为截断而缺少具体代码，请基于目录结构和你的架构经验进行合理补充推演。
 3. **可复现的步骤**：如果是实战或配置相关，请给出明确的执行步骤。
 4. **小白友好**：在解释抽象的理论概念时，必须提供对应的代码示例或生活化比喻。
 5. 所有生成的 Mermaid 图表代码块绝对禁止包含自定义样式关键字（如 style, classDef, linkStyle 等），必须使用基础语法。在 Mermaid 图表中，如果节点文本包含特殊字符（如括号、幂符号等，例如 O(1), O(n^2)），必须使用双引号将节点文本包裹起来，例如 A["O(1)"] 而不是 A[O(1)]。
 6. **完整性约束**：请务必完整输出，不要遗漏关键知识点。如果内容较长，请合理分配篇幅，确保文章结构完整，包含结尾总结。
-%s
-源内容：
 %s
 
 本章节大纲：
 - 标题: %s
 - 摘要: %s
 - 排序: %d
-`, extraRequirements, chapterSourceContent, chapter.Title, chapter.Summary, chapter.Sort)
+`, extraRequirements, chapter.Title, chapter.Summary, chapter.Sort)
+
+			if oldContent != "" {
+				prompt += fmt.Sprintf("\n【注意：本章节为旧版博客的更新重写】\n以下是该章节在旧版本项目中的博客内容，供你作为松散参考。\n你可以参考旧内容中解释抽象概念的比喻、业务知识点或行文风格，但必须以本次提供的最新源码为准进行重写或调整，如果最新代码逻辑发生了改变，请以最新代码为准。\n旧版本内容：\n---\n%s\n---\n", oldContent)
+			}
 
 			messages := []llm.Message{
-				{Role: "system", Content: "你是一个高级技术博客作者。"},
+				{Role: "system", Content: "你是一个高级全栈架构师和技术博主。\n\n项目源内容如下：\n" + chapterSourceContent},
 				{Role: "user", Content: prompt},
 			}
 
@@ -371,12 +387,12 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 
 			// Extract Tech Stacks using LLM
 			var techStacks datatypes.JSON
-			extractPrompt := "请从以下文章内容中提取出涉及的核心技术栈名称（如 React, Go, Docker 等），以 JSON 数组格式返回，不要有任何其他多余字符：\n\n" + content
+			extractPrompt := "请从以下文章内容中提取出涉及的核心技术栈名称（如 React, Go, Docker 等），以 JSON 数组格式返回，不要有任何其他多余字符。\n\n例如：[\"React\", \"Go\"]\n\n文章内容：\n\n" + content
 			extractMessages := []llm.Message{
 				{Role: "user", Content: extractPrompt},
 			}
 
-			extractedJSON, err := s.llmClient.Generate(ctx, llmModel, extractMessages)
+			extractedJSON, err := s.llmClient.GenerateJSON(ctx, llmModel, extractMessages)
 			if err == nil && len(extractedJSON) > 0 {
 				// basic validation that it is a json array
 				var parsed []string
@@ -574,13 +590,14 @@ func (s *DecompositionService) generateSeriesIntro(ctx context.Context, userID u
 func (s *DecompositionService) GenerateOutline(ctx context.Context, sourceContent string, existingParent *model.Blog, existingChildren []model.Blog) (*OutlineResult, error) {
 
 	runes := []rune(sourceContent)
-	if len(runes) > 2000000 {
-		sourceContent = string(runes[:2000000]) + "\n\n... [Content Truncated due to length limits] ..."
+	if len(runes) > 15000000 {
+		sourceContent = string(runes[:15000000]) + "\n\n... [Content Truncated due to length limits] ..."
 	}
 
 	instruction := `你是一个高级架构师。请评估前面提供的项目文本，并生成一个系列博客的大纲。
 对于大型项目、源码仓库或复杂内容，**强制拆分为细粒度系列博客**。
-要求一个技术点分为一个博客，博客篇数上不封顶，只要有需要，技术点可以拆的更加详细。`
+确保每个章节（每篇博客）只聚焦于**一个核心技术点**，切忌在一篇博客中堆砌过多技术点。
+既然大模型上下文和输出能力很强，博客的篇数完全**不设上限**，只要有需要，技术点可以拆得更加详细和深入。`
 
 	if existingParent != nil {
 		var existingOutlineBuilder strings.Builder
@@ -629,7 +646,7 @@ JSON 格式如下：
 		model = envModel
 	}
 
-	content, err := s.llmClient.Generate(ctx, model, messages)
+	content, err := s.llmClient.GenerateJSON(ctx, model, messages)
 	if err != nil {
 		return nil, fmt.Errorf("llm generation failed: %w", err)
 	}
