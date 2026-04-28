@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -192,7 +193,148 @@ func (s *BlogService) UpdateBlog(ctx context.Context, id uuid.UUID, userID uuid.
 	return nil
 }
 
-// ExportToObsidian 导出博客到 Obsidian 挂载目录
+// ExportSeriesToObsidian 批量导出整个系列博客到 Obsidian 挂载目录
+func (s *BlogService) ExportSeriesToObsidian(ctx context.Context, parentID uuid.UUID, userID uuid.UUID) error {
+	blogs, err := s.GetSeriesBlogs(ctx, parentID, userID)
+	if err != nil {
+		return err
+	}
+	if len(blogs) == 0 {
+		return errors.New("系列博客为空")
+	}
+
+	parentTitle := blogs[0].Title
+	if parentTitle == "" {
+		parentTitle = "未命名系列"
+	}
+
+	obsidianPath := os.Getenv("OBSIDIAN_VAULT_PATH_INTERNAL")
+	if obsidianPath == "" {
+		obsidianPath = "/app/obsidian"
+	}
+
+	// 为该系列创建一个专属文件夹（概念子目录）
+	seriesDir := filepath.Join(obsidianPath, parentTitle)
+	if err := os.MkdirAll(seriesDir, 0755); err != nil {
+		return fmt.Errorf("无法创建系列目录: %v", err)
+	}
+
+	now := time.Now().Format("2006-01-02")
+	nowTimeStr := time.Now().Format("2006-01-02 15:04:05")
+
+	var childTitles []string
+
+	// 写入所有子博客
+	for i := 1; i < len(blogs); i++ {
+		child := blogs[i]
+		childTitle := child.Title
+		if childTitle == "" {
+			childTitle = fmt.Sprintf("未命名子博客-%d", i)
+		}
+		childTitles = append(childTitles, childTitle)
+
+		frontmatter := fmt.Sprintf(`---
+type: concept
+title: "%s"
+created: %s
+updated: %s
+tags:
+  - "#domain/tech"
+status: seed
+related:
+  - "[[%s]]"
+---
+`, childTitle, now, now, parentTitle)
+
+		content := fmt.Sprintf("%s\n# %s\n\n%s", frontmatter, childTitle, child.Content)
+		filePath := filepath.Join(seriesDir, fmt.Sprintf("%s.md", childTitle))
+		if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
+			return fmt.Errorf("写入子博客失败: %v", err)
+		}
+	}
+
+	// 写入父博客 (Series Overview)
+	relatedStr := ""
+	if len(childTitles) > 0 {
+		relatedStr = "related:\n"
+		for _, title := range childTitles {
+			relatedStr += fmt.Sprintf("  - \"[[%s]]\"\n", title)
+		}
+	}
+
+	parentFrontmatter := fmt.Sprintf(`---
+type: concept
+title: "%s"
+created: %s
+updated: %s
+tags:
+  - "#domain/tech"
+status: seed
+%s---
+`, parentTitle, now, now, strings.TrimSpace(relatedStr)+"\n")
+
+	parentContent := fmt.Sprintf("%s\n# %s\n\n%s", parentFrontmatter, parentTitle, blogs[0].Content)
+	parentFilePath := filepath.Join(seriesDir, fmt.Sprintf("%s.md", parentTitle))
+	if err := os.WriteFile(parentFilePath, []byte(parentContent), 0644); err != nil {
+		return fmt.Errorf("写入父博客失败: %v", err)
+	}
+
+	// ----------------- 更新 Obsidian 全局状态文件 -----------------
+	// 1. 更新 index.md
+	indexPath := filepath.Join(obsidianPath, "index.md")
+	if _, err := os.Stat(indexPath); err == nil {
+		// 如果存在，追加到某个地方（这里简化为追加到末尾或如果有特定结构则追加）
+		indexFile, err := os.OpenFile(indexPath, os.O_APPEND|os.O_WRONLY, 0644)
+		if err == nil {
+			indexFile.WriteString(fmt.Sprintf("\n- [[%s]]", parentTitle))
+			indexFile.Close()
+		}
+	}
+
+	// 2. 更新 log.md
+	logPath := filepath.Join(obsidianPath, "log.md")
+	if logContent, err := os.ReadFile(logPath); err == nil {
+		// 在 "---" 分隔符或特定标题下追加
+		lines := strings.Split(string(logContent), "\n")
+		var newLines []string
+		inserted := false
+		for _, line := range lines {
+			newLines = append(newLines, line)
+			if !inserted && strings.HasPrefix(line, "---") && len(newLines) > 10 { // 找到正文中的第一个 ---
+				newLines = append(newLines, fmt.Sprintf("- **%s**: Ingest 系列博客: [[%s]]，共包含 %d 篇子博客。", nowTimeStr, parentTitle, len(childTitles)))
+				inserted = true
+			}
+		}
+		if !inserted {
+			newLines = append(newLines, fmt.Sprintf("- **%s**: Ingest 系列博客: [[%s]]，共包含 %d 篇子博客。", nowTimeStr, parentTitle, len(childTitles)))
+		}
+		os.WriteFile(logPath, []byte(strings.Join(newLines, "\n")), 0644)
+	}
+
+	// 3. 覆盖更新 hot.md
+	hotPath := filepath.Join(obsidianPath, "hot.md")
+	hotContent := fmt.Sprintf(`---
+type: meta
+title: "🔥 热点上下文 (Hot)"
+created: %s
+updated: %s
+tags:
+  - "#meta/hot"
+status: mature
+---
+
+# 🔥 当前热点上下文
+
+最近摄入的知识：
+- [[%s]]
+`, now, now, parentTitle)
+	for _, title := range childTitles {
+		hotContent += fmt.Sprintf("- [[%s]]\n", title)
+	}
+	os.WriteFile(hotPath, []byte(hotContent), 0644)
+
+	return nil
+}
 func (s *BlogService) ExportToObsidian(ctx context.Context, blogID uuid.UUID, userID uuid.UUID) error {
 	var blog model.Blog
 	err := s.db.WithContext(ctx).Where("id = ? AND user_id = ?", blogID, userID).First(&blog).Error

@@ -126,7 +126,7 @@ export function Editor() {
   const handleExportToObsidian = async () => {
     if (!selectedBlog?.id) return;
     try {
-      toast.loading('正在同步到 Obsidian...', { id: 'export-obsidian' })
+      toast.loading('正在同步单篇到 Obsidian...', { id: 'export-obsidian' })
       const response = await fetch(`/api/v1/blogs/${selectedBlog.id}/export/obsidian`, {
         method: 'POST',
         headers: {
@@ -135,13 +135,35 @@ export function Editor() {
       });
       const data = await response.json();
       if (data.code === 200) {
-        toast.success('成功同步到 Obsidian 仓库', { id: 'export-obsidian' });
+        toast.success('成功同步单篇到 Obsidian 仓库', { id: 'export-obsidian' });
       } else {
-        toast.error(data.message || '导出失败', { id: 'export-obsidian' });
+        toast.error(data.message || '同步失败', { id: 'export-obsidian' });
       }
     } catch (error) {
       console.error('Export error:', error);
       toast.error('同步时发生网络错误', { id: 'export-obsidian' });
+    }
+  };
+
+  const handleExportSeriesToObsidian = async () => {
+    if (!selectedBlog?.id) return;
+    try {
+      toast.loading('正在同步整个系列到 Obsidian...', { id: 'export-series-obsidian' })
+      const response = await fetch(`/api/v1/blogs/${selectedBlog.id}/export/obsidian/series`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      const data = await response.json();
+      if (data.code === 200) {
+        toast.success('成功同步系列到 Obsidian 仓库，已建立知识网络', { id: 'export-series-obsidian' });
+      } else {
+        toast.error(data.message || '同步系列失败', { id: 'export-series-obsidian' });
+      }
+    } catch (error) {
+      console.error('Export series error:', error);
+      toast.error('同步系列时发生网络错误', { id: 'export-series-obsidian' });
     }
   };
 
@@ -434,16 +456,28 @@ export function Editor() {
                 <ChevronDown className="w-3 h-3 opacity-50" />
               </Button>
             } />
-            <DropdownMenuContent align="end" className="w-48 shadow-xl border-zinc-200/60 rounded-xl p-1">
+            <DropdownMenuContent align="end" className="w-56 shadow-xl border-zinc-200/60 rounded-xl p-1">
               <DropdownMenuItem onClick={handleExportToObsidian} className="gap-2 cursor-pointer focus:bg-zinc-100 rounded-lg py-2">
                 <div className="bg-indigo-50 text-indigo-600 p-1.5 rounded-md">
                   <Sparkles className="w-3.5 h-3.5" />
                 </div>
                 <div className="flex flex-col">
-                  <span className="font-medium text-zinc-900">同步到 Obsidian</span>
+                  <span className="font-medium text-zinc-900">同步单篇到 Obsidian</span>
                   <span className="text-xs text-zinc-500">直通本地第二大脑</span>
                 </div>
               </DropdownMenuItem>
+
+              {selectedBlog?.parent_id === '00000000-0000-0000-0000-000000000000' && selectedBlog?.children && selectedBlog.children.length > 0 && (
+                <DropdownMenuItem onClick={handleExportSeriesToObsidian} className="gap-2 cursor-pointer focus:bg-zinc-100 rounded-lg py-2 mt-1">
+                  <div className="bg-indigo-50 text-indigo-600 p-1.5 rounded-md">
+                    <FileArchive className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="font-medium text-zinc-900">同步整个系列到 Obsidian</span>
+                    <span className="text-xs text-zinc-500">自动构建双链知识网络</span>
+                  </div>
+                </DropdownMenuItem>
+              )}
               
               <DropdownMenuSeparator className="bg-zinc-100 my-1" />
               
