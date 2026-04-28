@@ -427,13 +427,13 @@ export function Editor() {
           </Button>
           
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
+            <DropdownMenuTrigger render={
               <Button variant="outline" size="sm" className="gap-1.5 text-zinc-700 hover:text-zinc-900 transition-all duration-200 shadow-sm">
                 <Download className="w-4 h-4" /> 
                 导出 / 同步
                 <ChevronDown className="w-3 h-3 opacity-50" />
               </Button>
-            </DropdownMenuTrigger>
+            } />
             <DropdownMenuContent align="end" className="w-48 shadow-xl border-zinc-200/60 rounded-xl p-1">
               <DropdownMenuItem onClick={handleExportToObsidian} className="gap-2 cursor-pointer focus:bg-zinc-100 rounded-lg py-2">
                 <div className="bg-indigo-50 text-indigo-600 p-1.5 rounded-md">

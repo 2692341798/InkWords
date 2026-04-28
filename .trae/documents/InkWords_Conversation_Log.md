@@ -754,16 +754,18 @@
   - **JSON 生成稳定性**：大语言模型在输出严格的结构化数据（如大纲、配置）时，必须使用极低的 Temperature（如 0.1）来消除随机性，保证输出格式的确定性。
   - **动态篇数规划**：不能盲目要求大模型“拆分越细越好”或“不设上限”，否则容易导致水文泛滥。结合项目实际规模给予具体的篇数参考范围（如 1-3, 5-8, 10+），能有效提升系列博客的质量与含金量。
 
-### 对话 57：导出到 Obsidian 仓库功能开发
-- **用户需求**：执行 2026-04-28-export-to-obsidian.md 中的任务 5，更新所有文档并提交代码。
+### 对话 57：导出到 Obsidian 仓库功能开发与交互升级
+- **用户需求**：用户希望将解析生成的博客直接存入本地 Obsidian 知识库。后续反馈界面按钮拥挤且导出结果位置不对，要求通过 skill 优化界面并修复环境配置，最后提交代码到 GitHub。
 - **AI 动作**：
-  1. 分析了任务，该任务是实现将博客导出为包含 YAML Frontmatter 的 Markdown 文件并直接写入挂载的本地 Obsidian 仓库目录。
-  2. 更新了 API 文档，记录了 `POST /api/v1/blogs/:id/export/obsidian`。
-  3. 更新了 Architecture 文档，说明了 Docker volume 挂载宿主机目录实现知识库直通。
-  4. 更新了 Database、PRD、README、Development Log 等相关文档，体现这一全新导出方式。
-  5. 执行代码提交。
+  1. 实现了 `POST /api/v1/blogs/:id/export/obsidian`，读取博客并拼接 YAML Frontmatter，通过 Docker Volume 挂载直接写入本地 Markdown 文件。
+  2. **交互重构**：调用 `frontend-design` 和 `shadcn` 技能，将编辑器顶部拥挤的各种导出按钮（ZIP、PDF、Markdown、Obsidian）统一收拢为 `DropdownMenu` 下拉菜单。
+  3. **Toast 通知**：引入 `sonner` 库，以优雅的异步状态提示取代了会阻塞主线程的原生 `alert()`。
+  4. **环境修复**：清理了根目录冲突的 `.env.example` 和 `.env` 文件夹，将真实的 `OBSIDIAN_VAULT_PATH` 写入了正确的 `backend/.env`，并修改 `docker-compose.yml` 的 fallback 逻辑。
+  5. 更新了所有的架构与设计文档（API、PRD、开发日志等）。
+  6. 执行了 `git commit` 并打上了新标签。
 - **决策/变更**：
   - **本地知识库直通**：通过 Docker Volume 映射，直接打通 Web 应用和用户的本地 Obsidian 知识库，省去了繁琐的下载和解压拖拽过程，实现了沉浸式的文档收集工作流。
+  - **交互降噪与防错**：现代 Web 编辑器应将低频操作（如导出、打印）收纳进下拉菜单，保持界面极简；同时，环境变量的管理必须遵循“单点真实来源（SSOT）”原则，防止 Docker 启动时路径解析漂移。
 
 ### 对话 51：根据开发计划，执行 GitHub 扫描两步流功能开发
 - **用户需求**：要求根据计划文档 `2026-04-26-github-scan-and-series-plan.md`，开发 GitHub 扫描和系列文章生成的功能。
