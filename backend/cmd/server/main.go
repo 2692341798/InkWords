@@ -96,6 +96,7 @@ func main() {
 			blogGroup.DELETE("", blogAPI.BatchDeleteBlogs)
 			blogGroup.PUT("/:id", blogAPI.UpdateBlog)
 			blogGroup.GET("/:id/export", blogAPI.ExportSeries)
+			blogGroup.GET("/:id/export/pdf", blogAPI.ExportSeriesPDF)
 			blogGroup.POST("/:id/export/obsidian", blogAPI.ExportToObsidian)
 			blogGroup.POST("/:id/export/obsidian/series", blogAPI.ExportSeriesToObsidian)
 			blogGroup.POST("/:id/continue", streamAPI.ContinueBlogStreamHandler)

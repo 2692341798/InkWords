@@ -2,8 +2,11 @@ package api
 
 import (
 	"archive/zip"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -333,6 +336,76 @@ func (a *BlogAPI) ExportSeries(c *gin.Context) {
 		})
 		return
 	}
+}
+
+// ExportSeriesPDF 导出系列博客为合并 PDF
+func (a *BlogAPI) ExportSeriesPDF(c *gin.Context) {
+	userIDStr, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"code":    http.StatusUnauthorized,
+			"message": "未授权的访问",
+			"data":    nil,
+		})
+		return
+	}
+
+	uid, ok := userIDStr.(uuid.UUID)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    http.StatusInternalServerError,
+			"message": "用户 ID 类型错误",
+			"data":    nil,
+		})
+		return
+	}
+
+	blogIDStr := c.Param("id")
+	blogID, err := uuid.Parse(blogIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    http.StatusBadRequest,
+			"message": "无效的博客 ID",
+			"data":    nil,
+		})
+		return
+	}
+
+	pdfPath, filename, err := a.blogService.ExportSeriesToPDF(c.Request.Context(), blogID, uid)
+	if err != nil {
+		if errors.Is(err, service.ErrSeriesNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{
+				"code":    http.StatusNotFound,
+				"message": "找不到该系列博客",
+				"data":    nil,
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    http.StatusInternalServerError,
+			"message": err.Error(),
+			"data":    nil,
+		})
+		return
+	}
+
+	f, err := os.Open(pdfPath)
+	if err != nil {
+		_ = os.Remove(pdfPath)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    http.StatusInternalServerError,
+			"message": "读取 PDF 失败",
+			"data":    nil,
+		})
+		return
+	}
+	defer f.Close()
+
+	c.Writer.Header().Set("Content-Type", "application/pdf")
+	c.Writer.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+	c.Status(http.StatusOK)
+	_, _ = io.Copy(c.Writer, f)
+	_ = os.Remove(pdfPath)
 }
 
 // ExportToObsidian 导出博客到 Obsidian
