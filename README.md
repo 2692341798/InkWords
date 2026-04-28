@@ -12,7 +12,7 @@
 - 🔄 **博客松散参考再生 (Regeneration)**：在仓库更新后的重写阶段，系统会将旧版博客作为上下文注入大模型，基于最新源码进行“松散参考重写”，既保留了历史优秀的业务解释，又确保代码逻辑的绝对实时。单篇博客严格要求“单点聚焦与深度剖析”，深度挖掘核心技术点。
 - 📑 **超大文件解析支持**：支持本地上传高达 100MB 的 PDF/Word/MD 技术文档，前后端与网关链路已做深度适配。支持根据大文件内容智能评估并拆分系列大纲，像处理 Git 仓库一样并发生成系列博客。
 - ✍️ **沉浸式极简创作体验**：内置类似 Notion 的双栏 Markdown 二次编辑器。首创基于底层 AST 行号注入的像素级双向滚动同步算法；支持对生成的图表进行纯净无样式（无 `style` 污染）的原生 Mermaid 渲染，并具备强大的正则表达式错误兼容与自动修复机制。
-- 📦 **全能导出与本地知识库直通**：支持前端勾选历史博客，由浏览器离线构建 `.zip` 压缩包批量导出，或调用后端流式接口将完整项目系列一键打包下载。独创 Docker Volume 挂载技术，支持将博客一键导入宿主机的本地 Obsidian Vault，并按 Karpathy LLM Wiki Pattern 自动生成 `sources/`、`concepts/`、`entities/` 卡片与双向链接，实现知识复利沉淀。
+- 📦 **全能导出与本地知识库直通**：支持系列导出 Markdown ZIP、系列合并导出 PDF（封面 + 目录 + 正文），并支持前端勾选历史博客由浏览器离线构建 `.zip` 压缩包批量导出。支持通过 Obsidian Local REST API 将博客一键导入宿主机的本地 Obsidian Vault，并按 Karpathy LLM Wiki Pattern 自动生成 `sources/`、`concepts/`、`entities/` 卡片与双向链接，实现知识复利沉淀。
 - 🛡️ **极致安全与双态鉴权**：源文件解析采用“阅后即焚”策略，不在服务器进行任何物理滞留；内置常规账号密码与 GitHub OAuth2.0 一键授权双体系；集成图形验证码与防爆破锁定安全机制。
 - 🐳 **容器化开箱即用**：全面支持 Docker 化部署，提供前后端与数据库的一键编排，内置 Nginx 反向代理与流式通信优化。
 - 🚀 **支持随时中止与断点续传**：前端提供“停止生成”按钮，利用 AbortController 中断请求；后端透传 Context 以立刻释放大模型调用资源。用户随时可以点击“继续生成”，系统自动跳过已完成章节，无缝接续同一个系列生成，拒绝数据孤岛。
@@ -46,7 +46,7 @@
 # 使用 Docker Compose 一键启动
 docker compose down && docker compose up -d --build
 ```
-启动前请先在 `backend/.env` 中配置必要环境变量（例如 `DEEPSEEK_API_KEY`、`DATABASE_URL`、`JWT_SECRET`、`OBSIDIAN_VAULT_PATH`）。
+启动前请先在 `backend/.env` 中配置必要环境变量（例如 `DEEPSEEK_API_KEY`、`DATABASE_URL`、`JWT_SECRET`、`OBSIDIAN_REST_API_KEY`）。如需启用证书校验，另外在宿主机设置 `OBSIDIAN_REST_API_CERT_PATH` 指向插件证书；本机开发可选择设置 `OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY=true` 跳过 TLS 校验。
 由于后端仅提供 API 接口，前端服务由独立的 Nginx 容器代理。项目启动后：
 1. **必须通过前端入口**访问：`http://localhost` (映射于宿主机 80 端口)。
 

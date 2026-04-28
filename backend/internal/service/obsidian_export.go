@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
+	"path"
 	"strings"
 	"sync"
 	"time"
@@ -25,14 +25,19 @@ func (s *BlogService) ExportToObsidian(ctx context.Context, blogID uuid.UUID, us
 		return err
 	}
 
-	obsidianPath := os.Getenv("OBSIDIAN_VAULT_PATH_INTERNAL")
-	if obsidianPath == "" {
-		obsidianPath = "/app/obsidian"
+	store, err := newRestAPIStoreFromEnv()
+	if err != nil {
+		return fmt.Errorf("Obsidian REST API 未配置: %w", err)
+	}
+
+	rootDir := strings.TrimSpace(os.Getenv("OBSIDIAN_WIKI_DIR"))
+	if rootDir == "" {
+		rootDir = "wiki"
 	}
 
 	nowTime := time.Now()
 	opts := wikiScaffoldOptions{DomainSlug: "tech", DomainTag: "#domain/tech"}
-	if err := ensureWikiScaffold(obsidianPath, nowTime, opts); err != nil {
+	if err := ensureWikiScaffold(ctx, store, rootDir, nowTime, opts); err != nil {
 		return fmt.Errorf("初始化知识库目录失败: %w", err)
 	}
 
@@ -51,13 +56,13 @@ status: seed
 `, title, now, now, opts.DomainTag)
 
 	content := fmt.Sprintf("%s\n# %s\n\n%s", frontmatter, title, blog.Content)
-	filePath := filepath.Join(obsidianPath, "concepts", fmt.Sprintf("%s.md", title))
+	filePath := path.Join(rootDir, "concepts", fmt.Sprintf("%s.md", title))
 
-	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
+	if err := store.Put(ctx, filePath, "text/markdown", []byte(content)); err != nil {
 		return fmt.Errorf("写入 Obsidian 失败: %w", err)
 	}
 
-	if err := ensureWikiScaffold(obsidianPath, nowTime, opts); err != nil {
+	if err := ensureWikiScaffold(ctx, store, rootDir, nowTime, opts); err != nil {
 		return fmt.Errorf("更新知识库索引失败: %w", err)
 	}
 
@@ -74,14 +79,19 @@ func (s *BlogService) ExportSeriesToObsidian(ctx context.Context, parentID uuid.
 		return errors.New("系列博客为空")
 	}
 
-	obsidianPath := os.Getenv("OBSIDIAN_VAULT_PATH_INTERNAL")
-	if obsidianPath == "" {
-		obsidianPath = "/app/obsidian"
+	store, err := newRestAPIStoreFromEnv()
+	if err != nil {
+		return fmt.Errorf("Obsidian REST API 未配置: %w", err)
+	}
+
+	rootDir := strings.TrimSpace(os.Getenv("OBSIDIAN_WIKI_DIR"))
+	if rootDir == "" {
+		rootDir = "wiki"
 	}
 
 	nowTime := time.Now()
 	opts := wikiScaffoldOptions{DomainSlug: "tech", DomainTag: "#domain/tech"}
-	if err := ensureWikiScaffold(obsidianPath, nowTime, opts); err != nil {
+	if err := ensureWikiScaffold(ctx, store, rootDir, nowTime, opts); err != nil {
 		return fmt.Errorf("初始化知识库目录失败: %w", err)
 	}
 
@@ -187,15 +197,22 @@ related:
 `, childTitle, now, now, opts.DomainTag, relatedLinks)
 
 		content := fmt.Sprintf("%s\n# %s\n\n%s", frontmatter, childTitle, childContents[i])
-		filePath := filepath.Join(obsidianPath, "concepts", fmt.Sprintf("%s.md", childTitle))
-		if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
+		filePath := path.Join(rootDir, "concepts", fmt.Sprintf("%s.md", childTitle))
+		if err := store.Put(ctx, filePath, "text/markdown", []byte(content)); err != nil {
 			return fmt.Errorf("写入子博客失败: %w", err)
 		}
 
 		for _, e := range data.Entities {
-			ePath := filepath.Join(obsidianPath, "entities", fmt.Sprintf("%s.md", e))
-			if _, err := os.Stat(ePath); os.IsNotExist(err) {
-				eContent := fmt.Sprintf(`---
+			ePath := path.Join(rootDir, "entities", fmt.Sprintf("%s.md", e))
+			_, err := store.Read(ctx, ePath)
+			if err == nil {
+				continue
+			}
+			if !isObsidianNotFound(err) {
+				return fmt.Errorf("读取实体失败: %w", err)
+			}
+
+			eContent := fmt.Sprintf(`---
 type: entity
 title: "%s"
 created: %s
@@ -211,14 +228,22 @@ related:
 
 Context extracted from [[concepts/%s|%s]].
 `, e, now, now, opts.DomainTag, childTitle, childTitle, e, childTitle, childTitle)
-				_ = os.WriteFile(ePath, []byte(eContent), 0644)
+			if err := store.Put(ctx, ePath, "text/markdown", []byte(eContent)); err != nil {
+				return fmt.Errorf("写入实体失败: %w", err)
 			}
 		}
 
 		for _, c := range data.Concepts {
-			cPath := filepath.Join(obsidianPath, "concepts", fmt.Sprintf("%s.md", c))
-			if _, err := os.Stat(cPath); os.IsNotExist(err) {
-				cContent := fmt.Sprintf(`---
+			cPath := path.Join(rootDir, "concepts", fmt.Sprintf("%s.md", c))
+			_, err := store.Read(ctx, cPath)
+			if err == nil {
+				continue
+			}
+			if !isObsidianNotFound(err) {
+				return fmt.Errorf("读取概念失败: %w", err)
+			}
+
+			cContent := fmt.Sprintf(`---
 type: concept
 title: "%s"
 created: %s
@@ -234,7 +259,8 @@ related:
 
 Context extracted from [[concepts/%s|%s]].
 `, c, now, now, opts.DomainTag, childTitle, childTitle, c, childTitle, childTitle)
-				_ = os.WriteFile(cPath, []byte(cContent), 0644)
+			if err := store.Put(ctx, cPath, "text/markdown", []byte(cContent)); err != nil {
+				return fmt.Errorf("写入概念失败: %w", err)
 			}
 		}
 	}
@@ -256,19 +282,31 @@ status: mature
 `, parentTitle, now, now, opts.DomainTag, parentRelatedStr)
 
 	parentContent := fmt.Sprintf("%s\n# %s\n\n%s", parentFrontmatter, parentTitle, blogs[0].Content)
-	parentFilePath := filepath.Join(obsidianPath, "sources", fmt.Sprintf("%s.md", parentTitle))
-	if err := os.WriteFile(parentFilePath, []byte(parentContent), 0644); err != nil {
+	parentFilePath := path.Join(rootDir, "sources", fmt.Sprintf("%s.md", parentTitle))
+	if err := store.Put(ctx, parentFilePath, "text/markdown", []byte(parentContent)); err != nil {
 		return fmt.Errorf("写入父博客失败: %w", err)
 	}
 
-	indexPath := filepath.Join(obsidianPath, "index.md")
-	if indexFile, err := os.OpenFile(indexPath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644); err == nil {
-		indexFile.WriteString(fmt.Sprintf("\n- [[sources/%s|%s]]", parentTitle, parentTitle))
-		_ = indexFile.Close()
+	indexPath := path.Join(rootDir, "index.md")
+	indexContentBytes, err := store.Read(ctx, indexPath)
+	if err != nil && !isObsidianNotFound(err) {
+		return fmt.Errorf("读取 index 失败: %w", err)
+	}
+	indexContent := string(indexContentBytes)
+	if indexContent != "" && !strings.HasSuffix(indexContent, "\n") {
+		indexContent += "\n"
+	}
+	if indexContent != "" {
+		indexContent += "\n"
+	}
+	indexContent += fmt.Sprintf("- [[sources/%s|%s]]", parentTitle, parentTitle)
+	if err := store.Put(ctx, indexPath, "text/markdown", []byte(indexContent)); err != nil {
+		return fmt.Errorf("写入 index 失败: %w", err)
 	}
 
-	logPath := filepath.Join(obsidianPath, "log.md")
-	if logContent, err := os.ReadFile(logPath); err == nil {
+	logPath := path.Join(rootDir, "log.md")
+	logContent, err := store.Read(ctx, logPath)
+	if err == nil {
 		lines := strings.Split(string(logContent), "\n")
 		var newLines []string
 		inserted := false
@@ -282,10 +320,14 @@ status: mature
 		if !inserted {
 			newLines = append(newLines, fmt.Sprintf("- **%s**: Ingest 系列源: [[sources/%s|%s]]，生成 %d 篇概念卡，并抽取实体/概念。", nowTimeStr, parentTitle, parentTitle, len(childTitles)))
 		}
-		_ = os.WriteFile(logPath, []byte(strings.Join(newLines, "\n")), 0644)
+		if err := store.Put(ctx, logPath, "text/markdown", []byte(strings.Join(newLines, "\n"))); err != nil {
+			return fmt.Errorf("写入 log 失败: %w", err)
+		}
+	} else if err != nil && !isObsidianNotFound(err) {
+		return fmt.Errorf("读取 log 失败: %w", err)
 	}
 
-	hotPath := filepath.Join(obsidianPath, "hot.md")
+	hotPath := path.Join(rootDir, "hot.md")
 	hotContent := fmt.Sprintf(`---
 type: meta
 title: "🔥 热点上下文 (Hot)"
@@ -306,12 +348,13 @@ status: mature
 	for _, title := range childTitles {
 		hotContent += fmt.Sprintf("- [[concepts/%s|%s]]\n", title, title)
 	}
-	_ = os.WriteFile(hotPath, []byte(hotContent), 0644)
+	if err := store.Put(ctx, hotPath, "text/markdown", []byte(hotContent)); err != nil {
+		return fmt.Errorf("写入 hot 失败: %w", err)
+	}
 
-	if err := ensureWikiScaffold(obsidianPath, nowTime, opts); err != nil {
+	if err := ensureWikiScaffold(ctx, store, rootDir, nowTime, opts); err != nil {
 		return fmt.Errorf("更新知识库索引失败: %w", err)
 	}
 
 	return nil
 }
-

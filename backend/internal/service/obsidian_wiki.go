@@ -1,9 +1,9 @@
 package service
 
 import (
+	"context"
 	"fmt"
-	"os"
-	"path/filepath"
+	"path"
 	"sort"
 	"strings"
 	"time"
@@ -14,35 +14,28 @@ type wikiScaffoldOptions struct {
 	DomainTag  string
 }
 
-func ensureWikiScaffold(basePath string, now time.Time, opts wikiScaffoldOptions) error {
-	dirs := []string{".raw", "sources", "concepts", "entities", "domains", filepath.Join("domains", opts.DomainSlug)}
-	for _, dir := range dirs {
-		if err := os.MkdirAll(filepath.Join(basePath, dir), 0755); err != nil {
-			return err
-		}
-	}
-
+func ensureWikiScaffold(ctx context.Context, store ObsidianStore, rootDir string, now time.Time, opts wikiScaffoldOptions) error {
 	nowDate := now.Format("2006-01-02")
 
-	if err := writeFolderIndex(basePath, nowDate, "sources", "sources/_index", "Sources Index", []string{"#meta/index"}); err != nil {
+	if err := writeFolderIndex(ctx, store, rootDir, nowDate, "sources", "sources/_index", "Sources Index", []string{"#meta/index"}); err != nil {
 		return err
 	}
-	if err := writeFolderIndex(basePath, nowDate, "concepts", "concepts/_index", "Concepts Index", []string{"#meta/index"}); err != nil {
+	if err := writeFolderIndex(ctx, store, rootDir, nowDate, "concepts", "concepts/_index", "Concepts Index", []string{"#meta/index"}); err != nil {
 		return err
 	}
-	if err := writeFolderIndex(basePath, nowDate, "entities", "entities/_index", "Entities Index", []string{"#meta/index"}); err != nil {
+	if err := writeFolderIndex(ctx, store, rootDir, nowDate, "entities", "entities/_index", "Entities Index", []string{"#meta/index"}); err != nil {
 		return err
 	}
 
-	if err := writeDomainsIndex(basePath, nowDate, opts); err != nil {
+	if err := writeDomainsIndex(ctx, store, rootDir, nowDate, opts); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func writeDomainsIndex(basePath string, nowDate string, opts wikiScaffoldOptions) error {
-	domainsIndexPath := filepath.Join(basePath, "domains", "_index.md")
+func writeDomainsIndex(ctx context.Context, store ObsidianStore, rootDir string, nowDate string, opts wikiScaffoldOptions) error {
+	domainsIndexPath := path.Join(rootDir, "domains", "_index.md")
 	content := fmt.Sprintf(`---
 type: domain
 title: "Domains Index"
@@ -58,11 +51,11 @@ status: mature
 - [[domains/%s/_index|%s]]
 `, nowDate, nowDate, opts.DomainSlug, strings.ToUpper(opts.DomainSlug[:1])+opts.DomainSlug[1:])
 
-	if err := os.WriteFile(domainsIndexPath, []byte(content), 0644); err != nil {
+	if err := store.Put(ctx, domainsIndexPath, "text/markdown", []byte(content)); err != nil {
 		return err
 	}
 
-	domainIndexPath := filepath.Join(basePath, "domains", opts.DomainSlug, "_index.md")
+	domainIndexPath := path.Join(rootDir, "domains", opts.DomainSlug, "_index.md")
 	domainIndex := fmt.Sprintf(`---
 type: domain
 title: "%s"
@@ -85,21 +78,18 @@ status: mature
 - [[entities/_index|Entities Index]]
 `, opts.DomainSlug, nowDate, nowDate, opts.DomainTag, opts.DomainSlug)
 
-	return os.WriteFile(domainIndexPath, []byte(domainIndex), 0644)
+	return store.Put(ctx, domainIndexPath, "text/markdown", []byte(domainIndex))
 }
 
-func writeFolderIndex(basePath string, nowDate string, folder string, notePath string, title string, tags []string) error {
-	entries, err := os.ReadDir(filepath.Join(basePath, folder))
-	if err != nil {
+func writeFolderIndex(ctx context.Context, store ObsidianStore, rootDir string, nowDate string, folder string, notePath string, title string, tags []string) error {
+	entries, err := store.List(ctx, path.Join(rootDir, folder))
+	if err != nil && !isObsidianNotFound(err) {
 		return err
 	}
 
 	var noteNames []string
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		name := e.Name()
+	for _, entry := range entries {
+		name := path.Base(entry)
 		if !strings.HasSuffix(name, ".md") {
 			continue
 		}
@@ -138,7 +128,7 @@ updated: %s
 
 %s`, title, nowDate, nowDate, tagLines, title, listLines)
 
-	return os.WriteFile(filepath.Join(basePath, notePath+".md"), []byte(content), 0644)
+	return store.Put(ctx, path.Join(rootDir, notePath+".md"), "text/markdown", []byte(content))
 }
 
 func sanitizeObsidianFileName(name string) string {
@@ -153,4 +143,3 @@ func sanitizeObsidianFileName(name string) string {
 	s = strings.ReplaceAll(s, "\r", " ")
 	return s
 }
-

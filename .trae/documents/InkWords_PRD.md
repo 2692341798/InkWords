@@ -21,8 +21,8 @@
 ### 2.2 博客管理
 - **历史记录列表**：用户可查看所有已生成的博客（按系列父节点和子章节组织）。
 - **Markdown 编辑器**：内置 Markdown 编辑器，支持用户对生成的博客进行二次编辑与实时预览，并在输入停止后自动保存到数据库。
-- **导出与下载**：支持将单篇博客或整个系列的博客打包下载为 Markdown 格式（ZIP 压缩包）。
-- **直通 Obsidian 知识库**：支持一键将生成的单篇博客（附带标准 YAML Frontmatter）直接导出至本地 Docker 挂载的 Obsidian Vault 目录，实现个人知识库的无缝沉淀。
+- **导出与下载**：支持将整个系列导出为 Markdown ZIP；支持在侧边栏批量模式下将系列导出为合并 PDF（封面 + 目录 + 正文，无页码）。
+- **直通 Obsidian 知识库**：支持一键将生成的单篇博客（附带标准 YAML Frontmatter）导出至本地 Obsidian Vault，并通过 Obsidian Local REST API（Docker 内 sidecar 转发）完成写入，实现个人知识库的无缝沉淀。
 - **系列批量 Ingest（知识复利）**：支持一键将整个系列批量导入 Obsidian，并遵循 Karpathy LLM Wiki Pattern：系列作为 `sources/`，章节作为 `concepts/`，并自动抽取关键 `entities/` 与 `concepts/` 建立双向链接网络，同时更新 `wiki/index.md`、`wiki/log.md`、`wiki/hot.md`。
 
 ### 2.3 用户与授权
