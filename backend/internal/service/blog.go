@@ -2,17 +2,20 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
 	"inkwords-backend/internal/db"
+	"inkwords-backend/internal/llm"
 	"inkwords-backend/internal/model"
 )
 
@@ -213,18 +216,36 @@ func (s *BlogService) ExportSeriesToObsidian(ctx context.Context, parentID uuid.
 		obsidianPath = "/app/obsidian"
 	}
 
-	// 为该系列创建一个专属文件夹（概念子目录）
-	seriesDir := filepath.Join(obsidianPath, parentTitle)
-	if err := os.MkdirAll(seriesDir, 0755); err != nil {
-		return fmt.Errorf("无法创建系列目录: %v", err)
+	// 1. 初始化 Karpathy LLM Wiki 目录结构
+	dirs := []string{"sources", "concepts", "entities"}
+	for _, dir := range dirs {
+		if err := os.MkdirAll(filepath.Join(obsidianPath, dir), 0755); err != nil {
+			return fmt.Errorf("无法创建 %s 目录: %v", dir, err)
+		}
 	}
 
 	now := time.Now().Format("2006-01-02")
 	nowTimeStr := time.Now().Format("2006-01-02 15:04:05")
 
 	var childTitles []string
+	var childContents []string
 
-	// 写入所有子博客
+	// 准备 LLM 客户端进行实体抽取
+	llmClient := llm.NewDeepSeekClient(os.Getenv("DEEPSEEK_API_KEY"))
+	modelName := os.Getenv("DEEPSEEK_MODEL")
+	if modelName == "" {
+		modelName = "deepseek-chat"
+	}
+
+	// 并发提取实体和概念
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	type extractedData struct {
+		Entities []string `json:"entities"`
+		Concepts []string `json:"concepts"`
+	}
+	extractedMap := make(map[string]extractedData) // key: childTitle
+
 	for i := 1; i < len(blogs); i++ {
 		child := blogs[i]
 		childTitle := child.Title
@@ -232,8 +253,89 @@ func (s *BlogService) ExportSeriesToObsidian(ctx context.Context, parentID uuid.
 			childTitle = fmt.Sprintf("未命名子博客-%d", i)
 		}
 		childTitles = append(childTitles, childTitle)
+		childContents = append(childContents, child.Content)
+
+		wg.Add(1)
+		go func(title, content string) {
+			defer wg.Done()
+			messages := []llm.Message{
+				{Role: "system", Content: "You are an AI assistant helping to build a personal knowledge base (Second Brain). Extract the key entities (people, organizations, tools, projects, etc.) and concepts (abstract ideas, theories, patterns, frameworks) from the following text. Return the result strictly as a JSON object with the schema: {\"entities\": [\"entity1\", \"entity2\"], \"concepts\": [\"concept1\", \"concept2\"]}. Limit to the most important 3-5 entities and 3-5 concepts. Do not over-extract."},
+				{Role: "user", Content: content},
+			}
+			jsonResp, err := llmClient.GenerateJSON(context.Background(), modelName, messages)
+			if err == nil {
+				var data extractedData
+				if json.Unmarshal([]byte(jsonResp), &data) == nil {
+					mu.Lock()
+					extractedMap[title] = data
+					mu.Unlock()
+				}
+			}
+		}(childTitle, child.Content)
+	}
+
+	// 等待所有实体提取完成
+	wg.Wait()
+
+	// 2. 写入子博客 (Concepts)
+	for i, childTitle := range childTitles {
+		relatedLinks := fmt.Sprintf("  - \"[[%s]]\"\n", parentTitle)
+		data := extractedMap[childTitle]
+		
+		// 记录这些知识点到子博客的 related 中
+		for _, e := range data.Entities {
+			relatedLinks += fmt.Sprintf("  - \"[[%s]]\"\n", e)
+		}
+		for _, c := range data.Concepts {
+			relatedLinks += fmt.Sprintf("  - \"[[%s]]\"\n", c)
+		}
 
 		frontmatter := fmt.Sprintf(`---
+type: concept
+title: "%s"
+created: %s
+updated: %s
+tags:
+  - "#domain/tech"
+status: developing
+related:
+%s---
+`, childTitle, now, now, relatedLinks)
+
+		content := fmt.Sprintf("%s\n# %s\n\n%s", frontmatter, childTitle, childContents[i])
+		filePath := filepath.Join(obsidianPath, "concepts", fmt.Sprintf("%s.md", childTitle))
+		if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
+			return fmt.Errorf("写入子博客失败: %v", err)
+		}
+
+		// 3. 写入抽取出的实体与概念卡片
+		for _, e := range data.Entities {
+			ePath := filepath.Join(obsidianPath, "entities", fmt.Sprintf("%s.md", e))
+			if _, err := os.Stat(ePath); os.IsNotExist(err) {
+				eContent := fmt.Sprintf(`---
+type: entity
+title: "%s"
+created: %s
+updated: %s
+tags:
+  - "#domain/tech"
+status: seed
+related:
+  - "[[%s]]"
+---
+
+# %s
+
+Context extracted from [[%s]].
+`, e, now, now, childTitle, e, childTitle)
+				os.WriteFile(ePath, []byte(eContent), 0644)
+			}
+		}
+
+		for _, c := range data.Concepts {
+			cPath := filepath.Join(obsidianPath, "concepts", fmt.Sprintf("%s.md", c))
+			if _, err := os.Stat(cPath); os.IsNotExist(err) {
+				cContent := fmt.Sprintf(`---
 type: concept
 title: "%s"
 created: %s
@@ -244,74 +346,71 @@ status: seed
 related:
   - "[[%s]]"
 ---
-`, childTitle, now, now, parentTitle)
 
-		content := fmt.Sprintf("%s\n# %s\n\n%s", frontmatter, childTitle, child.Content)
-		filePath := filepath.Join(seriesDir, fmt.Sprintf("%s.md", childTitle))
-		if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
-			return fmt.Errorf("写入子博客失败: %v", err)
+# %s
+
+Context extracted from [[%s]].
+`, c, now, now, childTitle, c, childTitle)
+				os.WriteFile(cPath, []byte(cContent), 0644)
+			}
 		}
 	}
 
-	// 写入父博客 (Series Overview)
-	relatedStr := ""
-	if len(childTitles) > 0 {
-		relatedStr = "related:\n"
-		for _, title := range childTitles {
-			relatedStr += fmt.Sprintf("  - \"[[%s]]\"\n", title)
-		}
+	// 4. 写入父博客 (Source Overview)
+	parentRelatedStr := "related:\n"
+	for _, title := range childTitles {
+		parentRelatedStr += fmt.Sprintf("  - \"[[%s]]\"\n", title)
 	}
 
 	parentFrontmatter := fmt.Sprintf(`---
-type: concept
+type: source
 title: "%s"
 created: %s
 updated: %s
 tags:
   - "#domain/tech"
-status: seed
+status: mature
 %s---
-`, parentTitle, now, now, strings.TrimSpace(relatedStr)+"\n")
+`, parentTitle, now, now, parentRelatedStr)
 
 	parentContent := fmt.Sprintf("%s\n# %s\n\n%s", parentFrontmatter, parentTitle, blogs[0].Content)
-	parentFilePath := filepath.Join(seriesDir, fmt.Sprintf("%s.md", parentTitle))
+	parentFilePath := filepath.Join(obsidianPath, "sources", fmt.Sprintf("%s.md", parentTitle))
 	if err := os.WriteFile(parentFilePath, []byte(parentContent), 0644); err != nil {
 		return fmt.Errorf("写入父博客失败: %v", err)
 	}
 
-	// ----------------- 更新 Obsidian 全局状态文件 -----------------
-	// 1. 更新 index.md
+	// 5. 更新 Obsidian 全局状态文件
+	// 更新 index.md
 	indexPath := filepath.Join(obsidianPath, "index.md")
-	if _, err := os.Stat(indexPath); err == nil {
-		// 如果存在，追加到某个地方（这里简化为追加到末尾或如果有特定结构则追加）
-		indexFile, err := os.OpenFile(indexPath, os.O_APPEND|os.O_WRONLY, 0644)
-		if err == nil {
-			indexFile.WriteString(fmt.Sprintf("\n- [[%s]]", parentTitle))
-			indexFile.Close()
-		}
+	if indexFile, err := os.OpenFile(indexPath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644); err == nil {
+		indexFile.WriteString(fmt.Sprintf("\n- [[%s]]", parentTitle))
+		indexFile.Close()
 	}
 
-	// 2. 更新 log.md
+	// 更新 log.md
 	logPath := filepath.Join(obsidianPath, "log.md")
 	if logContent, err := os.ReadFile(logPath); err == nil {
-		// 在 "---" 分隔符或特定标题下追加
 		lines := strings.Split(string(logContent), "\n")
 		var newLines []string
 		inserted := false
 		for _, line := range lines {
 			newLines = append(newLines, line)
-			if !inserted && strings.HasPrefix(line, "---") && len(newLines) > 10 { // 找到正文中的第一个 ---
-				newLines = append(newLines, fmt.Sprintf("- **%s**: Ingest 系列博客: [[%s]]，共包含 %d 篇子博客。", nowTimeStr, parentTitle, len(childTitles)))
+			if !inserted && strings.HasPrefix(line, "---") && len(newLines) > 10 {
+				newLines = append(newLines, fmt.Sprintf("- **%s**: Ingest 系列博客: [[%s]]，共包含 %d 篇子博客概念卡，并自动抽取了关联实体。", nowTimeStr, parentTitle, len(childTitles)))
 				inserted = true
 			}
 		}
 		if !inserted {
-			newLines = append(newLines, fmt.Sprintf("- **%s**: Ingest 系列博客: [[%s]]，共包含 %d 篇子博客。", nowTimeStr, parentTitle, len(childTitles)))
+			newLines = append(newLines, fmt.Sprintf("- **%s**: Ingest 系列博客: [[%s]]，共包含 %d 篇子博客概念卡，并自动抽取了关联实体。", nowTimeStr, parentTitle, len(childTitles)))
 		}
 		os.WriteFile(logPath, []byte(strings.Join(newLines, "\n")), 0644)
+	} else {
+		// 如果不存在则创建
+		logInit := fmt.Sprintf("---\ntype: meta\ntitle: \"操作日志\"\ncreated: %s\nupdated: %s\ntags:\n  - \"#meta/log\"\nstatus: mature\n---\n\n# 📝 AI 操作日志\n\n- **%s**: Ingest 系列博客: [[%s]]，共包含 %d 篇子博客概念卡，并自动抽取了关联实体。\n", now, now, nowTimeStr, parentTitle, len(childTitles))
+		os.WriteFile(logPath, []byte(logInit), 0644)
 	}
 
-	// 3. 覆盖更新 hot.md
+	// 覆盖更新 hot.md
 	hotPath := filepath.Join(obsidianPath, "hot.md")
 	hotContent := fmt.Sprintf(`---
 type: meta
@@ -325,8 +424,10 @@ status: mature
 
 # 🔥 当前热点上下文
 
-最近摄入的知识：
+最近摄入的源 (Source)：
 - [[%s]]
+
+关联概念 (Concepts)：
 `, now, now, parentTitle)
 	for _, title := range childTitles {
 		hotContent += fmt.Sprintf("- [[%s]]\n", title)

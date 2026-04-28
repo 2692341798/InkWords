@@ -262,17 +262,28 @@
 
 ---
 
-## 10. Obsidian 第二大脑（LLM Wiki Pattern）
+## 10. Obsidian 第二大脑（Karpathy LLM Wiki Pattern）
 
-当处理/维护 Obsidian 知识库（LLM Wiki）时，必须遵循以下工作流：
+基于 [karpathy-llm-wiki](https://github.com/Astro-Han/karpathy-llm-wiki) 的工作流规范与 [claude-obsidian](https://github.com/AgriciDaniel/claude-obsidian) 最佳实践，当处理或维护 Obsidian 知识库时，必须遵循以下机制：
 
-### 10.1 核心机制
+### 10.1 核心操作机制
 
-1. **Ingest（知识摄入）**：从原始资料中提取实体与概念，生成卡片并更新索引与双向链接。  
-2. **Query（带源检索）**：回答问题必须先读取 `wiki/hot.md` 与 `wiki/index.md`，并引用具体页面，避免幻觉。  
-3. **Lint（大脑体检）**：清理孤立页面、死链，解决冲突知识，并记录日志。
+1. **Ingest（知识摄入）**：将原始资料（网页/PDF/文本）存入 `.raw/` 目录，大模型自动提取实体与概念，编译为 `wiki/` 下的持久化 Markdown 页面，并建立交叉引用。
+2. **Query（带源检索）**：回答问题时，必须先读取 `wiki/hot.md`（近期会话记忆）与 `wiki/index.md`（全局目录），并在回答中**引用（Cite）具体的 Wiki 页面**，严禁仅基于训练数据凭空生成。
+3. **Lint（大脑体检）**：定期检查孤立页面（Orphans）、死链（Dead links）、知识空白（Gaps），并输出修复建议与报告。
+4. **Autoresearch（自主研究）**：在遇到知识盲区时，执行“搜索 -> 抓取 -> 综合 -> 归档”的自主研究循环，并自动生成相关 Wiki 页面。
 
-### 10.2 页面结构（Frontmatter 规范）
+### 10.2 目录与文件架构
+
+- **`.raw/`**：不可变（Immutable）的原始输入资料库。
+- **`wiki/concepts/` 与 `wiki/entities/`**：提取的核心知识与实体卡片。
+- **`wiki/sources/`**：原始资料的元数据卡片。
+- **`wiki/index.md`**：全局主目录（Master catalog）。
+- **`wiki/log.md`**：只追加（Append-only）的操作日志。
+- **`wiki/hot.md`**：热缓存（Hot cache），用于跨会话保留近期上下文，无需反复回忆。
+- **`wiki/meta/dashboard.base`**：基于 Obsidian Bases 插件的主控制台（替代 Dataview）。
+
+### 10.3 页面结构（Frontmatter 规范）
 
 ```yaml
 ---
@@ -285,16 +296,16 @@ tags:
 status: <seed|developing|mature|evergreen>
 related:
   - "[[相关页面]]"
+banner: "_attachments/images/your-image.png" # 可选：Notion 风格头图
 ---
 ```
 
-### 10.3 不可变与同步
+### 10.4 维护与扩展约束
 
-- **不可变原则**：严禁修改 `.raw/` 下的原始输入文件。  
-- 每次 Ingest 后必须更新：
-  - `wiki/index.md` 与 `wiki/domains/<domain>/_index.md`
-  - 在 `wiki/log.md` 顶部追加操作记录
-  - 覆盖更新 `wiki/hot.md`
+- **不可变原则**：严禁修改 `.raw/` 下的原始文件，大模型只负责生成和更新 `wiki/` 目录下的提炼卡片。
+- **状态强同步**：每次 Ingest 或修改后，必须同步更新 `wiki/index.md`、在 `wiki/log.md` 追加记录，并覆盖更新 `wiki/hot.md`。
+- **矛盾处理**：当发现不同来源的知识存在冲突时，使用 `[!contradiction]` Callout 进行标记并附上信息源。
+- **可视化与 MCP**：支持通过 `/canvas` 组织视觉卡片，推荐配置 MCP（Local REST API 或 filesystem）以实现工具对 Vault 的直接读写。
 
 ---
 
