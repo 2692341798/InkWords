@@ -107,6 +107,27 @@ export function Editor() {
     window.print()
   }
 
+  const handleExportToObsidian = async () => {
+    if (!selectedBlog?.id) return;
+    try {
+      const response = await fetch(`/api/v1/blogs/${selectedBlog.id}/export/obsidian`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      const data = await response.json();
+      if (data.code === 200) {
+        alert('成功导出到 Obsidian 仓库！');
+      } else {
+        alert(data.message || '导出失败');
+      }
+    } catch (error) {
+      console.error('Export error:', error);
+      alert('导出发生错误');
+    }
+  };
+
   const handleContinueGenerating = async () => {
     if (!selectedBlog || isContinuing) return
     setIsContinuing(true)
@@ -391,6 +412,9 @@ export function Editor() {
               <Sparkles className="w-4 h-4" />
             )}
             继续生成
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleExportToObsidian} className="gap-1.5 text-zinc-600">
+            <Download className="w-4 h-4" /> 导出到 Obsidian
           </Button>
           <Button variant="outline" size="sm" onClick={exportMarkdown} className="gap-1.5 text-zinc-600">
             <Download className="w-4 h-4" /> 导出 MD
