@@ -187,6 +187,16 @@
 - **踩坑记录 / 架构调整**:
   - 在处理流式中断后的重试时，如果直接把所有大纲再次发给后端，会导致已完成的章节被重复生成。通过在前端 Zustand store 中严格过滤掉状态为 `completed` 的章节，并在后端复用 `parent_id`，实现了一种简单且高度可靠的“按章节重试”的断点续传架构。
 
+### [2026-04-28] Feature - 导出到 Obsidian 仓库
+- **开发模块**: [后端导出接口, 前端导出交互, Docker 挂载]
+- **完成事项**:
+  1. **Docker 挂载配置**: 修改 `.env.example` 和 `docker-compose.yml`，增加 `OBSIDIAN_VAULT_PATH` 环境变量，将宿主机的 Obsidian 目录挂载到后端容器的 `/app/obsidian`。
+  2. **后端导出逻辑**: 在 `BlogService` 中新增 `ExportToObsidian` 方法，读取数据库中的博客内容，拼接标准 YAML Frontmatter（包含 type, title, created, updated, tags, status），并直接以 Markdown 文件形式写入挂载目录。
+  3. **后端 API 路由**: 新增 `POST /api/v1/blogs/:id/export/obsidian` 接口。
+  4. **前端交互**: 在 `Editor.tsx` 组件的操作栏新增“导出到 Obsidian”按钮，调用后端 API 并提供相应的成功或失败提示。
+- **踩坑记录 / 架构调整**:
+  - **本地知识库直通架构**: 传统的导出通常是生成文件让用户下载（如导出为 ZIP），这打断了用户的心流。通过 Docker Volume 目录挂载，系统能够直接将生成的带有元数据的 Markdown 笔记“注入”到用户的本地 Obsidian 知识库中，极大提升了 PKM（个人知识管理）的效率和体验。
+
 ### [2026-04-06] 博客生成体验与性能优化
   - 修复了 Worker 卡片宽度被挤压的问题（将 `max-w-sm` 修改为 `max-w-3xl`）。
   - 新增“手风琴式”折叠大纲功能（支持生成期间自动折叠与手动展开）。

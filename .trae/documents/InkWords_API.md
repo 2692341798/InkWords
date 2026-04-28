@@ -39,3 +39,4 @@
 | `/api/v1/blogs/:id` | PUT | 更新博客内容 (标题、内容等) | `{ title, content }` |
 | `/api/v1/blogs` | DELETE | 批量删除博客 | `{ ids: [] }` |
 | `/api/v1/blogs/:id/export` | GET | 将系列博客或单篇博客导出为 Markdown Zip 包 | 无 -> application/zip |
+| `/api/v1/blogs/:id/export/obsidian` | POST | 将单篇博客导出到本地挂载的 Obsidian 仓库目录 | 无 -> JSON `{ code: 200, message: "success" }` |

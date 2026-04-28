@@ -192,7 +192,7 @@ git commit -m "feat: add ExportToObsidian API route"
 **Files:**
 - Modify: `/Users/huangqijun/Documents/墨言博客助手/InkWords/frontend/src/components/Editor.tsx`
 
-- [ ] **Step 1: Add export API call function to `Editor.tsx`**
+- [x] **Step 1: Add export API call function to `Editor.tsx`**
 
 Inside the `Editor` component, add:
 
@@ -219,7 +219,7 @@ Inside the `Editor` component, add:
   };
 ```
 
-- [ ] **Step 2: Add "Export to Obsidian" button to the UI**
+- [x] **Step 2: Add "Export to Obsidian" button to the UI**
 
 In `Editor.tsx`, locate the top action bar (where "保存", "返回" etc. might be) and add the new button.
 
@@ -235,7 +235,7 @@ In `Editor.tsx`, locate the top action bar (where "保存", "返回" etc. might 
 ```
 *(Make sure to import the appropriate icon from `lucide-react` if used, like `Download` or `FileText`)*
 
-- [ ] **Step 3: Commit changes**
+- [x] **Step 3: Commit changes**
 
 ```bash
 git add frontend/src/components/Editor.tsx
@@ -248,15 +248,15 @@ git commit -m "feat: add Export to Obsidian button in Editor"
 - Modify: `/Users/huangqijun/Documents/墨言博客助手/InkWords/.trae/documents/InkWords_API.md`
 - Modify: `/Users/huangqijun/Documents/墨言博客助手/InkWords/.trae/documents/InkWords_Development_Plan_and_Log.md`
 
-- [ ] **Step 1: Document the new API**
+- [x] **Step 1: Document the new API**
 
 Add the `POST /api/v1/blogs/:id/export/obsidian` documentation to `InkWords_API.md`.
 
-- [ ] **Step 2: Update Development Log**
+- [x] **Step 2: Update Development Log**
 
 Record the completion of the "Export to Obsidian" feature in `InkWords_Development_Plan_and_Log.md`.
 
-- [ ] **Step 3: Commit changes**
+- [x] **Step 3: Commit changes**
 
 ```bash
 git add .trae/documents/

@@ -57,3 +57,6 @@
 ## 4. 迁移策略 (Migration)
 - 系统在启动时，会通过 GORM 的 `AutoMigrate` 功能自动根据 Go 模型结构 (`internal/model`) 同步创建或更新数据库表。
 - 敏感数据如密码，在存入数据库之前必须经过 `golang.org/x/crypto/bcrypt` 进行哈希加密。
+
+## 5. 外部数据持久化 (External Persistence)
+- **Obsidian 本地知识库导出**: 除关系型数据库外，系统支持将 `blogs` 表中的结构化数据导出为纯文本的 Markdown 文件，并在文件头部自动生成兼容 Obsidian LLM Wiki 规范的 YAML Frontmatter。这些文件直接写入 Docker 挂载的宿主机卷（通过 `OBSIDIAN_VAULT_PATH` 环境变量指定，默认为 `./obsidian_vault`），从而实现与用户本地个人知识管理（PKM）系统的直通与同步。
