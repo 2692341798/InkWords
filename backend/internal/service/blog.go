@@ -3,6 +3,9 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/google/uuid"
@@ -184,6 +187,55 @@ func (s *BlogService) UpdateBlog(ctx context.Context, id uuid.UUID, userID uuid.
 	}
 	if res.RowsAffected == 0 {
 		return errors.New("blog not found or no permission")
+	}
+
+	return nil
+}
+
+// ExportToObsidian 导出博客到 Obsidian 挂载目录
+func (s *BlogService) ExportToObsidian(ctx context.Context, blogID uuid.UUID, userID uuid.UUID) error {
+	var blog model.Blog
+	err := s.db.WithContext(ctx).Where("id = ? AND user_id = ?", blogID, userID).First(&blog).Error
+	if err != nil {
+		return err
+	}
+
+	title := blog.Title
+	if title == "" {
+		title = "未命名博客"
+	}
+
+	// 构建 Frontmatter
+	now := time.Now().Format("2006-01-02")
+	frontmatter := fmt.Sprintf(`---
+type: concept
+title: "%s"
+created: %s
+updated: %s
+tags:
+  - "#domain/tech"
+status: seed
+---
+`, title, now, now)
+
+	content := fmt.Sprintf("%s\n# %s\n\n%s", frontmatter, title, blog.Content)
+
+	// 写入文件
+	obsidianPath := os.Getenv("OBSIDIAN_VAULT_PATH_INTERNAL")
+	if obsidianPath == "" {
+		obsidianPath = "/app/obsidian"
+	}
+
+	// 确保目录存在
+	if err := os.MkdirAll(obsidianPath, 0755); err != nil {
+		return fmt.Errorf("无法创建 Obsidian 目录: %v", err)
+	}
+
+	fileName := fmt.Sprintf("%s.md", title)
+	filePath := filepath.Join(obsidianPath, fileName)
+
+	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
+		return fmt.Errorf("写入 Obsidian 失败: %v", err)
 	}
 
 	return nil
