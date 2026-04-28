@@ -5,6 +5,7 @@ import { Generator } from '@/components/Generator'
 import { Editor } from '@/components/Editor'
 import { Login } from '@/components/Login'
 import { Dashboard } from '@/components/Dashboard'
+import { Toaster } from '@/components/ui/sonner'
 
 function App() {
   const { selectedBlog, currentView } = useBlogStore()
@@ -33,6 +34,7 @@ function App() {
     <div className="h-screen overflow-hidden bg-zinc-50 flex print:bg-white print:block print:h-auto print:overflow-visible">
       <Sidebar />
       {selectedBlog ? <Editor key={selectedBlog.id} /> : currentView === 'dashboard' ? <Dashboard /> : <Generator />}
+      <Toaster />
     </div>
   )
 }

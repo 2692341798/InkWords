@@ -2,9 +2,17 @@ import { useState, useEffect, useRef } from 'react'
 import { useBlogStore } from '@/store/blogStore'
 import { MarkdownEngine } from './MarkdownEngine'
 import { Button } from './ui/button'
-import { Download, FileDown, Save, Loader2, Sparkles, FileArchive } from 'lucide-react'
+import { Download, FileDown, Save, Loader2, Sparkles, FileArchive, ChevronDown } from 'lucide-react'
 import { useDebounce } from '@/hooks/useDebounce'
 import { fetchEventSource } from '@microsoft/fetch-event-source'
+import { toast } from 'sonner'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 class StopStreamError extends Error {}
 
@@ -68,13 +76,18 @@ export function Editor() {
   }
 
   const exportMarkdown = () => {
-    const blob = new Blob([`# ${title}\n\n${content}`], { type: 'text/markdown;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${title || '未命名博客'}.md`
-    a.click()
-    URL.revokeObjectURL(url)
+    try {
+      const blob = new Blob([`# ${title}\n\n${content}`], { type: 'text/markdown;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${title || '未命名博客'}.md`
+      a.click()
+      URL.revokeObjectURL(url)
+      toast.success('成功导出 Markdown 文件')
+    } catch {
+      toast.error('导出失败')
+    }
   }
 
   const exportSeriesZip = async () => {
@@ -82,6 +95,7 @@ export function Editor() {
     const token = localStorage.getItem('token')
     
     try {
+      toast.loading('正在打包系列博客...', { id: 'export-zip' })
       const res = await fetch(`/api/v1/blogs/${selectedBlog.id}/export`, {
         headers: {
           'Authorization': `Bearer ${token}`
@@ -98,8 +112,10 @@ export function Editor() {
       a.click()
       window.URL.revokeObjectURL(url)
       document.body.removeChild(a)
+      toast.success('成功导出系列 ZIP', { id: 'export-zip' })
     } catch (err) {
       console.error('Failed to export zip:', err)
+      toast.error('导出系列失败', { id: 'export-zip' })
     }
   }
 
@@ -110,6 +126,7 @@ export function Editor() {
   const handleExportToObsidian = async () => {
     if (!selectedBlog?.id) return;
     try {
+      toast.loading('正在同步到 Obsidian...', { id: 'export-obsidian' })
       const response = await fetch(`/api/v1/blogs/${selectedBlog.id}/export/obsidian`, {
         method: 'POST',
         headers: {
@@ -118,13 +135,13 @@ export function Editor() {
       });
       const data = await response.json();
       if (data.code === 200) {
-        alert('成功导出到 Obsidian 仓库！');
+        toast.success('成功同步到 Obsidian 仓库', { id: 'export-obsidian' });
       } else {
-        alert(data.message || '导出失败');
+        toast.error(data.message || '导出失败', { id: 'export-obsidian' });
       }
     } catch (error) {
       console.error('Export error:', error);
-      alert('导出发生错误');
+      toast.error('同步时发生网络错误', { id: 'export-obsidian' });
     }
   };
 
@@ -393,18 +410,13 @@ export function Editor() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {selectedBlog?.parent_id === '00000000-0000-0000-0000-000000000000' && selectedBlog?.children && selectedBlog.children.length > 0 && (
-            <Button variant="outline" size="sm" onClick={exportSeriesZip} className="gap-1.5 text-zinc-600">
-              <FileArchive className="w-4 h-4" /> 导出 ZIP
-            </Button>
-          )}
+        <div className="flex items-center gap-3">
           <Button 
             variant="outline" 
             size="sm" 
             onClick={handleContinueGenerating} 
             disabled={isContinuing}
-            className="gap-1.5 text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+            className="gap-1.5 text-indigo-600 border-indigo-200 hover:bg-indigo-50 transition-all duration-200"
           >
             {isContinuing ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -413,15 +425,44 @@ export function Editor() {
             )}
             继续生成
           </Button>
-          <Button variant="outline" size="sm" onClick={handleExportToObsidian} className="gap-1.5 text-zinc-600">
-            <Download className="w-4 h-4" /> 导出到 Obsidian
-          </Button>
-          <Button variant="outline" size="sm" onClick={exportMarkdown} className="gap-1.5 text-zinc-600">
-            <Download className="w-4 h-4" /> 导出 MD
-          </Button>
-          <Button variant="outline" size="sm" onClick={exportPDF} className="gap-1.5 text-zinc-600">
-            <FileDown className="w-4 h-4" /> 导出 PDF
-          </Button>
+          
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-1.5 text-zinc-700 hover:text-zinc-900 transition-all duration-200 shadow-sm">
+                <Download className="w-4 h-4" /> 
+                导出 / 同步
+                <ChevronDown className="w-3 h-3 opacity-50" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48 shadow-xl border-zinc-200/60 rounded-xl p-1">
+              <DropdownMenuItem onClick={handleExportToObsidian} className="gap-2 cursor-pointer focus:bg-zinc-100 rounded-lg py-2">
+                <div className="bg-indigo-50 text-indigo-600 p-1.5 rounded-md">
+                  <Sparkles className="w-3.5 h-3.5" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="font-medium text-zinc-900">同步到 Obsidian</span>
+                  <span className="text-xs text-zinc-500">直通本地第二大脑</span>
+                </div>
+              </DropdownMenuItem>
+              
+              <DropdownMenuSeparator className="bg-zinc-100 my-1" />
+              
+              {selectedBlog?.parent_id === '00000000-0000-0000-0000-000000000000' && selectedBlog?.children && selectedBlog.children.length > 0 && (
+                <DropdownMenuItem onClick={exportSeriesZip} className="gap-2 cursor-pointer focus:bg-zinc-100 rounded-lg">
+                  <FileArchive className="w-4 h-4 text-zinc-500" />
+                  <span>导出系列 ZIP</span>
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem onClick={exportMarkdown} className="gap-2 cursor-pointer focus:bg-zinc-100 rounded-lg">
+                <FileDown className="w-4 h-4 text-zinc-500" />
+                <span>导出为 Markdown</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={exportPDF} className="gap-2 cursor-pointer focus:bg-zinc-100 rounded-lg">
+                <Download className="w-4 h-4 text-zinc-500" />
+                <span>打印为 PDF</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
