@@ -63,3 +63,5 @@
   - **单篇导出**：写入一篇带 `type: concept` 的笔记。
   - **系列批量 Ingest**：系列父节点写入 `wiki/sources/`，子章节写入 `wiki/concepts/`，并通过大模型抽取关键实体写入 `wiki/entities/`，自动编织双向链接网络。同时会初始化 `.raw/` 目录，并生成 `sources/_index.md`、`concepts/_index.md`、`entities/_index.md`、`domains/_index.md` 等索引页，避免 Obsidian 地图出现空入口；并更新 `wiki/index.md`、`wiki/log.md` 与 `wiki/hot.md`。
   这些文件直接写入 Docker 挂载的宿主机卷（通过 `OBSIDIAN_VAULT_PATH` 环境变量指定），从而实现与用户本地个人知识管理（PKM）系统的直通与同步。
+
+- **系列合并 PDF 导出**：PDF 导出不新增数据库表，仅复用 `blogs` 表的系列父子结构数据；后端会将系列内容渲染为 HTML 并通过容器内 Chromium 生成 PDF 后直接以文件附件形式返回给前端下载。

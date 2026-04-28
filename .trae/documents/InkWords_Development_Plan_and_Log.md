@@ -70,6 +70,18 @@
 ## 4. 每日开发日志 (Dev Log)
 > 该区域将由 Vibe Coding 工程师（AI 助手）在每天/每次开发周期结束时，如实记录当天的完成事项、遇到的技术坑点及架构小规模调整。
 
+### [2026-04-28] Feature - 系列博客批量导出 PDF（合并版）
+- **开发模块**: [博客管理, 导出, 前端 Sidebar, 后端 PDF 生成]
+- **完成事项**:
+  1. **后端新增 PDF 导出 API**：新增 `GET /api/v1/blogs/:id/export/pdf`，将系列 Markdown 渲染为 HTML（封面 + 目录 + 正文），并在容器内调用 Chromium Headless 打印为 PDF 后以附件返回。
+  2. **运行时镜像依赖补齐**：后端运行时镜像安装 `chromium` 与 `font-noto-cjk` 等字体依赖，保证中文 PDF 正常显示。
+  3. **前端批量模式入口（B 方案）**：侧边栏批量模式新增「导出 PDF」，支持勾选多个系列父节点后逐个触发多次下载；单个系列失败不会中断后续下载。
+  4. **批量操作栏体验优化**：将底部操作按钮从“横向挤一排”重排为“二行 + 下拉菜单”，降低视觉拥挤度。
+- **验证**:
+  - `cd backend && go test ./... -v` 通过
+  - `cd frontend && npm run build` 通过
+  - `docker compose down && docker compose up -d --build` 验证容器可启动且 Chromium 可在容器内生成 PDF
+
 ### [2026-04-26] Bugfix - 修复 Markdown 引擎不带语言标记的代码块换行丢失问题
 - **开发模块**: [前端 UI, ReactMarkdown]
 - **完成事项**:

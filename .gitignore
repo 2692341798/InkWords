@@ -39,3 +39,7 @@ lerna-debug.log*
 # Project specific
 .trae/specs/*/tmp/
 test_results/
+
+# Agent artifacts
+.superpowers/
+skills/*.zip
