@@ -219,8 +219,10 @@ export function Editor() {
           if (err instanceof DOMException && err.name === 'AbortError') {
             throw new StopStreamError('aborted')
           }
-          const e = err as any
-          if (e?.name === 'AbortError' || e?.message?.includes('AbortError') || e?.message?.includes('aborted') || e?.message?.includes('Failed to fetch')) {
+          const maybeError = err as { name?: unknown; message?: unknown }
+          const name = typeof maybeError?.name === 'string' ? maybeError.name : ''
+          const message = typeof maybeError?.message === 'string' ? maybeError.message : ''
+          if (name === 'AbortError' || message.includes('AbortError') || message.includes('aborted') || message.includes('Failed to fetch')) {
             throw new StopStreamError('aborted')
           }
           console.error('Continue generating fetch error:', err)
@@ -234,8 +236,10 @@ export function Editor() {
           return
         }
       }
-      const e = err as any
-      if (e?.name === 'AbortError' || e?.message?.includes('AbortError') || e?.message?.includes('aborted')) return
+      const maybeError = err as { name?: unknown; message?: unknown }
+      const name = typeof maybeError?.name === 'string' ? maybeError.name : ''
+      const message = typeof maybeError?.message === 'string' ? maybeError.message : ''
+      if (name === 'AbortError' || message.includes('AbortError') || message.includes('aborted')) return
       
       console.error('Failed to continue generating:', err)
       setIsContinuing(false)

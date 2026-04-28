@@ -34,7 +34,7 @@
 
 ### 2.3 基础设施 (Infrastructure)
 - **数据库**: PostgreSQL 14 (Docker volume 挂载持久化)
-- **本地知识库导出**: 挂载宿主机目录到 `/app/obsidian` 用于生成包含 YAML Frontmatter 的 Markdown 笔记，直接接入用户的 Obsidian Vault
+- **本地知识库导出**: 挂载宿主机目录到 `/app/obsidian` 用于生成包含 YAML Frontmatter 的 Markdown 笔记，直接接入用户的 Obsidian Vault；支持按 Karpathy LLM Wiki Pattern 将系列批量 Ingest 为 `sources/`、`concepts/`、`entities/` 并自动编织双向链接网络
 - **代理与网关**: Nginx (构建前端静态页面并反向代理后端 `/api/` 路径，配置 `client_max_body_size 100M` 以支持大文件解析)
 - **大语言模型**: DeepSeek-V4-Flash API (支持 128k 输出及 1M Token 上下文)
 

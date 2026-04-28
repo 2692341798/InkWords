@@ -109,7 +109,7 @@ export const useSeriesGenerator = () => {
               } else if (data.status === 'retrying') {
                 store.updateChapterStatus(sort, 'pending') // or maybe a special retrying state, but pending is fine
               }
-            } catch (e) {
+            } catch {
               // If it's not JSON, maybe it's just raw text (for single blog generation)
               store.appendContent(msg.data)
             }

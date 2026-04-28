@@ -1,9 +1,38 @@
 import { useCallback } from 'react'
 import { fetchEventSource } from '@microsoft/fetch-event-source'
 import { useStreamStore } from '@/store/streamStore'
+import type { ModuleCard } from '@/store/streamStore'
 
 export const useProjectScanner = () => {
   const store = useStreamStore()
+
+  const normalizeModules = (input: unknown): ModuleCard[] => {
+    const isModuleCard = (value: unknown): value is ModuleCard => {
+      if (!value || typeof value !== 'object') return false
+      const obj = value as Record<string, unknown>
+      return typeof obj.path === 'string' && typeof obj.name === 'string' && typeof obj.description === 'string'
+    }
+
+    const pickFromArray = (value: unknown): ModuleCard[] => {
+      if (!Array.isArray(value)) return []
+      return value.filter(isModuleCard)
+    }
+
+    if (!input) return []
+    if (Array.isArray(input)) return pickFromArray(input)
+    if (typeof input === 'object') {
+      const obj = input as Record<string, unknown>
+      const data = obj.data
+      if (data && typeof data === 'object') {
+        const modules = (data as Record<string, unknown>).modules
+        const picked = pickFromArray(modules)
+        if (picked.length > 0) return picked
+      }
+      const picked = pickFromArray(obj.modules)
+      if (picked.length > 0) return picked
+    }
+    return []
+  }
 
   const scanGit = useCallback(async (gitUrl: string) => {
     if (!gitUrl.startsWith('http://') && !gitUrl.startsWith('https://') && !gitUrl.startsWith('git@') && !gitUrl.startsWith('file://')) {
@@ -34,7 +63,7 @@ export const useProjectScanner = () => {
     
     try {
       const token = localStorage.getItem('token')
-      let modulesResult: any = null;
+      let modulesResult: unknown = null
       
       await fetchEventSource('/api/v1/stream/scan', {
         method: 'POST',
@@ -84,7 +113,7 @@ export const useProjectScanner = () => {
           store.setAnalysisMessage('扫描完成，请选择要分析的模块')
         }
         store.setSource('git', '', gitUrl)
-        store.setModules(modulesResult.data?.modules || modulesResult.modules || modulesResult || [])
+        store.setModules(normalizeModules(modulesResult))
         store.setSelectedModules([])
         store.setScanning(false)
       } else {

@@ -196,6 +196,7 @@
   4. **前端交互**: 在 `Editor.tsx` 组件的操作栏新增“导出到 Obsidian”按钮。随后重构了顶部操作栏，引入 `shadcn/ui` 的 `DropdownMenu` 下拉菜单，将各种导出动作（ZIP、Markdown、PDF、Obsidian）统一收纳为“导出 / 同步”；同时引入了 `sonner` 库，以优雅的异步 Toast 替换原生 `alert()`。
   5. **环境配置修复**: 删除了冗余的 `.env.example`，并将 `OBSIDIAN_VAULT_PATH` 真实路径写入 `backend/.env` 中，修复了 Docker Compose 挂载路径解析错误的问题。
   6. **知识网络批量导出**: 新增“同步系列到 Obsidian”功能。不仅能一次性将整个系列的父子博客批量导出，还会按照 Obsidian LLM Wiki 规范自动生成带有 `related: [[关联博客]]` 双向链接的 Frontmatter，同时自动追加写入知识库的 `index.md`, `log.md` 以及重写 `hot.md` 热点上下文，建立完整的知识网络。
+  7. **批量模式入口补齐**: 在侧边栏“历史博客”的批量模式操作条中新增“同步系列”按钮，支持对勾选的系列父节点一键触发批量 Ingest，解决功能入口不易发现的问题。
 - **踩坑记录 / 架构调整**:
   - **本地知识库直通架构**: 传统的导出通常是生成文件让用户下载（如导出为 ZIP），这打断了用户的心流。通过 Docker Volume 目录挂载，系统能够直接将生成的带有元数据的 Markdown 笔记“注入”到用户的本地 Obsidian 知识库中，极大提升了 PKM（个人知识管理）的效率和体验。
   - **批量摄入与索引更新 (Ingest)**: 在批量导入系列时，必须同时维护全局图谱索引（`index.md` 和 `log.md`），否则新知识会成为孤岛。我们在 Go 后端 Service 层通过文件追加（`os.OpenFile` `os.O_APPEND`）和 Frontmatter 动态渲染，解决了批量摄入时的图谱编织问题。

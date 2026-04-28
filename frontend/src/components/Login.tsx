@@ -99,7 +99,7 @@ export function Login() {
     setIsLoading(true)
 
     let endpoint = '/api/v1/auth/login'
-    let payload: any = {}
+    let payload: Record<string, unknown> = {}
 
     if (mode === 'login') {
       payload = { email: formData.email, password: formData.password, captcha_id: captcha.id, captcha_value: captcha.value, remember_me: rememberMe }

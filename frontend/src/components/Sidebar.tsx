@@ -1,12 +1,13 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import JSZip from 'jszip'
 import { useStreamStore } from '@/store/streamStore'
 import { useBlogStore } from '@/store/blogStore'
 import type { BlogNode } from '@/store/blogStore'
-import { GitBranch, CheckCircle2, CircleDashed, Loader2, BookOpen, ChevronRight, ChevronDown, Plus, LogOut, FolderArchive, Square, CheckSquare, RefreshCw, Trash2, User } from 'lucide-react'
+import { BookOpen, CheckCircle2, CheckSquare, ChevronDown, ChevronRight, CircleDashed, FolderArchive, GitBranch, Loader2, LogOut, Plus, RefreshCw, Sparkles, Square, Trash2, User } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from './ui/button'
 import { ConfirmDialog } from './ui/confirm-dialog'
+import { toast } from 'sonner'
 
 export function Sidebar() {
   const streamStore = useStreamStore()
@@ -15,6 +16,7 @@ export function Sidebar() {
   const [isBatchMode, setIsBatchMode] = useState(false)
   const [selectedForExport, setSelectedForExport] = useState<Set<string>>(new Set())
   const [isExporting, setIsExporting] = useState(false)
+  const [isSyncingSeriesToObsidian, setIsSyncingSeriesToObsidian] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false)
 
@@ -107,6 +109,47 @@ export function Sidebar() {
       console.error('Failed to export batch zip:', err)
     } finally {
       setIsExporting(false)
+    }
+  }
+
+  const selectedSeriesRoots = useMemo(() => {
+    return blogs.filter(b => Boolean(b.children?.length) && selectedForExport.has(b.id))
+  }, [blogs, selectedForExport])
+
+  const handleBatchExportSeriesToObsidian = async () => {
+    if (selectedSeriesRoots.length === 0) {
+      toast.error('请先选择一个系列父节点')
+      return
+    }
+
+    setIsSyncingSeriesToObsidian(true)
+    const token = localStorage.getItem('token')
+
+    try {
+      toast.loading('正在同步系列到 Obsidian...', { id: 'sync-series-obsidian' })
+
+      for (const series of selectedSeriesRoots) {
+        const res = await fetch(`/api/v1/blogs/${series.id}/export/obsidian/series`, {
+          method: 'POST',
+          headers: {
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          }
+        })
+
+        const data = await res.json().catch(() => null)
+        if (!res.ok || data?.code !== 200) {
+          throw new Error(data?.message || '同步系列失败')
+        }
+      }
+
+      toast.success(`成功同步 ${selectedSeriesRoots.length} 个系列到 Obsidian`, { id: 'sync-series-obsidian' })
+      setIsBatchMode(false)
+      setSelectedForExport(new Set())
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '同步系列失败'
+      toast.error(message, { id: 'sync-series-obsidian' })
+    } finally {
+      setIsSyncingSeriesToObsidian(false)
     }
   }
 
@@ -390,6 +433,17 @@ export function Sidebar() {
               <span className="text-xs text-zinc-500">已选 {selectedForExport.size} 项</span>
               <div className="flex items-center gap-2">
                 <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setIsBatchMode(false)}>取消</Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="h-7 text-xs px-2"
+                  onClick={handleBatchExportSeriesToObsidian}
+                  disabled={selectedSeriesRoots.length === 0 || isExporting || isDeleting || isSyncingSeriesToObsidian}
+                  title="同步系列到 Obsidian（构建知识网络）"
+                >
+                  {isSyncingSeriesToObsidian ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Sparkles className="w-3 h-3 mr-1" />}
+                  同步系列
+                </Button>
                 <Button 
                   type="button"
                   variant="destructive" 

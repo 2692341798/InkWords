@@ -59,4 +59,7 @@
 - 敏感数据如密码，在存入数据库之前必须经过 `golang.org/x/crypto/bcrypt` 进行哈希加密。
 
 ## 5. 外部数据持久化 (External Persistence)
-- **Obsidian 本地知识库导出**: 除关系型数据库外，系统支持将 `blogs` 表中的结构化数据导出为纯文本的 Markdown 文件，并在文件头部自动生成兼容 Obsidian LLM Wiki 规范的 YAML Frontmatter。这些文件直接写入 Docker 挂载的宿主机卷（通过 `OBSIDIAN_VAULT_PATH` 环境变量指定，默认为 `./obsidian_vault`），从而实现与用户本地个人知识管理（PKM）系统的直通与同步。
+- **Obsidian 本地知识库导出**: 除关系型数据库外，系统支持将 `blogs` 表中的结构化数据导出为纯文本的 Markdown 文件，并在文件头部自动生成兼容 Karpathy LLM Wiki Pattern 的 YAML Frontmatter。导出支持两种形态：
+  - **单篇导出**：写入一篇带 `type: concept` 的笔记。
+  - **系列批量 Ingest**：系列父节点写入 `wiki/sources/`，子章节写入 `wiki/concepts/`，并通过大模型抽取关键实体写入 `wiki/entities/`，自动编织双向链接网络，同时更新 `wiki/index.md`、`wiki/log.md` 与 `wiki/hot.md`。
+  这些文件直接写入 Docker 挂载的宿主机卷（通过 `OBSIDIAN_VAULT_PATH` 环境变量指定），从而实现与用户本地个人知识管理（PKM）系统的直通与同步。

@@ -763,7 +763,8 @@
   4. **环境修复**：清理了根目录冲突的 `.env.example` 和 `.env` 文件夹，将真实的 `OBSIDIAN_VAULT_PATH` 写入了正确的 `backend/.env`，并修改 `docker-compose.yml` 的 fallback 逻辑。
   5. 更新了所有的架构与设计文档（API、PRD、开发日志等）。
   6. **知识网络批量导出**：应用户要求增加系列批量导入功能。新增了 `POST /api/v1/blogs/:id/export/obsidian/series` 接口，自动在系列中建立父子双向链接 `related: [[关联节点]]`，并追加修改了知识库全局的 `index.md`、`log.md` 以及热点上下文 `hot.md`，实现知识入库。
-  7. 执行了 `git commit` 并打上了新标签。
+  7. **入口可发现性**：在侧边栏“历史博客”的批量模式操作条中补齐“同步系列”按钮，让用户无需进入编辑器即可批量触发系列 Ingest。
+  8. 执行了 `git commit` 并打上了新标签。
 - **决策/变更**：
   - **本地知识库直通**：通过 Docker Volume 映射，直接打通 Web 应用和用户的本地 Obsidian 知识库，省去了繁琐的下载和解压拖拽过程，实现了沉浸式的文档收集工作流。
   - **双向图谱编织 (Ingest Workflow)**：对于单篇笔记，通常只会成为一个节点。但对于一整个生成的项目系列，系统会主动将其作为子网接入第二大脑中，同时更新索引和访问日志，严格遵守 LLM Wiki Pattern。

@@ -40,4 +40,4 @@
 | `/api/v1/blogs` | DELETE | 批量删除博客 | `{ ids: [] }` |
 | `/api/v1/blogs/:id/export` | GET | 将系列博客或单篇博客导出为 Markdown Zip 包 | 无 -> application/zip |
 | `/api/v1/blogs/:id/export/obsidian` | POST | 将单篇博客导出到本地挂载的 Obsidian 仓库目录 | 无 -> JSON `{ code: 200, message: "success" }` |
-| `/api/v1/blogs/:id/export/obsidian/series` | POST | 批量同步系列到 Obsidian (建立知识网络，自动追加双向链接并更新知识库索引) | 无 -> JSON `{ code: 200, message: "success" }` |
+| `/api/v1/blogs/:id/export/obsidian/series` | POST | 批量同步系列到 Obsidian（遵循 Karpathy LLM Wiki Pattern：生成 sources/concepts/entities 并更新 index/log/hot） | 无 -> JSON `{ code: 200, message: "success" }` |
