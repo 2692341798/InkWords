@@ -31,14 +31,14 @@ func NewStreamAPI(userService *service.UserService) *StreamAPI {
 
 // GenerateRequest represents the request body for generating a blog
 type GenerateRequest struct {
-	SourceContent string            `json:"source_content"`
-	SourceType    string            `json:"source_type"`
-	Outline       []service.Chapter `json:"outline"`      // Optional outline for series generation
-	GitURL        string            `json:"git_url"`      // For analyze stream
-	SubDir        string            `json:"sub_dir"`      // For analyze stream
-	SelectedModules []string      `json:"selected_modules"` // For analyze stream
-	SeriesTitle   string            `json:"series_title"` // Series title for parent blog
-	ParentID      string            `json:"parent_id"`    // Optional parent ID for resuming series
+	SourceContent   string            `json:"source_content"`
+	SourceType      string            `json:"source_type"`
+	Outline         []service.Chapter `json:"outline"`          // Optional outline for series generation
+	GitURL          string            `json:"git_url"`          // For analyze stream
+	SubDir          string            `json:"sub_dir"`          // For analyze stream
+	SelectedModules []string          `json:"selected_modules"` // For analyze stream
+	SeriesTitle     string            `json:"series_title"`     // Series title for parent blog
+	ParentID        string            `json:"parent_id"`        // Optional parent ID for resuming series
 }
 
 // AnalyzeStreamHandler handles the /api/v1/stream/analyze endpoint
@@ -72,7 +72,7 @@ func (api *StreamAPI) AnalyzeStreamHandler(c *gin.Context) {
 	// We use a WaitGroup to ensure the goroutine finishes before we return from the handler
 	var wg sync.WaitGroup
 	wg.Add(1)
-// Start generation in a goroutine
+	// Start generation in a goroutine
 	var userID uuid.UUID
 	if v, exists := c.Get("user_id"); exists {
 		if id, ok := v.(uuid.UUID); ok {
@@ -102,7 +102,7 @@ func (api *StreamAPI) AnalyzeStreamHandler(c *gin.Context) {
 	// Flush headers immediately so client knows connection is open
 	w := c.Writer
 	w.Flush()
-	
+
 	c.Stream(func(w io.Writer) bool {
 		select {
 		case <-ctx.Done():
@@ -200,9 +200,15 @@ func (api *StreamAPI) ScanStreamHandler(c *gin.Context) {
 		case <-ctx.Done():
 			go func() {
 				// drain channels
-				for len(progressChan) > 0 { <-progressChan }
-				for len(errChan) > 0 { <-errChan }
-				for len(resultChan) > 0 { <-resultChan }
+				for len(progressChan) > 0 {
+					<-progressChan
+				}
+				for len(errChan) > 0 {
+					<-errChan
+				}
+				for len(resultChan) > 0 {
+					<-resultChan
+				}
 			}()
 			return false
 		case err, ok := <-errChan:

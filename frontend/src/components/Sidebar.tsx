@@ -1,26 +1,25 @@
 import { useEffect, useMemo, useState } from 'react'
-import JSZip from 'jszip'
 import { useStreamStore } from '@/store/streamStore'
 import { useBlogStore } from '@/store/blogStore'
 import type { BlogNode } from '@/store/blogStore'
-import { BookOpen, CheckCircle2, CheckSquare, ChevronDown, ChevronRight, CircleDashed, Download, FileArchive, FolderArchive, GitBranch, Loader2, LogOut, Plus, RefreshCw, Sparkles, Square, Trash2, User } from 'lucide-react'
+import { BookOpen, CheckCircle2, CheckSquare, ChevronDown, ChevronRight, CircleDashed, FilePenLine, FolderArchive, GitBranch, Loader2, LogOut, Plus, RefreshCw, Sparkles, Square, Trash2, User } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from './ui/button'
 import { ConfirmDialog } from './ui/confirm-dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu'
 import { toast } from 'sonner'
+import { useBatchExportZip } from '@/hooks/useBatchExportZip'
 
 export function Sidebar() {
   const streamStore = useStreamStore()
-  const { blogs, fetchBlogs, selectedBlog, selectBlog, currentView, setCurrentView } = useBlogStore()
+  const { blogs, fetchBlogs, createDraftBlog, selectedBlog, selectBlog, currentView, setCurrentView } = useBlogStore()
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set())
   const [isBatchMode, setIsBatchMode] = useState(false)
   const [selectedForExport, setSelectedForExport] = useState<Set<string>>(new Set())
-  const [isExporting, setIsExporting] = useState(false)
-  const [isExportingPDF, setIsExportingPDF] = useState(false)
   const [isSyncingSeriesToObsidian, setIsSyncingSeriesToObsidian] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false)
+  const [isCreatingDraft, setIsCreatingDraft] = useState(false)
 
   const blogMap = useMemo(() => {
     const map = new Map<string, { node: BlogNode; parentId: string | null }>()
@@ -67,52 +66,14 @@ export function Sidebar() {
     setSelectedForExport(newSelected)
   }
 
-  const handleBatchExport = async () => {
-    if (selectedForExport.size === 0) return
-    setIsExporting(true)
-    try {
-      const zip = new JSZip()
-      
-      const addNodeToZip = (node: BlogNode, folder: JSZip | null, index: number) => {
-        if (selectedForExport.has(node.id)) {
-          const title = node.title || `未命名_${index}`
-          const filename = `${title}.md`
-          
-          if (node.children && node.children.length > 0) {
-            const subFolder = folder ? folder.folder(title) : zip.folder(title)
-            node.children.forEach((child, idx) => addNodeToZip(child, subFolder, idx))
-          } else {
-            const targetFolder = folder || zip
-            const prefix = node.chapter_sort > 0 ? `${String(node.chapter_sort).padStart(2, '0')}-` : ''
-            targetFolder.file(`${prefix}${filename}`, `# ${title}\n\n${node.content || ''}`)
-          }
-        } else {
-          if (node.children && node.children.length > 0) {
-            node.children.forEach((child, idx) => addNodeToZip(child, folder, idx))
-          }
-        }
-      }
-
-      blogs.forEach((blog, idx) => addNodeToZip(blog, null, idx))
-      
-      const blob = await zip.generateAsync({ type: 'blob' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = 'blogs_export.zip'
-      document.body.appendChild(a)
-      a.click()
-      URL.revokeObjectURL(url)
-      document.body.removeChild(a)
-      
+  const { isExporting, handleBatchExport } = useBatchExportZip({
+    blogs,
+    selectedForExport,
+    onDone: () => {
       setIsBatchMode(false)
       setSelectedForExport(new Set())
-    } catch (err) {
-      console.error('Failed to export batch zip:', err)
-    } finally {
-      setIsExporting(false)
-    }
-  }
+    },
+  })
 
   const selectedSeriesRoots = useMemo(() => {
     return blogs.filter(b => Boolean(b.children?.length) && selectedForExport.has(b.id))
@@ -337,6 +298,27 @@ export function Sidebar() {
         >
           <Plus className="w-4 h-4" />
           新工作区
+        </Button>
+        <Button
+          variant="outline"
+          className="w-full gap-2 shadow-sm"
+          disabled={isCreatingDraft}
+          onClick={async () => {
+            if (isCreatingDraft) return
+            setIsCreatingDraft(true)
+            try {
+              await createDraftBlog()
+              toast.success('已创建草稿，开始写作吧')
+            } catch (err: unknown) {
+              const message = err instanceof Error ? err.message : '创建草稿失败'
+              toast.error(message)
+            } finally {
+              setIsCreatingDraft(false)
+            }
+          }}
+        >
+          {isCreatingDraft ? <Loader2 className="w-4 h-4 animate-spin" /> : <FilePenLine className="w-4 h-4" />}
+          写博客
         </Button>
       </div>
       

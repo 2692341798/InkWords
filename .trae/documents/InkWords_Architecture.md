@@ -1,5 +1,8 @@
 # 墨言博客助手 (InkWords) - 架构设计与工程规范
 
+## 0. 变更记录
+- 2026-04-29：对后端 `parser`/`service` 与前端核心组件进行模块化拆分，消除超大文件（>500 行），以提升可维护性与复用性（无业务行为变更）。
+- 2026-04-29：新增“手写博客入口”，支持创建草稿并直接进入现有双栏编辑器（新增后端草稿创建接口与前端侧边栏入口）。
 ## 1. 整体架构 (Monorepo)
 项目采用前后端分离的 Monorepo 结构，根目录隔离：
 - **`frontend/`**: 包含所有前端界面、状态管理和客户端逻辑。
@@ -34,7 +37,7 @@
 
 ### 2.3 基础设施 (Infrastructure)
 - **数据库**: PostgreSQL 14 (Docker volume 挂载持久化)
-- **本地知识库导出**: 挂载宿主机目录到 `/app/obsidian` 用于生成包含 YAML Frontmatter 的 Markdown 笔记，直接接入用户的 Obsidian Vault；支持按 Karpathy LLM Wiki Pattern 将系列批量 Ingest 为 `sources/`、`concepts/`、`entities/` 并自动编织双向链接网络，同时自动生成 `sources/_index.md`、`concepts/_index.md`、`entities/_index.md`、`domains/_index.md` 等“地图索引页”以避免知识孤岛与空页面
+- **本地知识库导出**: 后端通过 Obsidian Local REST API（HTTPS + API Key）写入用户本地 Vault，并遵循 Karpathy LLM Wiki Pattern 将系列批量 Ingest 为 `sources/`、`concepts/`、`entities/` 并自动编织双向链接网络，同时自动生成 `sources/_index.md`、`concepts/_index.md`、`entities/_index.md`、`domains/_index.md` 等“地图索引页”以避免知识孤岛与空页面；容器通过 sidecar `obsidian-bridge`（27125）转发访问宿主机插件端口（27124）
 - **系列 PDF 导出**: 后端将系列 Markdown 渲染为 HTML（封面 + 目录 + 正文），并使用容器内 Chromium Headless 打印为 PDF（前端在侧边栏批量模式中逐个触发下载）。为保证中文正常显示，后端运行时镜像需安装 `chromium` 与 `font-noto-cjk` 等字体依赖。
 - **代理与网关**: Nginx (构建前端静态页面并反向代理后端 `/api/` 路径，配置 `client_max_body_size 100M` 以支持大文件解析)
 - **大语言模型**: DeepSeek-V4-Flash API (支持 128k 输出及 1M Token 上下文)

@@ -1,5 +1,7 @@
 # 墨言博客助手 (InkWords) - API 接口文档
 
+## 0. 变更记录
+- 2026-04-29：新增“写博客”入口配套接口 `/api/v1/blogs/draft`（创建手写草稿）。
 ## 1. 认证模块 (AuthAPI)
 | 接口地址 | 请求方法 | 功能描述 | 参数 |
 | -------- | -------- | -------- | ---- |
@@ -35,10 +37,11 @@
 ## 5. 博客管理模块 (BlogAPI)
 | 接口地址 | 请求方法 | 功能描述 | 参数 |
 | -------- | -------- | -------- | ---- |
-| `/api/v1/blogs` | GET | 获取用户的博客历史列表 (含系列结构) | JWT Bearer Token |
+| `/api/v1/blogs` | GET | 获取用户的博客历史列表 (含系列结构) | 无 |
+| `/api/v1/blogs/draft` | POST | 创建一篇手写草稿（顶级单篇，便于进入编辑器手写写作） | 无 |
 | `/api/v1/blogs/:id` | PUT | 更新博客内容 (标题、内容等) | `{ title, content }` |
 | `/api/v1/blogs` | DELETE | 批量删除博客 | `{ blog_ids: [] }` |
 | `/api/v1/blogs/:id/export` | GET | 将系列博客或单篇博客导出为 Markdown Zip 包 | 无 -> application/zip |
 | `/api/v1/blogs/:id/export/pdf` | GET | 将系列博客导出为合并 PDF（封面 + 目录 + 正文，无页码） | 无 -> application/pdf |
-| `/api/v1/blogs/:id/export/obsidian` | POST | 将单篇博客导出到本地挂载的 Obsidian 仓库目录 | 无 -> JSON `{ code: 200, message: "success" }` |
-| `/api/v1/blogs/:id/export/obsidian/series` | POST | 批量同步系列到 Obsidian（遵循 Karpathy LLM Wiki Pattern：生成 sources/concepts/entities 并更新 index/log/hot） | 无 -> JSON `{ code: 200, message: "success" }` |
+| `/api/v1/blogs/:id/export/obsidian` | POST | 将单篇博客导出到本地 Obsidian Vault（通过 Obsidian Local REST API） | 无 -> JSON `{ code: 200, message: "success" }` |
+| `/api/v1/blogs/:id/export/obsidian/series` | POST | 批量同步系列到 Obsidian（遵循 Karpathy LLM Wiki Pattern：生成 sources/concepts/entities 并更新 index/log/hot；通过 Obsidian Local REST API） | 无 -> JSON `{ code: 200, message: "success" }` |

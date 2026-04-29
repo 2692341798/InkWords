@@ -40,6 +40,5 @@ lerna-debug.log*
 .trae/specs/*/tmp/
 test_results/
 
-# Agent artifacts
 .superpowers/
-skills/*.zip
+backend/*.test
