@@ -82,6 +82,17 @@
   - `docker compose config -q` 通过
   - `docker compose down && docker compose up -d --build` 验证容器可启动且可通过 sidecar 访问 Obsidian REST API
 
+### [2026-04-29] Refactor - 代码规模治理（模块化拆分）
+- **开发模块**: [后端 parser/service, 前端 Editor/Sidebar, 工程化规范]
+- **完成事项**:
+  1. **后端拆分大文件**：将 `GitFetcher`、`DecompositionService` 的分析/生成逻辑按职责拆分为多个同包文件，保留关键入口文件名以兼容既有测试与调用方。
+  2. **前端拆分大组件**：将 `Editor` 的滚动同步逻辑抽为 `useSyncedScroll`，将 `Sidebar` 的批量 ZIP 导出逻辑抽为 `useBatchExportZip`，降低组件复杂度。
+  3. **清理遗留与门禁**：删除未引用的 `.bak` 文件，补充 `.gitignore` 忽略本地临时目录与测试产物，避免污染仓库。
+- **验证**:
+  - `cd backend && go test ./... -count=1` 通过
+  - `cd frontend && npm run lint && npm run build` 通过
+  - `docker compose down && docker compose up -d --build` 后 `http://localhost` 可访问（200）
+
 ### [2026-04-28] Feature - 系列博客批量导出 PDF（合并版）
 - **开发模块**: [博客管理, 导出, 前端 Sidebar, 后端 PDF 生成]
 - **完成事项**:

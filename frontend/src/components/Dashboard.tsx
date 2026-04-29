@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import type { NameType, ValueType } from 'recharts/types/component/DefaultTooltipContent'
 import { Coins, FileText, Hash, User, Loader2, Upload, BookOpen } from 'lucide-react'
 
 interface TechStackStat {
@@ -267,7 +268,7 @@ export function Dashboard() {
                     ))}
                   </Pie>
                   <Tooltip 
-                    formatter={(value: any, name: any) => [value, name]}
+                    formatter={(value: ValueType | undefined, name: NameType | undefined) => [String(value ?? ''), name ?? '']}
                     contentStyle={{ borderRadius: '8px', border: '1px solid #e4e4e7', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                   />
                   <Legend verticalAlign="bottom" height={36} />

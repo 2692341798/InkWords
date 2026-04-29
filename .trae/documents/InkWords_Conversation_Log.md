@@ -1,6 +1,17 @@
 # 墨言博客助手 (InkWords) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 53：代码规模治理（大文件模块化拆分）
+- **用户需求**：检查项目中是否存在过大的代码文件（>500 行），并按模块化、高内聚低耦合、高复用、高可维护原则整理；先后端再前端；最终提交到 GitHub。
+- **AI 动作**：
+  1. 扫描 `backend/` 与 `frontend/src` 行数分布，定位超大文件，并先输出拆分方案后再落地。
+  2. 后端将 `GitFetcher`、`DecompositionService` 的分析/生成逻辑按职责拆分为多文件，保留关键入口文件名以兼容既有测试。
+  3. 前端将 `Editor` 的滚动同步抽为 `useSyncedScroll`，将 `Sidebar` 的批量导出 ZIP 抽为 `useBatchExportZip`，并删除未引用的 `.bak` 文件。
+  4. 增补 `.gitignore` 忽略本地目录与临时测试产物；执行 lint/build、go test、docker compose 重启做冒烟验证。
+- **决策/变更**：
+  - 采用“同包多文件拆分 + 保持对外签名不变”的最小改动策略，优先降低风险与回滚成本。
+  - 将可复用但容易膨胀的逻辑（Map-Reduce、滚动同步、批量导出）提取为独立模块，避免组件/服务继续堆叠。
+
 ### 对话 52：通过 Obsidian Local REST API 导出知识库
 - **用户需求**：后端运行在 Docker 内，希望通过 `obsidian-local-rest-api` 驱动 Obsidian 的写入能力；不对前端暴露 Obsidian 能力；导出由前端按钮触发、后端同步完成；并要求提交到 GitHub。
 - **AI 动作**：
