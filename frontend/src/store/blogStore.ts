@@ -19,6 +19,7 @@ interface BlogState {
   selectedBlog: BlogNode | null
   currentView: 'generator' | 'dashboard'
   fetchBlogs: () => Promise<void>
+  createDraftBlog: () => Promise<BlogNode>
   selectBlog: (blog: BlogNode | null) => void
   setCurrentView: (view: 'generator' | 'dashboard') => void
   updateBlog: (id: string, updates: { title?: string; content?: string }) => Promise<void>
@@ -41,6 +42,11 @@ export const useBlogStore = create<BlogState>((set, get) => ({
           'Authorization': token ? `Bearer ${token}` : ''
         }
       })
+      if (res.status === 401) {
+        localStorage.removeItem('token')
+        window.location.href = '/'
+        return
+      }
       const text = await res.text()
       if (!text) {
         console.log('Empty response received')
@@ -60,6 +66,34 @@ export const useBlogStore = create<BlogState>((set, get) => ({
     } finally {
       set({ isLoading: false })
     }
+  },
+
+  createDraftBlog: async () => {
+    const token = localStorage.getItem('token')
+    const res = await fetch('/api/v1/blogs/draft', {
+      method: 'POST',
+      headers: {
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      }
+    })
+
+    const data = await res.json().catch(() => null)
+    if (res.status === 401) {
+      localStorage.removeItem('token')
+      window.location.href = '/'
+      throw new Error('登录已过期，请重新登录')
+    }
+    if (!res.ok || data?.code !== 200 || !data?.data) {
+      throw new Error(data?.message || '创建草稿失败')
+    }
+
+    const draft = data.data as BlogNode
+    set((state) => {
+      const nextBlogs = [draft, ...state.blogs.filter(b => b.id !== draft.id)]
+      return { blogs: nextBlogs, selectedBlog: draft }
+    })
+
+    return draft
   },
 
   selectBlog: (blog) => {
@@ -111,6 +145,11 @@ export const useBlogStore = create<BlogState>((set, get) => ({
         body: JSON.stringify(updates)
       })
       
+      if (res.status === 401) {
+        localStorage.removeItem('token')
+        window.location.href = '/'
+        return
+      }
       if (!res.ok) {
         throw new Error('Failed to update blog')
       }
@@ -133,6 +172,11 @@ export const useBlogStore = create<BlogState>((set, get) => ({
         body: JSON.stringify({ blog_ids: ids })
       })
 
+      if (res.status === 401) {
+        localStorage.removeItem('token')
+        window.location.href = '/'
+        throw new Error('登录已过期，请重新登录')
+      }
       if (!res.ok) {
         throw new Error('Failed to batch delete blogs')
       }

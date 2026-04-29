@@ -1,6 +1,50 @@
 # 墨言博客助手 (InkWords) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 54：手写博客入口（创建草稿并进入编辑器）
+- **用户需求**：新增一个专门的编辑器入口，作为“手写博客”的开始；入口放在侧边栏顶部（A）；点击后“进入即建草稿”，并立刻出现在历史列表里。
+- **AI 动作**：
+  1. 后端新增 `POST /api/v1/blogs/draft` 创建顶级草稿（`source_type=manual`），并在路由中注册。
+  2. 前端 Sidebar 顶部新增“写博客”按钮，调用创建草稿接口并选中草稿以复用现有双栏编辑器。
+  3. 补充 401 过期 token 的前端降级处理：清理 token 并回到登录页。
+  4. 执行 `go test ./...` + `docker compose down && docker compose up -d --build` 做端到端验证。
+- **决策/变更**：
+  - 采用“最小改动”的方式，不引入新路由框架，通过“新入口 + 自动选中草稿”复用既有 Editor 能力。
+
+### 对话 53：代码规模治理（大文件模块化拆分）
+- **用户需求**：检查项目中是否存在过大的代码文件（>500 行），并按模块化、高内聚低耦合、高复用、高可维护原则整理；先后端再前端；最终提交到 GitHub。
+- **AI 动作**：
+  1. 扫描 `backend/` 与 `frontend/src` 行数分布，定位超大文件，并先输出拆分方案后再落地。
+  2. 后端将 `GitFetcher`、`DecompositionService` 的分析/生成逻辑按职责拆分为多文件，保留关键入口文件名以兼容既有测试。
+  3. 前端将 `Editor` 的滚动同步抽为 `useSyncedScroll`，将 `Sidebar` 的批量导出 ZIP 抽为 `useBatchExportZip`，并删除未引用的 `.bak` 文件。
+  4. 增补 `.gitignore` 忽略本地目录与临时测试产物；执行 lint/build、go test、docker compose 重启做冒烟验证。
+- **决策/变更**：
+  - 采用“同包多文件拆分 + 保持对外签名不变”的最小改动策略，优先降低风险与回滚成本。
+  - 将可复用但容易膨胀的逻辑（Map-Reduce、滚动同步、批量导出）提取为独立模块，避免组件/服务继续堆叠。
+
+### 对话 52：通过 Obsidian Local REST API 导出知识库
+- **用户需求**：后端运行在 Docker 内，希望通过 `obsidian-local-rest-api` 驱动 Obsidian 的写入能力；不对前端暴露 Obsidian 能力；导出由前端按钮触发、后端同步完成；并要求提交到 GitHub。
+- **AI 动作**：
+  1. 增加 `obsidian-bridge` sidecar（27125→宿主机 27124）转发访问 Obsidian 插件端口。
+  2. 后端新增 REST Store 封装并迁移 Obsidian 导出逻辑，沿用 Karpathy LLM Wiki Pattern 的索引更新机制。
+  3. 在不依赖证书文件的前提下，增加开发态 `OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY=true` 降级开关（默认关闭）。
+  4. 同步更新架构/API/PRD/数据库/开发日志等基准文档。
+- **决策/变更**：
+  - 选择“REST API 控制面 + Docker sidecar 转发”的方式，而不是直接把 Vault 目录暴露给容器写文件，以获得更强的 Obsidian 应用层能力并避免容器访问宿主机回环地址问题。
+  - 出于开发便捷性增加不校验证书的降级开关，但明确默认关闭并限制本机开发使用。
+
+### 对话 51：系列博客批量导出 PDF（合并版）
+- **用户需求**：新增功能，支持系列博客批量导出 PDF；入口采用侧边栏批量模式（B 方案）；多个系列勾选时逐个触发多次下载；PDF 带封面+目录但不需要页码。并要求最终提交到 GitHub。
+- **AI 动作**：
+  1. 新增后端 `GET /api/v1/blogs/:id/export/pdf`，将系列 Markdown 渲染为 HTML 并使用容器内 Chromium Headless 打印为 PDF。
+  2. 更新后端运行时镜像依赖（Chromium + 中文字体），并通过 Docker Compose 重启验证。
+  3. 前端 Sidebar 批量操作栏新增「导出 PDF」并支持逐个下载；随后将批量操作栏重排为“二行 + 下拉菜单”以解决按钮拥挤问题。
+  4. 同步更新 API/架构/PRD/数据库/开发日志等基准文档，满足 Docs-as-Code 提交门禁。
+- **决策/变更**：
+  - 选择“后端生成 PDF”而非 `window.print()`，以实现可控的批量下载体验与一致的版式输出。
+  - 目录页先不做页码，避免引入 paged media 等额外渲染复杂度，先交付最小可用版本。
+
+>>>>>>> ab55a95 (feat(editor): add manual blog draft entry)
 ### 对话 50：优化大型项目大纲生成的篇数限制
 - **用户需求**：对于像 FFmpeg 这样的大型项目，系统生成的章节太少（只有 10 章），要求对每个核心模块都对应至少一篇博客，不设篇数上限。
 - **AI 动作**：
