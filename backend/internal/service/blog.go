@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 
 	"inkwords-backend/internal/db"
@@ -33,9 +34,11 @@ type BlogService struct {
 
 // NewBlogService 创建博客服务实例
 func NewBlogService() *BlogService {
-	return &BlogService{
-		db: db.DB,
-	}
+	return NewBlogServiceWithDB(db.DB)
+}
+
+func NewBlogServiceWithDB(database *gorm.DB) *BlogService {
+	return &BlogService{db: database}
 }
 
 // GetUserBlogs 获取用户的博客列表，并组织成树状结构
@@ -187,4 +190,26 @@ func (s *BlogService) UpdateBlog(ctx context.Context, id uuid.UUID, userID uuid.
 	}
 
 	return nil
+}
+
+func (s *BlogService) CreateDraftBlog(ctx context.Context, userID uuid.UUID) (model.Blog, error) {
+	blog := model.Blog{
+		UserID:      userID,
+		ParentID:    nil,
+		ChapterSort: 0,
+		Title:       "未命名博客",
+		Content:     "",
+		SourceType:  "manual",
+		SourceURL:   "",
+		IsSeries:    false,
+		Status:      0,
+		WordCount:   0,
+		TechStacks:  datatypes.JSON([]byte("[]")),
+	}
+
+	if err := s.db.WithContext(ctx).Create(&blog).Error; err != nil {
+		return model.Blog{}, err
+	}
+
+	return blog, nil
 }

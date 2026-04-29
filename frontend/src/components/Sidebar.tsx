@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useStreamStore } from '@/store/streamStore'
 import { useBlogStore } from '@/store/blogStore'
 import type { BlogNode } from '@/store/blogStore'
-import { BookOpen, CheckCircle2, CheckSquare, ChevronDown, ChevronRight, CircleDashed, FolderArchive, GitBranch, Loader2, LogOut, Plus, RefreshCw, Sparkles, Square, Trash2, User } from 'lucide-react'
+import { BookOpen, CheckCircle2, CheckSquare, ChevronDown, ChevronRight, CircleDashed, FilePenLine, FolderArchive, GitBranch, Loader2, LogOut, Plus, RefreshCw, Sparkles, Square, Trash2, User } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from './ui/button'
 import { ConfirmDialog } from './ui/confirm-dialog'
@@ -11,13 +11,14 @@ import { useBatchExportZip } from '@/hooks/useBatchExportZip'
 
 export function Sidebar() {
   const streamStore = useStreamStore()
-  const { blogs, fetchBlogs, selectedBlog, selectBlog, currentView, setCurrentView } = useBlogStore()
+  const { blogs, fetchBlogs, createDraftBlog, selectedBlog, selectBlog, currentView, setCurrentView } = useBlogStore()
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set())
   const [isBatchMode, setIsBatchMode] = useState(false)
   const [selectedForExport, setSelectedForExport] = useState<Set<string>>(new Set())
   const [isSyncingSeriesToObsidian, setIsSyncingSeriesToObsidian] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false)
+  const [isCreatingDraft, setIsCreatingDraft] = useState(false)
 
   const blogMap = useMemo(() => {
     const map = new Map<string, { node: BlogNode; parentId: string | null }>()
@@ -238,6 +239,27 @@ export function Sidebar() {
         >
           <Plus className="w-4 h-4" />
           新工作区
+        </Button>
+        <Button
+          variant="outline"
+          className="w-full gap-2 shadow-sm"
+          disabled={isCreatingDraft}
+          onClick={async () => {
+            if (isCreatingDraft) return
+            setIsCreatingDraft(true)
+            try {
+              await createDraftBlog()
+              toast.success('已创建草稿，开始写作吧')
+            } catch (err: unknown) {
+              const message = err instanceof Error ? err.message : '创建草稿失败'
+              toast.error(message)
+            } finally {
+              setIsCreatingDraft(false)
+            }
+          }}
+        >
+          {isCreatingDraft ? <Loader2 className="w-4 h-4 animate-spin" /> : <FilePenLine className="w-4 h-4" />}
+          写博客
         </Button>
       </div>
       
