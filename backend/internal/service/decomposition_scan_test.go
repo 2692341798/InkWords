@@ -32,7 +32,7 @@ func TestDecompositionService_ScanProjectModules(t *testing.T) {
 
 	// We can use a file:// URL to clone the local repo
 	cmdName := "git"
-	
+
 	err = executeCommand(tempDir, cmdName, "init")
 	require.NoError(t, err)
 

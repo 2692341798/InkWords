@@ -9,7 +9,7 @@ import (
 
 func TestParseGithubOwnerRepo(t *testing.T) {
 	tests := []struct {
-		url      string
+		url           string
 		expectedOwner string
 		expectedRepo  string
 		expectedOk    bool

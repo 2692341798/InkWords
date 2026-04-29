@@ -70,6 +70,7 @@
 ## 4. 每日开发日志 (Dev Log)
 > 该区域将由 Vibe Coding 工程师（AI 助手）在每天/每次开发周期结束时，如实记录当天的完成事项、遇到的技术坑点及架构小规模调整。
 
+<<<<<<< agent/manual-editor-entry
 ### [2026-04-29] Feature - 手写博客入口（创建草稿并进入编辑器）
 - **开发模块**: [BlogAPI, 前端 Sidebar, Zustand Store, 文档同步]
 - **完成事项**:
@@ -80,6 +81,43 @@
 - **验证**:
   - `go test ./...` 全通过
   - `docker compose down && docker compose up -d --build` 后在 `http://localhost` 点击“写博客”可创建草稿并自动保存
+=======
+### [2026-04-29] Feature - 通过 Obsidian Local REST API 导出知识库
+- **开发模块**: [Obsidian 集成, 导出, Docker Compose, 后端 Service]
+- **完成事项**:
+  1. **新增 sidecar 转发**：在 `docker-compose.yml` 增加 `obsidian-bridge`（27125→宿主机 27124）以解决容器无法访问宿主机回环地址的问题。
+  2. **后端封装 ObsidianStore**：新增 REST Store 封装（HTTPS + API Key），并将 Obsidian 导出与 wiki scaffold/index 更新迁移为调用 REST API 完成。
+  3. **开发态降级开关**：新增 `OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY=true` 允许本机开发跳过 TLS 校验（默认关闭，推荐使用证书信任）。
+  4. **文档强同步**：同步更新架构/API/PRD/数据库等基准文档，确保 Docs-as-Code 一致性。
+- **验证**:
+  - `cd backend && go test ./... -v` 通过
+  - `docker compose config -q` 通过
+  - `docker compose down && docker compose up -d --build` 验证容器可启动且可通过 sidecar 访问 Obsidian REST API
+
+### [2026-04-29] Refactor - 代码规模治理（模块化拆分）
+- **开发模块**: [后端 parser/service, 前端 Editor/Sidebar, 工程化规范]
+- **完成事项**:
+  1. **后端拆分大文件**：将 `GitFetcher`、`DecompositionService` 的分析/生成逻辑按职责拆分为多个同包文件，保留关键入口文件名以兼容既有测试与调用方。
+  2. **前端拆分大组件**：将 `Editor` 的滚动同步逻辑抽为 `useSyncedScroll`，将 `Sidebar` 的批量 ZIP 导出逻辑抽为 `useBatchExportZip`，降低组件复杂度。
+  3. **清理遗留与门禁**：删除未引用的 `.bak` 文件，补充 `.gitignore` 忽略本地临时目录与测试产物，避免污染仓库。
+- **验证**:
+  - `cd backend && go test ./... -count=1` 通过
+  - `cd frontend && npm run lint && npm run build` 通过
+  - `docker compose down && docker compose up -d --build` 后 `http://localhost` 可访问（200）
+
+### [2026-04-28] Feature - 系列博客批量导出 PDF（合并版）
+- **开发模块**: [博客管理, 导出, 前端 Sidebar, 后端 PDF 生成]
+- **完成事项**:
+  1. **后端新增 PDF 导出 API**：新增 `GET /api/v1/blogs/:id/export/pdf`，将系列 Markdown 渲染为 HTML（封面 + 目录 + 正文），并在容器内调用 Chromium Headless 打印为 PDF 后以附件返回。
+  2. **运行时镜像依赖补齐**：后端运行时镜像安装 `chromium` 与 `font-noto-cjk` 等字体依赖，保证中文 PDF 正常显示。
+  3. **前端批量模式入口（B 方案）**：侧边栏批量模式新增「导出 PDF」，支持勾选多个系列父节点后逐个触发多次下载；单个系列失败不会中断后续下载。
+  4. **批量操作栏体验优化**：将底部操作按钮从“横向挤一排”重排为“二行 + 下拉菜单”，降低视觉拥挤度。
+- **验证**:
+  - `cd backend && go test ./... -v` 通过
+  - `cd frontend && npm run build` 通过
+  - `docker compose down && docker compose up -d --build` 验证容器可启动且 Chromium 可在容器内生成 PDF
+
+>>>>>>> main
 ### [2026-04-26] Bugfix - 修复 Markdown 引擎不带语言标记的代码块换行丢失问题
 - **开发模块**: [前端 UI, ReactMarkdown]
 - **完成事项**:

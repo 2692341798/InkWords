@@ -19,6 +19,7 @@
 - 🚀 **支持随时中止与断点续传**：前端提供“停止生成”按钮，利用 AbortController 中断请求；后端透传 Context 以立刻释放大模型调用资源。用户随时可以点击“继续生成”，系统自动跳过已完成章节，无缝接续同一个系列生成，拒绝数据孤岛。
 - 📱 **响应式阅读体验**：在开始生成系列博客时，大纲自动呈现手风琴式折叠，为正文腾出充足的阅读空间；卡片排版兼容响应式，拒绝溢出。
 - 📊 **用户仪表盘**：直观展示 Token 消耗、生成字数与最高频技术栈图表。
+- 🧩 **代码规模治理**：持续将超大文件拆分为可复用模块（Hooks/子组件/同包多文件），保持高内聚低耦合，降低维护成本。
 
 ## 3. 技术栈与架构 (Tech Stack)
 本项目采用前后端完全分离的 **Monorepo** 结构。
@@ -47,7 +48,7 @@
 # 使用 Docker Compose 一键启动
 docker compose down && docker compose up -d --build
 ```
-启动前请先在 `backend/.env` 中配置必要环境变量（例如 `DEEPSEEK_API_KEY`、`DATABASE_URL`、`JWT_SECRET`、`OBSIDIAN_VAULT_PATH`）。
+启动前请先在 `backend/.env` 中配置必要环境变量（例如 `DEEPSEEK_API_KEY`、`DATABASE_URL`、`JWT_SECRET`、`OBSIDIAN_REST_API_KEY`）。如需启用证书校验，另外在宿主机设置 `OBSIDIAN_REST_API_CERT_PATH` 指向插件证书；本机开发可选择设置 `OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY=true` 跳过 TLS 校验。
 由于后端仅提供 API 接口，前端服务由独立的 Nginx 容器代理。项目启动后：
 1. **必须通过前端入口**访问：`http://localhost` (映射于宿主机 80 端口)。
 
