@@ -40,7 +40,7 @@
 | `/api/v1/blogs` | GET | 获取用户的博客历史列表 (含系列结构) | 无 |
 | `/api/v1/blogs/draft` | POST | 创建一篇手写草稿（顶级单篇，便于进入编辑器手写写作） | 无 |
 | `/api/v1/blogs/:id` | PUT | 更新博客内容 (标题、内容等) | `{ title, content }` |
-| `/api/v1/blogs` | DELETE | 批量删除博客 | `{ ids: [] }` |
+| `/api/v1/blogs` | DELETE | 批量删除博客 | `{ blog_ids: [] }` |
 | `/api/v1/blogs/:id/export` | GET | 将系列博客或单篇博客导出为 Markdown Zip 包 | 无 -> application/zip |
 | `/api/v1/blogs/:id/export/pdf` | GET | 将系列博客导出为合并 PDF（封面 + 目录 + 正文，无页码） | 无 -> application/pdf |
 | `/api/v1/blogs/:id/export/obsidian` | POST | 将单篇博客导出到本地 Obsidian Vault（通过 Obsidian Local REST API） | 无 -> JSON `{ code: 200, message: "success" }` |
