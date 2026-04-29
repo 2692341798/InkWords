@@ -65,9 +65,9 @@ func newRestAPIStoreFromEnv() (*restAPIStore, error) {
 
 	transport := &http.Transport{
 		TLSClientConfig: &tls.Config{
-			RootCAs:    caPool,
-			ServerName: "127.0.0.1",
-			MinVersion: tls.VersionTLS12,
+			RootCAs:            caPool,
+			ServerName:         "127.0.0.1",
+			MinVersion:         tls.VersionTLS12,
 			InsecureSkipVerify: insecureSkipVerify,
 		},
 	}

@@ -39,3 +39,6 @@ lerna-debug.log*
 # Project specific
 .trae/specs/*/tmp/
 test_results/
+
+.superpowers/
+backend/*.test

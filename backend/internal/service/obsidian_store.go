@@ -9,4 +9,3 @@ type ObsidianStore interface {
 	Patch(ctx context.Context, path string, headers map[string]string, contentType string, body []byte) error
 	List(ctx context.Context, dirPath string) ([]string, error)
 }
-
