@@ -1,52 +1,72 @@
 package service
 
 import (
-	"os"
-	"path/filepath"
+	"context"
+	"strings"
 	"testing"
 	"time"
 )
 
 func TestEnsureWikiScaffoldCreatesIndexNotes(t *testing.T) {
-	baseDir := t.TempDir()
-
-	if err := os.MkdirAll(filepath.Join(baseDir, "concepts"), 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(baseDir, "concepts", "A.md"), []byte("# A"), 0644); err != nil {
-		t.Fatal(err)
+	store := &fakeStore{
+		files: map[string][]byte{},
+		dirs: map[string][]string{
+			"wiki/concepts": {"A.md"},
+			"wiki/entities": {},
+			"wiki/sources":  {},
+			"wiki/domains":  {},
+		},
 	}
 
 	now := time.Date(2026, 4, 28, 12, 0, 0, 0, time.UTC)
-	if err := ensureWikiScaffold(baseDir, now, wikiScaffoldOptions{DomainSlug: "tech", DomainTag: "#domain/tech"}); err != nil {
+	if err := ensureWikiScaffold(context.Background(), store, "wiki", now, wikiScaffoldOptions{DomainSlug: "tech", DomainTag: "#domain/tech"}); err != nil {
 		t.Fatal(err)
 	}
 
-	indexPath := filepath.Join(baseDir, "concepts", "_index.md")
-	b, err := os.ReadFile(indexPath)
-	if err != nil {
-		t.Fatalf("read concepts index: %v", err)
-	}
-	if string(b) == "" || !contains(string(b), "[[concepts/A|A]]") {
-		t.Fatalf("concepts index missing link, got: %s", string(b))
+	indexPath := "wiki/concepts/_index.md"
+	indexBytes := store.files[indexPath]
+	if len(indexBytes) == 0 || !strings.Contains(string(indexBytes), "[[concepts/A|A]]") {
+		t.Fatalf("concepts index missing link, got: %s", string(indexBytes))
 	}
 
-	domainsIndexPath := filepath.Join(baseDir, "domains", "_index.md")
-	if _, err := os.Stat(domainsIndexPath); err != nil {
-		t.Fatalf("domains index not created: %v", err)
+	domainsIndexPath := "wiki/domains/_index.md"
+	if len(store.files[domainsIndexPath]) == 0 {
+		t.Fatalf("domains index not created")
 	}
 }
 
-func contains(s string, sub string) bool {
-	return len(sub) == 0 || (len(s) >= len(sub) && indexOf(s, sub) >= 0)
+type fakeStore struct {
+	files map[string][]byte
+	dirs  map[string][]string
 }
 
-func indexOf(s string, sub string) int {
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if s[i:i+len(sub)] == sub {
-			return i
-		}
+func (f *fakeStore) Read(_ context.Context, p string) ([]byte, error) {
+	b, ok := f.files[p]
+	if !ok {
+		return nil, obsidianHTTPError{StatusCode: 404}
 	}
-	return -1
+	return b, nil
 }
 
+func (f *fakeStore) Put(_ context.Context, p string, _ string, body []byte) error {
+	f.files[p] = body
+	return nil
+}
+
+func (f *fakeStore) Post(_ context.Context, p string, _ string, body []byte) error {
+	f.files[p] = append(f.files[p], body...)
+	return nil
+}
+
+func (f *fakeStore) Patch(_ context.Context, p string, _ map[string]string, _ string, body []byte) error {
+	f.files[p] = body
+	return nil
+}
+
+func (f *fakeStore) List(_ context.Context, dirPath string) ([]string, error) {
+	entries, ok := f.dirs[dirPath]
+	if !ok {
+		return nil, obsidianHTTPError{StatusCode: 404}
+	}
+	return entries, nil
+}
