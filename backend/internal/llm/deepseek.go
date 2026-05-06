@@ -29,6 +29,7 @@ type ChatRequest struct {
 	Temperature    *float64          `json:"temperature,omitempty"`
 	MaxTokens      int               `json:"max_tokens,omitempty"`
 	Thinking       map[string]string `json:"thinking,omitempty"`
+	ReasoningEffort string           `json:"reasoning_effort,omitempty"`
 	ResponseFormat map[string]string `json:"response_format,omitempty"`
 }
 
@@ -67,10 +68,11 @@ func NewDeepSeekClient(apiKey string) *DeepSeekClient {
 // Generate calls the DeepSeek API with stream=false and returns the full response content
 func (c *DeepSeekClient) Generate(ctx context.Context, model string, messages []Message) (string, error) {
 	reqBody := ChatRequest{
-		Model:    model,
-		Messages: messages,
-		Stream:   false,
-		Thinking: map[string]string{"type": "enabled"},
+		Model:           model,
+		Messages:        messages,
+		Stream:          false,
+		Thinking:        map[string]string{"type": "enabled"},
+		ReasoningEffort: "high",
 	}
 
 	jsonData, err := json.Marshal(reqBody)
@@ -133,12 +135,13 @@ func (c *DeepSeekClient) Generate(ctx context.Context, model string, messages []
 func (c *DeepSeekClient) GenerateJSON(ctx context.Context, model string, messages []Message) (string, error) {
 	temp := 0.1 // Recommend 0.1 for stable JSON output
 	reqBody := ChatRequest{
-		Model:          model,
-		Messages:       messages,
-		Stream:         false,
-		Temperature:    &temp,
-		Thinking:       map[string]string{"type": "enabled"},
-		ResponseFormat: map[string]string{"type": "json_object"},
+		Model:           model,
+		Messages:        messages,
+		Stream:          false,
+		Temperature:     &temp,
+		Thinking:        map[string]string{"type": "enabled"},
+		ReasoningEffort: "high",
+		ResponseFormat:  map[string]string{"type": "json_object"},
 	}
 
 	jsonData, err := json.Marshal(reqBody)
@@ -202,10 +205,11 @@ func (c *DeepSeekClient) GenerateJSON(ctx context.Context, model string, message
 func (c *DeepSeekClient) GenerateStream(ctx context.Context, model string, messages []Message, chunkChan chan<- string) (string, error) {
 	defer close(chunkChan)
 	reqBody := ChatRequest{
-		Model:    model,
-		Messages: messages,
-		Stream:   true,
-		Thinking: map[string]string{"type": "enabled"},
+		Model:           model,
+		Messages:        messages,
+		Stream:          true,
+		Thinking:        map[string]string{"type": "enabled"},
+		ReasoningEffort: "high",
 	}
 
 	jsonData, err := json.Marshal(reqBody)
