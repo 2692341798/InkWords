@@ -1,6 +1,16 @@
 # 墨言博客助手 (InkWords) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 61：后端目录升级（Stream + Project Domain 渐进迁移）
+- **用户需求**：继续后端 DDD 垂直切片迁移，同时迁移 Stream（SSE）与 Project（scan/analyze/parse）两条链路。
+- **AI 动作**：
+  1. 新增 `internal/domain/stream` 与 `internal/domain/project`（Phase 1 过渡复用现有 service/parser 作为依赖），将核心 handler 逻辑迁移到 domain handler。
+  2. 将 `internal/api/stream_*.go` 与 `internal/api/project.go` 薄化为转发层（保持对外 SSE event 类型与 JSON 结构不变）。
+  3. 在 `cmd/server/main.go` 统一组装 GeneratorService/DecompositionService/GitFetcher/DocParser 并注入到对应 API（收口 DI）。
+- **决策/变更**：
+  - 本轮选择 Phase 1：不深拆 Generator/Decomposition/parser 内部实现，优先稳定迁移边界与依赖组装方式。
+  - 迁移过程中持续 `go test ./...` 回归，并同步更新架构/API/DB/PRD/开发日志文档。
+
 ### 对话 60：后端目录升级（Auth Domain 渐进迁移）
 - **用户需求**：继续后端 DDD 垂直切片迁移，迁移 Auth 领域（register/login/oauth/captcha/bind-github）。
 - **AI 动作**：

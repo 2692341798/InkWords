@@ -106,6 +106,15 @@
 - **验证**:
   - `cd backend && go test ./...` 通过
 
+### [2026-05-08] Refactor - 后端目录升级（DDD 垂直切片，Stream + Project Domain）
+- **开发模块**: [backend/internal/domain/stream, backend/internal/domain/project, backend/internal/api, cmd/server DI]
+- **完成事项**:
+  1. 新增 `internal/domain/stream` 与 `internal/domain/project`（Phase 1 过渡复用现有 service/parser），并将对应 handler 逻辑迁移到 domain handler。
+  2. 将 `internal/api/stream_*.go` 与 `internal/api/project.go` 薄化为转发层，保持对外 SSE event 类型与 JSON 结构不变。
+  3. 将依赖组装收口到 `cmd/server/main.go`（统一创建 GeneratorService/DecompositionService/GitFetcher/DocParser 并注入到 API）。
+- **验证**:
+  - `cd backend && go test ./...` 通过
+
 ### [2026-05-08] Feature - 编辑器语音输入（浏览器实时转写）
 - **开发模块**: [前端 Editor, Hooks, 单元测试]
 - **完成事项**:

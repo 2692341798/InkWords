@@ -12,8 +12,11 @@ import (
 	"inkwords-backend/internal/db"
 	authdomain "inkwords-backend/internal/domain/auth"
 	blogdomain "inkwords-backend/internal/domain/blog"
+	projectdomain "inkwords-backend/internal/domain/project"
+	streamdomain "inkwords-backend/internal/domain/stream"
 	userdomain "inkwords-backend/internal/domain/user"
 	"inkwords-backend/internal/middleware"
+	"inkwords-backend/internal/parser"
 	"inkwords-backend/internal/service"
 )
 
@@ -61,6 +64,10 @@ func main() {
 	// 初始化 API Handler
 	userService := service.NewUserService(db.DB)
 	blogService := service.NewBlogService()
+	generatorService := service.NewGeneratorService()
+	decompositionService := service.NewDecompositionService()
+	gitFetcher := parser.NewGitFetcher()
+	docParser := parser.NewDocParser()
 
 	authRepo := authdomain.NewGormRepository(db.DB)
 	authDomainService := authdomain.NewService(authRepo)
@@ -74,10 +81,16 @@ func main() {
 	userDomainService := userdomain.NewService(userRepo)
 	userDomainHandler := userdomain.NewHandler(userDomainService)
 
+	streamDomainService := streamdomain.NewService(generatorService, decompositionService, userService)
+	streamDomainHandler := streamdomain.NewHandler(streamDomainService)
+
+	projectDomainService := projectdomain.NewService(decompositionService, gitFetcher, docParser, userService)
+	projectDomainHandler := projectdomain.NewHandler(projectDomainService)
+
 	authAPI := api.NewAuthAPIWithDeps(authDomainHandler)
 	userAPI := api.NewUserAPIWithDeps(userService, userDomainHandler)
-	streamAPI := api.NewStreamAPI(userService)
-	projectAPI := api.NewProjectAPI(userService)
+	streamAPI := api.NewStreamAPIWithDeps(generatorService, decompositionService, userService, streamDomainHandler)
+	projectAPI := api.NewProjectAPIWithDeps(decompositionService, gitFetcher, docParser, userService, projectDomainHandler)
 	blogAPI := api.NewBlogAPIWithDeps(blogService, blogDomainHandler)
 
 	// v1 路由组

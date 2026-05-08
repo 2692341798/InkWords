@@ -25,7 +25,7 @@ func TestGenerateRequest_HasSubDirField(t *testing.T) {
 }
 
 func TestProjectAnalyze_UsesSubDirWhenFetchingRepo(t *testing.T) {
-	data, err := os.ReadFile("project.go")
+	data, err := os.ReadFile("../domain/project/service.go")
 	require.NoError(t, err)
 	assert.True(t, strings.Contains(string(data), "FetchWithSubDir("))
 }
