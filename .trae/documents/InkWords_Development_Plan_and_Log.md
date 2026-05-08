@@ -70,6 +70,17 @@
 ## 4. 每日开发日志 (Dev Log)
 > 该区域将由 Vibe Coding 工程师（AI 助手）在每天/每次开发周期结束时，如实记录当天的完成事项、遇到的技术坑点及架构小规模调整。
 
+### [2026-05-08] Chore - 工程化整理（仓库减肥与文件结构治理）
+- **开发模块**: [仓库结构, .gitignore, 文档同步]
+- **完成事项**:
+  1. **清理空壳文件**：删除 `backend/internal/api/blog.go`、`backend/internal/api/stream.go` 等仅保留 `package` 声明的占位文件，避免误导后续维护。
+  2. **移除敏感/大产物追踪**：将 `dogfood-output/` 从 Git 追踪中移除并加入 `.gitignore`（该目录可能包含 token 与大量截图）。
+  3. **大文件策略落地**：补充 `.gitignore` 规则，确保后端二进制与 PDF 等本地产物不进入仓库。
+  4. **补齐 QA 归档**：新增 `docs/qa/dogfood/report-template.md`，保留可复用的 dogfood 报告模板。
+- **验证**:
+  - `cd backend && go test ./...` 通过
+  - `cd frontend && npm run build` 通过
+
 ### [2026-05-08] Feature - 编辑器语音输入（浏览器实时转写）
 - **开发模块**: [前端 Editor, Hooks, 单元测试]
 - **完成事项**:

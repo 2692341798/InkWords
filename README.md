@@ -27,11 +27,11 @@
 本项目采用前后端完全分离的 **Monorepo** 结构。
 
 - **前端 (`frontend/`)**：
-  - React 18 + Vite + Tailwind CSS v4 + Shadcn UI
+  - React (当前依赖为 React 19) + Vite + Tailwind CSS v4 + Shadcn UI
   - Zustand (全局状态管理，接管 SSE 长连接保活)
   - 自定义 Rehype/Remark 插件 (AST 行号注入与图表拦截)
 - **后端 (`backend/`)**：
-  - Go (1.24+) + Gin 框架 (依赖注入分层架构)
+  - Go (建议 >= 1.25；当前 go.mod 为 1.25.4) + Gin 框架 (依赖注入分层架构)
   - Map-Reduce 并发调度引擎 (`x/sync/semaphore`)
   - SSE (Server-Sent Events) 打字机流式推送与空闲超时打断机制
   - GORM + PostgreSQL 14+
@@ -55,7 +55,7 @@ docker compose down && docker compose up -d --build
 1. **必须通过前端入口**访问：`http://localhost` (映射于宿主机 80 端口)。
 
 ### 4.2 本地开发环境运行
-如果您需要进行二次开发，请确保本地已安装 Node.js 18+、Go 1.24+ 和 PostgreSQL 14+。
+如果您需要进行二次开发，请确保本地已安装 Node.js 18+、Go 1.25+ 和 PostgreSQL 14+。
 
 **启动后端：**
 ```bash
@@ -73,6 +73,10 @@ npm install
 npm run dev
 ```
 *前端页面默认运行在 `http://localhost:5173`*
+
+### 4.3 仓库文件整理与大文件策略
+- 本仓库不追踪构建产物/大文件：`backend/server`、`backend/inkwords-server`、`backend/bin/*`、`pdf/*.pdf`、`dogfood-output/` 等均应保持为本地产物或通过脚本/CI 生成。
+- `dogfood-output/` 可能包含本地调试截图与浏览器存储（含 token），只允许本地存在，禁止提交进 Git。
 
 ## 5. 文档索引与 AI 协作指南 (AI Collaboration)
 本项目深度拥抱 **Vibe Coding**（AI 辅助编程）理念。在项目根目录下，我们维护了 `.trae/rules` 作为全栈开发的核心护栏。

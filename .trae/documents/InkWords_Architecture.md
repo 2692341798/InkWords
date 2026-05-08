@@ -5,6 +5,7 @@
 - 2026-04-29：新增“手写博客入口”，支持创建草稿并直接进入现有双栏编辑器（新增后端草稿创建接口与前端侧边栏入口）。
 - 2026-05-08：写博客编辑器新增“语音输入”（浏览器 SpeechRecognition 实时转写，插入正文光标处）。
 - 2026-05-08：写博客编辑器新增“润色”（后端新增 `/api/v1/blogs/:id/polish` SSE；前端新增润色预览与一键应用），并优化 Markdown 预览标题/表格排版。
+- 2026-05-08：工程化整理：移除仓库中的大二进制/调试产物追踪（避免泄漏 token），并将超大文件按职责拆分为同包多文件/子组件目录。
 ## 1. 整体架构 (Monorepo)
 项目采用前后端分离的 Monorepo 结构，根目录隔离：
 - **`frontend/`**: 包含所有前端界面、状态管理和客户端逻辑。
@@ -13,7 +14,7 @@
 
 ## 2. 核心技术栈
 ### 2.1 前端 (Frontend)
-- **核心框架**: React 18 + Vite
+- **核心框架**: React + Vite
 - **UI 库**: Tailwind CSS + Shadcn UI + Recharts
 - **状态管理**: Zustand (含多 store：`blogStore`, `streamStore`, `authStore`)
 - **流式通信**: `@microsoft/fetch-event-source` 维持 SSE 连接
@@ -64,6 +65,10 @@
 - **后端镜像**: 采用多阶段构建（Go 官方镜像编译，Alpine 运行）。使用 `FRONTEND_URL` 和 `DATABASE_URL` 环境变量控制运行逻辑。
 - **数据库**: PostgreSQL，初始化 `inkwords_db`。
 - **容器互联**: 全部服务处于 `inkwords_default` 内部网络，后端连接数据库通过服务名 `db:5432` 互通。
+
+## 4.1 仓库产物与敏感信息策略
+- 禁止提交构建产物与大文件（例如后端二进制、PDF、批量截图等），统一通过 `.gitignore` 管理本地产物目录。
+- `dogfood-output/` 可能包含浏览器 localStorage 等敏感信息（例如 token），必须保持为本地目录，严禁进入 Git 追踪。
 
 ## 5. 全局缓存机制 (Prompt Caching)
 - **目标**：降低 DeepSeek Token 消耗，提高首字响应速度 (TTFT)。

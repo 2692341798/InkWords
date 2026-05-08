@@ -1,24 +1,16 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useBlogStore } from '@/store/blogStore'
-import { MarkdownEngine } from './MarkdownEngine'
-import { Button } from './ui/button'
-import { Download, FileDown, Save, Loader2, Sparkles, FileArchive, ChevronDown, Mic, MicOff, Wand2 } from 'lucide-react'
+import { toast } from 'sonner'
 import { useDebounce } from '@/hooks/useDebounce'
 import { useSyncedScroll } from '@/hooks/useSyncedScroll'
 import { fetchEventSource } from '@microsoft/fetch-event-source'
-import { toast } from 'sonner'
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition'
 import { replaceVoiceSegment } from '@/lib/voiceInsertion'
 import { usePolishStream } from '@/hooks/usePolishStream'
 import { extractPolishedBody } from '@/lib/polishDraft'
 import { normalizeMarkdown } from '@/lib/markdownNormalize'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+import { EditorHeader } from './editor/EditorHeader'
+import { EditorBody } from './editor/EditorBody'
 
 class StopStreamError extends Error {}
 
@@ -421,198 +413,41 @@ export function Editor() {
 
   return (
     <div className="flex-1 flex flex-col h-screen bg-white print:h-auto print:block">
-      {/* Editor Header */}
-      <div className="h-14 border-b border-zinc-200 flex items-center justify-between px-6 shrink-0 print:hidden">
-        <div className="flex items-center gap-4 flex-1">
-          <input
-            type="text"
-            className="text-lg font-semibold bg-transparent border-none focus:outline-none focus:ring-0 text-zinc-800 placeholder-zinc-400 w-1/2"
-            placeholder="输入博客标题..."
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-          />
-          <div className="text-xs text-zinc-400 flex items-center gap-1">
-            {isSaving ? (
-              <>
-                <Loader2 className="w-3 h-3 animate-spin" /> 保存中...
-              </>
-            ) : lastSaved ? (
-              <>
-                <Save className="w-3 h-3" /> 已保存 {lastSaved.toLocaleTimeString()}
-              </>
-            ) : null}
-          </div>
-        </div>
+      <EditorHeader
+        selectedBlog={selectedBlog}
+        title={title}
+        onTitleChange={setTitle}
+        isSaving={isSaving}
+        lastSaved={lastSaved}
+        isVoiceListening={isVoiceListening}
+        isContinuing={isContinuing}
+        isPolishing={isPolishing}
+        onToggleVoiceInput={handleToggleVoiceInput}
+        onStartPolish={handleStartPolish}
+        onContinueGenerating={handleContinueGenerating}
+        onExportToObsidian={handleExportToObsidian}
+        onExportSeriesToObsidian={handleExportSeriesToObsidian}
+        onExportSeriesZip={exportSeriesZip}
+        onExportMarkdown={exportMarkdown}
+        onExportPDF={exportPDF}
+      />
 
-        <div className="flex items-center gap-3">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleToggleVoiceInput}
-            disabled={isContinuing || isPolishing}
-            className={
-              isVoiceListening
-                ? 'gap-1.5 text-red-600 border-red-200 hover:bg-red-50 transition-all duration-200'
-                : 'gap-1.5 text-zinc-700 hover:text-zinc-900 transition-all duration-200 shadow-sm'
-            }
-          >
-            {isVoiceListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-            {isVoiceListening ? '停止语音' : '语音输入'}
-          </Button>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleStartPolish}
-            disabled={isPolishing || isContinuing || isVoiceListening}
-            className="gap-1.5 text-emerald-700 border-emerald-200 hover:bg-emerald-50 transition-all duration-200"
-          >
-            {isPolishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
-            {isPolishing ? '润色中...' : '润色'}
-          </Button>
-
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={handleContinueGenerating} 
-            disabled={isContinuing || isVoiceListening || isPolishing}
-            className="gap-1.5 text-indigo-600 border-indigo-200 hover:bg-indigo-50 transition-all duration-200"
-          >
-            {isContinuing ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Sparkles className="w-4 h-4" />
-            )}
-            继续生成
-          </Button>
-          
-          <DropdownMenu>
-            <DropdownMenuTrigger render={
-              <Button variant="outline" size="sm" className="gap-1.5 text-zinc-700 hover:text-zinc-900 transition-all duration-200 shadow-sm">
-                <Download className="w-4 h-4" /> 
-                导出 / 同步
-                <ChevronDown className="w-3 h-3 opacity-50" />
-              </Button>
-            } />
-            <DropdownMenuContent align="end" className="w-56 shadow-xl border-zinc-200/60 rounded-xl p-1">
-              <DropdownMenuItem onClick={handleExportToObsidian} className="gap-2 cursor-pointer focus:bg-zinc-100 rounded-lg py-2">
-                <div className="bg-indigo-50 text-indigo-600 p-1.5 rounded-md">
-                  <Sparkles className="w-3.5 h-3.5" />
-                </div>
-                <div className="flex flex-col">
-                  <span className="font-medium text-zinc-900">同步单篇到 Obsidian</span>
-                  <span className="text-xs text-zinc-500">直通本地第二大脑</span>
-                </div>
-              </DropdownMenuItem>
-
-              {selectedBlog?.parent_id === '00000000-0000-0000-0000-000000000000' && selectedBlog?.children && selectedBlog.children.length > 0 && (
-                <DropdownMenuItem onClick={handleExportSeriesToObsidian} className="gap-2 cursor-pointer focus:bg-zinc-100 rounded-lg py-2 mt-1">
-                  <div className="bg-indigo-50 text-indigo-600 p-1.5 rounded-md">
-                    <FileArchive className="w-3.5 h-3.5" />
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="font-medium text-zinc-900">同步整个系列到 Obsidian</span>
-                    <span className="text-xs text-zinc-500">自动构建双链知识网络</span>
-                  </div>
-                </DropdownMenuItem>
-              )}
-              
-              <DropdownMenuSeparator className="bg-zinc-100 my-1" />
-              
-              {selectedBlog?.parent_id === '00000000-0000-0000-0000-000000000000' && selectedBlog?.children && selectedBlog.children.length > 0 && (
-                <DropdownMenuItem onClick={exportSeriesZip} className="gap-2 cursor-pointer focus:bg-zinc-100 rounded-lg">
-                  <FileArchive className="w-4 h-4 text-zinc-500" />
-                  <span>导出系列 ZIP</span>
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuItem onClick={exportMarkdown} className="gap-2 cursor-pointer focus:bg-zinc-100 rounded-lg">
-                <FileDown className="w-4 h-4 text-zinc-500" />
-                <span>导出为 Markdown</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={exportPDF} className="gap-2 cursor-pointer focus:bg-zinc-100 rounded-lg">
-                <Download className="w-4 h-4 text-zinc-500" />
-                <span>打印为 PDF</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
-
-      {/* Split Pane */}
-      <div className="flex-1 flex overflow-hidden print:overflow-visible print:block">
-        {/* Editor Pane */}
-        <div className="flex-1 border-r border-zinc-200 flex flex-col print:hidden">
-          <textarea
-            ref={editorRef}
-            onScroll={handleEditorScroll}
-            className="flex-1 w-full p-6 resize-none bg-zinc-50 border-none focus:outline-none focus:ring-0 font-mono text-sm text-zinc-700 leading-relaxed"
-            placeholder="使用 Markdown 开始编写您的博客..."
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            spellCheck={false}
-          />
-        </div>
-
-        {/* Preview Pane */}
-        <div 
-          ref={previewRef}
-          onScroll={handlePreviewScroll}
-          className="flex-1 bg-white overflow-y-auto print:block print:w-full print:overflow-visible relative"
-        >
-          <div className="sticky top-0 z-10 border-b border-zinc-200/60 bg-white/80 backdrop-blur print:hidden">
-            <div className="max-w-3xl mx-auto px-8 py-3 flex items-center justify-between gap-4">
-              <div className="inline-flex rounded-lg bg-zinc-100 p-1">
-                <button
-                  type="button"
-                  onClick={() => setActivePreviewTab('preview')}
-                  className={
-                    activePreviewTab === 'preview'
-                      ? 'px-3 py-1.5 text-sm font-medium rounded-md bg-white shadow-sm text-zinc-900'
-                      : 'px-3 py-1.5 text-sm font-medium rounded-md text-zinc-600 hover:text-zinc-900'
-                  }
-                >
-                  预览
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActivePreviewTab('polish')}
-                  className={
-                    activePreviewTab === 'polish'
-                      ? 'px-3 py-1.5 text-sm font-medium rounded-md bg-white shadow-sm text-zinc-900 flex items-center gap-2'
-                      : 'px-3 py-1.5 text-sm font-medium rounded-md text-zinc-600 hover:text-zinc-900 flex items-center gap-2'
-                  }
-                >
-                  润色预览
-                  {isPolishing ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-                </button>
-              </div>
-
-              {activePreviewTab === 'polish' ? (
-                <div className="flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    onClick={handleApplyPolish}
-                    disabled={isPolishing || !polishedDraft.trim()}
-                    className="gap-1.5 bg-emerald-600 hover:bg-emerald-600/90 text-white"
-                  >
-                    应用润色结果
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={handleCancelPolish}>
-                    取消
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={handleRetryPolish} disabled={isPolishing}>
-                    重新润色
-                  </Button>
-                </div>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="max-w-3xl mx-auto p-8 print:p-0">
-            <MarkdownEngine content={activePreviewTab === 'polish' ? normalizedPolishedDraft : content} />
-          </div>
-        </div>
-      </div>
+      <EditorBody
+        content={content}
+        onContentChange={setContent}
+        editorRef={editorRef}
+        previewRef={previewRef}
+        handleEditorScroll={handleEditorScroll}
+        handlePreviewScroll={handlePreviewScroll}
+        activePreviewTab={activePreviewTab}
+        setActivePreviewTab={setActivePreviewTab}
+        isPolishing={isPolishing}
+        polishedDraft={polishedDraft}
+        normalizedPolishedDraft={normalizedPolishedDraft}
+        onApplyPolish={handleApplyPolish}
+        onCancelPolish={handleCancelPolish}
+        onRetryPolish={handleRetryPolish}
+      />
     </div>
   )
 }

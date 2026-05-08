@@ -4,6 +4,8 @@
 # Go
 backend/main
 backend/bin/
+backend/server
+backend/inkwords-server
 backend/.env
 backend/tmp/
 *.exe
@@ -42,3 +44,9 @@ test_results/
 
 .superpowers/
 backend/*.test
+
+# PDFs / large local assets
+pdf/*.pdf
+
+# QA / dogfood artifacts (may contain auth tokens or large screenshots)
+dogfood-output/
