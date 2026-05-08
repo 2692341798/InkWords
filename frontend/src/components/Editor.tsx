@@ -1,12 +1,14 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useBlogStore } from '@/store/blogStore'
 import { MarkdownEngine } from './MarkdownEngine'
 import { Button } from './ui/button'
-import { Download, FileDown, Save, Loader2, Sparkles, FileArchive, ChevronDown } from 'lucide-react'
+import { Download, FileDown, Save, Loader2, Sparkles, FileArchive, ChevronDown, Mic, MicOff } from 'lucide-react'
 import { useDebounce } from '@/hooks/useDebounce'
 import { useSyncedScroll } from '@/hooks/useSyncedScroll'
 import { fetchEventSource } from '@microsoft/fetch-event-source'
 import { toast } from 'sonner'
+import { useSpeechRecognition } from '@/hooks/useSpeechRecognition'
+import { replaceVoiceSegment } from '@/lib/voiceInsertion'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,6 +28,120 @@ export function Editor() {
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
 
   const { editorRef, previewRef, handleEditorScroll, handlePreviewScroll } = useSyncedScroll(content)
+
+  const voiceSessionRef = useRef({
+    isActive: false,
+    anchorStart: 0,
+    anchorEnd: 0,
+    lastInsertedLength: 0,
+  })
+
+  const normalizeVoiceText = useCallback((text: string) => {
+    return text.replace(/\s+/g, ' ')
+  }, [])
+
+  const moveCaretToVoiceEnd = useCallback(() => {
+    requestAnimationFrame(() => {
+      const textarea = editorRef.current
+      if (!textarea) return
+      const session = voiceSessionRef.current
+      const pos = session.anchorStart + session.lastInsertedLength
+      textarea.focus()
+      textarea.setSelectionRange(pos, pos)
+    })
+  }, [])
+
+  const applyVoiceText = useCallback(
+    (rawText: string, isFinal: boolean) => {
+      const session = voiceSessionRef.current
+      if (!session.isActive) return
+
+      const normalized = normalizeVoiceText(rawText)
+      if (!normalized) return
+
+      const nextText = isFinal ? `${normalized} ` : normalized
+
+      setContent((prev) => {
+        const res = replaceVoiceSegment({
+          base: prev,
+          anchorStart: session.anchorStart,
+          anchorEnd: session.anchorEnd,
+          lastInsertedLength: session.lastInsertedLength,
+          nextText,
+        })
+
+        session.lastInsertedLength = res.newInsertedLength
+
+        if (isFinal) {
+          session.anchorStart = session.anchorStart + res.newInsertedLength
+          session.anchorEnd = session.anchorStart
+          session.lastInsertedLength = 0
+        }
+
+        return res.merged
+      })
+
+      if (!isFinal) {
+        moveCaretToVoiceEnd()
+      } else {
+        requestAnimationFrame(() => {
+          const textarea = editorRef.current
+          if (!textarea) return
+          const session = voiceSessionRef.current
+          textarea.focus()
+          textarea.setSelectionRange(session.anchorStart, session.anchorStart)
+        })
+      }
+    },
+    [moveCaretToVoiceEnd, normalizeVoiceText],
+  )
+
+  const voiceCallbacks = useMemo(
+    () => ({
+      onInterimText: (text: string) => applyVoiceText(text, false),
+      onFinalText: (text: string) => applyVoiceText(text, true),
+      onErrorText: (message: string) => {
+        voiceSessionRef.current.isActive = false
+        voiceSessionRef.current.lastInsertedLength = 0
+        toast.error(message)
+      },
+    }),
+    [applyVoiceText],
+  )
+
+  const { isSupported: isVoiceSupported, isListening: isVoiceListening, start: startVoice, stop: stopVoice } =
+    useSpeechRecognition(voiceCallbacks)
+
+  const handleToggleVoiceInput = useCallback(() => {
+    if (isContinuing) return
+
+    if (!isVoiceSupported) {
+      toast.error('当前浏览器不支持语音输入，请使用 Chrome/Edge')
+      return
+    }
+
+    if (isVoiceListening) {
+      voiceSessionRef.current.isActive = false
+      voiceSessionRef.current.lastInsertedLength = 0
+      stopVoice()
+      return
+    }
+
+    const textarea = editorRef.current
+    if (!textarea) {
+      toast.error('正文输入框未就绪')
+      return
+    }
+
+    voiceSessionRef.current = {
+      isActive: true,
+      anchorStart: textarea.selectionStart ?? 0,
+      anchorEnd: textarea.selectionEnd ?? textarea.selectionStart ?? 0,
+      lastInsertedLength: 0,
+    }
+
+    startVoice()
+  }, [isContinuing, isVoiceListening, isVoiceSupported, startVoice, stopVoice])
 
   // Track latest state for unmount save
   const currentStateRef = useRef({ selectedBlog, title, content })
@@ -166,7 +282,7 @@ export function Editor() {
   };
 
   const handleContinueGenerating = async () => {
-    if (!selectedBlog || isContinuing) return
+    if (!selectedBlog || isContinuing || isVoiceListening) return
     setIsContinuing(true)
 
     const token = localStorage.getItem('token')
@@ -270,11 +386,26 @@ export function Editor() {
         </div>
 
         <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleToggleVoiceInput}
+            disabled={isContinuing}
+            className={
+              isVoiceListening
+                ? 'gap-1.5 text-red-600 border-red-200 hover:bg-red-50 transition-all duration-200'
+                : 'gap-1.5 text-zinc-700 hover:text-zinc-900 transition-all duration-200 shadow-sm'
+            }
+          >
+            {isVoiceListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+            {isVoiceListening ? '停止语音' : '语音输入'}
+          </Button>
+
           <Button 
             variant="outline" 
             size="sm" 
             onClick={handleContinueGenerating} 
-            disabled={isContinuing}
+            disabled={isContinuing || isVoiceListening}
             className="gap-1.5 text-indigo-600 border-indigo-200 hover:bg-indigo-50 transition-all duration-200"
           >
             {isContinuing ? (

@@ -268,7 +268,7 @@ export function Dashboard() {
                     ))}
                   </Pie>
                   <Tooltip 
-                    formatter={(value: ValueType | undefined, name: NameType | undefined) => [String(value ?? ''), name ?? '']}
+                    formatter={(value: unknown, name: unknown) => [String(value), String(name)]}
                     contentStyle={{ borderRadius: '8px', border: '1px solid #e4e4e7', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                   />
                   <Legend verticalAlign="bottom" height={36} />

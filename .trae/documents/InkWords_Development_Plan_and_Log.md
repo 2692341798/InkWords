@@ -52,7 +52,7 @@
 
 ### 3.2 前端组件测试 (Component Testing)
 - **重点目标**：Markdown 渲染器（验证是否准确剥离了 Mermaid 的样式 `style`）以及 Zustand 的状态变化。
-- **约束**：引入 `Jest` 和 `React Testing Library`，为 `MermaidViewer` 和核心的 `useBlogStream` Hooks 编写隔离测试。
+- **约束**：优先引入 `Vitest` 做轻量级单元测试；如需对 UI 组件做更强隔离测试，再补充 `React Testing Library`。
 
 ### 3.3 端到端联调测试 (E2E Integration)
 - **重点目标**：打通上传 -> SSE 流接收 -> 渲染 -> 落库保存的完整闭环。
@@ -70,8 +70,20 @@
 ## 4. 每日开发日志 (Dev Log)
 > 该区域将由 Vibe Coding 工程师（AI 助手）在每天/每次开发周期结束时，如实记录当天的完成事项、遇到的技术坑点及架构小规模调整。
 
-### [2026-04-29] Feature - 通过 Obsidian Local REST API 导出知识库
-- **开发模块**: [Obsidian 集成, 导出, Docker Compose, 后端 Service]
+### [2026-05-08] Feature - 编辑器语音输入（浏览器实时转写）
+- **开发模块**: [前端 Editor, Hooks, 单元测试]
+- **完成事项**:
+  1. **新增语音输入 Hook**：新增 `useSpeechRecognition` 封装浏览器 SpeechRecognition/Web Speech API，固定 `zh-CN`，支持 `interimResults` 实时转写与“只手动停止”的自动续听策略。
+  2. **编辑器集成**：在 `Editor.tsx` 顶部工具栏新增「语音输入 / 停止语音」按钮，转写内容实时插入到正文光标处，并与「继续生成」互斥禁用避免竞态写入。
+  3. **补充测试框架与单测**：引入 `Vitest`，为“实时插入区间替换算法”新增单元测试，避免 interim 文本重复堆叠。
+- **验证**:
+  - `npm test` 通过
+  - `npm run build` 通过
+  - `npm run lint` 通过
+  - `docker compose down && docker compose up -d --build` 后可在 `http://localhost` 登录进入编辑器进行手工验收（需浏览器麦克风权限）
+
+### [2026-04-29] Feature - 手写博客入口（创建草稿并进入编辑器）
+- **开发模块**: [BlogAPI, 前端 Sidebar, Zustand Store, 文档同步]
 - **完成事项**:
   1. **新增 sidecar 转发**：在 `docker-compose.yml` 增加 `obsidian-bridge`（27125→宿主机 27124）以解决容器无法访问宿主机回环地址的问题。
   2. **后端封装 ObsidianStore**：新增 REST Store 封装（HTTPS + API Key），并将 Obsidian 导出与 wiki scaffold/index 更新迁移为调用 REST API 完成。
