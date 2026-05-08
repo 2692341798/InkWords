@@ -11,6 +11,7 @@ import (
 	"inkwords-backend/internal/cache"
 	"inkwords-backend/internal/db"
 	blogdomain "inkwords-backend/internal/domain/blog"
+	userdomain "inkwords-backend/internal/domain/user"
 	"inkwords-backend/internal/middleware"
 	"inkwords-backend/internal/service"
 )
@@ -65,8 +66,12 @@ func main() {
 	blogDomainService := blogdomain.NewService(blogRepo)
 	blogDomainHandler := blogdomain.NewHandlerWithLegacy(blogDomainService, blogService)
 
+	userRepo := userdomain.NewGormRepository(db.DB)
+	userDomainService := userdomain.NewService(userRepo)
+	userDomainHandler := userdomain.NewHandler(userDomainService)
+
 	authAPI := api.NewAuthAPI(authService)
-	userAPI := api.NewUserAPI(userService)
+	userAPI := api.NewUserAPIWithDeps(userService, userDomainHandler)
 	streamAPI := api.NewStreamAPI(userService)
 	projectAPI := api.NewProjectAPI(userService)
 	blogAPI := api.NewBlogAPIWithDeps(blogService, blogDomainHandler)
