@@ -19,14 +19,14 @@ import (
 
 // GeneratorService handles the blog generation process
 type GeneratorService struct {
-	llmClient     *llm.DeepSeekClient
+	llmClient *llm.DeepSeekClient
 }
 
 // NewGeneratorService creates a new generator service
 func NewGeneratorService() *GeneratorService {
 	apiKey := os.Getenv("DEEPSEEK_API_KEY")
 	return &GeneratorService{
-		llmClient:     llm.NewDeepSeekClient(apiKey),
+		llmClient: llm.NewDeepSeekClient(apiKey),
 	}
 }
 

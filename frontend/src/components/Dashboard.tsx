@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import type { NameType, ValueType } from 'recharts/types/component/DefaultTooltipContent'
 import { Coins, FileText, Hash, User, Loader2, Upload, BookOpen } from 'lucide-react'
 
 interface TechStackStat {

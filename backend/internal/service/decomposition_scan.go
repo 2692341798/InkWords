@@ -38,7 +38,7 @@ func (s *DecompositionService) ScanProjectModulesWithProgress(ctx context.Contex
 		client := &http.Client{Timeout: 10 * time.Second}
 		req, _ := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
 		req.Header.Set("Accept", "application/vnd.github.v3+json")
-		
+
 		// If GITHUB_TOKEN is available, use it to avoid rate limiting
 		if token := os.Getenv("GITHUB_TOKEN"); token != "" {
 			req.Header.Set("Authorization", "Bearer "+token)
@@ -94,7 +94,7 @@ func (s *DecompositionService) ScanProjectModulesWithProgress(ctx context.Contex
 		if err != nil {
 			return nil, fmt.Errorf("failed to run git ls-tree: %w", err)
 		}
-		
+
 		dirNames = strings.Split(strings.TrimSpace(string(outBytes)), "\n")
 	}
 
@@ -185,7 +185,7 @@ func (s *DecompositionService) ScanProjectModulesWithProgress(ctx context.Contex
 		if dirName == "" || ignoredDirs[dirName] || strings.HasPrefix(dirName, ".") {
 			continue
 		}
-		
+
 		desc := dirDescriptions[dirName]
 		if desc == "" {
 			desc = "代码目录模块 (点击解析后查看大纲)"

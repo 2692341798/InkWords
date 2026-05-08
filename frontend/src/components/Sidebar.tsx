@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import JSZip from 'jszip'
 import { useStreamStore } from '@/store/streamStore'
 import { useBlogStore } from '@/store/blogStore'
 import type { BlogNode } from '@/store/blogStore'
@@ -7,7 +6,9 @@ import { BookOpen, CheckCircle2, CheckSquare, ChevronDown, ChevronRight, CircleD
 import { cn } from '@/lib/utils'
 import { Button } from './ui/button'
 import { ConfirmDialog } from './ui/confirm-dialog'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu'
 import { toast } from 'sonner'
+import { useBatchExportZip } from '@/hooks/useBatchExportZip'
 
 export function Sidebar() {
   const streamStore = useStreamStore()
@@ -15,7 +16,6 @@ export function Sidebar() {
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set())
   const [isBatchMode, setIsBatchMode] = useState(false)
   const [selectedForExport, setSelectedForExport] = useState<Set<string>>(new Set())
-  const [isExporting, setIsExporting] = useState(false)
   const [isSyncingSeriesToObsidian, setIsSyncingSeriesToObsidian] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false)
@@ -66,52 +66,14 @@ export function Sidebar() {
     setSelectedForExport(newSelected)
   }
 
-  const handleBatchExport = async () => {
-    if (selectedForExport.size === 0) return
-    setIsExporting(true)
-    try {
-      const zip = new JSZip()
-      
-      const addNodeToZip = (node: BlogNode, folder: JSZip | null, index: number) => {
-        if (selectedForExport.has(node.id)) {
-          const title = node.title || `未命名_${index}`
-          const filename = `${title}.md`
-          
-          if (node.children && node.children.length > 0) {
-            const subFolder = folder ? folder.folder(title) : zip.folder(title)
-            node.children.forEach((child, idx) => addNodeToZip(child, subFolder, idx))
-          } else {
-            const targetFolder = folder || zip
-            const prefix = node.chapter_sort > 0 ? `${String(node.chapter_sort).padStart(2, '0')}-` : ''
-            targetFolder.file(`${prefix}${filename}`, `# ${title}\n\n${node.content || ''}`)
-          }
-        } else {
-          if (node.children && node.children.length > 0) {
-            node.children.forEach((child, idx) => addNodeToZip(child, folder, idx))
-          }
-        }
-      }
-
-      blogs.forEach((blog, idx) => addNodeToZip(blog, null, idx))
-      
-      const blob = await zip.generateAsync({ type: 'blob' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = 'blogs_export.zip'
-      document.body.appendChild(a)
-      a.click()
-      URL.revokeObjectURL(url)
-      document.body.removeChild(a)
-      
+  const { isExporting, handleBatchExport } = useBatchExportZip({
+    blogs,
+    selectedForExport,
+    onDone: () => {
       setIsBatchMode(false)
       setSelectedForExport(new Set())
-    } catch (err) {
-      console.error('Failed to export batch zip:', err)
-    } finally {
-      setIsExporting(false)
-    }
-  }
+    },
+  })
 
   const selectedSeriesRoots = useMemo(() => {
     return blogs.filter(b => Boolean(b.children?.length) && selectedForExport.has(b.id))
@@ -151,6 +113,64 @@ export function Sidebar() {
       toast.error(message, { id: 'sync-series-obsidian' })
     } finally {
       setIsSyncingSeriesToObsidian(false)
+    }
+  }
+
+  const sanitizeDownloadFilename = (name: string) => {
+    return (name || 'series')
+      .replaceAll('/', '-')
+      .replaceAll('\\', '-')
+      .replaceAll(':', '：')
+      .trim()
+  }
+
+  const handleBatchExportSeriesPDF = async () => {
+    if (selectedSeriesRoots.length === 0) {
+      toast.error('请先选择一个系列父节点')
+      return
+    }
+
+    const token = localStorage.getItem('token')
+    setIsExportingPDF(true)
+
+    try {
+      toast.loading(`正在导出 PDF：0/${selectedSeriesRoots.length}`, { id: 'export-series-pdf' })
+
+      let done = 0
+      for (const series of selectedSeriesRoots) {
+        try {
+          const res = await fetch(`/api/v1/blogs/${series.id}/export/pdf`, {
+            headers: {
+              ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+            }
+          })
+
+          if (!res.ok) {
+            const data = await res.json().catch(() => null)
+            throw new Error(data?.message || '导出失败')
+          }
+
+          const blob = await res.blob()
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement('a')
+          a.href = url
+          a.download = `${sanitizeDownloadFilename(series.title)}.pdf`
+          document.body.appendChild(a)
+          a.click()
+          URL.revokeObjectURL(url)
+          document.body.removeChild(a)
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : '导出失败'
+          toast.error(`《${series.title || '未命名系列'}》导出失败：${message}`)
+        } finally {
+          done += 1
+          toast.loading(`正在导出 PDF：${done}/${selectedSeriesRoots.length}`, { id: 'export-series-pdf' })
+        }
+      }
+
+      toast.success(`已开始下载 ${selectedSeriesRoots.length} 份 PDF`, { id: 'export-series-pdf' })
+    } finally {
+      setIsExportingPDF(false)
     }
   }
 
@@ -439,7 +459,7 @@ export function Sidebar() {
             </div>
           </div>
           
-          <div className={cn("flex-1 overflow-y-auto custom-scrollbar flex flex-col space-y-1 px-4", isBatchMode ? "pb-16" : "pb-4")}>
+          <div className={cn("flex-1 overflow-y-auto custom-scrollbar flex flex-col space-y-1 px-4", isBatchMode ? "pb-24" : "pb-4")}>
             {blogs.length > 0 ? (
               blogs.map(blog => renderBlogNode(blog))
             ) : (
@@ -451,45 +471,72 @@ export function Sidebar() {
 
           {/* Batch Export Action Bar */}
           {isBatchMode && (
-            <div className="absolute bottom-0 left-0 right-0 bg-white border-t border-zinc-200 p-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] flex items-center justify-between">
-              <span className="text-xs text-zinc-500">已选 {selectedForExport.size} 项</span>
-              <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setIsBatchMode(false)}>取消</Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="h-7 text-xs px-2"
-                  onClick={handleBatchExportSeriesToObsidian}
-                  disabled={selectedSeriesRoots.length === 0 || isExporting || isDeleting || isSyncingSeriesToObsidian}
-                  title="同步系列到 Obsidian（构建知识网络）"
-                >
-                  {isSyncingSeriesToObsidian ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Sparkles className="w-3 h-3 mr-1" />}
-                  同步系列
-                </Button>
+            <div className="absolute bottom-0 left-0 right-0 bg-white border-t border-zinc-200 p-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] flex flex-col gap-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs text-zinc-500">已选 {selectedForExport.size} 项</span>
+                <Button variant="ghost" size="sm" onClick={() => setIsBatchMode(false)}>取消</Button>
+              </div>
+              <div className="flex items-center justify-end gap-2">
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={isExporting || isDeleting || isSyncingSeriesToObsidian || isExportingPDF}
+                      >
+                        <Download data-icon="inline-start" />
+                        导出 / 同步
+                        <ChevronDown data-icon="inline-end" className="opacity-60" />
+                      </Button>
+                    }
+                  />
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuItem
+                      onClick={handleBatchExportSeriesPDF}
+                      disabled={selectedSeriesRoots.length === 0 || isExporting || isDeleting || isSyncingSeriesToObsidian || isExportingPDF}
+                      className="cursor-pointer"
+                    >
+                      <Download data-icon="inline-start" className="text-muted-foreground" />
+                      <span>导出系列 PDF</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={handleBatchExport}
+                      disabled={selectedForExport.size === 0 || isExporting || isDeleting}
+                      className="cursor-pointer"
+                    >
+                      <FileArchive data-icon="inline-start" className="text-muted-foreground" />
+                      <span>导出 ZIP</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator className="my-1" />
+                    <DropdownMenuItem
+                      onClick={handleBatchExportSeriesToObsidian}
+                      disabled={selectedSeriesRoots.length === 0 || isExporting || isDeleting || isSyncingSeriesToObsidian || isExportingPDF}
+                      className="cursor-pointer"
+                    >
+                      {isSyncingSeriesToObsidian ? (
+                        <Loader2 data-icon="inline-start" className="animate-spin" />
+                      ) : (
+                        <Sparkles data-icon="inline-start" className="text-muted-foreground" />
+                      )}
+                      <span>同步系列到 Obsidian</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
                 <Button 
                   type="button"
                   variant="destructive" 
-                  size="sm" 
-                  className="h-7 text-xs px-2"
+                  size="icon-sm"
                   onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    handleBatchDeleteClick();
+                    e.preventDefault()
+                    e.stopPropagation()
+                    handleBatchDeleteClick()
                   }}
-                  disabled={selectedForExport.size === 0 || isDeleting || isExporting}
+                  disabled={selectedForExport.size === 0 || isDeleting || isExporting || isExportingPDF || isSyncingSeriesToObsidian}
                   title="批量删除"
                 >
-                  {isDeleting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
-                </Button>
-                <Button 
-                  variant="default" 
-                  size="sm" 
-                  className="h-7 text-xs bg-indigo-600 hover:bg-indigo-700"
-                  onClick={handleBatchExport}
-                  disabled={selectedForExport.size === 0 || isExporting || isDeleting}
-                >
-                  {isExporting ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
-                  导出 ZIP
+                  {isDeleting ? <Loader2 className="animate-spin" /> : <Trash2 />}
                 </Button>
               </div>
             </div>
