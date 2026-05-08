@@ -3,7 +3,6 @@ package project
 import (
 	"context"
 	"io"
-	"strings"
 
 	"github.com/google/uuid"
 
@@ -52,14 +51,7 @@ func (s *Service) Analyze(ctx context.Context, gitURL string, subDir string) (ou
 	if err != nil {
 		return OutlineResult{}, "", "fetch", err
 	}
-
-	var fullContentBuilder strings.Builder
-	fullContentBuilder.WriteString(treeContent)
-	fullContentBuilder.WriteString("\n=== Repository Content ===\n")
-	for _, chunk := range chunks {
-		fullContentBuilder.WriteString(chunk.Content)
-	}
-	content := fullContentBuilder.String()
+	content := AssembleSourceContent(treeContent, chunks)
 
 	outlineRes, err := s.decomposition.GenerateOutline(ctx, content, nil, nil)
 	if err != nil {

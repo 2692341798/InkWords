@@ -124,6 +124,15 @@
 - **验证**:
   - `cd backend && go test ./...` 通过
 
+### [2026-05-08] Refactor - Project Phase3：Source Assembler 抽取
+- **开发模块**: [backend/internal/domain/project]
+- **完成事项**:
+  1. 新增 `domain/project/source_assembler.go`，集中实现 `source_content` 拼接规则（tree + "\n=== Repository Content ===\n" + concat chunk.Content）。
+  2. `domain/project/service.go` 的 `Analyze` 统一调用 assembler，保持对外返回不变。
+  3. 新增 `source_assembler_test.go` 作为格式快照测试，防止拼接规则回归。
+- **验证**:
+  - `cd backend && go test ./...` 通过
+
 ### [2026-05-08] Feature - 编辑器语音输入（浏览器实时转写）
 - **开发模块**: [前端 Editor, Hooks, 单元测试]
 - **完成事项**:

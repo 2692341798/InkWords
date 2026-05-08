@@ -11,6 +11,15 @@
   - 本次以“行为不变”为约束，不改 SSE event 协议与 `project/analyze` 的 `source_content` 拼接结构。
   - 继续坚持每步 `go test ./...` 回归，并在验证通过后提交推送。
 
+### 对话 63：后端目录升级（Project Phase3：Source Assembler 抽取）
+- **用户需求**：继续 Phase3，收敛 `project/analyze` 的 `source_content` 组装重复逻辑，避免后续漂移。
+- **AI 动作**：
+  1. 新增 `domain/project/source_assembler.go`，集中实现 `treeContent + "\\n=== Repository Content ===\\n" + concat(chunk.Content)` 的拼接规则。
+  2. `domain/project/service.go` 的 `Analyze` 统一调用 assembler，保证输出结构不变。
+  3. 补充单测 `source_assembler_test.go` 作为格式快照，防止拼接规则回归。
+- **验证**：
+  - `cd backend && go test ./...` 通过
+
 ### 对话 61：后端目录升级（Stream + Project Domain 渐进迁移）
 - **用户需求**：继续后端 DDD 垂直切片迁移，同时迁移 Stream（SSE）与 Project（scan/analyze/parse）两条链路。
 - **AI 动作**：
