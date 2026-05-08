@@ -101,6 +101,7 @@ func main() {
 			blogGroup.POST("/:id/export/obsidian", blogAPI.ExportToObsidian)
 			blogGroup.POST("/:id/export/obsidian/series", blogAPI.ExportSeriesToObsidian)
 			blogGroup.POST("/:id/continue", streamAPI.ContinueBlogStreamHandler)
+			blogGroup.POST("/:id/polish", streamAPI.PolishBlogStreamHandler)
 		}
 
 		// 项目分析相关路由 (需鉴权)

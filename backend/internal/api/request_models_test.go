@@ -29,3 +29,15 @@ func TestProjectAnalyze_UsesSubDirWhenFetchingRepo(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, strings.Contains(string(data), "FetchWithSubDir("))
 }
+
+func TestPolishRequest_HasTitleAndContentFields(t *testing.T) {
+	rt := reflect.TypeOf(PolishRequest{})
+
+	field, ok := rt.FieldByName("Title")
+	require.True(t, ok)
+	assert.Equal(t, "title", field.Tag.Get("json"))
+
+	field, ok = rt.FieldByName("Content")
+	require.True(t, ok)
+	assert.Equal(t, "content", field.Tag.Get("json"))
+}
