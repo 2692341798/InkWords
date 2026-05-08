@@ -28,6 +28,18 @@ func (s *Service) CheckQuota(uid uuid.UUID) error {
 
 func (s *Service) Generate(ctx context.Context, userID uuid.UUID, req GenerateRequest, chunkChan chan<- string, errChan chan<- error) {
 	if len(req.Outline) > 0 {
+		outline := make([]service.Chapter, 0, len(req.Outline))
+		for _, ch := range req.Outline {
+			outline = append(outline, service.Chapter{
+				ID:      ch.ID,
+				Title:   ch.Title,
+				Summary: ch.Summary,
+				Sort:    ch.Sort,
+				Files:   ch.Files,
+				Action:  ch.Action,
+			})
+		}
+
 		var parentID uuid.UUID
 		if req.ParentID != "" {
 			if parsedID, err := uuid.Parse(req.ParentID); err == nil {
@@ -37,7 +49,7 @@ func (s *Service) Generate(ctx context.Context, userID uuid.UUID, req GenerateRe
 		if parentID == uuid.Nil {
 			parentID = uuid.New()
 		}
-		s.decomposition.GenerateSeries(ctx, userID, parentID, req.SeriesTitle, req.Outline, req.SourceContent, req.SourceType, req.GitURL, chunkChan, errChan)
+		s.decomposition.GenerateSeries(ctx, userID, parentID, req.SeriesTitle, outline, req.SourceContent, req.SourceType, req.GitURL, chunkChan, errChan)
 		return
 	}
 
@@ -60,7 +72,18 @@ func (s *Service) AnalyzeStream(bgCtx context.Context, userID uuid.UUID, req Gen
 	s.decomposition.AnalyzeStream(bgCtx, userID, req.GitURL, req.SelectedModules, progressChan, errChan)
 }
 
-func (s *Service) ScanProjectModules(bgCtx context.Context, gitURL string, progressChan chan<- string) ([]service.ModuleCard, error) {
-	return s.decomposition.ScanProjectModulesWithProgress(bgCtx, gitURL, progressChan)
+func (s *Service) ScanProjectModules(bgCtx context.Context, gitURL string, progressChan chan<- string) ([]ModuleCard, error) {
+	modules, err := s.decomposition.ScanProjectModulesWithProgress(bgCtx, gitURL, progressChan)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]ModuleCard, 0, len(modules))
+	for _, m := range modules {
+		result = append(result, ModuleCard{
+			Path:        m.Path,
+			Name:        m.Name,
+			Description: m.Description,
+		})
+	}
+	return result, nil
 }
-

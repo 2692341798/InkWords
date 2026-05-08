@@ -115,6 +115,15 @@
 - **验证**:
   - `cd backend && go test ./...` 通过
 
+### [2026-05-08] Refactor - 后端目录升级（Stream + Project Phase2：DTO 解耦与边界收敛）
+- **开发模块**: [backend/internal/domain/stream, backend/internal/domain/project, backend/internal/api]
+- **完成事项**:
+  1. Stream/Project 领域 DTO 下沉到 domain（Chapter/ModuleCard/OutlineResult 等），并在 domain service 内做与旧 `internal/service` 类型的适配转换。
+  2. 移除 `internal/api` 重复 DTO（如 `stream_types.go`、project request structs），API 层保持纯转发。
+  3. 将 stream 的 blog 存在性校验改为接口注入（默认 GORM 实现），保持错误码与文案不变。
+- **验证**:
+  - `cd backend && go test ./...` 通过
+
 ### [2026-05-08] Feature - 编辑器语音输入（浏览器实时转写）
 - **开发模块**: [前端 Editor, Hooks, 单元测试]
 - **完成事项**:

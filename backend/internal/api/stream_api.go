@@ -16,7 +16,7 @@ func NewStreamAPI(userService *service.UserService) *StreamAPI {
 	generatorService := service.NewGeneratorService()
 	decompositionService := service.NewDecompositionService()
 	streamService := streamdomain.NewService(generatorService, decompositionService, userService)
-	return NewStreamAPIWithDeps(generatorService, decompositionService, userService, streamdomain.NewHandler(streamService))
+	return NewStreamAPIWithDeps(generatorService, decompositionService, userService, streamdomain.NewHandler(streamService, streamdomain.NewGormBlogReadable()))
 }
 
 func NewStreamAPIWithDeps(generatorService *service.GeneratorService, decompositionService *service.DecompositionService, userService *service.UserService, streamDomainHandler *streamdomain.Handler) *StreamAPI {

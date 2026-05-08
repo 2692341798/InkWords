@@ -1,6 +1,16 @@
 # 墨言博客助手 (InkWords) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 62：后端目录升级（Stream/Project Phase2 深拆：DTO 解耦与边界收敛）
+- **用户需求**：在完成 Stream/Project Phase1 迁移后继续深拆（Phase2），减少 domain 对 `internal/service` 类型耦合，并为后续深迁移打基础。
+- **AI 动作**：
+  1. 将 Stream/Project 的请求与返回 DTO 下沉到 domain（Chapter/ModuleCard/OutlineResult 等），并在 domain service 内做与旧 service 类型的适配转换。
+  2. 移除 `internal/api` 中重复 DTO（例如 `stream_types.go`、project request structs），API 层保持纯转发。
+  3. 将 stream 的 blog 存在性校验从 handler 内直连 DB 改为接口注入（默认 GORM 实现），保持错误码与文案不变。
+- **决策/变更**：
+  - 本次以“行为不变”为约束，不改 SSE event 协议与 `project/analyze` 的 `source_content` 拼接结构。
+  - 继续坚持每步 `go test ./...` 回归，并在验证通过后提交推送。
+
 ### 对话 61：后端目录升级（Stream + Project Domain 渐进迁移）
 - **用户需求**：继续后端 DDD 垂直切片迁移，同时迁移 Stream（SSE）与 Project（scan/analyze/parse）两条链路。
 - **AI 动作**：

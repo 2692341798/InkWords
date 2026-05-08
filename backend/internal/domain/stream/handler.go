@@ -9,17 +9,15 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-
-	"inkwords-backend/internal/db"
-	"inkwords-backend/internal/model"
 )
 
 type Handler struct {
-	service *Service
+	service  *Service
+	blogRepo BlogReadable
 }
 
-func NewHandler(service *Service) *Handler {
-	return &Handler{service: service}
+func NewHandler(service *Service, blogRepo BlogReadable) *Handler {
+	return &Handler{service: service, blogRepo: blogRepo}
 }
 
 func (h *Handler) getUserID(c *gin.Context) uuid.UUID {
@@ -202,8 +200,7 @@ func (h *Handler) PolishBlogStreamHandler(c *gin.Context) {
 		return
 	}
 
-	var blog model.Blog
-	if err := db.DB.WithContext(c.Request.Context()).Select("id").First(&blog, "id = ? AND user_id = ?", blogID, userID).Error; err != nil {
+	if err := h.blogRepo.Exists(c.Request.Context(), userID, blogID); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "blog not found"})
 		return
 	}
@@ -366,7 +363,7 @@ func (h *Handler) ScanStreamHandler(c *gin.Context) {
 
 	progressChan := make(chan string)
 	errChan := make(chan error)
-	resultChan := make(chan interface{})
+	resultChan := make(chan []ModuleCard)
 
 	bgCtx := context.WithoutCancel(c.Request.Context())
 	ctx := c.Request.Context()
@@ -437,4 +434,3 @@ func (h *Handler) ScanStreamHandler(c *gin.Context) {
 
 	go wg.Wait()
 }
-

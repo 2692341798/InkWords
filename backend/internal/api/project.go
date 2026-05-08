@@ -24,19 +24,11 @@ func NewProjectAPI(userService *service.UserService) *ProjectAPI {
 	return NewProjectAPIWithDeps(decompositionService, gitFetcher, docParser, userService, projectdomain.NewHandler(projectService))
 }
 
-type ScanRequest struct {
-	GitURL string `json:"git_url" binding:"required"`
-}
-
 // ScanGithubRepo handles the /api/v1/project/scan endpoint
 func (api *ProjectAPI) ScanGithubRepo(c *gin.Context) {
 	api.projectDomainHandler.ScanGithubRepo(c)
 }
 
-type AnalyzeRequest struct {
-	GitURL string `json:"git_url" binding:"required"`
-	SubDir string `json:"sub_dir"`
-}
 
 // Analyze handles the /api/v1/project/analyze endpoint
 func (api *ProjectAPI) Analyze(c *gin.Context) {

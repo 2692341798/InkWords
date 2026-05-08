@@ -8,17 +8,20 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	projectdomain "inkwords-backend/internal/domain/project"
+	streamdomain "inkwords-backend/internal/domain/stream"
 )
 
 func TestAnalyzeRequest_HasSubDirField(t *testing.T) {
-	rt := reflect.TypeOf(AnalyzeRequest{})
+	rt := reflect.TypeOf(projectdomain.AnalyzeRequest{})
 	field, ok := rt.FieldByName("SubDir")
 	require.True(t, ok)
 	assert.Equal(t, "sub_dir", field.Tag.Get("json"))
 }
 
 func TestGenerateRequest_HasSubDirField(t *testing.T) {
-	rt := reflect.TypeOf(GenerateRequest{})
+	rt := reflect.TypeOf(streamdomain.GenerateRequest{})
 	field, ok := rt.FieldByName("SubDir")
 	require.True(t, ok)
 	assert.Equal(t, "sub_dir", field.Tag.Get("json"))
@@ -31,7 +34,7 @@ func TestProjectAnalyze_UsesSubDirWhenFetchingRepo(t *testing.T) {
 }
 
 func TestPolishRequest_HasTitleAndContentFields(t *testing.T) {
-	rt := reflect.TypeOf(PolishRequest{})
+	rt := reflect.TypeOf(streamdomain.PolishRequest{})
 
 	field, ok := rt.FieldByName("Title")
 	require.True(t, ok)

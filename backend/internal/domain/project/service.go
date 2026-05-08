@@ -31,14 +31,26 @@ func (s *Service) CheckQuota(uid uuid.UUID) error {
 	return s.userService.CheckQuota(uid)
 }
 
-func (s *Service) ScanProjectModules(ctx context.Context, gitURL string) (interface{}, error) {
-	return s.decomposition.ScanProjectModules(ctx, gitURL)
+func (s *Service) ScanProjectModules(ctx context.Context, gitURL string) ([]ModuleCard, error) {
+	modules, err := s.decomposition.ScanProjectModules(ctx, gitURL)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]ModuleCard, 0, len(modules))
+	for _, m := range modules {
+		result = append(result, ModuleCard{
+			Path:        m.Path,
+			Name:        m.Name,
+			Description: m.Description,
+		})
+	}
+	return result, nil
 }
 
-func (s *Service) Analyze(ctx context.Context, gitURL string, subDir string) (outline interface{}, sourceContent string, stage string, err error) {
+func (s *Service) Analyze(ctx context.Context, gitURL string, subDir string) (outline OutlineResult, sourceContent string, stage string, err error) {
 	treeContent, chunks, err := s.gitFetcher.FetchWithSubDir(gitURL, subDir, nil)
 	if err != nil {
-		return nil, "", "fetch", err
+		return OutlineResult{}, "", "fetch", err
 	}
 
 	var fullContentBuilder strings.Builder
@@ -51,10 +63,26 @@ func (s *Service) Analyze(ctx context.Context, gitURL string, subDir string) (ou
 
 	outlineRes, err := s.decomposition.GenerateOutline(ctx, content, nil, nil)
 	if err != nil {
-		return nil, content, "outline", err
+		return OutlineResult{}, content, "outline", err
 	}
 
-	return outlineRes, content, "", nil
+	chapters := make([]Chapter, 0, len(outlineRes.Chapters))
+	for _, ch := range outlineRes.Chapters {
+		chapters = append(chapters, Chapter{
+			ID:      ch.ID,
+			Title:   ch.Title,
+			Summary: ch.Summary,
+			Sort:    ch.Sort,
+			Files:   ch.Files,
+			Action:  ch.Action,
+		})
+	}
+
+	return OutlineResult{
+		SeriesTitle: outlineRes.SeriesTitle,
+		Chapters:    chapters,
+		ParentID:    outlineRes.ParentID,
+	}, content, "", nil
 }
 
 func (s *Service) Parse(file io.Reader, filename string) (string, error) {

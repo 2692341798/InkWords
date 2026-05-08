@@ -82,7 +82,7 @@ func main() {
 	userDomainHandler := userdomain.NewHandler(userDomainService)
 
 	streamDomainService := streamdomain.NewService(generatorService, decompositionService, userService)
-	streamDomainHandler := streamdomain.NewHandler(streamDomainService)
+	streamDomainHandler := streamdomain.NewHandler(streamDomainService, streamdomain.NewGormBlogReadable())
 
 	projectDomainService := projectdomain.NewService(decompositionService, gitFetcher, docParser, userService)
 	projectDomainHandler := projectdomain.NewHandler(projectDomainService)
