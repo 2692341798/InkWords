@@ -1,6 +1,16 @@
 # 墨言博客助手 (InkWords) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 60：后端目录升级（Auth Domain 渐进迁移）
+- **用户需求**：继续后端 DDD 垂直切片迁移，迁移 Auth 领域（register/login/oauth/captcha/bind-github）。
+- **AI 动作**：
+  1. 新增 `internal/domain/auth`（repo/service/handler/dto），并将 `internal/service/auth.go` 迁移为 domain service 后移除。
+  2. 将 `internal/api/auth.go` 薄化为转发到 domain handler，保持路由与对外跳转/响应结构不变。
+  3. 在 `cmd/server/main.go` 统一组装 auth domain 依赖并注入到 AuthAPI。
+- **决策/变更**：
+  - 本次仅做结构迁移，不引入新的 OAuth 安全策略（state 随机化/PKCE 等）以避免行为变更；后续如需安全增强再单独开改动。
+  - 迁移过程中持续 `go test ./...` 回归，确保编译与既有测试不回归。
+
 ### 对话 59：后端目录升级（User Domain 渐进迁移）
 - **用户需求**：继续进行后端 DDD 垂直切片迁移，迁移 User 领域（profile/update/avatar/stats）。
 - **AI 动作**：

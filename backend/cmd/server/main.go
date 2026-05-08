@@ -10,6 +10,7 @@ import (
 	"inkwords-backend/internal/api"
 	"inkwords-backend/internal/cache"
 	"inkwords-backend/internal/db"
+	authdomain "inkwords-backend/internal/domain/auth"
 	blogdomain "inkwords-backend/internal/domain/blog"
 	userdomain "inkwords-backend/internal/domain/user"
 	"inkwords-backend/internal/middleware"
@@ -58,9 +59,12 @@ func main() {
 	})
 
 	// 初始化 API Handler
-	authService := service.NewAuthService(db.DB)
 	userService := service.NewUserService(db.DB)
 	blogService := service.NewBlogService()
+
+	authRepo := authdomain.NewGormRepository(db.DB)
+	authDomainService := authdomain.NewService(authRepo)
+	authDomainHandler := authdomain.NewHandler(authDomainService)
 
 	blogRepo := blogdomain.NewGormRepository(db.DB)
 	blogDomainService := blogdomain.NewService(blogRepo)
@@ -70,7 +74,7 @@ func main() {
 	userDomainService := userdomain.NewService(userRepo)
 	userDomainHandler := userdomain.NewHandler(userDomainService)
 
-	authAPI := api.NewAuthAPI(authService)
+	authAPI := api.NewAuthAPIWithDeps(authDomainHandler)
 	userAPI := api.NewUserAPIWithDeps(userService, userDomainHandler)
 	streamAPI := api.NewStreamAPI(userService)
 	projectAPI := api.NewProjectAPI(userService)

@@ -98,6 +98,14 @@
 - **验证**:
   - `cd backend && go test ./...` 通过
 
+### [2026-05-08] Refactor - 后端目录升级（DDD 垂直切片，Auth Domain）
+- **开发模块**: [backend/internal/domain/auth, backend/internal/api, cmd/server DI]
+- **完成事项**:
+  1. 新增 `internal/domain/auth`（repo/service/handler/dto），并将 Auth 的 register/login/oauth/captcha/bind-github 迁移为 domain handler 实现，`internal/api` 保持薄适配。
+  2. 将依赖组装收口到 `cmd/server/main.go`（repo -> service -> handler -> api），并移除旧 `internal/service/auth.go`。
+- **验证**:
+  - `cd backend && go test ./...` 通过
+
 ### [2026-05-08] Feature - 编辑器语音输入（浏览器实时转写）
 - **开发模块**: [前端 Editor, Hooks, 单元测试]
 - **完成事项**:
