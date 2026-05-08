@@ -157,4 +157,21 @@
   div.prose h4 {
     @apply text-lg font-semibold mt-4 mb-2;
   }
+
+  div.prose h2 + h3 {
+    @apply !mt-4;
+  }
+
+  div.prose table {
+    @apply my-6 w-full block overflow-x-auto border border-border rounded-lg;
+  }
+  div.prose thead {
+    @apply bg-muted;
+  }
+  div.prose th {
+    @apply border border-border px-3 py-2 text-left font-medium align-top;
+  }
+  div.prose td {
+    @apply border border-border px-3 py-2 align-top;
+  }
 }

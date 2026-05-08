@@ -3,6 +3,7 @@
 ## 0. 变更记录
 - 2026-04-29：新增“写博客”入口配套接口 `/api/v1/blogs/draft`（创建手写草稿）。
 - 2026-05-08：写博客编辑器新增“语音输入”（纯前端能力，无 API 变更）。
+- 2026-05-08：新增“博客润色”流式接口 `/api/v1/blogs/:id/polish`（SSE 输出润色草稿，不落库）。
 ## 1. 认证模块 (AuthAPI)
 | 接口地址 | 请求方法 | 功能描述 | 参数 |
 | -------- | -------- | -------- | ---- |
@@ -34,6 +35,7 @@
 | `/api/v1/stream/analyze` | POST | 实时流式拉取 Git 或解析长文本文件生成大纲 | `{ git_url, selected_modules, source_type, source_content }` -> SSE Stream |
 | `/api/v1/stream/generate` | POST | 根据大纲或内容流式生成博客章节 | `{ source_content, source_type, git_url, outline, series_title, parent_id }` -> SSE Stream |
 | `/api/v1/blogs/:id/continue` | POST | 继续生成被截断的单篇博客 (Legacy) | 无 -> SSE Stream |
+| `/api/v1/blogs/:id/polish` | POST | 对当前草稿全文润色并返回“润色草稿” | `{ title, content }` -> SSE Stream |
 
 ## 5. 博客管理模块 (BlogAPI)
 | 接口地址 | 请求方法 | 功能描述 | 参数 |

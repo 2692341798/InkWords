@@ -82,6 +82,19 @@
   - `npm run lint` 通过
   - `docker compose down && docker compose up -d --build` 后可在 `http://localhost` 登录进入编辑器进行手工验收（需浏览器麦克风权限）
 
+### [2026-05-08] Feature - 编辑器润色（SSE 生成润色草稿 + 预览与一键应用）
+- **开发模块**: [后端 StreamAPI, GeneratorService, 前端 Editor, Hooks, Markdown 引擎样式]
+- **完成事项**:
+  1. **后端新增润色 SSE 接口**：新增 `POST /api/v1/blogs/:id/polish`，接收 `{ title, content }`，流式返回润色草稿（不落库）。
+  2. **前端新增润色预览与应用**：Editor 预览面板新增「润色预览」Tab，支持开始润色/取消/重试，并支持一键将润色结果应用回正文。
+  3. **Markdown 预览排版增强**：修复 `h2` 后紧跟 `h3` 的间距压缩问题，并增强表格的边框/padding/横向滚动体验（更接近 Notion）。
+  4. **补充前端单测**：新增对 Markdown 规范化、润色草稿提取、流式中止与预览样式覆盖的回归测试。
+- **验证**:
+  - `go test ./...` 通过
+  - `npm test` 通过
+  - `npm run build` 通过
+  - `docker compose down && docker compose up -d --build` 后可在 `http://localhost` 打开编辑器进行手工验收
+
 ### [2026-04-29] Feature - 手写博客入口（创建草稿并进入编辑器）
 - **开发模块**: [BlogAPI, 前端 Sidebar, Zustand Store, 文档同步]
 - **完成事项**:

@@ -152,6 +152,137 @@ func (s *GeneratorService) GenerateBlogStream(ctx context.Context, userID uuid.U
 	}()
 }
 
+// GeneratePolishDraftStream generates a polished blog draft via LLM streaming, without persisting it.
+func (s *GeneratorService) GeneratePolishDraftStream(ctx context.Context, title string, content string, chunkChan chan<- string, errChan chan<- error) {
+	const maxInputRunes = 15000000
+	contentRunes := []rune(content)
+	if len(contentRunes) > maxInputRunes {
+		content = string(contentRunes[:maxInputRunes])
+	}
+
+	titleRunes := []rune(title)
+	if len(titleRunes) > 2000 {
+		title = string(titleRunes[:2000])
+	}
+
+	instruction := `你是一个高级技术博主和全栈架构师。现在请对用户提供的博客正文进行“全文润色”，输出一份可直接发布的高质量技术博客草稿。
+要求：
+1. 输出必须为中文。
+2. 结构更清晰（H1-H4），逻辑更严密，适当补充示例代码、解释与可复现步骤（如适用）。
+3. 严格禁止在 Mermaid 图表代码块中出现 style/classDef/linkStyle 等自定义样式关键字；如果节点文本包含括号或幂符号等特殊字符（如 O(1), O(n^2)），必须使用双引号包裹，例如 A["O(1)"]。
+4. Markdown 格式必须严格正确：
+   - 标题语法必须为 "# " / "## " / "### " / "#### "（# 后必须有空格），禁止出现 "##2." 这类没有空格的标题写法
+   - 代码块必须使用三反引号围栏，且围栏必须单独成行：先输出“围栏行（含语言标识，如 c）”，换行后再写代码；结束围栏也必须单独成行
+   - 列表、表格、引用块均使用标准 Markdown 语法；不要输出 HTML 标签
+5. 输出必须严格按以下顺序组织，便于前端预览与应用：
+   - 先输出一个“## 标题建议”小节，列出 3 个备选标题（编号列表）
+   - 然后输出一行分隔线：---
+   - 最后输出完整 Markdown 正文（可包含代码块、列表等）`
+
+	messages := []llm.Message{
+		{
+			Role:    "system",
+			Content: fmt.Sprintf("当前博客标题：%s\n\n当前博客正文（Markdown）如下：\n%s", title, content),
+		},
+		{Role: "user", Content: instruction},
+	}
+
+	modelType := "deepseek-v4-flash"
+	if envModel := os.Getenv("DEEPSEEK_MODEL"); envModel != "" {
+		modelType = envModel
+	}
+
+	internalChunkChan := make(chan string, 100)
+	internalErrChan := make(chan error, 1)
+
+	streamCtx, streamCancel := context.WithCancel(ctx)
+
+	go func() {
+		defer streamCancel()
+		defer close(chunkChan)
+		defer close(errChan)
+
+		idleTimeout := 60 * time.Second
+		timer := time.NewTimer(idleTimeout)
+		defer timer.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				errChan <- ctx.Err()
+				return
+			case <-timer.C:
+				streamCancel()
+				errChan <- fmt.Errorf("AI generation idle timeout (no data for %v)", idleTimeout)
+				return
+			case err, ok := <-internalErrChan:
+				if ok && err != nil {
+					errChan <- err
+					return
+				}
+				if !ok {
+					internalErrChan = nil
+				}
+			case chunk, ok := <-internalChunkChan:
+				if !ok {
+					return
+				}
+				if !timer.Stop() {
+					select {
+					case <-timer.C:
+					default:
+					}
+				}
+				timer.Reset(idleTimeout)
+
+				chunkChan <- chunk
+			}
+		}
+	}()
+
+	go func() {
+		defer close(internalChunkChan)
+		defer close(internalErrChan)
+
+		for {
+			tempChunkChan := make(chan string)
+			var assistantContent string
+			var wg sync.WaitGroup
+			wg.Add(1)
+
+			go func() {
+				defer wg.Done()
+				for chunk := range tempChunkChan {
+					assistantContent += chunk
+					internalChunkChan <- chunk
+				}
+			}()
+
+			finishReason, err := s.llmClient.GenerateStream(streamCtx, modelType, messages, tempChunkChan)
+			wg.Wait()
+
+			if err != nil {
+				internalErrChan <- err
+				return
+			}
+
+			messages = append(messages, llm.Message{
+				Role:    "assistant",
+				Content: assistantContent,
+			})
+
+			if finishReason != "length" {
+				return
+			}
+
+			messages = append(messages, llm.Message{
+				Role:    "user",
+				Content: "刚才你的回答被截断了，请严格从上文最后一个字符开始无缝续写。绝对不要输出“好的，我们继续”等任何过渡性废话，直接输出后续的Markdown或代码内容。",
+			})
+		}
+	}()
+}
+
 // saveToDB persists the generated markdown to PostgreSQL
 func (s *GeneratorService) saveToDB(ctx context.Context, userID uuid.UUID, sourceType string, content string) {
 	title := "文件解析生成的博客"

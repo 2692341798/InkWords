@@ -2,13 +2,16 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useBlogStore } from '@/store/blogStore'
 import { MarkdownEngine } from './MarkdownEngine'
 import { Button } from './ui/button'
-import { Download, FileDown, Save, Loader2, Sparkles, FileArchive, ChevronDown, Mic, MicOff } from 'lucide-react'
+import { Download, FileDown, Save, Loader2, Sparkles, FileArchive, ChevronDown, Mic, MicOff, Wand2 } from 'lucide-react'
 import { useDebounce } from '@/hooks/useDebounce'
 import { useSyncedScroll } from '@/hooks/useSyncedScroll'
 import { fetchEventSource } from '@microsoft/fetch-event-source'
 import { toast } from 'sonner'
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition'
 import { replaceVoiceSegment } from '@/lib/voiceInsertion'
+import { usePolishStream } from '@/hooks/usePolishStream'
+import { extractPolishedBody } from '@/lib/polishDraft'
+import { normalizeMarkdown } from '@/lib/markdownNormalize'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,6 +29,16 @@ export function Editor() {
   const [isSaving, setIsSaving] = useState(false)
   const [isContinuing, setIsContinuing] = useState(false)
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
+  const [activePreviewTab, setActivePreviewTab] = useState<'preview' | 'polish'>('preview')
+
+  const {
+    isPolishing,
+    draft: polishedDraft,
+    start: startPolish,
+    cancelAndClear: cancelPolishAndClear,
+  } = usePolishStream()
+
+  const normalizedPolishedDraft = useMemo(() => normalizeMarkdown(polishedDraft), [polishedDraft])
 
   const { editorRef, previewRef, handleEditorScroll, handlePreviewScroll } = useSyncedScroll(content)
 
@@ -113,7 +126,7 @@ export function Editor() {
     useSpeechRecognition(voiceCallbacks)
 
   const handleToggleVoiceInput = useCallback(() => {
-    if (isContinuing) return
+    if (isContinuing || isPolishing) return
 
     if (!isVoiceSupported) {
       toast.error('当前浏览器不支持语音输入，请使用 Chrome/Edge')
@@ -141,7 +154,12 @@ export function Editor() {
     }
 
     startVoice()
-  }, [isContinuing, isVoiceListening, isVoiceSupported, startVoice, stopVoice])
+  }, [isContinuing, isPolishing, isVoiceListening, isVoiceSupported, startVoice, stopVoice])
+
+  useEffect(() => {
+    cancelPolishAndClear()
+    setActivePreviewTab('preview')
+  }, [selectedBlog?.id, cancelPolishAndClear])
 
   // Track latest state for unmount save
   const currentStateRef = useRef({ selectedBlog, title, content })
@@ -180,6 +198,47 @@ export function Editor() {
       save()
     }
   }, [debouncedTitle, debouncedContent, selectedBlog, updateBlog])
+
+  const handleStartPolish = useCallback(() => {
+    if (!selectedBlog) return
+    if (isContinuing || isVoiceListening || isPolishing) return
+    if (!content.trim()) {
+      toast.error('正文为空，无法润色')
+      return
+    }
+    setActivePreviewTab('polish')
+    startPolish(selectedBlog.id, title, content)
+  }, [content, isContinuing, isPolishing, isVoiceListening, selectedBlog, startPolish, title])
+
+  const handleCancelPolish = useCallback(() => {
+    cancelPolishAndClear()
+    setActivePreviewTab('preview')
+  }, [cancelPolishAndClear])
+
+  const handleRetryPolish = useCallback(() => {
+    if (!selectedBlog) return
+    if (isContinuing || isVoiceListening) return
+    if (!content.trim()) {
+      cancelPolishAndClear()
+      toast.error('正文为空，无法润色')
+      return
+    }
+    cancelPolishAndClear()
+    setActivePreviewTab('polish')
+    startPolish(selectedBlog.id, title, content)
+  }, [cancelPolishAndClear, content, isContinuing, isVoiceListening, selectedBlog, startPolish, title])
+
+  const handleApplyPolish = useCallback(() => {
+    const draft = normalizedPolishedDraft.trim()
+    if (!draft) {
+      toast.error('润色草稿为空')
+      return
+    }
+    setContent(extractPolishedBody(draft))
+    cancelPolishAndClear()
+    setActivePreviewTab('preview')
+    toast.success('已应用润色结果')
+  }, [cancelPolishAndClear, normalizedPolishedDraft])
 
   if (!selectedBlog) {
     return (
@@ -282,7 +341,7 @@ export function Editor() {
   };
 
   const handleContinueGenerating = async () => {
-    if (!selectedBlog || isContinuing || isVoiceListening) return
+    if (!selectedBlog || isContinuing || isVoiceListening || isPolishing) return
     setIsContinuing(true)
 
     const token = localStorage.getItem('token')
@@ -390,7 +449,7 @@ export function Editor() {
             variant="outline"
             size="sm"
             onClick={handleToggleVoiceInput}
-            disabled={isContinuing}
+            disabled={isContinuing || isPolishing}
             className={
               isVoiceListening
                 ? 'gap-1.5 text-red-600 border-red-200 hover:bg-red-50 transition-all duration-200'
@@ -401,11 +460,22 @@ export function Editor() {
             {isVoiceListening ? '停止语音' : '语音输入'}
           </Button>
 
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleStartPolish}
+            disabled={isPolishing || isContinuing || isVoiceListening}
+            className="gap-1.5 text-emerald-700 border-emerald-200 hover:bg-emerald-50 transition-all duration-200"
+          >
+            {isPolishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+            {isPolishing ? '润色中...' : '润色'}
+          </Button>
+
           <Button 
             variant="outline" 
             size="sm" 
             onClick={handleContinueGenerating} 
-            disabled={isContinuing || isVoiceListening}
+            disabled={isContinuing || isVoiceListening || isPolishing}
             className="gap-1.5 text-indigo-600 border-indigo-200 hover:bg-indigo-50 transition-all duration-200"
           >
             {isContinuing ? (
@@ -489,8 +559,57 @@ export function Editor() {
           onScroll={handlePreviewScroll}
           className="flex-1 bg-white overflow-y-auto print:block print:w-full print:overflow-visible relative"
         >
+          <div className="sticky top-0 z-10 border-b border-zinc-200/60 bg-white/80 backdrop-blur print:hidden">
+            <div className="max-w-3xl mx-auto px-8 py-3 flex items-center justify-between gap-4">
+              <div className="inline-flex rounded-lg bg-zinc-100 p-1">
+                <button
+                  type="button"
+                  onClick={() => setActivePreviewTab('preview')}
+                  className={
+                    activePreviewTab === 'preview'
+                      ? 'px-3 py-1.5 text-sm font-medium rounded-md bg-white shadow-sm text-zinc-900'
+                      : 'px-3 py-1.5 text-sm font-medium rounded-md text-zinc-600 hover:text-zinc-900'
+                  }
+                >
+                  预览
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActivePreviewTab('polish')}
+                  className={
+                    activePreviewTab === 'polish'
+                      ? 'px-3 py-1.5 text-sm font-medium rounded-md bg-white shadow-sm text-zinc-900 flex items-center gap-2'
+                      : 'px-3 py-1.5 text-sm font-medium rounded-md text-zinc-600 hover:text-zinc-900 flex items-center gap-2'
+                  }
+                >
+                  润色预览
+                  {isPolishing ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                </button>
+              </div>
+
+              {activePreviewTab === 'polish' ? (
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    onClick={handleApplyPolish}
+                    disabled={isPolishing || !polishedDraft.trim()}
+                    className="gap-1.5 bg-emerald-600 hover:bg-emerald-600/90 text-white"
+                  >
+                    应用润色结果
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={handleCancelPolish}>
+                    取消
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={handleRetryPolish} disabled={isPolishing}>
+                    重新润色
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+          </div>
+
           <div className="max-w-3xl mx-auto p-8 print:p-0">
-            <MarkdownEngine content={content} />
+            <MarkdownEngine content={activePreviewTab === 'polish' ? normalizedPolishedDraft : content} />
           </div>
         </div>
       </div>
