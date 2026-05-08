@@ -5,7 +5,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"inkwords-backend/internal/db"
+	"inkwords-backend/internal/infra/db"
 	"inkwords-backend/internal/model"
 )
 

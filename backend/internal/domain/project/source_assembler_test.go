@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"inkwords-backend/internal/parser"
+	"inkwords-backend/internal/infra/parser"
 )
 
 func TestAssembleSourceContent_MatchesLegacyFormat(t *testing.T) {
@@ -19,4 +19,3 @@ func TestAssembleSourceContent_MatchesLegacyFormat(t *testing.T) {
 	want := "TREE\n\n=== Repository Content ===\nA1\nB2\n"
 	assert.Equal(t, want, got)
 }
-

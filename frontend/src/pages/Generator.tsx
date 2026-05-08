@@ -4,10 +4,10 @@ import { useStreamStore } from '@/store/streamStore'
 import { useBlogStream } from '@/hooks/useBlogStream'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 
-import { GeneratorInput } from './generator/GeneratorInput'
-import { GeneratorModules } from './generator/GeneratorModules'
-import { GeneratorOutline } from './generator/GeneratorOutline'
-import { GeneratorStatus } from './generator/GeneratorStatus'
+import { GeneratorInput } from '@/components/generator/GeneratorInput'
+import { GeneratorModules } from '@/components/generator/GeneratorModules'
+import { GeneratorOutline } from '@/components/generator/GeneratorOutline'
+import { GeneratorStatus } from '@/components/generator/GeneratorStatus'
 
 export function Generator() {
   const store = useStreamStore()

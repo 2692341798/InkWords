@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"inkwords-backend/internal/parser"
+	"inkwords-backend/internal/infra/parser"
 )
 
 func TestParseGithubOwnerRepo(t *testing.T) {

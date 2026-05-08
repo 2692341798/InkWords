@@ -2,8 +2,8 @@ package api
 
 import (
 	"github.com/gin-gonic/gin"
-	"inkwords-backend/internal/db"
 	userdomain "inkwords-backend/internal/domain/user"
+	"inkwords-backend/internal/infra/db"
 	"inkwords-backend/internal/service"
 )
 

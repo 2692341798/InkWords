@@ -3,8 +3,8 @@ package service
 import (
 	"context"
 	"fmt"
-	"inkwords-backend/internal/llm"
-	"inkwords-backend/internal/parser"
+	"inkwords-backend/internal/infra/llm"
+	"inkwords-backend/internal/infra/parser"
 	"os"
 	"sync"
 	"time"

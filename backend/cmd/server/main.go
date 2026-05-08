@@ -7,17 +7,18 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 
-	"inkwords-backend/internal/api"
-	"inkwords-backend/internal/cache"
-	"inkwords-backend/internal/db"
 	authdomain "inkwords-backend/internal/domain/auth"
 	blogdomain "inkwords-backend/internal/domain/blog"
 	projectdomain "inkwords-backend/internal/domain/project"
 	streamdomain "inkwords-backend/internal/domain/stream"
 	userdomain "inkwords-backend/internal/domain/user"
-	"inkwords-backend/internal/middleware"
-	"inkwords-backend/internal/parser"
+	"inkwords-backend/internal/infra/cache"
+	"inkwords-backend/internal/infra/db"
+	"inkwords-backend/internal/infra/parser"
 	"inkwords-backend/internal/service"
+	"inkwords-backend/internal/transport/http/middleware"
+	transportv1 "inkwords-backend/internal/transport/http/v1"
+	"inkwords-backend/internal/transport/http/v1/api"
 )
 
 // init 初始化环境变量
@@ -93,64 +94,44 @@ func main() {
 	projectAPI := api.NewProjectAPIWithDeps(decompositionService, gitFetcher, docParser, userService, projectDomainHandler)
 	blogAPI := api.NewBlogAPIWithDeps(blogService, blogDomainHandler)
 
-	// v1 路由组
-	v1 := r.Group("/api/v1")
-	{
-		// 认证相关路由 (公开)
-		authGroup := v1.Group("/auth")
-		{
-			authGroup.POST("/register", authAPI.Register)
-			authGroup.POST("/login", authAPI.Login)
-			authGroup.POST("/bind-github", authAPI.BindGithub)
-			authGroup.GET("/captcha", authAPI.GetCaptcha)
-			authGroup.GET("/oauth/:provider", authAPI.OAuthRedirect)
-			authGroup.GET("/callback/:provider", authAPI.OAuthCallback)
-		}
-
-		// 用户相关路由 (需鉴权)
-		userGroup := v1.Group("/user")
-		userGroup.Use(middleware.AuthMiddleware())
-		{
-			userGroup.GET("/profile", userAPI.GetProfile)
-			userGroup.PUT("/profile", userAPI.UpdateProfile)
-			userGroup.POST("/avatar", userAPI.UploadAvatar)
-			userGroup.GET("/stats", userAPI.GetUserStats)
-		}
-
-		// 博客相关路由 (需鉴权)
-		blogGroup := v1.Group("/blogs")
-		blogGroup.Use(middleware.AuthMiddleware())
-		{
-			blogGroup.GET("", blogAPI.GetUserBlogs)
-			blogGroup.POST("/draft", blogAPI.CreateDraftBlog)
-			blogGroup.DELETE("", blogAPI.BatchDeleteBlogs)
-			blogGroup.PUT("/:id", blogAPI.UpdateBlog)
-			blogGroup.GET("/:id/export", blogAPI.ExportSeries)
-			blogGroup.GET("/:id/export/pdf", blogAPI.ExportSeriesPDF)
-			blogGroup.POST("/:id/export/obsidian", blogAPI.ExportToObsidian)
-			blogGroup.POST("/:id/export/obsidian/series", blogAPI.ExportSeriesToObsidian)
-			blogGroup.POST("/:id/continue", streamAPI.ContinueBlogStreamHandler)
-			blogGroup.POST("/:id/polish", streamAPI.PolishBlogStreamHandler)
-		}
-
-		// 项目分析相关路由 (需鉴权)
-		projectGroup := v1.Group("/project")
-		projectGroup.Use(middleware.AuthMiddleware())
-		{
-			projectGroup.POST("/scan", projectAPI.ScanGithubRepo)
-			projectGroup.POST("/analyze", projectAPI.Analyze)
-			projectGroup.POST("/parse", projectAPI.Parse)
-		}
-
-		// 流式生成路由 (需鉴权)
-		streamGroup := v1.Group("/stream")
-		streamGroup.Use(middleware.AuthMiddleware())
-		{
-			streamGroup.POST("/scan", streamAPI.ScanStreamHandler)
-			streamGroup.POST("/analyze", streamAPI.AnalyzeStreamHandler)
-			streamGroup.POST("/generate", streamAPI.GenerateBlogStreamHandler)
-		}
-	}
+	transportv1.Register(r, middleware.AuthMiddleware(), transportv1.Handlers{
+		Auth: transportv1.AuthHandlers{
+			Register:      authAPI.Register,
+			Login:         authAPI.Login,
+			BindGithub:    authAPI.BindGithub,
+			GetCaptcha:    authAPI.GetCaptcha,
+			OAuthRedirect: authAPI.OAuthRedirect,
+			OAuthCallback: authAPI.OAuthCallback,
+		},
+		User: transportv1.UserHandlers{
+			GetProfile:    userAPI.GetProfile,
+			UpdateProfile: userAPI.UpdateProfile,
+			UploadAvatar:  userAPI.UploadAvatar,
+			GetUserStats:  userAPI.GetUserStats,
+		},
+		Blog: transportv1.BlogHandlers{
+			GetUserBlogs:           blogAPI.GetUserBlogs,
+			CreateDraftBlog:        blogAPI.CreateDraftBlog,
+			BatchDeleteBlogs:       blogAPI.BatchDeleteBlogs,
+			UpdateBlog:             blogAPI.UpdateBlog,
+			ExportSeries:           blogAPI.ExportSeries,
+			ExportSeriesPDF:        blogAPI.ExportSeriesPDF,
+			ExportToObsidian:       blogAPI.ExportToObsidian,
+			ExportSeriesToObsidian: blogAPI.ExportSeriesToObsidian,
+			ContinueBlog:           streamAPI.ContinueBlogStreamHandler,
+			PolishBlog:             streamAPI.PolishBlogStreamHandler,
+		},
+		Project: transportv1.ProjectHandlers{
+			ScanGithubRepo: projectAPI.ScanGithubRepo,
+			Analyze:        projectAPI.Analyze,
+			Parse:          projectAPI.Parse,
+		},
+		Stream: transportv1.StreamHandlers{
+			ScanStreamHandler:     streamAPI.ScanStreamHandler,
+			AnalyzeStreamHandler:  streamAPI.AnalyzeStreamHandler,
+			GenerateStreamHandler: streamAPI.GenerateBlogStreamHandler,
+		},
+	})
 
 	// 启动服务，默认监听 8080 端口
 	log.Println("Server is running on port 8080")

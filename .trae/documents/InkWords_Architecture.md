@@ -6,11 +6,15 @@
 - 2026-05-08：写博客编辑器新增“语音输入”（浏览器 SpeechRecognition 实时转写，插入正文光标处）。
 - 2026-05-08：写博客编辑器新增“润色”（后端新增 `/api/v1/blogs/:id/polish` SSE；前端新增润色预览与一键应用），并优化 Markdown 预览标题/表格排版。
 - 2026-05-08：工程化整理：移除仓库中的大二进制/调试产物追踪（避免泄漏 token），并将超大文件按职责拆分为同包多文件/子组件目录。
+- 2026-05-08：目录结构工程化调整（目标态设计）：后端明确 `domain/transport/infra` 边界，前端明确 `pages/services` 边界（仅规划，不改代码）。
 ## 1. 整体架构 (Monorepo)
 项目采用前后端分离的 Monorepo 结构，根目录隔离：
 - **`frontend/`**: 包含所有前端界面、状态管理和客户端逻辑。
 - **`backend/`**: 包含所有的 RESTful API 服务、数据库交互、第三方登录与大模型通信。
 - **`docker-compose.yml`**: 项目唯一的容器化编排入口。
+
+## 1.1 目录结构目标态（规划）
+目录结构的目标态与迁移路线图见：[2026-05-08-project-directory-structure-design.md](file:///Users/huangqijun/Documents/%E5%A2%A8%E8%A8%80%E5%8D%9A%E5%AE%A2%E5%8A%A9%E6%89%8B/InkWords/docs/superpowers/specs/2026-05-08-project-directory-structure-design.md)。
 
 ## 2. 核心技术栈
 ### 2.1 前端 (Frontend)

@@ -4,7 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	projectdomain "inkwords-backend/internal/domain/project"
-	"inkwords-backend/internal/parser"
+	"inkwords-backend/internal/infra/parser"
 	"inkwords-backend/internal/service"
 )
 
@@ -28,7 +28,6 @@ func NewProjectAPI(userService *service.UserService) *ProjectAPI {
 func (api *ProjectAPI) ScanGithubRepo(c *gin.Context) {
 	api.projectDomainHandler.ScanGithubRepo(c)
 }
-
 
 // Analyze handles the /api/v1/project/analyze endpoint
 func (api *ProjectAPI) Analyze(c *gin.Context) {

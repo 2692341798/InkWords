@@ -3,14 +3,14 @@ import { useBlogStore } from '@/store/blogStore'
 import { toast } from 'sonner'
 import { useDebounce } from '@/hooks/useDebounce'
 import { useSyncedScroll } from '@/hooks/useSyncedScroll'
-import { fetchEventSource } from '@microsoft/fetch-event-source'
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition'
 import { replaceVoiceSegment } from '@/lib/voiceInsertion'
 import { usePolishStream } from '@/hooks/usePolishStream'
 import { extractPolishedBody } from '@/lib/polishDraft'
 import { normalizeMarkdown } from '@/lib/markdownNormalize'
-import { EditorHeader } from './editor/EditorHeader'
-import { EditorBody } from './editor/EditorBody'
+import { fetchEventSourceWithAuth } from '@/services/sse'
+import { EditorHeader } from '@/components/editor/EditorHeader'
+import { EditorBody } from '@/components/editor/EditorBody'
 
 class StopStreamError extends Error {}
 
@@ -336,16 +336,13 @@ export function Editor() {
     if (!selectedBlog || isContinuing || isVoiceListening || isPolishing) return
     setIsContinuing(true)
 
-    const token = localStorage.getItem('token')
-
     try {
       let currentContent = content
 
-      await fetchEventSource(`/api/v1/blogs/${selectedBlog.id}/continue`, {
+      await fetchEventSourceWithAuth(`/api/v1/blogs/${selectedBlog.id}/continue`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({}),
         async onopen(response) {

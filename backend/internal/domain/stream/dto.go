@@ -16,14 +16,14 @@ type ModuleCard struct {
 }
 
 type GenerateRequest struct {
-	SourceContent   string            `json:"source_content"`
-	SourceType      string            `json:"source_type"`
-	Outline         []Chapter         `json:"outline"`
-	GitURL          string            `json:"git_url"`
-	SubDir          string            `json:"sub_dir"`
-	SelectedModules []string          `json:"selected_modules"`
-	SeriesTitle     string            `json:"series_title"`
-	ParentID        string            `json:"parent_id"`
+	SourceContent   string    `json:"source_content"`
+	SourceType      string    `json:"source_type"`
+	Outline         []Chapter `json:"outline"`
+	GitURL          string    `json:"git_url"`
+	SubDir          string    `json:"sub_dir"`
+	SelectedModules []string  `json:"selected_modules"`
+	SeriesTitle     string    `json:"series_title"`
+	ParentID        string    `json:"parent_id"`
 }
 
 type PolishRequest struct {

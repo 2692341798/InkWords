@@ -3,8 +3,8 @@ package api
 import (
 	"github.com/gin-gonic/gin"
 
-	"inkwords-backend/internal/db"
 	authdomain "inkwords-backend/internal/domain/auth"
+	"inkwords-backend/internal/infra/db"
 )
 
 type AuthAPI struct {

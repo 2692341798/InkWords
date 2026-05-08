@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
-import { fetchEventSource } from '@microsoft/fetch-event-source'
 import { toast } from 'sonner'
 import { shouldResetPolishState } from '@/lib/polishStreamStop'
+import { fetchEventSourceWithAuth } from '@/services/sse'
 
 class StopStreamError extends Error {}
 
@@ -31,13 +31,10 @@ export const usePolishStream = () => {
     abortControllerRef.current = ctrl
 
     try {
-      const token = localStorage.getItem('token')
-
-      await fetchEventSource(`/api/v1/blogs/${blogId}/polish`, {
+      await fetchEventSourceWithAuth(`/api/v1/blogs/${blogId}/polish`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          Authorization: token ? `Bearer ${token}` : ''
+          'Content-Type': 'application/json'
         },
         signal: ctrl.signal,
         openWhenHidden: true,
@@ -48,11 +45,6 @@ export const usePolishStream = () => {
           }
           if (response.headers.get('content-type')?.includes('application/json')) {
             const data = await response.json()
-            if (response.status === 401) {
-              localStorage.removeItem('token')
-              window.location.reload()
-              throw new StopStreamError('登录已过期，请重新登录')
-            }
             throw new StopStreamError(data.message || data.error || '请求失败')
           }
           const text = await response.text()

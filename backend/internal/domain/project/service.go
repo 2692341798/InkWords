@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"inkwords-backend/internal/parser"
+	"inkwords-backend/internal/infra/parser"
 	"inkwords-backend/internal/service"
 )
 

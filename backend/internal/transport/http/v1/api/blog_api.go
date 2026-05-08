@@ -1,8 +1,8 @@
 package api
 
 import (
-	"inkwords-backend/internal/db"
 	blogdomain "inkwords-backend/internal/domain/blog"
+	"inkwords-backend/internal/infra/db"
 	"inkwords-backend/internal/service"
 )
 

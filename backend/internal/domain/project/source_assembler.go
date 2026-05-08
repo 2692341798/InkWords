@@ -3,7 +3,7 @@ package project
 import (
 	"strings"
 
-	"inkwords-backend/internal/parser"
+	"inkwords-backend/internal/infra/parser"
 )
 
 func AssembleSourceContent(treeContent string, chunks []parser.FileChunk) string {
@@ -15,4 +15,3 @@ func AssembleSourceContent(treeContent string, chunks []parser.FileChunk) string
 	}
 	return b.String()
 }
-

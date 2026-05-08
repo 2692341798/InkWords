@@ -29,10 +29,11 @@
 - **前端 (`frontend/`)**：
   - React (当前依赖为 React 19) + Vite + Tailwind CSS v4 + Shadcn UI
   - Zustand (全局状态管理，接管 SSE 长连接保活)
+  - 目录边界：`src/pages`（页面级）/ `src/components`（组件）/ `src/hooks`（编排）/ `src/services`（请求层）/ `src/store`（全局状态）
   - 自定义 Rehype/Remark 插件 (AST 行号注入与图表拦截)
 - **后端 (`backend/`)**：
   - Go (建议 >= 1.25；当前 go.mod 为 1.25.4) + Gin 框架 (依赖注入分层架构)
-  - 目录结构逐步升级为 DDD 垂直切片（首批：`internal/domain/blog`，其余领域按同模式迁移）
+  - 目录边界：`internal/domain/*`（领域切片）/ `internal/transport/http`（HTTP 适配）/ `internal/infra/*`（基础设施能力）
   - Map-Reduce 并发调度引擎 (`x/sync/semaphore`)
   - SSE (Server-Sent Events) 打字机流式推送与空闲超时打断机制
   - GORM + PostgreSQL 14+
