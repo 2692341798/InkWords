@@ -1,6 +1,16 @@
 # 墨言博客助手 (InkWords) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 55：写博客编辑器支持语音输入（浏览器实时转写）
+- **用户需求**：在写博客编辑器中支持语音输入；优先采用浏览器语音识别；转写内容实时写入正文且插入到光标处；停顿不自动停止（只手动停止）。
+- **AI 动作**：
+  1. 输出设计规格与实现计划：`.trae/documents/specs/2026-05-08-editor-voice-input-design.md`、`.trae/documents/plans/2026-05-08-editor-voice-input-plan.md`。
+  2. 前端新增 `useSpeechRecognition` hook 封装 Web Speech API，Editor Header 增加「语音输入/停止语音」按钮并与「继续生成」互斥禁用。
+  3. 引入 Vitest，并为“实时插入区间替换算法”补充单元测试，避免 interim 重复堆叠。
+  4. 执行 `npm test`、`npm run build`、`npm run lint` 与 `docker compose down && docker compose up -d --build` 做构建验证。
+- **决策/变更**：
+  - 采用浏览器 SpeechRecognition（`SpeechRecognition/webkitSpeechRecognition`）实现最小可用版本，不新增后端接口；后续如需更强兼容性再扩展“后端转写”方案。
+
 ### 对话 54：手写博客入口（创建草稿并进入编辑器）
 - **用户需求**：新增一个专门的编辑器入口，作为“手写博客”的开始；入口放在侧边栏顶部（A）；点击后“进入即建草稿”，并立刻出现在历史列表里。
 - **AI 动作**：
@@ -44,7 +54,6 @@
   - 选择“后端生成 PDF”而非 `window.print()`，以实现可控的批量下载体验与一致的版式输出。
   - 目录页先不做页码，避免引入 paged media 等额外渲染复杂度，先交付最小可用版本。
 
->>>>>>> ab55a95 (feat(editor): add manual blog draft entry)
 ### 对话 50：优化大型项目大纲生成的篇数限制
 - **用户需求**：对于像 FFmpeg 这样的大型项目，系统生成的章节太少（只有 10 章），要求对每个核心模块都对应至少一篇博客，不设篇数上限。
 - **AI 动作**：
