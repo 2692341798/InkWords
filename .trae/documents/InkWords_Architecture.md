@@ -21,9 +21,10 @@
 - **Markdown 渲染**: `react-markdown` 配合 `rehype-highlight`、`remark-gfm` 和 `mermaid`。
 
 ### 2.2 后端 (Backend)
-- **核心语言**: Go 1.21+
+- **核心语言**: Go 1.25+
 - **Web 框架**: Gin (`github.com/gin-gonic/gin`)
 - **依赖注入**: 后端通过明确的构造函数（如 `NewAuthAPI(authService)`）进行依赖注入，降低 `api` 层和 `service` 层、全局变量之间的耦合，便于单元测试。
+- **目录升级（渐进式垂直切片）**: 新增 `internal/domain/blog` 作为首批领域切片（repo/service/handler），并在 `cmd/server/main.go` 统一完成依赖组装（repo -> service -> handler -> api 适配）。
 - **数据库 ORM**: GORM (`gorm.io/gorm` + `gorm.io/driver/postgres`)
 - **认证与安全**: 
   - JWT Token (长短效签发) + GitHub OAuth (`golang.org/x/oauth2`)

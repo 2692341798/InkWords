@@ -1,6 +1,17 @@
 # 墨言博客助手 (InkWords) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 58：后端目录升级（DDD 垂直切片，首批 Blog Domain 渐进迁移）
+- **用户需求**：进一步整理后端目录结构，按领域切片升级（DDD/垂直切片），采用渐进式迁移。
+- **AI 动作**：
+  1. 新增 `internal/domain/blog`，落地 `repository/service/handler/dto` 边界，并保持对外 JSON 结构不变。
+  2. 将博客路由处理从 `internal/api/blog_*.go` 逐步薄化为“转发到 domain handler”，保持路由与响应结构不变。
+  3. Phase 1 导出能力通过 `LegacyExporter` 复用现有 `internal/service.BlogService`，避免一次性深拆导出链路带来回归风险。
+  4. 在 `cmd/server/main.go` 统一组装 DI（repo -> service -> handler -> api），减少 `api` 层自行 new 依赖导致的耦合。
+- **决策/变更**：
+  - 首批迁移选择 Blog 领域（可快速验证、依赖面相对可控）；后续按同样模式扩展到 user/auth/stream/project。
+  - 迁移过程中坚持“最小改动 + 强制验证（go test ./...）”，每次只迁移一组路由并保持可回滚。
+
 ### 对话 57：工程规范整理（仓库减肥、空壳文件清理、文档同步）
 - **用户需求**：按照工程规范整理项目文件，并提交到 GitHub。
 - **AI 动作**：

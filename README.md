@@ -32,6 +32,7 @@
   - 自定义 Rehype/Remark 插件 (AST 行号注入与图表拦截)
 - **后端 (`backend/`)**：
   - Go (建议 >= 1.25；当前 go.mod 为 1.25.4) + Gin 框架 (依赖注入分层架构)
+  - 目录结构逐步升级为 DDD 垂直切片（首批：`internal/domain/blog`，其余领域按同模式迁移）
   - Map-Reduce 并发调度引擎 (`x/sync/semaphore`)
   - SSE (Server-Sent Events) 打字机流式推送与空闲超时打断机制
   - GORM + PostgreSQL 14+
