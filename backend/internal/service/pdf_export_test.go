@@ -49,4 +49,3 @@ func TestBuildChromiumArgs(t *testing.T) {
 		t.Fatalf("expected print-to-pdf arg")
 	}
 }
-

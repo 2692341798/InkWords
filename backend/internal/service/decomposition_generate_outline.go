@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"inkwords-backend/internal/llm"
+	"inkwords-backend/internal/infra/llm"
 	"inkwords-backend/internal/model"
 	"os"
 	"strings"

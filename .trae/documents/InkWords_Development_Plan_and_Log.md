@@ -47,7 +47,7 @@
 遵循 Vibe Coding **“小步迭代与强制验证”** 的铁律，在实际开发过程中，严禁越过测试环节强行合并代码。
 
 ### 3.1 后端单元测试 (Unit Testing)
-- **重点目标**：`internal/parser` (Git与文档的提取清洗)、`internal/llm` (Prompt构建) 及 `internal/service` (大项目拆解算法与 Goroutine 调度)。
+- **重点目标**：`internal/infra/parser` (Git与文档的提取清洗)、`internal/infra/llm` (Prompt构建) 及 `internal/service` (大项目拆解算法与 Goroutine 调度)。
 - **约束**：使用 Go 的内置 `testing` 框架和 `testify` 库。所有核心 Service 必须包含 Mock（如 `gomock`），特别是对 DeepSeek API 的 Mock 测试，确保在断网下仍能测试内部状态机的流转。
 
 ### 3.2 前端组件测试 (Component Testing)
@@ -69,6 +69,69 @@
 
 ## 4. 每日开发日志 (Dev Log)
 > 该区域将由 Vibe Coding 工程师（AI 助手）在每天/每次开发周期结束时，如实记录当天的完成事项、遇到的技术坑点及架构小规模调整。
+
+### [2026-05-08] Chore - 工程化整理（仓库减肥与文件结构治理）
+- **开发模块**: [仓库结构, .gitignore, 文档同步]
+- **完成事项**:
+  1. **清理空壳文件**：删除 `backend/internal/api/blog.go`、`backend/internal/api/stream.go` 等仅保留 `package` 声明的占位文件，避免误导后续维护。
+  2. **移除敏感/大产物追踪**：将 `dogfood-output/` 从 Git 追踪中移除并加入 `.gitignore`（该目录可能包含 token 与大量截图）。
+  3. **大文件策略落地**：补充 `.gitignore` 规则，确保后端二进制与 PDF 等本地产物不进入仓库。
+  4. **补齐 QA 归档**：新增 `docs/qa/dogfood/report-template.md`，保留可复用的 dogfood 报告模板。
+- **验证**:
+  - `cd backend && go test ./...` 通过
+  - `cd frontend && npm run build` 通过
+
+### [2026-05-08] Refactor - 后端目录升级（DDD 垂直切片，首批 Blog Domain）
+- **开发模块**: [backend/internal/domain/blog, backend/internal/transport/http/v1/api, cmd/server DI]
+- **完成事项**:
+  1. 新增 `internal/domain/blog`（repo/service/handler/dto），并将 Blog 的 CRUD 相关 API 迁移为 domain handler 实现，`internal/transport/http/v1/api` 保持薄适配。
+  2. Phase 1 导出能力通过 `LegacyExporter` 复用旧 `BlogService`，避免一次性深拆导出链路。
+  3. 将依赖组装收口到 `cmd/server/main.go`（repo -> service -> handler -> api）。
+- **验证**:
+  - `cd backend && go test ./...` 通过
+
+### [2026-05-08] Refactor - 后端目录升级（DDD 垂直切片，User Domain）
+- **开发模块**: [backend/internal/domain/user, backend/internal/transport/http/v1/api, cmd/server DI]
+- **完成事项**:
+  1. 新增 `internal/domain/user`（repo/service/handler/dto），并将 User 的 profile/update/avatar/stats 迁移为 domain handler 实现，`internal/transport/http/v1/api` 保持薄适配。
+  2. 将依赖组装收口到 `cmd/server/main.go`（repo -> service -> handler -> api）。
+- **验证**:
+  - `cd backend && go test ./...` 通过
+
+### [2026-05-08] Refactor - 后端目录升级（DDD 垂直切片，Auth Domain）
+- **开发模块**: [backend/internal/domain/auth, backend/internal/transport/http/v1/api, cmd/server DI]
+- **完成事项**:
+  1. 新增 `internal/domain/auth`（repo/service/handler/dto），并将 Auth 的 register/login/oauth/captcha/bind-github 迁移为 domain handler 实现，`internal/transport/http/v1/api` 保持薄适配。
+  2. 将依赖组装收口到 `cmd/server/main.go`（repo -> service -> handler -> api），并移除旧 `internal/service/auth.go`。
+- **验证**:
+  - `cd backend && go test ./...` 通过
+
+### [2026-05-08] Refactor - 后端目录升级（DDD 垂直切片，Stream + Project Domain）
+- **开发模块**: [backend/internal/domain/stream, backend/internal/domain/project, backend/internal/transport/http/v1/api, cmd/server DI]
+- **完成事项**:
+  1. 新增 `internal/domain/stream` 与 `internal/domain/project`（Phase 1 过渡复用现有 service/parser），并将对应 handler 逻辑迁移到 domain handler。
+  2. 将 `internal/transport/http/v1/api/stream_*.go` 与 `internal/transport/http/v1/api/project.go` 薄化为转发层，保持对外 SSE event 类型与 JSON 结构不变。
+  3. 将依赖组装收口到 `cmd/server/main.go`（统一创建 GeneratorService/DecompositionService/GitFetcher/DocParser 并注入到 API）。
+- **验证**:
+  - `cd backend && go test ./...` 通过
+
+### [2026-05-08] Refactor - 后端目录升级（Stream + Project Phase2：DTO 解耦与边界收敛）
+- **开发模块**: [backend/internal/domain/stream, backend/internal/domain/project, backend/internal/transport/http/v1/api]
+- **完成事项**:
+  1. Stream/Project 领域 DTO 下沉到 domain（Chapter/ModuleCard/OutlineResult 等），并在 domain service 内做与旧 `internal/service` 类型的适配转换。
+  2. 移除 `internal/transport/http/v1/api` 重复 DTO（如 `stream_types.go`、project request structs），API 层保持纯转发。
+  3. 将 stream 的 blog 存在性校验改为接口注入（默认 GORM 实现），保持错误码与文案不变。
+- **验证**:
+  - `cd backend && go test ./...` 通过
+
+### [2026-05-08] Refactor - Project Phase3：Source Assembler 抽取
+- **开发模块**: [backend/internal/domain/project]
+- **完成事项**:
+  1. 新增 `domain/project/source_assembler.go`，集中实现 `source_content` 拼接规则（tree + "\n=== Repository Content ===\n" + concat chunk.Content）。
+  2. `domain/project/service.go` 的 `Analyze` 统一调用 assembler，保持对外返回不变。
+  3. 新增 `source_assembler_test.go` 作为格式快照测试，防止拼接规则回归。
+- **验证**:
+  - `cd backend && go test ./...` 通过
 
 ### [2026-05-08] Feature - 编辑器语音输入（浏览器实时转写）
 - **开发模块**: [前端 Editor, Hooks, 单元测试]

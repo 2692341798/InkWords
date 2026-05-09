@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"inkwords-backend/internal/llm"
-	"inkwords-backend/internal/parser"
+	"inkwords-backend/internal/infra/llm"
+	"inkwords-backend/internal/infra/parser"
 )
 
 // ScanProjectModules clones the git repo without blobs (partial clone) or uses GitHub API,

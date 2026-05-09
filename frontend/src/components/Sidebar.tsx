@@ -2,13 +2,14 @@ import { useEffect, useMemo, useState } from 'react'
 import { useStreamStore } from '@/store/streamStore'
 import { useBlogStore } from '@/store/blogStore'
 import type { BlogNode } from '@/store/blogStore'
-import { BookOpen, CheckCircle2, CheckSquare, ChevronDown, ChevronRight, CircleDashed, FilePenLine, FolderArchive, GitBranch, Loader2, LogOut, Plus, RefreshCw, Sparkles, Square, Trash2, User } from 'lucide-react'
+import { BookOpen, CheckSquare, ChevronDown, ChevronRight, Download, FileArchive, FilePenLine, FolderArchive, GitBranch, Loader2, LogOut, Plus, RefreshCw, Sparkles, Square, Trash2, User } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from './ui/button'
 import { ConfirmDialog } from './ui/confirm-dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu'
 import { toast } from 'sonner'
 import { useBatchExportZip } from '@/hooks/useBatchExportZip'
+import { StreamOutlineSection } from './sidebar/StreamOutlineSection'
 
 export function Sidebar() {
   const streamStore = useStreamStore()
@@ -18,6 +19,7 @@ export function Sidebar() {
   const [selectedForExport, setSelectedForExport] = useState<Set<string>>(new Set())
   const [isSyncingSeriesToObsidian, setIsSyncingSeriesToObsidian] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [isExportingPDF, setIsExportingPDF] = useState(false)
   const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false)
   const [isCreatingDraft, setIsCreatingDraft] = useState(false)
 
@@ -323,117 +325,22 @@ export function Sidebar() {
       </div>
       
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-        {/* Stream / Generator Outline Section */}
         {streamStore.outline && streamStore.outline.length > 0 && (
-          <div className="p-4 border-b border-zinc-100">
-            <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-4 flex items-center justify-between">
-              <span>当前生成任务</span>
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => {
-                if (streamStore.isGenerating || streamStore.isAnalyzing) {
-                  if (window.confirm('当前有任务正在执行，确定要终止并开启新工作区吗？')) {
-                    streamStore.reset()
-                    setCurrentView('generator')
-                  }
-                } else {
-                  streamStore.reset()
-                  setCurrentView('generator')
-                }
-              }} title="新建工作区">
-                <Plus className="h-4 w-4" />
-              </Button>
-            </div>
-            <div className="space-y-3 max-h-[30vh] overflow-y-auto custom-scrollbar">
-              {/* 系列导读 */}
-              {streamStore.chapterStatus[0] && (
-                  <div 
-                    key={0} 
-                    className={cn(
-                      "p-3 rounded-lg border flex items-start gap-3 transition-colors",
-                      streamStore.chapterStatus[0] === 'completed'
-                        ? "bg-green-50/50 border-green-100 hover:bg-green-50 cursor-pointer" 
-                        : streamStore.chapterStatus[0] === 'generating'
-                          ? "bg-indigo-50 border-indigo-200"
-                          : "bg-zinc-50 border-zinc-100"
-                    )}
-                    onClick={() => {
-                      if (streamStore.chapterStatus[0] === 'completed') {
-                        const parentBlogId = streamStore.parentBlogId
-                        if (parentBlogId) {
-                          const found = blogs.find(b => b.id === parentBlogId)
-                          if (found) {
-                            selectBlog(found)
-                          } else {
-                            fetchBlogs().then(() => {
-                               const updatedBlogs = useBlogStore.getState().blogs
-                               const newFound = updatedBlogs.find(b => b.id === parentBlogId)
-                               if (newFound) selectBlog(newFound)
-                            })
-                          }
-                        }
-                      }
-                    }}
-                  >
-                    <div className="mt-0.5">
-                      {streamStore.chapterStatus[0] === 'completed' ? (
-                        <CheckCircle2 className="w-4 h-4 text-green-500" />
-                      ) : streamStore.chapterStatus[0] === 'generating' ? (
-                        <Loader2 className="w-4 h-4 text-indigo-500 animate-spin" />
-                      ) : (
-                        <CircleDashed className="w-4 h-4 text-zinc-400" />
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <div className="text-sm font-medium text-zinc-800">系列导读</div>
-                      <div className="text-xs text-zinc-500 mt-1 line-clamp-2">全系列的引言与总结概览</div>
-                    </div>
-                  </div>
-              )}
-              {streamStore.outline.map((ch) => {
-                const status = streamStore.chapterStatus[ch.sort]
-                return (
-                  <div 
-                    key={ch.sort} 
-                    className={cn(
-                      "p-3 rounded-lg border flex items-start gap-3 transition-colors",
-                      status === 'completed'
-                        ? "bg-green-50/50 border-green-100 hover:bg-green-50 cursor-pointer" 
-                        : status === 'generating'
-                          ? "bg-indigo-50 border-indigo-200"
-                          : "bg-zinc-50 border-zinc-100"
-                    )}
-                    onClick={() => {
-                      if (status === 'completed') {
-                        const key = `${ch.title}_${ch.sort}`
-                        const found = blogMap.get(key)
-                        if (found) {
-                          if (found.parentId) {
-                            const newExpanded = new Set(expandedNodes)
-                            newExpanded.add(found.parentId)
-                            setExpandedNodes(newExpanded)
-                          }
-                          selectBlog(found.node)
-                        }
-                      }
-                    }}
-                  >
-                    <div className="mt-0.5">
-                      {status === 'completed' ? (
-                        <CheckCircle2 className="w-4 h-4 text-green-500" />
-                      ) : status === 'generating' ? (
-                        <Loader2 className="w-4 h-4 text-indigo-500 animate-spin" />
-                      ) : (
-                        <CircleDashed className="w-4 h-4 text-zinc-400" />
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <div className="text-sm font-medium text-zinc-800">{ch.title}</div>
-                      <div className="text-xs text-zinc-500 mt-1 line-clamp-2">{ch.summary}</div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
+          <StreamOutlineSection
+            outline={streamStore.outline}
+            chapterStatus={streamStore.chapterStatus}
+            parentBlogId={streamStore.parentBlogId}
+            isGenerating={streamStore.isGenerating}
+            isAnalyzing={streamStore.isAnalyzing}
+            resetStream={streamStore.reset}
+            setCurrentView={setCurrentView}
+            blogs={blogs}
+            fetchBlogs={fetchBlogs}
+            selectBlog={(blog) => selectBlog(blog)}
+            blogMap={blogMap}
+            expandedNodes={expandedNodes}
+            setExpandedNodes={(next) => setExpandedNodes(next)}
+          />
         )}
 
         {/* History Blogs Section */}

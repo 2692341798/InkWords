@@ -5,24 +5,30 @@
 - 2026-04-29：新增“手写博客入口”，支持创建草稿并直接进入现有双栏编辑器（新增后端草稿创建接口与前端侧边栏入口）。
 - 2026-05-08：写博客编辑器新增“语音输入”（浏览器 SpeechRecognition 实时转写，插入正文光标处）。
 - 2026-05-08：写博客编辑器新增“润色”（后端新增 `/api/v1/blogs/:id/polish` SSE；前端新增润色预览与一键应用），并优化 Markdown 预览标题/表格排版。
+- 2026-05-08：工程化整理：移除仓库中的大二进制/调试产物追踪（避免泄漏 token），并将超大文件按职责拆分为同包多文件/子组件目录。
+- 2026-05-08：目录结构工程化调整（目标态设计）：后端明确 `domain/transport/infra` 边界，前端明确 `pages/services` 边界（仅规划，不改代码）。
 ## 1. 整体架构 (Monorepo)
 项目采用前后端分离的 Monorepo 结构，根目录隔离：
 - **`frontend/`**: 包含所有前端界面、状态管理和客户端逻辑。
 - **`backend/`**: 包含所有的 RESTful API 服务、数据库交互、第三方登录与大模型通信。
 - **`docker-compose.yml`**: 项目唯一的容器化编排入口。
 
+## 1.1 目录结构目标态（规划）
+目录结构的目标态与迁移路线图见：[2026-05-08-project-directory-structure-design.md](file:///Users/huangqijun/Documents/%E5%A2%A8%E8%A8%80%E5%8D%9A%E5%AE%A2%E5%8A%A9%E6%89%8B/InkWords/docs/superpowers/specs/2026-05-08-project-directory-structure-design.md)。
+
 ## 2. 核心技术栈
 ### 2.1 前端 (Frontend)
-- **核心框架**: React 18 + Vite
+- **核心框架**: React + Vite
 - **UI 库**: Tailwind CSS + Shadcn UI + Recharts
 - **状态管理**: Zustand (含多 store：`blogStore`, `streamStore`, `authStore`)
 - **流式通信**: `@microsoft/fetch-event-source` 维持 SSE 连接
 - **Markdown 渲染**: `react-markdown` 配合 `rehype-highlight`、`remark-gfm` 和 `mermaid`。
 
 ### 2.2 后端 (Backend)
-- **核心语言**: Go 1.21+
+- **核心语言**: Go 1.25+
 - **Web 框架**: Gin (`github.com/gin-gonic/gin`)
 - **依赖注入**: 后端通过明确的构造函数（如 `NewAuthAPI(authService)`）进行依赖注入，降低 `api` 层和 `service` 层、全局变量之间的耦合，便于单元测试。
+- **目录升级（渐进式垂直切片）**: 新增 `internal/domain/blog`、`internal/domain/user`、`internal/domain/auth`、`internal/domain/stream`、`internal/domain/project` 作为首批领域切片（repo/service/handler），并在 `cmd/server/main.go` 统一完成依赖组装（repo -> service -> handler -> api 适配）。
 - **数据库 ORM**: GORM (`gorm.io/gorm` + `gorm.io/driver/postgres`)
 - **认证与安全**: 
   - JWT Token (长短效签发) + GitHub OAuth (`golang.org/x/oauth2`)
@@ -64,6 +70,10 @@
 - **后端镜像**: 采用多阶段构建（Go 官方镜像编译，Alpine 运行）。使用 `FRONTEND_URL` 和 `DATABASE_URL` 环境变量控制运行逻辑。
 - **数据库**: PostgreSQL，初始化 `inkwords_db`。
 - **容器互联**: 全部服务处于 `inkwords_default` 内部网络，后端连接数据库通过服务名 `db:5432` 互通。
+
+## 4.1 仓库产物与敏感信息策略
+- 禁止提交构建产物与大文件（例如后端二进制、PDF、批量截图等），统一通过 `.gitignore` 管理本地产物目录。
+- `dogfood-output/` 可能包含浏览器 localStorage 等敏感信息（例如 token），必须保持为本地目录，严禁进入 Git 追踪。
 
 ## 5. 全局缓存机制 (Prompt Caching)
 - **目标**：降低 DeepSeek Token 消耗，提高首字响应速度 (TTFT)。

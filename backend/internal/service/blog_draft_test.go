@@ -40,4 +40,3 @@ func TestBlogService_CreateDraftBlog_createsTopLevelDraft(t *testing.T) {
 	require.Equal(t, "", persisted.Content)
 	require.Equal(t, "manual", persisted.SourceType)
 }
-

@@ -2,7 +2,7 @@ package service
 
 import (
 	"fmt"
-	"inkwords-backend/internal/parser"
+	"inkwords-backend/internal/infra/parser"
 )
 
 func chunkFileContent(content string, targetChunkSize int) []parser.FileChunk {

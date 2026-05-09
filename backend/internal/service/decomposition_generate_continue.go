@@ -3,8 +3,8 @@ package service
 import (
 	"context"
 	"fmt"
-	"inkwords-backend/internal/db"
-	"inkwords-backend/internal/llm"
+	"inkwords-backend/internal/infra/db"
+	"inkwords-backend/internal/infra/llm"
 	"inkwords-backend/internal/model"
 	"os"
 	"strings"

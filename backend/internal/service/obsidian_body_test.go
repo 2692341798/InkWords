@@ -34,4 +34,3 @@ func TestBuildObsidianBody_LeavesCodeFenceH1Untouched(t *testing.T) {
 		t.Fatalf("unexpected markdown:\n--- got ---\n%s\n--- want ---\n%s", got, want)
 	}
 }
-

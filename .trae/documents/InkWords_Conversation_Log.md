@@ -1,6 +1,86 @@
 # 墨言博客助手 (InkWords) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 64：目录结构工程化调整（后端 transport/infra + 前端 pages/services）
+- **用户需求**：按照软件工程规范调整目录结构，明确边界并给出可执行迁移方案。
+- **AI 动作**：
+  1. 产出目标态设计文档（backend：`domain/transport/infra`；frontend：`pages/services`）并写入仓库。
+  2. 落地迁移：后端抽离 v1 路由注册到 `internal/transport/http/v1`，基础设施迁移到 `internal/infra`，legacy API 迁移到 `internal/transport/http/v1/api`；前端页面迁移到 `src/pages` 并新增 `src/services/sse.ts` 收敛 SSE 鉴权与 401 处理。
+  3. 按规则执行验证：`go test ./...`、`npm test`、`npm run build`、`docker compose down && docker compose up -d --build`。
+- **决策/变更**：
+  - 以“行为不变 + 小步可回滚”为原则，仅做结构迁移与薄层抽离，不改变对外 API、DB schema 与 SSE 协议。
+
+### 对话 62：后端目录升级（Stream/Project Phase2 深拆：DTO 解耦与边界收敛）
+- **用户需求**：在完成 Stream/Project Phase1 迁移后继续深拆（Phase2），减少 domain 对 `internal/service` 类型耦合，并为后续深迁移打基础。
+- **AI 动作**：
+  1. 将 Stream/Project 的请求与返回 DTO 下沉到 domain（Chapter/ModuleCard/OutlineResult 等），并在 domain service 内做与旧 service 类型的适配转换。
+  2. 移除 `internal/transport/http/v1/api` 中重复 DTO（例如 `stream_types.go`、project request structs），API 层保持纯转发。
+  3. 将 stream 的 blog 存在性校验从 handler 内直连 DB 改为接口注入（默认 GORM 实现），保持错误码与文案不变。
+- **决策/变更**：
+  - 本次以“行为不变”为约束，不改 SSE event 协议与 `project/analyze` 的 `source_content` 拼接结构。
+  - 继续坚持每步 `go test ./...` 回归，并在验证通过后提交推送。
+
+### 对话 63：后端目录升级（Project Phase3：Source Assembler 抽取）
+- **用户需求**：继续 Phase3，收敛 `project/analyze` 的 `source_content` 组装重复逻辑，避免后续漂移。
+- **AI 动作**：
+  1. 新增 `domain/project/source_assembler.go`，集中实现 `treeContent + "\\n=== Repository Content ===\\n" + concat(chunk.Content)` 的拼接规则。
+  2. `domain/project/service.go` 的 `Analyze` 统一调用 assembler，保证输出结构不变。
+  3. 补充单测 `source_assembler_test.go` 作为格式快照，防止拼接规则回归。
+- **验证**：
+  - `cd backend && go test ./...` 通过
+
+### 对话 61：后端目录升级（Stream + Project Domain 渐进迁移）
+- **用户需求**：继续后端 DDD 垂直切片迁移，同时迁移 Stream（SSE）与 Project（scan/analyze/parse）两条链路。
+- **AI 动作**：
+  1. 新增 `internal/domain/stream` 与 `internal/domain/project`（Phase 1 过渡复用现有 service/parser 作为依赖），将核心 handler 逻辑迁移到 domain handler。
+  2. 将 `internal/transport/http/v1/api/stream_*.go` 与 `internal/transport/http/v1/api/project.go` 薄化为转发层（保持对外 SSE event 类型与 JSON 结构不变）。
+  3. 在 `cmd/server/main.go` 统一组装 GeneratorService/DecompositionService/GitFetcher/DocParser 并注入到对应 API（收口 DI）。
+- **决策/变更**：
+  - 本轮选择 Phase 1：不深拆 Generator/Decomposition/parser 内部实现，优先稳定迁移边界与依赖组装方式。
+  - 迁移过程中持续 `go test ./...` 回归，并同步更新架构/API/DB/PRD/开发日志文档。
+
+### 对话 60：后端目录升级（Auth Domain 渐进迁移）
+- **用户需求**：继续后端 DDD 垂直切片迁移，迁移 Auth 领域（register/login/oauth/captcha/bind-github）。
+- **AI 动作**：
+  1. 新增 `internal/domain/auth`（repo/service/handler/dto），并将 `internal/service/auth.go` 迁移为 domain service 后移除。
+  2. 将 `internal/transport/http/v1/api/auth.go` 薄化为转发到 domain handler，保持路由与对外跳转/响应结构不变。
+  3. 在 `cmd/server/main.go` 统一组装 auth domain 依赖并注入到 AuthAPI。
+- **决策/变更**：
+  - 本次仅做结构迁移，不引入新的 OAuth 安全策略（state 随机化/PKCE 等）以避免行为变更；后续如需安全增强再单独开改动。
+  - 迁移过程中持续 `go test ./...` 回归，确保编译与既有测试不回归。
+
+### 对话 59：后端目录升级（User Domain 渐进迁移）
+- **用户需求**：继续进行后端 DDD 垂直切片迁移，迁移 User 领域（profile/update/avatar/stats）。
+- **AI 动作**：
+  1. 新增 `internal/domain/user`（repo/service/handler/dto）并补齐最小 handler 单测。
+  2. 将 `internal/transport/http/v1/api/user.go` 薄化为转发到 domain handler（保持路由与 JSON 返回结构不变）。
+  3. 在 `cmd/server/main.go` 统一组装 user domain 依赖并注入到 UserAPI。
+- **决策/变更**：
+  - 迁移顺序遵循“低风险优先”：user -> auth -> stream -> project。
+  - 迁移以行为不变为约束，新增单测只覆盖关键路径（未授权/正常返回/参数校验），持续用 `go test ./...` 做回归。
+
+### 对话 58：后端目录升级（DDD 垂直切片，首批 Blog Domain 渐进迁移）
+- **用户需求**：进一步整理后端目录结构，按领域切片升级（DDD/垂直切片），采用渐进式迁移。
+- **AI 动作**：
+  1. 新增 `internal/domain/blog`，落地 `repository/service/handler/dto` 边界，并保持对外 JSON 结构不变。
+  2. 将博客路由处理从 `internal/transport/http/v1/api/blog_*.go` 逐步薄化为“转发到 domain handler”，保持路由与响应结构不变。
+  3. Phase 1 导出能力通过 `LegacyExporter` 复用现有 `internal/service.BlogService`，避免一次性深拆导出链路带来回归风险。
+  4. 在 `cmd/server/main.go` 统一组装 DI（repo -> service -> handler -> api），减少 `api` 层自行 new 依赖导致的耦合。
+- **决策/变更**：
+  - 首批迁移选择 Blog 领域（可快速验证、依赖面相对可控）；后续按同样模式扩展到 user/auth/stream/project。
+  - 迁移过程中坚持“最小改动 + 强制验证（go test ./...）”，每次只迁移一组路由并保持可回滚。
+
+### 对话 57：工程规范整理（仓库减肥、空壳文件清理、文档同步）
+- **用户需求**：按照工程规范整理项目文件，并提交到 GitHub。
+- **AI 动作**：
+  1. 删除 `backend/internal/transport/http/v1/api/blog.go`、`backend/internal/transport/http/v1/api/stream.go` 等空壳占位文件（仅 `package` 声明）。
+  2. 将 `dogfood-output/`（含截图与浏览器本地存储）从 Git 追踪中移除并加入 `.gitignore`，避免 token 等敏感信息泄漏与大文件污染仓库。
+  3. 移除仓库内不应追踪的本地二进制/PDF，并完善 `.gitignore` 的大文件策略。
+  4. 同步更新 README、架构/开发日志等基准文档，保证 Docs-as-Code 一致性；补充 QA 报告模板用于后续归档。
+- **决策/变更**：
+  - 采用“最小改动”策略：后端继续使用同包多文件（同一 `package` 下按职责拆分），前端使用子组件目录拆分，避免大范围目录迁移导致的 import 链式变更。
+  - 将可能携带敏感信息的 dogfood 产物定义为“本地目录”，只允许生成与使用，不允许进入版本控制。
+
 ### 对话 56：编辑器润色（流式润色草稿 + 预览与一键应用）与 Markdown 预览排版增强
 - **用户需求**：编辑器预览区表格可读性差、标题层级间距不自然（`h3` 贴住 `h2`）；希望同时补齐更接近 Notion 的排版；并希望支持“一键润色”能力辅助二次编辑。
 - **AI 动作**：

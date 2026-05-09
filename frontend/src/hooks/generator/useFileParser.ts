@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
-import { fetchEventSource } from '@microsoft/fetch-event-source'
 import { useStreamStore } from '@/store/streamStore'
+import { fetchEventSourceWithAuth } from '@/services/sse'
 
 class StopStreamError extends Error {}
 
@@ -54,12 +54,9 @@ export const useFileParser = () => {
       store.setAnalysisStep(1)
       store.setAnalysisMessage('文件解析成功，正在生成大纲...')
 
-      await fetchEventSource('/api/v1/stream/analyze', {
+      await fetchEventSourceWithAuth('/api/v1/stream/analyze', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': token ? `Bearer ${token}` : ''
-        },
+        headers: { 'Content-Type': 'application/json' },
         signal: ctrl.signal,
         openWhenHidden: true,
         body: JSON.stringify({ source_content: content }),
@@ -69,11 +66,6 @@ export const useFileParser = () => {
           }
           if (response.headers.get('content-type')?.includes('application/json')) {
             const data = await response.json();
-            if (response.status === 401) {
-              localStorage.removeItem('token');
-              window.location.reload();
-              throw new StopStreamError('登录已过期，请重新登录');
-            }
             throw new StopStreamError(data.message || data.error || '请求失败');
           }
           const text = await response.text();

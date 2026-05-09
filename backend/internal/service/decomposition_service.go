@@ -8,8 +8,8 @@ import (
 
 	"golang.org/x/time/rate"
 
-	"inkwords-backend/internal/llm"
-	"inkwords-backend/internal/parser"
+	"inkwords-backend/internal/infra/llm"
+	"inkwords-backend/internal/infra/parser"
 )
 
 // exponentialBackoff 返回退避时间： 2^retryCount 秒 + 随机抖动

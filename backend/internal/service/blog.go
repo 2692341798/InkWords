@@ -9,7 +9,7 @@ import (
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 
-	"inkwords-backend/internal/db"
+	"inkwords-backend/internal/infra/db"
 	"inkwords-backend/internal/model"
 )
 

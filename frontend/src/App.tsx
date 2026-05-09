@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useBlogStore } from '@/store/blogStore'
 import { Sidebar } from '@/components/Sidebar'
-import { Generator } from '@/components/Generator'
-import { Editor } from '@/components/Editor'
-import { Login } from '@/components/Login'
-import { Dashboard } from '@/components/Dashboard'
+import { Generator } from '@/pages/Generator'
+import { Editor } from '@/pages/Editor'
+import { Login } from '@/pages/Login'
+import { Dashboard } from '@/pages/Dashboard'
 import { Toaster } from '@/components/ui/sonner'
 
 function App() {

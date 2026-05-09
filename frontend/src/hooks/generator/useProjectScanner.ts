@@ -1,7 +1,7 @@
 import { useCallback } from 'react'
-import { fetchEventSource } from '@microsoft/fetch-event-source'
 import { useStreamStore } from '@/store/streamStore'
 import type { ModuleCard } from '@/store/streamStore'
+import { fetchEventSourceWithAuth } from '@/services/sse'
 
 export const useProjectScanner = () => {
   const store = useStreamStore()
@@ -62,23 +62,14 @@ export const useProjectScanner = () => {
     store.setAbortController(ctrl)
     
     try {
-      const token = localStorage.getItem('token')
       let modulesResult: unknown = null
       
-      await fetchEventSource('/api/v1/stream/scan', {
+      await fetchEventSourceWithAuth('/api/v1/stream/scan', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': token ? `Bearer ${token}` : ''
-        },
+        headers: { 'Content-Type': 'application/json' },
         signal: ctrl.signal,
         body: JSON.stringify({ git_url: gitUrl }),
         async onopen(response) {
-          if (response.status === 401) {
-            localStorage.removeItem('token')
-            window.location.reload()
-            throw new Error('登录已过期，请重新登录')
-          }
           if (!response.ok) {
             throw new Error('请求失败')
           }
