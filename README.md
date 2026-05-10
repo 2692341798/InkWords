@@ -53,6 +53,7 @@
 docker compose down && docker compose up -d --build
 ```
 启动前请先在 `backend/.env` 中配置必要环境变量（例如 `DEEPSEEK_API_KEY`、`DATABASE_URL`、`JWT_SECRET`、`OBSIDIAN_REST_API_KEY`）。如需启用证书校验，另外在宿主机设置 `OBSIDIAN_REST_API_CERT_PATH` 指向插件证书；本机开发可选择设置 `OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY=true` 跳过 TLS 校验。
+如遇导出到 Obsidian 提示“无法解析 Obsidian 目录列表响应”，请确认后端版本已兼容 Obsidian Local REST API 目录列表 `{ "files": [...] }` 返回格式。
 由于后端仅提供 API 接口，前端服务由独立的 Nginx 容器代理。项目启动后：
 1. **必须通过前端入口**访问：`http://localhost` (映射于宿主机 80 端口)。
 
