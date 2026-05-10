@@ -91,6 +91,27 @@ func TestRestAPIStore_List_ParsesStringArray(t *testing.T) {
 	}
 }
 
+func TestRestAPIStore_List_ParsesFilesObject(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"files":["a.md","b.md","concepts/"]}`))
+	}))
+	defer srv.Close()
+
+	u, _ := url.Parse(srv.URL)
+	store := newRestAPIStore(u, "dummy", srv.Client())
+
+	items, err := store.List(context.Background(), "wiki")
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(items) != 3 || items[0] != "a.md" || items[1] != "b.md" || items[2] != "concepts/" {
+		t.Fatalf("unexpected items: %#v", items)
+	}
+}
+
 func TestRestAPIStoreFromEnv_LoadsCertFile(t *testing.T) {
 	tlsSrv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
