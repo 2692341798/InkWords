@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 
 	"inkwords-backend/internal/domain/user"
@@ -45,6 +46,14 @@ func (s *stubRepo) SumWords(ctx context.Context, uid uuid.UUID) (int64, error) {
 
 func (s *stubRepo) ListBlogsWithTechStacks(ctx context.Context, uid uuid.UUID) ([]model.Blog, error) {
 	return []model.Blog{}, nil
+}
+
+func (s *stubRepo) GetPromptSettings(ctx context.Context, uid uuid.UUID) (*model.UserPromptSettings, error) {
+	return nil, gorm.ErrRecordNotFound
+}
+
+func (s *stubRepo) UpsertPromptSettings(ctx context.Context, uid uuid.UUID, overrides datatypes.JSON) error {
+	return nil
 }
 
 func TestHandler_GetProfile_Unauthorized(t *testing.T) {
@@ -107,4 +116,3 @@ func TestHandler_GetProfile_OK(t *testing.T) {
 	require.Equal(t, "u", resp.Data.Username)
 	require.Equal(t, 1000000000, resp.Data.TokenLimit)
 }
-

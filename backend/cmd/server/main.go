@@ -65,8 +65,9 @@ func main() {
 	// 初始化 API Handler
 	userService := service.NewUserService(db.DB)
 	blogService := service.NewBlogService()
-	generatorService := service.NewGeneratorService()
-	decompositionService := service.NewDecompositionService()
+	promptReqService := service.NewPromptRequirementsService(db.DB)
+	generatorService := service.NewGeneratorService(promptReqService)
+	decompositionService := service.NewDecompositionService(promptReqService)
 	gitFetcher := parser.NewGitFetcher()
 	docParser := parser.NewDocParser()
 
@@ -104,10 +105,12 @@ func main() {
 			OAuthCallback: authAPI.OAuthCallback,
 		},
 		User: transportv1.UserHandlers{
-			GetProfile:    userAPI.GetProfile,
-			UpdateProfile: userAPI.UpdateProfile,
-			UploadAvatar:  userAPI.UploadAvatar,
-			GetUserStats:  userAPI.GetUserStats,
+			GetProfile:           userAPI.GetProfile,
+			UpdateProfile:        userAPI.UpdateProfile,
+			UploadAvatar:         userAPI.UploadAvatar,
+			GetUserStats:         userAPI.GetUserStats,
+			GetPromptSettings:    userAPI.GetPromptSettings,
+			UpdatePromptSettings: userAPI.UpdatePromptSettings,
 		},
 		Blog: transportv1.BlogHandlers{
 			GetUserBlogs:           blogAPI.GetUserBlogs,

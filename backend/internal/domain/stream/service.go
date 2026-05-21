@@ -27,6 +27,11 @@ func (s *Service) CheckQuota(uid uuid.UUID) error {
 }
 
 func (s *Service) Generate(ctx context.Context, userID uuid.UUID, req GenerateRequest, chunkChan chan<- string, errChan chan<- error) {
+	style := req.ArticleStyle
+	if style == "" {
+		style = "general"
+	}
+
 	if len(req.Outline) > 0 {
 		outline := make([]service.Chapter, 0, len(req.Outline))
 		for _, ch := range req.Outline {
@@ -49,11 +54,11 @@ func (s *Service) Generate(ctx context.Context, userID uuid.UUID, req GenerateRe
 		if parentID == uuid.Nil {
 			parentID = uuid.New()
 		}
-		s.decomposition.GenerateSeries(ctx, userID, parentID, req.SeriesTitle, outline, req.SourceContent, req.SourceType, req.GitURL, chunkChan, errChan)
+		s.decomposition.GenerateSeries(ctx, userID, parentID, req.SeriesTitle, outline, req.SourceContent, req.SourceType, req.GitURL, style, chunkChan, errChan)
 		return
 	}
 
-	s.generator.GenerateBlogStream(ctx, userID, req.SourceContent, req.SourceType, chunkChan, errChan)
+	s.generator.GenerateBlogStream(ctx, userID, req.SourceContent, req.SourceType, style, chunkChan, errChan)
 }
 
 func (s *Service) Continue(bgCtx context.Context, userID uuid.UUID, blogID uuid.UUID, chunkChan chan<- string, errChan chan<- error) {

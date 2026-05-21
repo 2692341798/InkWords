@@ -72,10 +72,11 @@ type DecompositionService struct {
 	llmClient  *llm.DeepSeekClient
 	gitFetcher *parser.GitFetcher
 	limiter    *rate.Limiter
+	promptReq  *PromptRequirementsService
 }
 
 // NewDecompositionService creates a new decomposition service
-func NewDecompositionService() *DecompositionService {
+func NewDecompositionService(promptReq *PromptRequirementsService) *DecompositionService {
 	apiKey := os.Getenv("DEEPSEEK_API_KEY")
 
 	rpmLimit := 10000
@@ -90,5 +91,6 @@ func NewDecompositionService() *DecompositionService {
 		llmClient:  llm.NewDeepSeekClient(apiKey),
 		gitFetcher: parser.NewGitFetcher(),
 		limiter:    rate.NewLimiter(limit, 1),
+		promptReq:  promptReq,
 	}
 }

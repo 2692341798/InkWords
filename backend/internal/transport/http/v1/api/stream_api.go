@@ -2,6 +2,7 @@ package api
 
 import (
 	streamdomain "inkwords-backend/internal/domain/stream"
+	"inkwords-backend/internal/infra/db"
 	"inkwords-backend/internal/service"
 )
 
@@ -13,8 +14,9 @@ type StreamAPI struct {
 }
 
 func NewStreamAPI(userService *service.UserService) *StreamAPI {
-	generatorService := service.NewGeneratorService()
-	decompositionService := service.NewDecompositionService()
+	promptReqService := service.NewPromptRequirementsService(db.DB)
+	generatorService := service.NewGeneratorService(promptReqService)
+	decompositionService := service.NewDecompositionService(promptReqService)
 	streamService := streamdomain.NewService(generatorService, decompositionService, userService)
 	return NewStreamAPIWithDeps(generatorService, decompositionService, userService, streamdomain.NewHandler(streamService, streamdomain.NewGormBlogReadable()))
 }

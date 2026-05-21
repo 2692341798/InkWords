@@ -15,30 +15,41 @@ import (
 	"inkwords-backend/internal/infra/db"
 	"inkwords-backend/internal/infra/llm"
 	"inkwords-backend/internal/model"
+	"inkwords-backend/internal/prompt"
 )
 
 // GeneratorService handles the blog generation process
 type GeneratorService struct {
-	llmClient *llm.DeepSeekClient
+	llmClient  *llm.DeepSeekClient
+	promptReq *PromptRequirementsService
 }
 
 // NewGeneratorService creates a new generator service
-func NewGeneratorService() *GeneratorService {
+func NewGeneratorService(promptReq *PromptRequirementsService) *GeneratorService {
 	apiKey := os.Getenv("DEEPSEEK_API_KEY")
 	return &GeneratorService{
 		llmClient: llm.NewDeepSeekClient(apiKey),
+		promptReq: promptReq,
 	}
 }
 
 // GenerateBlogStream assembles the prompt, calls the LLM, and pushes chunks to the channel
-func (s *GeneratorService) GenerateBlogStream(ctx context.Context, userID uuid.UUID, sourceContent string, sourceType string, chunkChan chan<- string, errChan chan<- error) {
-	instruction := `你是一个高级全栈架构师和技术博主。请根据前面提供的源内容，将其转化为一篇“小白友好、图文并茂、可独立复现”的高质量技术博客。
-要求：
-1. **单点聚焦与深度剖析**：严格保证本篇文章只介绍**一个核心技术点**。请利用充足的上下文，深入分析其底层原理、设计思想和演进逻辑，不要只写干瘪的总结。字数篇幅不设上限，请尽可能详尽。
-2. **丰富的代码示例**：在解释原理和应用时，尽可能多地提供代码示例（不仅仅是源码，还可以是辅助理解的伪代码或最佳实践用例）。如果源内容包含代码，请引用核心代码并逐行解释其作用。
-3. **可复现的步骤**：如果是实战或教程相关，请给出明确的执行步骤。
-4. **小白友好**：在解释抽象的理论概念时，必须提供对应的代码示例或生活化比喻。
-5. 所有生成的 Mermaid 图表代码块绝对禁止包含自定义样式关键字（如 style, classDef, linkStyle 等），必须使用基础语法。在 Mermaid 图表中，如果节点文本包含特殊字符（如括号、幂符号等，例如 O(1), O(n^2)），必须使用双引号将节点文本包裹起来，例如 A["O(1)"] 而不是 A[O(1)]。`
+func (s *GeneratorService) GenerateBlogStream(ctx context.Context, userID uuid.UUID, sourceContent string, sourceType string, style string, chunkChan chan<- string, errChan chan<- error) {
+	requirements := prompt.DefaultRequirements(prompt.ArticleStyleGeneral)
+	if s.promptReq != nil {
+		if resolved, err := s.promptReq.Resolve(ctx, userID, prompt.ArticleStyle(style)); err == nil && resolved != "" {
+			requirements = resolved
+		}
+	}
+
+	instruction := fmt.Sprintf(`你是一个高级全栈架构师和技术博主。请根据前面提供的源内容，生成一篇可独立复现的高质量技术博客。
+
+写作要求：
+%s
+
+硬性约束：
+1. 所有生成的 Mermaid 图表代码块绝对禁止包含自定义样式关键字（如 style, classDef, linkStyle 等），必须使用基础语法。
+2. 在 Mermaid 图表中，如果节点文本包含特殊字符（如括号、幂符号等，例如 O(1), O(n^2)），必须使用双引号将节点文本包裹起来，例如 A["O(1)"] 而不是 A[O(1)]。`, requirements)
 
 	messages := []llm.Message{
 		{Role: "system", Content: "项目源内容如下：\n" + sourceContent},

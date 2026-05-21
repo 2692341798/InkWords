@@ -43,6 +43,14 @@ func (a *UserAPI) GetUserStats(c *gin.Context) {
 	a.userDomainHandler.GetUserStats(c)
 }
 
+func (a *UserAPI) GetPromptSettings(c *gin.Context) {
+	a.userDomainHandler.GetPromptSettings(c)
+}
+
+func (a *UserAPI) UpdatePromptSettings(c *gin.Context) {
+	a.userDomainHandler.UpdatePromptSettings(c)
+}
+
 func NewUserAPIWithDeps(userService *service.UserService, userDomainHandler *userdomain.Handler) *UserAPI {
 	return &UserAPI{
 		userService:       userService,

@@ -8,6 +8,7 @@ import (
 	"inkwords-backend/internal/infra/llm"
 	"inkwords-backend/internal/infra/parser"
 	"inkwords-backend/internal/model"
+	"inkwords-backend/internal/prompt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -22,7 +23,7 @@ import (
 )
 
 // GenerateSeries generates blog chapters sequentially based on the outline with streaming
-func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.UUID, parentID uuid.UUID, seriesTitle string, outline []Chapter, sourceContent string, sourceType string, gitURL string, progressChan chan<- string, errChan chan<- error) {
+func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.UUID, parentID uuid.UUID, seriesTitle string, outline []Chapter, sourceContent string, sourceType string, gitURL string, style string, progressChan chan<- string, errChan chan<- error) {
 	defer close(progressChan)
 	defer close(errChan)
 
@@ -221,29 +222,36 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 				}
 			}
 
-			prompt := fmt.Sprintf(`请根据上述源内容，以及本章节的大纲，将其转化为一篇“小白友好、图文并茂、可独立复现”的高质量技术博客章节。
-要求：
-1. **单点聚焦与深度剖析**：严格保证本篇文章只介绍**一个核心技术点**。请利用充足的上下文，深入剖析其底层原理、设计思想和演进逻辑，不要停留在表面的 API 调用，字数篇幅不设上限，请尽可能详尽。
-2. **丰富的代码示例**：在解释原理和应用时，尽可能多地提供代码示例（不仅仅是源码，还可以是辅助理解的伪代码或最佳实践用例），引用源内容中的核心代码并逐行解释其作用。如果源内容因为截断而缺少具体代码，请基于目录结构和你的架构经验进行合理补充推演。
-3. **可复现的步骤**：如果是实战或配置相关，请给出明确的执行步骤。
-4. **小白友好**：在解释抽象的理论概念时，必须提供对应的代码示例或生活化比喻。
-5. 所有生成的 Mermaid 图表代码块绝对禁止包含自定义样式关键字（如 style, classDef, linkStyle 等），必须使用基础语法。在 Mermaid 图表中，如果节点文本包含特殊字符（如括号、幂符号等，例如 O(1), O(n^2)），必须使用双引号将节点文本包裹起来，例如 A["O(1)"] 而不是 A[O(1)]。
-6. **完整性约束**：请务必完整输出，不要遗漏关键知识点。如果内容较长，请合理分配篇幅，确保文章结构完整，包含结尾总结。
+			requirements := prompt.DefaultRequirements(prompt.ArticleStyleGeneral)
+			if s.promptReq != nil {
+				if resolved, err := s.promptReq.Resolve(ctx, userID, prompt.ArticleStyle(style)); err == nil && resolved != "" {
+					requirements = resolved
+				}
+			}
+
+			promptText := fmt.Sprintf(`请根据上述源内容，以及本章节的大纲，生成一篇高质量技术博客章节。
+
+写作要求：
+%s
+
+硬性约束：
+1. 所有生成的 Mermaid 图表代码块绝对禁止包含自定义样式关键字（如 style, classDef, linkStyle 等），必须使用基础语法。在 Mermaid 图表中，如果节点文本包含特殊字符（如括号、幂符号等，例如 O(1), O(n^2)），必须使用双引号将节点文本包裹起来，例如 A["O(1)"] 而不是 A[O(1)]。
+2. 请务必完整输出，不要遗漏关键知识点。如果内容较长，请合理分配篇幅，确保文章结构完整，包含结尾总结。
 %s
 
 本章节大纲：
 - 标题: %s
 - 摘要: %s
 - 排序: %d
-`, extraRequirements, chapter.Title, chapter.Summary, chapter.Sort)
+`, requirements, extraRequirements, chapter.Title, chapter.Summary, chapter.Sort)
 
 			if oldContent != "" {
-				prompt += fmt.Sprintf("\n【注意：本章节为旧版博客的更新重写】\n以下是该章节在旧版本项目中的博客内容，供你作为松散参考。\n你可以参考旧内容中解释抽象概念的比喻、业务知识点或行文风格，但必须以本次提供的最新源码为准进行重写或调整，如果最新代码逻辑发生了改变，请以最新代码为准。\n旧版本内容：\n---\n%s\n---\n", oldContent)
+				promptText += fmt.Sprintf("\n【注意：本章节为旧版博客的更新重写】\n以下是该章节在旧版本项目中的博客内容，供你作为松散参考。\n你可以参考旧内容中解释抽象概念的比喻、业务知识点或行文风格，但必须以本次提供的最新源码为准进行重写或调整，如果最新代码逻辑发生了改变，请以最新代码为准。\n旧版本内容：\n---\n%s\n---\n", oldContent)
 			}
 
 			messages := []llm.Message{
 				{Role: "system", Content: "你是一个高级全栈架构师和技术博主。\n\n项目源内容如下：\n" + chapterSourceContent},
-				{Role: "user", Content: prompt},
+				{Role: "user", Content: promptText},
 			}
 
 			llmModel := "deepseek-v4-flash"

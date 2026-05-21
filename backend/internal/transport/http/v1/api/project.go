@@ -4,6 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	projectdomain "inkwords-backend/internal/domain/project"
+	"inkwords-backend/internal/infra/db"
 	"inkwords-backend/internal/infra/parser"
 	"inkwords-backend/internal/service"
 )
@@ -17,7 +18,8 @@ type ProjectAPI struct {
 }
 
 func NewProjectAPI(userService *service.UserService) *ProjectAPI {
-	decompositionService := service.NewDecompositionService()
+	promptReqService := service.NewPromptRequirementsService(db.DB)
+	decompositionService := service.NewDecompositionService(promptReqService)
 	gitFetcher := parser.NewGitFetcher()
 	docParser := parser.NewDocParser()
 	projectService := projectdomain.NewService(decompositionService, gitFetcher, docParser, userService)

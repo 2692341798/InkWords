@@ -27,3 +27,17 @@ type StatsData struct {
 	TechStackStats []TechStackStat `json:"tech_stack_stats"`
 }
 
+type PromptSettingsResponse struct {
+	Styles    []PromptStyleItem `json:"styles"`
+	Defaults  map[string]string `json:"defaults"`
+	Overrides map[string]string `json:"overrides"`
+}
+
+type PromptStyleItem struct {
+	Key   string `json:"key"`
+	Label string `json:"label"`
+}
+
+type UpdatePromptSettingsRequest struct {
+	Overrides map[string]string `json:"overrides"`
+}

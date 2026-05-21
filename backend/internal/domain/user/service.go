@@ -7,9 +7,11 @@ import (
 	"sort"
 
 	"github.com/google/uuid"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 
 	"inkwords-backend/internal/model"
+	"inkwords-backend/internal/prompt"
 )
 
 type Service struct {
@@ -129,3 +131,53 @@ func (s *Service) GetStats(ctx context.Context, uid uuid.UUID) (*StatsData, erro
 	}, nil
 }
 
+func (s *Service) GetPromptSettings(ctx context.Context, uid uuid.UUID) (*PromptSettingsResponse, error) {
+	defaults := map[string]string{
+		string(prompt.ArticleStyleGeneral):          prompt.DefaultRequirements(prompt.ArticleStyleGeneral),
+		string(prompt.ArticleStyleBeginnerTutorial): prompt.DefaultRequirements(prompt.ArticleStyleBeginnerTutorial),
+		string(prompt.ArticleStyleExamReview):       prompt.DefaultRequirements(prompt.ArticleStyleExamReview),
+	}
+
+	styles := []PromptStyleItem{
+		{Key: string(prompt.ArticleStyleGeneral), Label: "通用技术博客"},
+		{Key: string(prompt.ArticleStyleBeginnerTutorial), Label: "小白手把手教程"},
+		{Key: string(prompt.ArticleStyleExamReview), Label: "备考复习文章"},
+	}
+
+	overrides := map[string]string{}
+	row, err := s.repo.GetPromptSettings(ctx, uid)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+	if err == nil && row != nil && len(row.Overrides) > 0 {
+		_ = json.Unmarshal(row.Overrides, &overrides)
+	}
+
+	return &PromptSettingsResponse{
+		Styles:    styles,
+		Defaults:  defaults,
+		Overrides: overrides,
+	}, nil
+}
+
+func (s *Service) UpdatePromptSettings(ctx context.Context, uid uuid.UUID, patch map[string]string) error {
+	merged := map[string]string{}
+	row, err := s.repo.GetPromptSettings(ctx, uid)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+	if err == nil && row != nil && len(row.Overrides) > 0 {
+		_ = json.Unmarshal(row.Overrides, &merged)
+	}
+
+	for k, v := range patch {
+		merged[k] = v
+	}
+
+	b, err := json.Marshal(merged)
+	if err != nil {
+		return err
+	}
+
+	return s.repo.UpsertPromptSettings(ctx, uid, datatypes.JSON(b))
+}
