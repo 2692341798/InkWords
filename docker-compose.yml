@@ -38,15 +38,12 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - FRONTEND_URL=http://localhost
       - OBSIDIAN_REST_API_BASE_URL=${OBSIDIAN_REST_API_BASE_URL:-https://obsidian-bridge:27125}
-      - OBSIDIAN_REST_API_CERT_PATH=${OBSIDIAN_REST_API_CERT_PATH_INTERNAL:-/app/obsidian-cert/obsidian-local-rest-api-certificate.crt}
-      - OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY=${OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY:-false}
       - OBSIDIAN_WIKI_DIR=${OBSIDIAN_WIKI_DIR:-wiki}
     ports:
       - "8081:8080"
     volumes:
       - uploads:/app/uploads
       - ${OBSIDIAN_VAULT_PATH:-/Users/huangqijun/Documents/obsidian_knowledge/knowledge/wiki}:/app/obsidian
-      - ${OBSIDIAN_REST_API_CERT_PATH:-/etc/hosts}:/app/obsidian-cert/obsidian-local-rest-api-certificate.crt:ro
     depends_on:
       db:
         condition: service_healthy

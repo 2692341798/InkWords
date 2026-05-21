@@ -1,6 +1,45 @@
 # 墨言博客助手 (InkWords) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 68：整理剩余改动并拆分为两条原子提交
+- **用户需求**：将当前工作区剩余未提交改动整理后，生成两条规范 commit 并推送当前分支。
+- **AI 动作**：
+  1. 将剩余改动归类为两组：其一为“文章类型/写作要求模板管理”功能闭环（模型、服务、用户接口、生成链路、测试）；其二为“Obsidian Docker 开发态证书兜底修复”（compose、README、回归测试、gitignore）。
+  2. 补齐 API / Database / Architecture / Development Log / Conversation Log 等基准文档，确保与本次两组改动保持同步。
+  3. 计划按“功能提交 -> Obsidian 修复提交”的顺序分别提交并推送，避免将独立修复混入功能提交。
+- **决策/变更**：
+  - 采用 `atomic commit` 原则，将“prompt settings 功能”与“Obsidian compose 修复”分离，以降低 review 与回滚成本。
+
+### 对话 67：修复 PDF 上传解析被误判为 Git 来源
+- **用户需求**：上传 PDF 解析时弹出 `git_url is required for git source type`，要求定位问题并修复。
+- **AI 动作**：
+  1. 定位到前端文件上传链路 `useFileParser` 在调用 `/api/v1/stream/analyze` 时未显式传 `source_type=file`，且错误读取了 `/api/v1/project/parse` 的返回字段（应读取 `data.source_content`）。
+  2. 前端新增 `fileParserUtils`，统一提取解析文本并构造文件分析请求；补充 Vitest 回归测试覆盖响应字段提取与文件请求体构造。
+  3. 后端 `stream` handler 增加 `resolveAnalyzeSourceType` 兼容推断：当请求包含 `source_content` 且无 `git_url` 时，自动按 `file` 来源处理，兜底兼容旧静态资源或缓存请求。
+- **验证**：
+  - `cd frontend && npm test -- src/hooks/generator/fileParserUtils.test.ts` 通过
+  - `cd frontend && npm run build` 通过
+  - `cd backend && go test ./internal/domain/stream` 通过
+  - `docker compose down && docker compose up -d --build` 完成
+
+### 对话 66：文章类型/风格与写作要求模板抽离（支持用户自定义）
+- **用户需求**：为后续扩展提供更多“文章类型/风格”选择（如小白手把手、备考复习），并将提示词可变部分单独抽离，支持用户自定义写作要求。
+- **AI 动作**：
+  1. 设计并落地文章类型枚举 `general/beginner_tutorial/exam_review`，将“写作要求”从生成逻辑中抽离为模板（system 安全约束不开放编辑）。
+  2. 新增用户模板接口 `/api/v1/user/prompt-settings`（GET/PUT），按用户保存覆盖值（空字符串视为恢复默认）。
+  3. 生成器页新增“文章类型”下拉并在生成请求携带 `article_style`；编辑器页新增“模板管理”入口与弹窗（查看默认/编辑自定义/保存与恢复默认）。
+- **验证**：
+  - `cd backend && go test ./...` 通过
+  - `cd frontend && npm test && npm run build` 通过
+
+### 对话 65：修复导出到 Obsidian 初始化目录失败（兼容 `{ "files": [...] }` 目录列表返回）
+- **用户需求**：导出/同步到 Obsidian 时提示“初始化知识库目录失败：无法解析 Obsidian 目录列表响应”。
+- **AI 动作**：
+  1. 定位 Obsidian Local REST API 在列目录时返回 `{ "files": [...] }`，而后端仅支持字符串数组/对象数组两种解析分支。
+  2. 扩展 `RestAPIStore.List` 解析逻辑，兼容 `{ "files": [...] }` 返回，并补充单元测试覆盖。
+- **验证**：
+  - `cd backend && go test ./...` 通过
+
 ### 对话 64：目录结构工程化调整（后端 transport/infra + 前端 pages/services）
 - **用户需求**：按照软件工程规范调整目录结构，明确边界并给出可执行迁移方案。
 - **AI 动作**：

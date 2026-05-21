@@ -1,6 +1,8 @@
 # 墨言博客助手 (InkWords) - API 接口文档
 
 ## 0. 变更记录
+- 2026-05-21：新增用户写作模板接口 `/api/v1/user/prompt-settings`（GET/PUT），并为 `/api/v1/stream/generate` 增加 `article_style` 请求字段，用于控制文章类型/写作要求模板。
+- 2026-05-21：修复本地 PDF/Word/Markdown 上传后触发 `git_url is required for git source type` 弹窗的问题；前端在 `/api/v1/stream/analyze` 显式发送 `source_type=file`，后端增加基于 `source_content` 的文件来源兼容推断（无 API 路由变更）。
 - 2026-04-29：新增“写博客”入口配套接口 `/api/v1/blogs/draft`（创建手写草稿）。
 - 2026-05-08：写博客编辑器新增“语音输入”（纯前端能力，无 API 变更）。
 - 2026-05-08：新增“博客润色”流式接口 `/api/v1/blogs/:id/polish`（SSE 输出润色草稿，不落库）。
@@ -10,6 +12,7 @@
 - 2026-05-08：后端 User Domain 垂直切片迁移（无 API 路由变更）。
 - 2026-05-08：后端 Auth Domain 垂直切片迁移（无 API 路由变更）。
 - 2026-05-08：后端 Stream/Project Domain 垂直切片迁移（无 API 路由变更）。
+- 2026-05-10：修复导出到 Obsidian 时“初始化知识库目录失败”（兼容 Obsidian Local REST API 目录列表 `{ "files": [...] }` 返回格式；无 API 路由变更）。
 ## 1. 认证模块 (AuthAPI)
 | 接口地址 | 请求方法 | 功能描述 | 参数 |
 | -------- | -------- | -------- | ---- |
@@ -27,6 +30,8 @@
 | `/api/v1/user/profile` | PUT | 更新当前登录用户名 | `{ username }` |
 | `/api/v1/user/avatar` | POST | 上传用户头像图片 | `multipart/form-data` -> `avatar` |
 | `/api/v1/user/stats` | GET | 获取用户仪表盘统计数据 (Token, 费用, 字数, 技术栈) | JWT Bearer Token |
+| `/api/v1/user/prompt-settings` | GET | 获取文章类型默认模板与当前用户自定义覆盖 | JWT Bearer Token |
+| `/api/v1/user/prompt-settings` | PUT | 更新当前用户的写作要求模板覆盖（空字符串表示恢复默认） | `{ overrides: { [styleKey]: string } }` |
 
 ## 3. 项目解析模块 (ProjectAPI)
 | 接口地址 | 请求方法 | 功能描述 | 参数 |
@@ -38,8 +43,8 @@
 | 接口地址 | 请求方法 | 功能描述 | 参数 |
 | -------- | -------- | -------- | ---- |
 | `/api/v1/stream/scan` | POST | 快速扫描 Git 仓库一级目录并通过 README 智能提取描述 | `{ git_url }` -> SSE Stream |
-| `/api/v1/stream/analyze` | POST | 实时流式拉取 Git 或解析长文本文件生成大纲 | `{ git_url, selected_modules, source_type, source_content }` -> SSE Stream |
-| `/api/v1/stream/generate` | POST | 根据大纲或内容流式生成博客章节 | `{ source_content, source_type, git_url, outline, series_title, parent_id }` -> SSE Stream |
+| `/api/v1/stream/analyze` | POST | 实时流式拉取 Git 或解析长文本文件生成大纲 | `{ git_url, selected_modules, source_type, source_content }` -> SSE Stream；当请求仅包含 `source_content` 且未传 `git_url` 时，后端会兼容判定为 `file` 来源 |
+| `/api/v1/stream/generate` | POST | 根据大纲或内容流式生成博客章节 | `{ source_content, source_type, git_url, outline, series_title, parent_id, article_style }` -> SSE Stream |
 | `/api/v1/blogs/:id/continue` | POST | 继续生成被截断的单篇博客 (Legacy) | 无 -> SSE Stream |
 | `/api/v1/blogs/:id/polish` | POST | 对当前草稿全文润色并返回“润色草稿” | `{ title, content }` -> SSE Stream |
 

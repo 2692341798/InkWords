@@ -4,7 +4,9 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"inkwords-backend/internal/model"
 )
@@ -16,6 +18,8 @@ type Repository interface {
 	CountArticles(ctx context.Context, uid uuid.UUID) (int64, error)
 	SumWords(ctx context.Context, uid uuid.UUID) (int64, error)
 	ListBlogsWithTechStacks(ctx context.Context, uid uuid.UUID) ([]model.Blog, error)
+	GetPromptSettings(ctx context.Context, uid uuid.UUID) (*model.UserPromptSettings, error)
+	UpsertPromptSettings(ctx context.Context, uid uuid.UUID, overrides datatypes.JSON) error
 }
 
 type GormRepository struct {
@@ -78,3 +82,23 @@ func (r *GormRepository) ListBlogsWithTechStacks(ctx context.Context, uid uuid.U
 	return blogs, nil
 }
 
+func (r *GormRepository) GetPromptSettings(ctx context.Context, uid uuid.UUID) (*model.UserPromptSettings, error) {
+	var row model.UserPromptSettings
+	if err := r.db.WithContext(ctx).First(&row, "user_id = ?", uid).Error; err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+func (r *GormRepository) UpsertPromptSettings(ctx context.Context, uid uuid.UUID, overrides datatypes.JSON) error {
+	row := &model.UserPromptSettings{
+		UserID:    uid,
+		Overrides: overrides,
+	}
+	return r.db.WithContext(ctx).
+		Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "user_id"}},
+			DoUpdates: clause.AssignmentColumns([]string{"overrides", "updated_at"}),
+		}).
+		Create(row).Error
+}

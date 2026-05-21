@@ -26,6 +26,7 @@ func InitDB(dsn string) error {
 		&model.User{},
 		&model.Blog{},
 		&model.OAuthToken{},
+		&model.UserPromptSettings{},
 	)
 	if err != nil {
 		log.Printf("Failed to auto migrate database: %v", err)

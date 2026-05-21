@@ -70,6 +70,50 @@
 ## 4. 每日开发日志 (Dev Log)
 > 该区域将由 Vibe Coding 工程师（AI 助手）在每天/每次开发周期结束时，如实记录当天的完成事项、遇到的技术坑点及架构小规模调整。
 
+### [2026-05-21] Fix - Obsidian Docker 开发态证书兜底修复
+- **开发模块**: [Docker Compose, Obsidian REST Store, Docs-as-Code]
+- **完成事项**:
+  1. 移除 `docker-compose.yml` 中将宿主机 `/etc/hosts` 兜底挂载为 Obsidian 证书文件的错误配置。
+  2. 保留并明确开发态 `OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY=true` 作为本机调试默认方案，避免因错误证书挂载导致容器启动后运行时失败。
+  3. 为 compose 配置新增回归测试，锁定“不允许回退到 `/etc/hosts` 作为证书”的约束。
+  4. 同步更新 `README` 与架构文档，说明本地开发的 Obsidian TLS 配置策略。
+- **验证**:
+  - `cd backend && go test ./internal/service` 预期应覆盖相关回归测试
+  - `docker compose config -q` 预期通过
+
+### [2026-05-21] Fix - PDF 上传解析误判为 Git 来源
+- **开发模块**: [Frontend File Parser, Stream Analyze, Docs-as-Code]
+- **完成事项**:
+  1. 修复前端文件解析链路：统一从 `/api/v1/project/parse` 读取 `data.source_content`，并为 `/api/v1/stream/analyze` 显式发送 `source_type=file`。
+  2. 新增 `fileParserUtils` 与 Vitest 回归测试，覆盖解析响应字段提取与文件来源请求体构造。
+  3. 在后端 `stream` handler 增加 `resolveAnalyzeSourceType` 兼容推断，避免旧前端包或缓存请求缺失 `source_type` 时被误判为 Git。
+  4. 按提交规范同步更新 API / Architecture / Database / PRD / README / Conversation Log 文档。
+- **验证**:
+  - `cd frontend && npm test -- src/hooks/generator/fileParserUtils.test.ts` 通过
+  - `cd frontend && npm run build` 通过
+  - `cd frontend && npx eslint src/hooks/generator/useFileParser.ts src/hooks/generator/fileParserUtils.ts src/hooks/generator/fileParserUtils.test.ts` 通过
+  - `cd backend && go test ./internal/domain/stream` 通过
+  - `docker compose down && docker compose up -d --build` 完成
+
+### [2026-05-10] Feat - 文章类型/风格与写作要求模板管理
+- **开发模块**: [Prompt Requirements, Stream Generate, Editor Settings]
+- **完成事项**:
+  1. 抽离“写作要求”为文章类型模板（内置：通用技术博客/小白手把手/备考复习），并保留 system 侧的安全约束不开放编辑。
+  2. 新增用户模板接口 `/api/v1/user/prompt-settings`（GET/PUT），按用户保存覆盖值（空字符串表示恢复默认）。
+  3. 生成链路支持 `article_style`，单篇与系列章节都会注入对应写作要求。
+  4. 前端生成器页新增“文章类型”下拉；编辑器页新增“模板管理”入口与弹窗（查看默认、编辑自定义、保存/恢复默认）。
+- **验证**:
+  - `cd backend && go test ./...` 通过
+  - `cd frontend && npm test && npm run build` 通过
+
+### [2026-05-10] Fix - 导出到 Obsidian 初始化目录失败
+- **开发模块**: [Obsidian Local REST API, 导出/同步, Scaffold Index]
+- **完成事项**:
+  1. 兼容 Obsidian Local REST API 列目录返回 `{ "files": [...] }` 的响应格式，避免初始化 scaffold 阶段解析失败。
+  2. 为目录列表解析补充单元测试覆盖，确保后续升级插件/返回格式变化时可快速发现回归。
+- **验证**:
+  - `cd backend && go test ./...` 通过
+
 ### [2026-05-08] Chore - 工程化整理（仓库减肥与文件结构治理）
 - **开发模块**: [仓库结构, .gitignore, 文档同步]
 - **完成事项**:

@@ -9,8 +9,25 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"strings"
 	"testing"
 )
+
+func TestDockerCompose_DoesNotFallbackToHostsAsObsidianCert(t *testing.T) {
+	t.Parallel()
+
+	// Why: 将 /etc/hosts 挂成证书文件会在运行时触发“解析 Obsidian 证书失败”，
+	// 这里用回归测试锁定 compose 配置，避免再次引入静默错误兜底。
+	composeBytes, err := os.ReadFile("../../../docker-compose.yml")
+	if err != nil {
+		t.Fatalf("read docker-compose: %v", err)
+	}
+
+	composeContent := string(composeBytes)
+	if strings.Contains(composeContent, "${OBSIDIAN_REST_API_CERT_PATH:-/etc/hosts}") {
+		t.Fatalf("docker-compose must not fall back to /etc/hosts for OBSIDIAN_REST_API_CERT_PATH")
+	}
+}
 
 func TestNewRestAPIStoreFromEnv_CertMissing(t *testing.T) {
 	t.Setenv("OBSIDIAN_REST_API_BASE_URL", "https://obsidian-bridge:27125")
@@ -87,6 +104,27 @@ func TestRestAPIStore_List_ParsesStringArray(t *testing.T) {
 		t.Fatalf("list: %v", err)
 	}
 	if len(items) != 2 || items[0] != "a.md" || items[1] != "b.md" {
+		t.Fatalf("unexpected items: %#v", items)
+	}
+}
+
+func TestRestAPIStore_List_ParsesFilesObject(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"files":["a.md","b.md","concepts/"]}`))
+	}))
+	defer srv.Close()
+
+	u, _ := url.Parse(srv.URL)
+	store := newRestAPIStore(u, "dummy", srv.Client())
+
+	items, err := store.List(context.Background(), "wiki")
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(items) != 3 || items[0] != "a.md" || items[1] != "b.md" || items[2] != "concepts/" {
 		t.Fatalf("unexpected items: %#v", items)
 	}
 }

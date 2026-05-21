@@ -44,3 +44,10 @@ func TestPolishRequest_HasTitleAndContentFields(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "content", field.Tag.Get("json"))
 }
+
+func TestGenerateRequest_HasArticleStyleField(t *testing.T) {
+	rt := reflect.TypeOf(streamdomain.GenerateRequest{})
+	field, ok := rt.FieldByName("ArticleStyle")
+	require.True(t, ok)
+	assert.Equal(t, "article_style", field.Tag.Get("json"))
+}

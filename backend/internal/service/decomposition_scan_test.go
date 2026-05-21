@@ -57,7 +57,7 @@ func TestDecompositionService_ScanProjectModules(t *testing.T) {
 	// but the ScanProjectModules should gracefully handle it and return "暂无简介".
 	os.Unsetenv("DEEPSEEK_API_KEY")
 
-	svc := NewDecompositionService()
+	svc := NewDecompositionService(nil)
 	repoURL := "file://" + filepath.ToSlash(tempDir)
 
 	modules, err := svc.ScanProjectModules(context.Background(), repoURL)

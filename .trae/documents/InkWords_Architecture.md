@@ -1,12 +1,16 @@
 # 墨言博客助手 (InkWords) - 架构设计与工程规范
 
 ## 0. 变更记录
+- 2026-05-21：修复 Docker 开发态 Obsidian 证书挂载兜底错误；移除将宿主机 `/etc/hosts` 作为证书文件的错误回退，改为默认通过 `OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY=true` 访问本地 Obsidian Local REST API，并用测试锁定 compose 配置。
+- 2026-05-21：修复文件上传解析链路的来源判定漂移；前端上传后统一从 `project/parse` 提取 `data.source_content`，并在调用 `stream/analyze` 时显式发送 `source_type=file`；后端 `stream` handler 增加基于 `source_content` 的兼容推断，避免旧静态资源或缓存请求被误判为 Git 分析。
 - 2026-04-29：对后端 `parser`/`service` 与前端核心组件进行模块化拆分，消除超大文件（>500 行），以提升可维护性与复用性（无业务行为变更）。
 - 2026-04-29：新增“手写博客入口”，支持创建草稿并直接进入现有双栏编辑器（新增后端草稿创建接口与前端侧边栏入口）。
 - 2026-05-08：写博客编辑器新增“语音输入”（浏览器 SpeechRecognition 实时转写，插入正文光标处）。
 - 2026-05-08：写博客编辑器新增“润色”（后端新增 `/api/v1/blogs/:id/polish` SSE；前端新增润色预览与一键应用），并优化 Markdown 预览标题/表格排版。
 - 2026-05-08：工程化整理：移除仓库中的大二进制/调试产物追踪（避免泄漏 token），并将超大文件按职责拆分为同包多文件/子组件目录。
 - 2026-05-08：目录结构工程化调整（目标态设计）：后端明确 `domain/transport/infra` 边界，前端明确 `pages/services` 边界（仅规划，不改代码）。
+- 2026-05-10：修复导出到 Obsidian 初始化 scaffold 时的目录列表解析失败（兼容 Obsidian Local REST API `{ \"files\": [...] }` 返回格式）。
+- 2026-05-10：提示词“写作要求”抽离为文章类型模板（内置默认 + 用户自定义覆盖），生成接口支持 `article_style`，编辑器新增“模板管理”入口。
 ## 1. 整体架构 (Monorepo)
 项目采用前后端分离的 Monorepo 结构，根目录隔离：
 - **`frontend/`**: 包含所有前端界面、状态管理和客户端逻辑。
@@ -35,6 +39,7 @@
   - 图形验证码防刷 (`github.com/mojocn/base64Captcha`)
   - 密码强度与连续登录失败防爆破锁定 (`LockedUntil`)
 - **并发架构**: 引入了 Go 原生的 Goroutine 池与 `x/sync/semaphore` 信号量控制（动态范围 3~8），保障并发生成稳定且不超限。
+- **提示词模板化**：新增 `internal/prompt` 作为文章类型与默认“写作要求”的单一来源；生成链路通过 `PromptRequirementsService` 在运行时合并默认模板与用户覆盖值，并注入到单篇/系列章节 prompt 中（system 注入与安全约束仍由系统固定）。
 - **特大型项目保护 (Map-Reduce)**:
   - **Map 阶段**: 按目录分块(针对 Git 仓库)或按字数智能段落分块(针对大于 1,000,000 字符的长文本文件)并发提炼局部摘要，当遇到 LLM 限流时启用带随机抖动的**指数退避 (Exponential Backoff)**。
   - **Reduce 阶段**: 当局部摘要过多（>20个）时，自动触发 **Tree Reduce** 多级树状汇总，将局部摘要分组提炼成中间层摘要后，再进行全局大纲合并，最高支持 15,000,000 字符上限。

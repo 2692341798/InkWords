@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 import { useStreamStore } from '@/store/streamStore'
 import { fetchEventSourceWithAuth } from '@/services/sse'
+import { buildFileAnalyzeRequest, extractParsedFileContent } from './fileParserUtils'
 
 class StopStreamError extends Error {}
 
@@ -48,7 +49,10 @@ export const useFileParser = () => {
       }
 
       const data = await uploadRes.json()
-      const content = data.content
+      const content = extractParsedFileContent(data)
+      if (!content) {
+        throw new Error('文件解析成功但未返回可用内容')
+      }
       store.setSourceContent(content)
       
       store.setAnalysisStep(1)
@@ -59,7 +63,8 @@ export const useFileParser = () => {
         headers: { 'Content-Type': 'application/json' },
         signal: ctrl.signal,
         openWhenHidden: true,
-        body: JSON.stringify({ source_content: content }),
+        // Why: 显式声明 file 来源，避免后端将文档上传误判为 git 解析链路。
+        body: JSON.stringify(buildFileAnalyzeRequest(content)),
         async onopen(response) {
           if (response.ok && response.headers.get('content-type')?.startsWith('text/event-stream')) {
             return;

@@ -11,10 +11,12 @@
 - 🎯 **精准按需阅读与后台静默生成**：大纲级别绑定源码文件，生成时仅动态提取强相关代码，拒绝“假大空”。流式生成任务全局接管，支持后台静默生成，切换页面或断网重连无缝衔接。
 - 🔄 **博客松散参考再生 (Regeneration)**：在仓库更新后的重写阶段，系统会将旧版博客作为上下文注入大模型，基于最新源码进行“松散参考重写”，既保留了历史优秀的业务解释，又确保代码逻辑的绝对实时。单篇博客严格要求“单点聚焦与深度剖析”，深度挖掘核心技术点。
 - 📑 **超大文件解析支持**：支持本地上传高达 100MB 的 PDF/Word/MD 技术文档，前后端与网关链路已做深度适配。支持根据大文件内容智能评估并拆分系列大纲，像处理 Git 仓库一样并发生成系列博客。
+- 🩹 **文件来源判定兼容修复**：文件上传分析链路会显式发送 `source_type=file`，后端也会在仅携带 `source_content` 且未传 `git_url` 时自动兜底识别为文件来源，避免旧静态资源或缓存请求误触发 `git_url is required for git source type`。
 - ✍️ **沉浸式极简创作体验**：内置类似 Notion 的双栏 Markdown 二次编辑器。首创基于底层 AST 行号注入的像素级双向滚动同步算法；支持对生成的图表进行纯净无样式（无 `style` 污染）的原生 Mermaid 渲染，并具备强大的正则表达式错误兼容与自动修复机制。
 - **手写博客入口**：侧边栏新增“写博客”，一键创建空白草稿并直接进入编辑器进行手写写作。
 - **语音输入**：写博客编辑器支持浏览器语音转写输入，转写内容实时写入正文并插入到光标处。
 - **全文润色**：支持对当前草稿进行流式润色，前端提供“润色预览”与一键应用到正文，提升二次编辑效率。
+- **文章类型/风格与模板管理**：生成器支持选择文章类型（通用/小白手把手/备考复习）；编辑器提供“模板管理”入口，可查看默认写作要求并按用户保存自定义覆盖（空字符串恢复默认）。
 - 📦 **全能导出与本地知识库直通**：支持前端勾选历史博客，由浏览器离线构建 `.zip` 压缩包批量导出，或调用后端流式接口将完整项目系列一键打包下载。独创 Docker Volume 挂载技术，支持将博客一键导入宿主机的本地 Obsidian Vault，并按 Karpathy LLM Wiki Pattern 自动生成 `sources/`、`concepts/`、`entities/` 卡片与双向链接，实现知识复利沉淀。
 - 🛡️ **极致安全与双态鉴权**：源文件解析采用“阅后即焚”策略，不在服务器进行任何物理滞留；内置常规账号密码与 GitHub OAuth2.0 一键授权双体系；集成图形验证码与防爆破锁定安全机制。
 - 🐳 **容器化开箱即用**：全面支持 Docker 化部署，提供前后端与数据库的一键编排，内置 Nginx 反向代理与流式通信优化。
@@ -52,7 +54,9 @@
 # 使用 Docker Compose 一键启动
 docker compose down && docker compose up -d --build
 ```
-启动前请先在 `backend/.env` 中配置必要环境变量（例如 `DEEPSEEK_API_KEY`、`DATABASE_URL`、`JWT_SECRET`、`OBSIDIAN_REST_API_KEY`）。如需启用证书校验，另外在宿主机设置 `OBSIDIAN_REST_API_CERT_PATH` 指向插件证书；本机开发可选择设置 `OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY=true` 跳过 TLS 校验。
+启动前请先在 `backend/.env` 中配置必要环境变量（例如 `DEEPSEEK_API_KEY`、`DATABASE_URL`、`JWT_SECRET`、`OBSIDIAN_REST_API_KEY`）。当前 Docker 本地开发默认通过 `backend/.env` 中的 `OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY=true` 访问 Obsidian Local REST API，避免把宿主机错误文件挂载成证书；如需启用严格证书校验，请显式配置 `OBSIDIAN_REST_API_CERT_PATH` 指向真实插件证书，并将 `OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY=false`。
+如遇导出到 Obsidian 提示“无法解析 Obsidian 目录列表响应”，请确认后端版本已兼容 Obsidian Local REST API 目录列表 `{ "files": [...] }` 返回格式。
+如遇上传 PDF/Word/Markdown 后仍提示 `git_url is required for git source type`，请先执行 `docker compose down && docker compose up -d --build` 并强制刷新浏览器，以确保前端静态资源与后端兼容逻辑同步生效。
 由于后端仅提供 API 接口，前端服务由独立的 Nginx 容器代理。项目启动后：
 1. **必须通过前端入口**访问：`http://localhost` (映射于宿主机 80 端口)。
 

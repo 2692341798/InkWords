@@ -188,6 +188,26 @@ func (s *restAPIStore) List(ctx context.Context, dirPath string) ([]string, erro
 		return out, nil
 	}
 
+	var wrapped map[string]json.RawMessage
+	if json.Unmarshal(resp, &wrapped) == nil {
+		if raw, ok := wrapped["files"]; ok {
+			var files []string
+			if json.Unmarshal(raw, &files) == nil {
+				return files, nil
+			}
+			var anyFiles []any
+			if json.Unmarshal(raw, &anyFiles) == nil {
+				var out []string
+				for _, v := range anyFiles {
+					if s, ok := v.(string); ok {
+						out = append(out, s)
+					}
+				}
+				return out, nil
+			}
+		}
+	}
+
 	return nil, errors.New("无法解析 Obsidian 目录列表响应")
 }
 

@@ -24,6 +24,7 @@ type GenerateRequest struct {
 	SelectedModules []string  `json:"selected_modules"`
 	SeriesTitle     string    `json:"series_title"`
 	ParentID        string    `json:"parent_id"`
+	ArticleStyle    string    `json:"article_style"`
 }
 
 type PolishRequest struct {

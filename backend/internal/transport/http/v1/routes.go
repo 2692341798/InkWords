@@ -12,10 +12,12 @@ type AuthHandlers struct {
 }
 
 type UserHandlers struct {
-	GetProfile    gin.HandlerFunc
-	UpdateProfile gin.HandlerFunc
-	UploadAvatar  gin.HandlerFunc
-	GetUserStats  gin.HandlerFunc
+	GetProfile           gin.HandlerFunc
+	UpdateProfile        gin.HandlerFunc
+	UploadAvatar         gin.HandlerFunc
+	GetUserStats         gin.HandlerFunc
+	GetPromptSettings    gin.HandlerFunc
+	UpdatePromptSettings gin.HandlerFunc
 }
 
 type BlogHandlers struct {
@@ -52,6 +54,11 @@ type Handlers struct {
 }
 
 func Register(r *gin.Engine, authMiddleware gin.HandlerFunc, handlers Handlers) {
+	if authMiddleware == nil {
+		panic("missing middleware: authMiddleware")
+	}
+	validateHandlers(handlers)
+
 	v1 := r.Group("/api/v1")
 	{
 		authGroup := v1.Group("/auth")
@@ -71,6 +78,8 @@ func Register(r *gin.Engine, authMiddleware gin.HandlerFunc, handlers Handlers) 
 			userGroup.PUT("/profile", handlers.User.UpdateProfile)
 			userGroup.POST("/avatar", handlers.User.UploadAvatar)
 			userGroup.GET("/stats", handlers.User.GetUserStats)
+			userGroup.GET("/prompt-settings", handlers.User.GetPromptSettings)
+			userGroup.PUT("/prompt-settings", handlers.User.UpdatePromptSettings)
 		}
 
 		blogGroup := v1.Group("/blogs")
@@ -103,5 +112,46 @@ func Register(r *gin.Engine, authMiddleware gin.HandlerFunc, handlers Handlers) 
 			streamGroup.POST("/analyze", handlers.Stream.AnalyzeStreamHandler)
 			streamGroup.POST("/generate", handlers.Stream.GenerateStreamHandler)
 		}
+	}
+}
+
+func validateHandlers(h Handlers) {
+	must(h.Auth.Register, "Auth.Register")
+	must(h.Auth.Login, "Auth.Login")
+	must(h.Auth.BindGithub, "Auth.BindGithub")
+	must(h.Auth.GetCaptcha, "Auth.GetCaptcha")
+	must(h.Auth.OAuthRedirect, "Auth.OAuthRedirect")
+	must(h.Auth.OAuthCallback, "Auth.OAuthCallback")
+
+	must(h.User.GetProfile, "User.GetProfile")
+	must(h.User.UpdateProfile, "User.UpdateProfile")
+	must(h.User.UploadAvatar, "User.UploadAvatar")
+	must(h.User.GetUserStats, "User.GetUserStats")
+	must(h.User.GetPromptSettings, "User.GetPromptSettings")
+	must(h.User.UpdatePromptSettings, "User.UpdatePromptSettings")
+
+	must(h.Blog.GetUserBlogs, "Blog.GetUserBlogs")
+	must(h.Blog.CreateDraftBlog, "Blog.CreateDraftBlog")
+	must(h.Blog.BatchDeleteBlogs, "Blog.BatchDeleteBlogs")
+	must(h.Blog.UpdateBlog, "Blog.UpdateBlog")
+	must(h.Blog.ExportSeries, "Blog.ExportSeries")
+	must(h.Blog.ExportSeriesPDF, "Blog.ExportSeriesPDF")
+	must(h.Blog.ExportToObsidian, "Blog.ExportToObsidian")
+	must(h.Blog.ExportSeriesToObsidian, "Blog.ExportSeriesToObsidian")
+	must(h.Blog.ContinueBlog, "Blog.ContinueBlog")
+	must(h.Blog.PolishBlog, "Blog.PolishBlog")
+
+	must(h.Project.ScanGithubRepo, "Project.ScanGithubRepo")
+	must(h.Project.Analyze, "Project.Analyze")
+	must(h.Project.Parse, "Project.Parse")
+
+	must(h.Stream.ScanStreamHandler, "Stream.ScanStreamHandler")
+	must(h.Stream.AnalyzeStreamHandler, "Stream.AnalyzeStreamHandler")
+	must(h.Stream.GenerateStreamHandler, "Stream.GenerateStreamHandler")
+}
+
+func must(fn gin.HandlerFunc, name string) {
+	if fn == nil {
+		panic("missing handler: " + name)
 	}
 }
