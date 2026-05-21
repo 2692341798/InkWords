@@ -9,8 +9,25 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"strings"
 	"testing"
 )
+
+func TestDockerCompose_DoesNotFallbackToHostsAsObsidianCert(t *testing.T) {
+	t.Parallel()
+
+	// Why: 将 /etc/hosts 挂成证书文件会在运行时触发“解析 Obsidian 证书失败”，
+	// 这里用回归测试锁定 compose 配置，避免再次引入静默错误兜底。
+	composeBytes, err := os.ReadFile("../../../docker-compose.yml")
+	if err != nil {
+		t.Fatalf("read docker-compose: %v", err)
+	}
+
+	composeContent := string(composeBytes)
+	if strings.Contains(composeContent, "${OBSIDIAN_REST_API_CERT_PATH:-/etc/hosts}") {
+		t.Fatalf("docker-compose must not fall back to /etc/hosts for OBSIDIAN_REST_API_CERT_PATH")
+	}
+}
 
 func TestNewRestAPIStoreFromEnv_CertMissing(t *testing.T) {
 	t.Setenv("OBSIDIAN_REST_API_BASE_URL", "https://obsidian-bridge:27125")

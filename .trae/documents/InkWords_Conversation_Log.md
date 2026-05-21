@@ -1,6 +1,15 @@
 # 墨言博客助手 (InkWords) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 68：整理剩余改动并拆分为两条原子提交
+- **用户需求**：将当前工作区剩余未提交改动整理后，生成两条规范 commit 并推送当前分支。
+- **AI 动作**：
+  1. 将剩余改动归类为两组：其一为“文章类型/写作要求模板管理”功能闭环（模型、服务、用户接口、生成链路、测试）；其二为“Obsidian Docker 开发态证书兜底修复”（compose、README、回归测试、gitignore）。
+  2. 补齐 API / Database / Architecture / Development Log / Conversation Log 等基准文档，确保与本次两组改动保持同步。
+  3. 计划按“功能提交 -> Obsidian 修复提交”的顺序分别提交并推送，避免将独立修复混入功能提交。
+- **决策/变更**：
+  - 采用 `atomic commit` 原则，将“prompt settings 功能”与“Obsidian compose 修复”分离，以降低 review 与回滚成本。
+
 ### 对话 67：修复 PDF 上传解析被误判为 Git 来源
 - **用户需求**：上传 PDF 解析时弹出 `git_url is required for git source type`，要求定位问题并修复。
 - **AI 动作**：

@@ -54,7 +54,7 @@
 # 使用 Docker Compose 一键启动
 docker compose down && docker compose up -d --build
 ```
-启动前请先在 `backend/.env` 中配置必要环境变量（例如 `DEEPSEEK_API_KEY`、`DATABASE_URL`、`JWT_SECRET`、`OBSIDIAN_REST_API_KEY`）。如需启用证书校验，另外在宿主机设置 `OBSIDIAN_REST_API_CERT_PATH` 指向插件证书；本机开发可选择设置 `OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY=true` 跳过 TLS 校验。
+启动前请先在 `backend/.env` 中配置必要环境变量（例如 `DEEPSEEK_API_KEY`、`DATABASE_URL`、`JWT_SECRET`、`OBSIDIAN_REST_API_KEY`）。当前 Docker 本地开发默认通过 `backend/.env` 中的 `OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY=true` 访问 Obsidian Local REST API，避免把宿主机错误文件挂载成证书；如需启用严格证书校验，请显式配置 `OBSIDIAN_REST_API_CERT_PATH` 指向真实插件证书，并将 `OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY=false`。
 如遇导出到 Obsidian 提示“无法解析 Obsidian 目录列表响应”，请确认后端版本已兼容 Obsidian Local REST API 目录列表 `{ "files": [...] }` 返回格式。
 如遇上传 PDF/Word/Markdown 后仍提示 `git_url is required for git source type`，请先执行 `docker compose down && docker compose up -d --build` 并强制刷新浏览器，以确保前端静态资源与后端兼容逻辑同步生效。
 由于后端仅提供 API 接口，前端服务由独立的 Nginx 容器代理。项目启动后：

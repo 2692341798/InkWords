@@ -1,6 +1,7 @@
 # 墨言博客助手 (InkWords) - 架构设计与工程规范
 
 ## 0. 变更记录
+- 2026-05-21：修复 Docker 开发态 Obsidian 证书挂载兜底错误；移除将宿主机 `/etc/hosts` 作为证书文件的错误回退，改为默认通过 `OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY=true` 访问本地 Obsidian Local REST API，并用测试锁定 compose 配置。
 - 2026-05-21：修复文件上传解析链路的来源判定漂移；前端上传后统一从 `project/parse` 提取 `data.source_content`，并在调用 `stream/analyze` 时显式发送 `source_type=file`；后端 `stream` handler 增加基于 `source_content` 的兼容推断，避免旧静态资源或缓存请求被误判为 Git 分析。
 - 2026-04-29：对后端 `parser`/`service` 与前端核心组件进行模块化拆分，消除超大文件（>500 行），以提升可维护性与复用性（无业务行为变更）。
 - 2026-04-29：新增“手写博客入口”，支持创建草稿并直接进入现有双栏编辑器（新增后端草稿创建接口与前端侧边栏入口）。

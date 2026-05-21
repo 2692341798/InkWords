@@ -40,6 +40,7 @@ lerna-debug.log*
 
 # Project specific
 .trae/specs/*/tmp/
+.trae/tmp_*.png
 test_results/
 
 .superpowers/

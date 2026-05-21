@@ -70,6 +70,17 @@
 ## 4. 每日开发日志 (Dev Log)
 > 该区域将由 Vibe Coding 工程师（AI 助手）在每天/每次开发周期结束时，如实记录当天的完成事项、遇到的技术坑点及架构小规模调整。
 
+### [2026-05-21] Fix - Obsidian Docker 开发态证书兜底修复
+- **开发模块**: [Docker Compose, Obsidian REST Store, Docs-as-Code]
+- **完成事项**:
+  1. 移除 `docker-compose.yml` 中将宿主机 `/etc/hosts` 兜底挂载为 Obsidian 证书文件的错误配置。
+  2. 保留并明确开发态 `OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY=true` 作为本机调试默认方案，避免因错误证书挂载导致容器启动后运行时失败。
+  3. 为 compose 配置新增回归测试，锁定“不允许回退到 `/etc/hosts` 作为证书”的约束。
+  4. 同步更新 `README` 与架构文档，说明本地开发的 Obsidian TLS 配置策略。
+- **验证**:
+  - `cd backend && go test ./internal/service` 预期应覆盖相关回归测试
+  - `docker compose config -q` 预期通过
+
 ### [2026-05-21] Fix - PDF 上传解析误判为 Git 来源
 - **开发模块**: [Frontend File Parser, Stream Analyze, Docs-as-Code]
 - **完成事项**:
