@@ -274,6 +274,10 @@ func (h *Handler) AnalyzeStreamHandler(c *gin.Context) {
 		return
 	}
 
+	// Why: 老前端或缓存中的静态资源可能没显式传 source_type，但文件上传链路仍会带 source_content。
+	// 这里在后端做一次兼容推断，避免把文档解析误判成 git 分析。
+	req.SourceType = resolveAnalyzeSourceType(req)
+
 	if req.SourceType != "file" && req.GitURL == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "git_url is required for git source type"})
 		return
@@ -350,6 +354,16 @@ func (h *Handler) AnalyzeStreamHandler(c *gin.Context) {
 	})
 
 	go wg.Wait()
+}
+
+func resolveAnalyzeSourceType(req GenerateRequest) string {
+	if req.SourceType != "" {
+		return req.SourceType
+	}
+	if req.SourceContent != "" && req.GitURL == "" {
+		return "file"
+	}
+	return "git"
 }
 
 func (h *Handler) ScanStreamHandler(c *gin.Context) {
