@@ -91,7 +91,7 @@ export function GeneratorInput({
           className="hidden"
           ref={fileInputRef}
           onChange={handleFileChange}
-          accept=".pdf,.doc,.docx,.md"
+          accept=".pdf,.docx,.md,.markdown,.txt,.zip"
           disabled={store.isScanning || store.isAnalyzing || store.isGenerating}
         />
         <div className="w-12 h-12 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mb-4">
@@ -99,7 +99,7 @@ export function GeneratorInput({
         </div>
         <h2 className="text-lg font-medium text-zinc-900 dark:text-zinc-100 mb-2">解析本地文档</h2>
         <p className="text-sm text-zinc-500 dark:text-zinc-400 text-center mb-2">
-          拖拽 PDF, Word, 或 Markdown 文件到这里
+          拖拽 PDF、DOCX、Markdown、TXT 或 ZIP 课件包到这里
         </p>
         <p className="text-xs text-zinc-400 dark:text-zinc-500">
           支持解析生成单篇或多篇系列博客

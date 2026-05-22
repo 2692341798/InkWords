@@ -1,17 +1,26 @@
 package project
 
 import (
+	"context"
+	"io"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
-type Handler struct {
-	service *Service
+type projectService interface {
+	CheckQuota(uuid.UUID) error
+	ScanProjectModules(context.Context, string) ([]ModuleCard, error)
+	Analyze(context.Context, string, string) (OutlineResult, string, string, error)
+	Parse(io.Reader, string) (ParseResult, error)
 }
 
-func NewHandler(service *Service) *Handler {
+type Handler struct {
+	service projectService
+}
+
+func NewHandler(service projectService) *Handler {
 	return &Handler{service: service}
 }
 
@@ -150,7 +159,7 @@ func (h *Handler) Parse(c *gin.Context) {
 		return
 	}
 
-	content, err := h.service.Parse(file, header.Filename)
+	parseResult, err := h.service.Parse(file, header.Filename)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    http.StatusInternalServerError,
@@ -160,11 +169,16 @@ func (h *Handler) Parse(c *gin.Context) {
 		return
 	}
 
+	response := gin.H{
+		"source_content": parseResult.SourceContent,
+	}
+	if parseResult.ArchiveSummary != nil {
+		response["archive_summary"] = parseResult.ArchiveSummary
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"code":    http.StatusOK,
 		"message": "success",
-		"data": gin.H{
-			"source_content": content,
-		},
+		"data":    response,
 	})
 }
