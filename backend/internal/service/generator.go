@@ -51,7 +51,7 @@ func (s *GeneratorService) GenerateBlogStream(
 
 	requirements := strings.TrimSpace(strings.Join([]string{
 		prompt.DefaultScenarioRequirements(scenarioMode),
-		prompt.DefaultRequirements(prompt.ArticleStyleGeneral),
+		prompt.DefaultStyleRequirements(scenarioMode, prompt.ArticleStyleGeneral),
 	}, "\n\n"))
 	if s.promptReq != nil {
 		if resolved, err := s.promptReq.Resolve(ctx, userID, scenarioMode, prompt.ArticleStyle(style)); err == nil && resolved != "" {

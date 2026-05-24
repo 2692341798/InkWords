@@ -35,7 +35,7 @@ func (s *PromptRequirementsService) Resolve(
 		style = prompt.ArticleStyleGeneral
 	}
 
-	styleRequirements := prompt.DefaultRequirements(style)
+	styleRequirements := prompt.DefaultStyleRequirements(scenario, style)
 	userStyleOverride := styleRequirements
 
 	var row model.UserPromptSettings
