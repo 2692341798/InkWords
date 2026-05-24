@@ -23,3 +23,18 @@ func DefaultRequirements(style ArticleStyle) string {
 5. 文章结构使用 H1-H4，输出必须为中文`
 	}
 }
+
+// DefaultStyleRequirements 返回结合场景后的风格层默认 Prompt 约束。
+func DefaultStyleRequirements(mode ScenarioMode, style ArticleStyle) string {
+	// Why: `general` 是旧客户端最常见的默认值，但在电子书解读场景下继续沿用
+	// “高质量技术博客/可独立复现”会把任务目标带偏成教程。这里仅对该组合做最小兜底。
+	if mode == ScenarioModeEbookInterpretation && style == ArticleStyleGeneral {
+		return `你将输出一篇面向普通读者的中文经典文本逐章解读文章。要求：
+1. 按原文篇章结构逐章展开，做好概念拆解、上下文交代和历史背景说明
+2. 以观点解释为主，配合代表性原文摘录，帮助读者理解原典精义
+3. 如果原文概念抽象，优先用白话解释，再按需要补充少量例子
+4. 文章结构使用 H1-H4，输出必须为中文`
+	}
+
+	return DefaultRequirements(style)
+}

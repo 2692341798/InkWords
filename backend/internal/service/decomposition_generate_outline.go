@@ -27,14 +27,7 @@ func (s *DecompositionService) GenerateOutline(
 		scenarioMode = prompt.ScenarioModeEbookInterpretation
 	}
 
-	instruction := `你是一个高级架构师。请评估前面提供的项目文本，并生成一个系列博客的大纲。
-对于大型项目、源码仓库或复杂内容，必须拆分为系列博客。
-我的核心要求是：对于每个核心模块、业务逻辑或重要架构层，**都必须对应至少一篇博客进行详细说明**。不要担心生成的篇数过多！
-
-请根据提供的项目文件数量和内容复杂度，充分且详细地规划章节数量：
-- 对于普通项目，不要吝啬章节数，确保每一个独立的功能点、数据流环节、配置模块等都有专属的文章解析。
-- 对于特别庞大的框架源码（如 FFmpeg 等），请大胆拆分出数十篇详细章节，做到对核心源码文件的全面覆盖。
-- 每一篇博客只聚焦于**一个具体的核心技术点或模块**，并详细说明其原理与实现。`
+	instruction := outlineBaseInstruction(scenarioMode)
 	instruction += "\n\n场景约束：\n" + outlineScenarioHint(scenarioMode)
 
 	if existingParent != nil {
@@ -74,8 +67,14 @@ JSON 格式如下：
   ]
 }`
 
+	// 不同场景使用不同的系统提示标签，避免电子书内容被当作技术项目
+	systemLabel := "项目文本内容如下：\n"
+	if scenarioMode == prompt.ScenarioModeEbookInterpretation {
+		systemLabel = "以下是原文内容：\n"
+	}
+
 	messages := []llm.Message{
-		{Role: "system", Content: "项目文本内容如下：\n" + sourceContent},
+		{Role: "system", Content: systemLabel + sourceContent},
 		{Role: "user", Content: instruction},
 	}
 
@@ -109,6 +108,28 @@ func outlineScenarioHint(mode prompt.ScenarioMode) string {
 	case prompt.ScenarioModeBeginnerWalkthrough:
 		return "请按学习路径拆分章节，优先覆盖环境准备、目录结构、关键主链路和常见排错。"
 	default:
-		return "请按篇章、主题脉络或核心观点拆分章节，保证解读性与连贯阅读体验。"
+		return "请按原文自身篇章结构与主题脉络拆分章节，只做文本解读，不要将内容映射到现代商业、技术或管理场景。"
 	}
+}
+
+// outlineBaseInstruction 返回不同场景下的大纲生成基础指令。
+func outlineBaseInstruction(mode prompt.ScenarioMode) string {
+	if mode == prompt.ScenarioModeEbookInterpretation {
+		return `你是一位文本解读专家。前面提供的是一本书或长篇文献的内容，请按原文自然篇章结构生成一个系列解读大纲。
+我的核心要求是：按原文的章节或主题单元逐章拆分，每章聚焦该篇的核心思想与原文精义，而非现代应用或技术映射。
+
+请根据文本的章节数量充分规划：
+- 每一个独立篇章或主题段落都应至少对应一篇解读
+- 每篇解读聚焦该篇章的历史背景、核心观点和代表性原文摘录
+- 不要将内容强行映射到现代商业、技术或管理场景`
+	}
+
+	return `你是一个高级架构师。请评估前面提供的项目文本，并生成一个系列博客的大纲。
+对于大型项目、源码仓库或复杂内容，必须拆分为系列博客。
+我的核心要求是：对于每个核心模块、业务逻辑或重要架构层，**都必须对应至少一篇博客进行详细说明**。不要担心生成的篇数过多！
+
+请根据提供的项目文件数量和内容复杂度，充分且详细地规划章节数量：
+- 对于普通项目，不要吝啬章节数，确保每一个独立的功能点、数据流环节、配置模块等都有专属的文章解析。
+- 对于特别庞大的框架源码（如 FFmpeg 等），请大胆拆分出数十篇详细章节，做到对核心源码文件的全面覆盖。
+- 每一篇博客只聚焦于**一个具体的核心技术点或模块**，并详细说明其原理与实现。`
 }
