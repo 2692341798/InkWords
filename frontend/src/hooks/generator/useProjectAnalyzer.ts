@@ -1,8 +1,21 @@
 import { useCallback } from 'react'
+import type { ScenarioMode } from '@/lib/scenarioMode'
 import { useStreamStore } from '@/store/streamStore'
 import { fetchEventSourceWithAuth } from '@/services/sse'
 
 class StopStreamError extends Error {}
+
+export function buildAnalyzeGitRequest(
+  gitUrl: string,
+  selectedModules: string[],
+  scenarioMode: ScenarioMode,
+) {
+  return {
+    git_url: gitUrl,
+    selected_modules: selectedModules,
+    scenario_mode: scenarioMode,
+  }
+}
 
 export const useProjectAnalyzer = () => {
   const store = useStreamStore()
@@ -31,7 +44,9 @@ export const useProjectAnalyzer = () => {
         headers: { 'Content-Type': 'application/json' },
         signal: ctrl.signal,
         openWhenHidden: true,
-        body: JSON.stringify({ git_url: gitUrl, selected_modules: selectedModules }),
+        body: JSON.stringify(
+          buildAnalyzeGitRequest(gitUrl, selectedModules, store.scenarioMode),
+        ),
         async onopen(response) {
           if (response.ok && response.headers.get('content-type')?.startsWith('text/event-stream')) {
             return;
