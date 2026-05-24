@@ -25,6 +25,7 @@ type GenerateRequest struct {
 	SeriesTitle     string    `json:"series_title"`
 	ParentID        string    `json:"parent_id"`
 	ArticleStyle    string    `json:"article_style"`
+	ScenarioMode    string    `json:"scenario_mode"`
 }
 
 type PolishRequest struct {

@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"inkwords-backend/internal/infra/parser"
+	"inkwords-backend/internal/prompt"
 	"inkwords-backend/internal/service"
 )
 
@@ -57,7 +58,7 @@ func (s *Service) Analyze(ctx context.Context, gitURL string, subDir string) (ou
 	}
 	content := AssembleSourceContent(treeContent, chunks)
 
-	outlineRes, err := s.decomposition.GenerateOutline(ctx, content, nil, nil)
+	outlineRes, err := s.decomposition.GenerateOutline(ctx, content, prompt.ScenarioModeBeginnerWalkthrough, nil, nil)
 	if err != nil {
 		return OutlineResult{}, content, "outline", err
 	}

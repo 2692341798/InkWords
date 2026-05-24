@@ -34,15 +34,27 @@ func NewGeneratorService(promptReq *PromptRequirementsService) *GeneratorService
 	}
 }
 
-// GenerateBlogStream assembles the prompt, calls the LLM, and pushes chunks to the channel
-func (s *GeneratorService) GenerateBlogStream(ctx context.Context, userID uuid.UUID, sourceContent string, sourceType string, style string, chunkChan chan<- string, errChan chan<- error) {
+// GenerateBlogStream assembles the prompt, calls the LLM, and pushes chunks to the channel.
+func (s *GeneratorService) GenerateBlogStream(
+	ctx context.Context,
+	userID uuid.UUID,
+	sourceContent string,
+	sourceType string,
+	scenarioMode prompt.ScenarioMode,
+	style string,
+	chunkChan chan<- string,
+	errChan chan<- error,
+) {
+	if !scenarioMode.IsValid() {
+		scenarioMode = prompt.DefaultScenarioModeForSource(sourceType)
+	}
+
 	requirements := strings.TrimSpace(strings.Join([]string{
-		prompt.DefaultScenarioRequirements(prompt.DefaultScenarioModeForSource(sourceType)),
+		prompt.DefaultScenarioRequirements(scenarioMode),
 		prompt.DefaultRequirements(prompt.ArticleStyleGeneral),
 	}, "\n\n"))
 	if s.promptReq != nil {
-		defaultScenario := prompt.DefaultScenarioModeForSource(sourceType)
-		if resolved, err := s.promptReq.Resolve(ctx, userID, defaultScenario, prompt.ArticleStyle(style)); err == nil && resolved != "" {
+		if resolved, err := s.promptReq.Resolve(ctx, userID, scenarioMode, prompt.ArticleStyle(style)); err == nil && resolved != "" {
 			requirements = resolved
 		}
 	}

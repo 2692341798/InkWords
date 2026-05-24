@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"inkwords-backend/internal/prompt"
 	"inkwords-backend/internal/service"
 )
 
@@ -31,6 +32,7 @@ func (s *Service) Generate(ctx context.Context, userID uuid.UUID, req GenerateRe
 	if style == "" {
 		style = "general"
 	}
+	scenarioMode := prompt.ScenarioMode(req.ScenarioMode)
 
 	if len(req.Outline) > 0 {
 		outline := make([]service.Chapter, 0, len(req.Outline))
@@ -54,11 +56,11 @@ func (s *Service) Generate(ctx context.Context, userID uuid.UUID, req GenerateRe
 		if parentID == uuid.Nil {
 			parentID = uuid.New()
 		}
-		s.decomposition.GenerateSeries(ctx, userID, parentID, req.SeriesTitle, outline, req.SourceContent, req.SourceType, req.GitURL, style, chunkChan, errChan)
+		s.decomposition.GenerateSeries(ctx, userID, parentID, req.SeriesTitle, outline, req.SourceContent, req.SourceType, req.GitURL, scenarioMode, style, chunkChan, errChan)
 		return
 	}
 
-	s.generator.GenerateBlogStream(ctx, userID, req.SourceContent, req.SourceType, style, chunkChan, errChan)
+	s.generator.GenerateBlogStream(ctx, userID, req.SourceContent, req.SourceType, scenarioMode, style, chunkChan, errChan)
 }
 
 func (s *Service) Continue(bgCtx context.Context, userID uuid.UUID, blogID uuid.UUID, chunkChan chan<- string, errChan chan<- error) {
@@ -70,11 +72,12 @@ func (s *Service) Polish(ctx context.Context, req PolishRequest, chunkChan chan<
 }
 
 func (s *Service) AnalyzeStream(bgCtx context.Context, userID uuid.UUID, req GenerateRequest, progressChan chan<- string, errChan chan<- error) {
+	scenarioMode := prompt.ScenarioMode(req.ScenarioMode)
 	if req.SourceType == "file" {
-		s.decomposition.AnalyzeFileStream(bgCtx, userID, req.SourceContent, progressChan, errChan)
+		s.decomposition.AnalyzeFileStream(bgCtx, userID, req.SourceContent, scenarioMode, progressChan, errChan)
 		return
 	}
-	s.decomposition.AnalyzeStream(bgCtx, userID, req.GitURL, req.SelectedModules, progressChan, errChan)
+	s.decomposition.AnalyzeStream(bgCtx, userID, req.GitURL, req.SelectedModules, scenarioMode, progressChan, errChan)
 }
 
 func (s *Service) ScanProjectModules(bgCtx context.Context, gitURL string, progressChan chan<- string) ([]ModuleCard, error) {

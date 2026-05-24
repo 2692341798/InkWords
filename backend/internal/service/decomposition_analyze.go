@@ -8,6 +8,7 @@ import (
 	"inkwords-backend/internal/infra/llm"
 	"inkwords-backend/internal/infra/parser"
 	"inkwords-backend/internal/model"
+	"inkwords-backend/internal/prompt"
 	"os"
 	"strings"
 	"sync"
@@ -34,10 +35,22 @@ func getStatusFromStep(step int) string {
 	}
 }
 
-// AnalyzeStream handles the full analysis pipeline with streaming progress
-func (s *DecompositionService) AnalyzeStream(ctx context.Context, userID uuid.UUID, gitURL string, selectedModules []string, progressChan chan<- string, errChan chan<- error) {
+// AnalyzeStream handles the full analysis pipeline with streaming progress.
+func (s *DecompositionService) AnalyzeStream(
+	ctx context.Context,
+	userID uuid.UUID,
+	gitURL string,
+	selectedModules []string,
+	scenarioMode prompt.ScenarioMode,
+	progressChan chan<- string,
+	errChan chan<- error,
+) {
 	defer close(progressChan)
 	defer close(errChan)
+
+	if !scenarioMode.IsValid() {
+		scenarioMode = prompt.ScenarioModeBeginnerWalkthrough
+	}
 
 	sendProgress := func(step int, message string, data interface{}) {
 		msg := map[string]interface{}{
@@ -200,7 +213,7 @@ func (s *DecompositionService) AnalyzeStream(ctx context.Context, userID uuid.UU
 		}
 	}
 
-	outlineResult, err := s.GenerateOutline(ctx, finalContent.String(), existingParent, existingChildren)
+	outlineResult, err := s.GenerateOutline(ctx, finalContent.String(), scenarioMode, existingParent, existingChildren)
 	if err != nil {
 		errChan <- fmt.Errorf("生成大纲失败: %w", err)
 		return
@@ -218,10 +231,21 @@ func (s *DecompositionService) AnalyzeStream(ctx context.Context, userID uuid.UU
 	})
 }
 
-// AnalyzeFileStream handles the analysis pipeline for a single file's content
-func (s *DecompositionService) AnalyzeFileStream(ctx context.Context, userID uuid.UUID, sourceContent string, progressChan chan<- string, errChan chan<- error) {
+// AnalyzeFileStream handles the analysis pipeline for a single file's content.
+func (s *DecompositionService) AnalyzeFileStream(
+	ctx context.Context,
+	userID uuid.UUID,
+	sourceContent string,
+	scenarioMode prompt.ScenarioMode,
+	progressChan chan<- string,
+	errChan chan<- error,
+) {
 	defer close(progressChan)
 	defer close(errChan)
+
+	if !scenarioMode.IsValid() {
+		scenarioMode = prompt.ScenarioModeEbookInterpretation
+	}
 
 	sendProgress := func(step int, message string, data interface{}) {
 		msg := map[string]interface{}{
@@ -340,7 +364,7 @@ func (s *DecompositionService) AnalyzeFileStream(ctx context.Context, userID uui
 
 	sendProgress(3, "评估大模型并生成全局大纲...", nil)
 
-	outlineResult, err := s.GenerateOutline(ctx, finalContent.String(), nil, nil)
+	outlineResult, err := s.GenerateOutline(ctx, finalContent.String(), scenarioMode, nil, nil)
 	if err != nil {
 		errChan <- fmt.Errorf("生成大纲失败: %w", err)
 		return

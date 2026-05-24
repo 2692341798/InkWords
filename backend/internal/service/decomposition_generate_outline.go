@@ -6,14 +6,25 @@ import (
 	"fmt"
 	"inkwords-backend/internal/infra/llm"
 	"inkwords-backend/internal/model"
+	"inkwords-backend/internal/prompt"
 	"os"
 	"strings"
 )
 
-func (s *DecompositionService) GenerateOutline(ctx context.Context, sourceContent string, existingParent *model.Blog, existingChildren []model.Blog) (*OutlineResult, error) {
+func (s *DecompositionService) GenerateOutline(
+	ctx context.Context,
+	sourceContent string,
+	scenarioMode prompt.ScenarioMode,
+	existingParent *model.Blog,
+	existingChildren []model.Blog,
+) (*OutlineResult, error) {
 	runes := []rune(sourceContent)
 	if len(runes) > 15000000 {
 		sourceContent = string(runes[:15000000]) + "\n\n... [Content Truncated due to length limits] ..."
+	}
+
+	if !scenarioMode.IsValid() {
+		scenarioMode = prompt.ScenarioModeEbookInterpretation
 	}
 
 	instruction := `你是一个高级架构师。请评估前面提供的项目文本，并生成一个系列博客的大纲。
@@ -24,6 +35,7 @@ func (s *DecompositionService) GenerateOutline(ctx context.Context, sourceConten
 - 对于普通项目，不要吝啬章节数，确保每一个独立的功能点、数据流环节、配置模块等都有专属的文章解析。
 - 对于特别庞大的框架源码（如 FFmpeg 等），请大胆拆分出数十篇详细章节，做到对核心源码文件的全面覆盖。
 - 每一篇博客只聚焦于**一个具体的核心技术点或模块**，并详细说明其原理与实现。`
+	instruction += "\n\n场景约束：\n" + outlineScenarioHint(scenarioMode)
 
 	if existingParent != nil {
 		var existingOutlineBuilder strings.Builder
@@ -88,4 +100,15 @@ JSON 格式如下：
 	}
 
 	return &outline, nil
+}
+
+func outlineScenarioHint(mode prompt.ScenarioMode) string {
+	switch mode {
+	case prompt.ScenarioModeOpenBookExamReview:
+		return "请按考点、题型、实验步骤或速查结构拆分章节，优先帮助开卷考试快速定位。"
+	case prompt.ScenarioModeBeginnerWalkthrough:
+		return "请按学习路径拆分章节，优先覆盖环境准备、目录结构、关键主链路和常见排错。"
+	default:
+		return "请按篇章、主题脉络或核心观点拆分章节，保证解读性与连贯阅读体验。"
+	}
 }

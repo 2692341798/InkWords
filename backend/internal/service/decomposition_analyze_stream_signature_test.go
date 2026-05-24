@@ -16,13 +16,14 @@ func TestDecompositionService_AnalyzeStreamSignatureIncludesSubDir(t *testing.T)
 	m, ok := rt.MethodByName("AnalyzeStream")
 	require.True(t, ok)
 
-	require.Equal(t, 7, m.Type.NumIn())
+	require.Equal(t, 8, m.Type.NumIn())
 	assert.True(t, m.Type.In(1).Implements(reflect.TypeOf((*context.Context)(nil)).Elem()))
 	// In(2) is uuid.UUID, we can skip checking it or just check it's not string
 	assert.Equal(t, reflect.TypeOf(""), m.Type.In(3))
 	assert.Equal(t, reflect.TypeOf([]string{}), m.Type.In(4))
-	assert.Equal(t, reflect.TypeOf((chan<- string)(nil)), m.Type.In(5))
-	assert.Equal(t, reflect.TypeOf((chan<- error)(nil)), m.Type.In(6))
+	assert.Equal(t, reflect.String, m.Type.In(5).Kind())
+	assert.Equal(t, reflect.TypeOf((chan<- string)(nil)), m.Type.In(6))
+	assert.Equal(t, reflect.TypeOf((chan<- error)(nil)), m.Type.In(7))
 }
 
 func TestDecompositionService_AnalyzeStreamUsesFetchWithSubDir(t *testing.T) {

@@ -7,6 +7,7 @@ import (
 	"inkwords-backend/internal/infra/db"
 	"inkwords-backend/internal/infra/llm"
 	"inkwords-backend/internal/model"
+	"inkwords-backend/internal/prompt"
 	"os"
 	"strings"
 	"sync"
@@ -15,7 +16,17 @@ import (
 	"github.com/google/uuid"
 )
 
-func (s *DecompositionService) generateSeriesIntro(ctx context.Context, userID uuid.UUID, parentID uuid.UUID, seriesTitle string, outline []Chapter, progressChan chan<- string, errChan chan<- error) {
+func (s *DecompositionService) generateSeriesIntro(
+	ctx context.Context,
+	userID uuid.UUID,
+	parentID uuid.UUID,
+	seriesTitle string,
+	outline []Chapter,
+	scenarioMode prompt.ScenarioMode,
+	style prompt.ArticleStyle,
+	progressChan chan<- string,
+	errChan chan<- error,
+) {
 	sendProgress := func(status string, content string, message string) {
 		msg := map[string]interface{}{
 			"status":       status,
@@ -35,17 +46,34 @@ func (s *DecompositionService) generateSeriesIntro(ctx context.Context, userID u
 		outlineStrBuilder.WriteString(fmt.Sprintf("- %s: %s\n", ch.Title, ch.Summary))
 	}
 
+	if !scenarioMode.IsValid() {
+		scenarioMode = prompt.ScenarioModeEbookInterpretation
+	}
+
+	requirements := strings.TrimSpace(strings.Join([]string{
+		prompt.DefaultScenarioRequirements(scenarioMode),
+		prompt.DefaultRequirements(prompt.ArticleStyleGeneral),
+	}, "\n\n"))
+	if s.promptReq != nil {
+		if resolved, err := s.promptReq.Resolve(ctx, userID, scenarioMode, style); err == nil && resolved != "" {
+			requirements = resolved
+		}
+	}
+
 	prompt := fmt.Sprintf(`你是一个高级技术博客作者。请根据以下系列文章的大纲，编写一篇高质量的“系列导读”或“总结”文章（约500-800字）。
 这篇文章将作为整个系列的入口，吸引读者阅读。
 系列标题：%s
 各章节大纲：
 %s
 
-要求：
+写作要求：
+%s
+
+额外要求：
 1. 简明扼要地介绍这个系列将要解决的问题和核心价值。
 2. 简述各个章节的精彩看点，引导读者循序渐进地阅读。
 3. 结尾给出学习建议或寄语。
-`, seriesTitle, outlineStrBuilder.String())
+`, seriesTitle, outlineStrBuilder.String(), requirements)
 
 	messages := []llm.Message{
 		{Role: "system", Content: "你是一个高级技术博客作者，擅长编写引人入胜的系列导读。"},
