@@ -1,6 +1,7 @@
 # 墨言博客助手 (InkWords) - API 接口文档
 
 ## 0. 变更记录
+- 2026-05-24：`/api/v1/stream/analyze` 与 `/api/v1/stream/generate` 新增 `scenario_mode` 请求字段，支持 `ebook_interpretation`、`open_book_exam_review`、`beginner_walkthrough` 三种创作场景；后端缺省按来源兜底（`git -> beginner_walkthrough`，其它来源 -> `ebook_interpretation`）。
 - 2026-05-21：`/api/v1/project/parse` 新增 ZIP 课件包解析能力；支持返回 `data.archive_summary`，用于展示压缩包扫描、保留、去重、忽略与失败统计。
 - 2026-05-21：新增用户写作模板接口 `/api/v1/user/prompt-settings`（GET/PUT），并为 `/api/v1/stream/generate` 增加 `article_style` 请求字段，用于控制文章类型/写作要求模板。
 - 2026-05-21：修复本地 PDF/Word/Markdown 上传后触发 `git_url is required for git source type` 弹窗的问题；前端在 `/api/v1/stream/analyze` 显式发送 `source_type=file`，后端增加基于 `source_content` 的文件来源兼容推断（无 API 路由变更）。
@@ -56,10 +57,36 @@
 | 接口地址 | 请求方法 | 功能描述 | 参数 |
 | -------- | -------- | -------- | ---- |
 | `/api/v1/stream/scan` | POST | 快速扫描 Git 仓库一级目录并通过 README 智能提取描述 | `{ git_url }` -> SSE Stream |
-| `/api/v1/stream/analyze` | POST | 实时流式拉取 Git 或解析长文本文件生成大纲 | `{ git_url, selected_modules, source_type, source_content }` -> SSE Stream；当请求仅包含 `source_content` 且未传 `git_url` 时，后端会兼容判定为 `file` 来源 |
-| `/api/v1/stream/generate` | POST | 根据大纲或内容流式生成博客章节 | `{ source_content, source_type, git_url, outline, series_title, parent_id, article_style }` -> SSE Stream |
+| `/api/v1/stream/analyze` | POST | 实时流式拉取 Git 或解析长文本文件生成大纲 | `{ git_url, selected_modules, source_type, source_content, scenario_mode }` -> SSE Stream；当请求仅包含 `source_content` 且未传 `git_url` 时，后端会兼容判定为 `file` 来源 |
+| `/api/v1/stream/generate` | POST | 根据大纲或内容流式生成博客章节 | `{ source_content, source_type, git_url, outline, series_title, parent_id, article_style, scenario_mode }` -> SSE Stream |
 | `/api/v1/blogs/:id/continue` | POST | 继续生成被截断的单篇博客 (Legacy) | 无 -> SSE Stream |
 | `/api/v1/blogs/:id/polish` | POST | 对当前草稿全文润色并返回“润色草稿” | `{ title, content }` -> SSE Stream |
+
+### 4.1 `scenario_mode` 场景字段说明
+- 支持枚举：
+  - `ebook_interpretation`：电子书解读
+  - `open_book_exam_review`：开卷复习
+  - `beginner_walkthrough`：小白教程
+- 设计边界：
+  - `scenario_mode` 决定“这次要产出什么任务形态”。
+  - `article_style` 继续决定“内容以什么写法呈现”。
+
+### 4.2 `/api/v1/stream/analyze` 请求补充说明
+- 新增字段：`scenario_mode`
+- 缺省兜底：
+  - `git -> beginner_walkthrough`
+  - `file` 及其它来源 -> `ebook_interpretation`
+- 作用：
+  - 控制大纲拆解偏向“章节解读 / 考点速查 / 学习路径”中的哪一种结构。
+
+### 4.3 `/api/v1/stream/generate` 请求补充说明
+- 新增字段：`scenario_mode`
+- 作用范围：
+  - 单篇生成
+  - 系列章节生成
+  - 系列导读生成
+- 兼容策略：
+  - 旧前端不传 `scenario_mode` 仍可调用，后端按 `source_type` 自动回填默认值。
 
 ## 5. 博客管理模块 (BlogAPI)
 | 接口地址 | 请求方法 | 功能描述 | 参数 |

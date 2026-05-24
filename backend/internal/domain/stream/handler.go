@@ -9,6 +9,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+
+	"inkwords-backend/internal/prompt"
 )
 
 type Handler struct {
@@ -51,6 +53,9 @@ func (h *Handler) GenerateBlogStreamHandler(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 		return
 	}
+
+	req.SourceType = resolveAnalyzeSourceType(req)
+	req.ScenarioMode = string(normalizeScenarioMode(req.ScenarioMode, req.SourceType))
 
 	chunkChan := make(chan string)
 	errChan := make(chan error)
@@ -277,6 +282,7 @@ func (h *Handler) AnalyzeStreamHandler(c *gin.Context) {
 	// Why: 老前端或缓存中的静态资源可能没显式传 source_type，但文件上传链路仍会带 source_content。
 	// 这里在后端做一次兼容推断，避免把文档解析误判成 git 分析。
 	req.SourceType = resolveAnalyzeSourceType(req)
+	req.ScenarioMode = string(normalizeScenarioMode(req.ScenarioMode, req.SourceType))
 
 	if req.SourceType != "file" && req.GitURL == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "git_url is required for git source type"})
@@ -364,6 +370,14 @@ func resolveAnalyzeSourceType(req GenerateRequest) string {
 		return "file"
 	}
 	return "git"
+}
+
+func normalizeScenarioMode(raw string, sourceType string) prompt.ScenarioMode {
+	mode := prompt.ScenarioMode(raw)
+	if mode.IsValid() {
+		return mode
+	}
+	return prompt.DefaultScenarioModeForSource(sourceType)
 }
 
 func (h *Handler) ScanStreamHandler(c *gin.Context) {

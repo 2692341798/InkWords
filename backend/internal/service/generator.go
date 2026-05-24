@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -20,7 +21,7 @@ import (
 
 // GeneratorService handles the blog generation process
 type GeneratorService struct {
-	llmClient  *llm.DeepSeekClient
+	llmClient *llm.DeepSeekClient
 	promptReq *PromptRequirementsService
 }
 
@@ -33,11 +34,27 @@ func NewGeneratorService(promptReq *PromptRequirementsService) *GeneratorService
 	}
 }
 
-// GenerateBlogStream assembles the prompt, calls the LLM, and pushes chunks to the channel
-func (s *GeneratorService) GenerateBlogStream(ctx context.Context, userID uuid.UUID, sourceContent string, sourceType string, style string, chunkChan chan<- string, errChan chan<- error) {
-	requirements := prompt.DefaultRequirements(prompt.ArticleStyleGeneral)
+// GenerateBlogStream assembles the prompt, calls the LLM, and pushes chunks to the channel.
+func (s *GeneratorService) GenerateBlogStream(
+	ctx context.Context,
+	userID uuid.UUID,
+	sourceContent string,
+	sourceType string,
+	scenarioMode prompt.ScenarioMode,
+	style string,
+	chunkChan chan<- string,
+	errChan chan<- error,
+) {
+	if !scenarioMode.IsValid() {
+		scenarioMode = prompt.DefaultScenarioModeForSource(sourceType)
+	}
+
+	requirements := strings.TrimSpace(strings.Join([]string{
+		prompt.DefaultScenarioRequirements(scenarioMode),
+		prompt.DefaultStyleRequirements(scenarioMode, prompt.ArticleStyleGeneral),
+	}, "\n\n"))
 	if s.promptReq != nil {
-		if resolved, err := s.promptReq.Resolve(ctx, userID, prompt.ArticleStyle(style)); err == nil && resolved != "" {
+		if resolved, err := s.promptReq.Resolve(ctx, userID, scenarioMode, prompt.ArticleStyle(style)); err == nil && resolved != "" {
 			requirements = resolved
 		}
 	}

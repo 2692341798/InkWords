@@ -1,4 +1,8 @@
 import { create } from 'zustand'
+import {
+  defaultScenarioModeForSource,
+  type ScenarioMode,
+} from '@/lib/scenarioMode'
 
 export interface Chapter {
   id?: string
@@ -28,6 +32,7 @@ interface StreamState {
   sourceType: 'git' | 'file' | null
   sourceContent: string
   gitUrl: string
+  scenarioMode: ScenarioMode
   modules: ModuleCard[] | null
   selectedModules: string[]
   seriesTitle: string
@@ -77,6 +82,7 @@ interface StreamState {
   setAbortController: (ctrl: AbortController | null) => void
   setParentBlogId: (id: string | null) => void
   setGitUrl: (url: string) => void
+  setScenarioMode: (mode: ScenarioMode) => void
   setModules: (modules: ModuleCard[] | null) => void
   setSelectedModules: (paths: string[]) => void
   stopAllStreams: () => void
@@ -87,6 +93,7 @@ export const useStreamStore = create<StreamState>((set, get) => ({
   sourceType: null,
   sourceContent: '',
   gitUrl: '',
+  scenarioMode: defaultScenarioModeForSource(null),
   modules: null,
   selectedModules: [],
   seriesTitle: '',
@@ -107,9 +114,21 @@ export const useStreamStore = create<StreamState>((set, get) => ({
   currentChapterTitle: '',
   abortController: null,
   parentBlogId: null,
-  setSource: (type, content, gitUrl) => set({ sourceType: type, sourceContent: content, gitUrl: gitUrl || '' }),
+  setSource: (type, content, gitUrl) =>
+    set((state) => ({
+      sourceType: type,
+      sourceContent: content,
+      gitUrl: gitUrl || '',
+      // Why: 扫描、解析完成都会重复写回 source；只有来源类型真正变化时才回到推荐场景，
+      // 否则会把用户手动选择的场景误覆盖掉。
+      scenarioMode:
+        state.sourceType === type
+          ? state.scenarioMode
+          : defaultScenarioModeForSource(type),
+    })),
   setSourceContent: (content) => set({ sourceContent: content }),
   setSeriesTitle: (title) => set({ seriesTitle: title }),
+  setScenarioMode: (mode) => set({ scenarioMode: mode }),
   setOutline: (outline) => set({ 
     outline,
     chapterStatus: outline ? outline.reduce((acc, ch) => ({ ...acc, [ch.sort]: 'pending' }), {}) : {},
@@ -274,6 +293,7 @@ export const useStreamStore = create<StreamState>((set, get) => ({
       sourceType: null,
       sourceContent: '',
       gitUrl: '',
+      scenarioMode: defaultScenarioModeForSource(null),
       modules: null,
       selectedModules: [],
       seriesTitle: '',

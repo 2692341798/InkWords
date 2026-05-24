@@ -1,3 +1,5 @@
+import type { ScenarioMode } from '@/lib/scenarioMode'
+
 export interface ArchiveSummary {
   total_files: number
   supported_files?: number
@@ -28,9 +30,13 @@ export function formatArchiveSummaryMessage(summary: ArchiveSummary): string {
   return `压缩包共扫描 ${summary.total_files} 个文件，保留 ${summary.kept_files} 个，去重 ${summary.duplicate_files} 个，忽略 ${summary.ignored_files} 个，失败 ${summary.failed_files} 个`
 }
 
-export function buildFileAnalyzeRequest(sourceContent: string) {
+export function buildFileAnalyzeRequest(
+  sourceContent: string,
+  scenarioMode: ScenarioMode,
+) {
   return {
     source_type: 'file' as const,
     source_content: sourceContent,
+    scenario_mode: scenarioMode,
   }
 }

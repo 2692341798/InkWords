@@ -18,9 +18,10 @@ describe('fileParserUtils', () => {
   })
 
   it('builds analyze payload with file source type', () => {
-    expect(buildFileAnalyzeRequest('parsed pdf content')).toEqual({
+    expect(buildFileAnalyzeRequest('parsed pdf content', 'ebook_interpretation')).toEqual({
       source_type: 'file',
       source_content: 'parsed pdf content',
+      scenario_mode: 'ebook_interpretation',
     })
   })
 

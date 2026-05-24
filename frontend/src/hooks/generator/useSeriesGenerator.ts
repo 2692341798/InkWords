@@ -1,9 +1,45 @@
 import { useCallback } from 'react'
+import type { ScenarioMode } from '@/lib/scenarioMode'
 import { useStreamStore } from '@/store/streamStore'
 import { useBlogStore } from '@/store/blogStore'
 import { fetchEventSourceWithAuth } from '@/services/sse'
+import type { Chapter } from '@/store/streamStore'
 
 class StopStreamError extends Error {}
+
+interface SeriesGenerateRequestInput {
+  sourceType: 'git' | 'file' | null
+  gitUrl: string
+  sourceContent: string
+  seriesTitle: string
+  outline: Chapter[] | null
+  parentBlogId: string | null
+  scenarioMode: ScenarioMode
+}
+
+export function buildSeriesGenerateRequest(input: SeriesGenerateRequestInput) {
+  return {
+    source_type: input.sourceType,
+    git_url: input.gitUrl,
+    source_content: input.sourceContent,
+    series_title: input.seriesTitle,
+    outline: input.outline,
+    parent_id: input.parentBlogId,
+    scenario_mode: input.scenarioMode,
+  }
+}
+
+export function buildSingleGenerateRequest(
+  content: string,
+  scenarioMode: ScenarioMode,
+) {
+  return {
+    source_type: 'file' as const,
+    source_content: content,
+    outline: [],
+    scenario_mode: scenarioMode,
+  }
+}
 
 export const useSeriesGenerator = () => {
   const store = useStreamStore()
@@ -26,14 +62,17 @@ export const useSeriesGenerator = () => {
         headers: { 'Content-Type': 'application/json' },
         signal: ctrl.signal,
         openWhenHidden: true,
-        body: JSON.stringify({ 
-          source_type: store.sourceType,
-          git_url: store.gitUrl,
-          source_content: store.sourceContent,
-          series_title: store.seriesTitle,
-          outline: store.outline,
-          parent_id: store.parentBlogId
-        }),
+        body: JSON.stringify(
+          buildSeriesGenerateRequest({
+            sourceType: store.sourceType,
+            gitUrl: store.gitUrl,
+            sourceContent: store.sourceContent,
+            seriesTitle: store.seriesTitle,
+            outline: store.outline,
+            parentBlogId: store.parentBlogId,
+            scenarioMode: store.scenarioMode,
+          }),
+        ),
         async onopen(response) {
           if (response.ok && response.headers.get('content-type')?.startsWith('text/event-stream')) {
             return;
@@ -140,11 +179,9 @@ export const useSeriesGenerator = () => {
         headers: { 'Content-Type': 'application/json' },
         signal: ctrl.signal,
         openWhenHidden: true,
-        body: JSON.stringify({ 
-          source_type: 'file',
-          source_content: content,
-          outline: []
-        }),
+        body: JSON.stringify(
+          buildSingleGenerateRequest(content, store.scenarioMode),
+        ),
         async onopen(response) {
           if (response.ok && response.headers.get('content-type')?.startsWith('text/event-stream')) {
             return;

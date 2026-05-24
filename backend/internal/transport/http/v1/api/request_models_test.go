@@ -51,3 +51,10 @@ func TestGenerateRequest_HasArticleStyleField(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "article_style", field.Tag.Get("json"))
 }
+
+func TestGenerateRequest_HasScenarioModeField(t *testing.T) {
+	rt := reflect.TypeOf(streamdomain.GenerateRequest{})
+	field, ok := rt.FieldByName("ScenarioMode")
+	require.True(t, ok)
+	assert.Equal(t, "scenario_mode", field.Tag.Get("json"))
+}

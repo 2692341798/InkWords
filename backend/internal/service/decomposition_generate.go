@@ -22,10 +22,27 @@ import (
 	"gorm.io/gorm"
 )
 
-// GenerateSeries generates blog chapters sequentially based on the outline with streaming
-func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.UUID, parentID uuid.UUID, seriesTitle string, outline []Chapter, sourceContent string, sourceType string, gitURL string, style string, progressChan chan<- string, errChan chan<- error) {
+// GenerateSeries generates blog chapters sequentially based on the outline with streaming.
+func (s *DecompositionService) GenerateSeries(
+	ctx context.Context,
+	userID uuid.UUID,
+	parentID uuid.UUID,
+	seriesTitle string,
+	outline []Chapter,
+	sourceContent string,
+	sourceType string,
+	gitURL string,
+	scenarioMode prompt.ScenarioMode,
+	style string,
+	progressChan chan<- string,
+	errChan chan<- error,
+) {
 	defer close(progressChan)
 	defer close(errChan)
+
+	if !scenarioMode.IsValid() {
+		scenarioMode = prompt.DefaultScenarioModeForSource(sourceType)
+	}
 
 	sendSystemProgress := func(msg string) {
 		progressMsg := map[string]interface{}{
@@ -222,9 +239,12 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 				}
 			}
 
-			requirements := prompt.DefaultRequirements(prompt.ArticleStyleGeneral)
+			requirements := strings.TrimSpace(strings.Join([]string{
+				prompt.DefaultScenarioRequirements(scenarioMode),
+				prompt.DefaultStyleRequirements(scenarioMode, prompt.ArticleStyleGeneral),
+			}, "\n\n"))
 			if s.promptReq != nil {
-				if resolved, err := s.promptReq.Resolve(ctx, userID, prompt.ArticleStyle(style)); err == nil && resolved != "" {
+				if resolved, err := s.promptReq.Resolve(ctx, userID, scenarioMode, prompt.ArticleStyle(style)); err == nil && resolved != "" {
 					requirements = resolved
 				}
 			}
@@ -495,7 +515,6 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 	wg.Wait()
 
 	if ctx.Err() == nil {
-
-		s.generateSeriesIntro(ctx, userID, parentID, seriesTitle, outline, progressChan, errChan)
+		s.generateSeriesIntro(ctx, userID, parentID, seriesTitle, outline, scenarioMode, prompt.ArticleStyle(style), progressChan, errChan)
 	}
 }
