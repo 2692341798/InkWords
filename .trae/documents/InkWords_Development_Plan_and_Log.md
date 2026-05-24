@@ -95,6 +95,22 @@
   - `cd backend && go test ./internal/domain/stream` 通过
   - `docker compose down && docker compose up -d --build` 完成
 
+### [2026-05-21] Feat - ZIP 课件包解析与前端摘要展示
+- **开发模块**: [Backend Parser, Project Parse API, Frontend Generator, Docs-as-Code]
+- **完成事项**:
+  1. 新增 `ArchiveParser`，支持 ZIP 临时落盘、安全解压、白名单筛选、文本规范化、完全重复去重与按路径顺序聚合，输出统一 `source_content`。
+  2. 扩展 `/api/v1/project/parse` 返回结构：ZIP 成功响应新增 `archive_summary`，包含扫描、保留、去重、忽略、失败统计及 `kept_paths`。
+  3. 前端生成器上传入口新增 `.zip` 支持，并在分析历史中展示“压缩包共扫描 X 个文件...”的中文摘要，普通文件链路保持兼容。
+  4. 同步更新 API / Architecture / PRD / README / Conversation Log 文档，记录 ZIP 课件包约束与返回结构。
+- **验证**:
+  - `cd backend && go test ./internal/infra/parser -run ArchiveParser -v` 通过
+  - `cd backend && go test ./internal/domain/project -run Parse -v` 通过
+  - `cd backend && go test ./internal/infra/parser ./internal/domain/project ./internal/domain/stream -v` 通过
+  - `cd frontend && npm test -- src/hooks/generator/fileParserUtils.test.ts` 通过
+  - `cd frontend && npm run build` 通过
+  - `docker compose down && docker compose up -d --build` 完成
+  - `curl -I http://localhost` 返回 `HTTP/1.1 200 OK`
+
 ### [2026-05-10] Feat - 文章类型/风格与写作要求模板管理
 - **开发模块**: [Prompt Requirements, Stream Generate, Editor Settings]
 - **完成事项**:

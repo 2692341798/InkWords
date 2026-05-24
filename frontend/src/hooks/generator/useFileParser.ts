@@ -1,7 +1,12 @@
 import { useCallback } from 'react'
 import { useStreamStore } from '@/store/streamStore'
 import { fetchEventSourceWithAuth } from '@/services/sse'
-import { buildFileAnalyzeRequest, extractParsedFileContent } from './fileParserUtils'
+import {
+  buildFileAnalyzeRequest,
+  extractArchiveSummary,
+  extractParsedFileContent,
+  formatArchiveSummaryMessage,
+} from './fileParserUtils'
 
 class StopStreamError extends Error {}
 
@@ -50,10 +55,20 @@ export const useFileParser = () => {
 
       const data = await uploadRes.json()
       const content = extractParsedFileContent(data)
+      const archiveSummary = extractArchiveSummary(data)
       if (!content) {
         throw new Error('文件解析成功但未返回可用内容')
       }
       store.setSourceContent(content)
+
+      // Why: ZIP 解析摘要只在上传完成时返回一次，落到分析历史里可以复用现有状态面板，
+      // 避免为首版额外引入新的展示组件和状态分支。
+      if (archiveSummary) {
+        store.appendAnalysisHistory({
+          message: formatArchiveSummaryMessage(archiveSummary),
+          status: 'parsed',
+        })
+      }
       
       store.setAnalysisStep(1)
       store.setAnalysisMessage('文件解析成功，正在生成大纲...')

@@ -1,6 +1,7 @@
 # 墨言博客助手 (InkWords) - API 接口文档
 
 ## 0. 变更记录
+- 2026-05-21：`/api/v1/project/parse` 新增 ZIP 课件包解析能力；支持返回 `data.archive_summary`，用于展示压缩包扫描、保留、去重、忽略与失败统计。
 - 2026-05-21：新增用户写作模板接口 `/api/v1/user/prompt-settings`（GET/PUT），并为 `/api/v1/stream/generate` 增加 `article_style` 请求字段，用于控制文章类型/写作要求模板。
 - 2026-05-21：修复本地 PDF/Word/Markdown 上传后触发 `git_url is required for git source type` 弹窗的问题；前端在 `/api/v1/stream/analyze` 显式发送 `source_type=file`，后端增加基于 `source_content` 的文件来源兼容推断（无 API 路由变更）。
 - 2026-04-29：新增“写博客”入口配套接口 `/api/v1/blogs/draft`（创建手写草稿）。
@@ -37,7 +38,19 @@
 | 接口地址 | 请求方法 | 功能描述 | 参数 |
 | -------- | -------- | -------- | ---- |
 | `/api/v1/project/analyze` | POST | 解析 Git 仓库生成大纲 (Legacy) | `{ git_url, sub_dir }` |
-| `/api/v1/project/parse` | POST | 解析本地文件生成大纲 | `multipart/form-data` -> `file` (最大支持 100MB) |
+| `/api/v1/project/parse` | POST | 解析本地文件或 ZIP 课件包并提取 `source_content` | `multipart/form-data` -> `file` (最大支持 100MB；支持 `.pdf/.docx/.md/.markdown/.txt/.zip`) |
+
+### 3.1 `/api/v1/project/parse` 返回说明
+- 普通文件上传时，成功响应保持兼容：`data.source_content`
+- ZIP 课件包上传时，成功响应会额外返回：
+  - `data.archive_summary.total_files`
+  - `data.archive_summary.supported_files`
+  - `data.archive_summary.kept_files`
+  - `data.archive_summary.duplicate_files`
+  - `data.archive_summary.ignored_files`
+  - `data.archive_summary.failed_files`
+  - `data.archive_summary.kept_paths`
+- ZIP 解析会自动完成白名单筛选、内容去重、顺序聚合，并在“无有效文本文件”或“存在非法压缩路径”时返回错误。
 
 ## 4. 流式生成模块 (StreamAPI)
 | 接口地址 | 请求方法 | 功能描述 | 参数 |

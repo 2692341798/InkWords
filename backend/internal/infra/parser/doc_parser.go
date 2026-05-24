@@ -12,6 +12,16 @@ import (
 	"github.com/nguyenthenguyen/docx"
 )
 
+var plainTextExtensions = map[string]bool{
+	".md":       true,
+	".markdown": true,
+	".txt":      true,
+}
+
+func isPlainTextExtension(ext string) bool {
+	return plainTextExtensions[strings.ToLower(ext)]
+}
+
 // Parser defines the interface for all document parsers
 type Parser interface {
 	Parse(src io.Reader, filename string) (string, error)
@@ -60,12 +70,12 @@ func (p *DocParser) Parse(src io.Reader, filename string) (string, error) {
 	}
 
 	// Route to specific parser based on extension
-	switch ext {
-	case ".pdf":
+	switch {
+	case ext == ".pdf":
 		return p.parsePDF(tempFile, size)
-	case ".md", ".markdown", ".txt":
+	case isPlainTextExtension(ext):
 		return p.parsePlainText(tempFile)
-	case ".docx":
+	case ext == ".docx":
 		return p.parseDocx(tempFile)
 	default:
 		return "", fmt.Errorf("unsupported file extension: %s", ext)

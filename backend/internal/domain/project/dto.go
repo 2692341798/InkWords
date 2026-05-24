@@ -1,5 +1,7 @@
 package project
 
+import "inkwords-backend/internal/infra/parser"
+
 type Chapter struct {
 	ID      string   `json:"id,omitempty"`
 	Title   string   `json:"title"`
@@ -28,4 +30,9 @@ type ScanRequest struct {
 type AnalyzeRequest struct {
 	GitURL string `json:"git_url" binding:"required"`
 	SubDir string `json:"sub_dir"`
+}
+
+type ParseResult struct {
+	SourceContent  string                 `json:"source_content"`
+	ArchiveSummary *parser.ArchiveSummary `json:"archive_summary,omitempty"`
 }

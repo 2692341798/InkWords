@@ -1,6 +1,7 @@
 # 墨言博客助手 (InkWords) - 架构设计与工程规范
 
 ## 0. 变更记录
+- 2026-05-21：本地文件解析链路新增 ZIP 课件包聚合能力；后端 `project parse` 在保留单文件解析的同时，新增 ZIP 安全解压、白名单筛选、文本去重与 `archive_summary` 摘要返回，前端生成器支持 `.zip` 上传并展示解析摘要。
 - 2026-05-21：修复 Docker 开发态 Obsidian 证书挂载兜底错误；移除将宿主机 `/etc/hosts` 作为证书文件的错误回退，改为默认通过 `OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY=true` 访问本地 Obsidian Local REST API，并用测试锁定 compose 配置。
 - 2026-05-21：修复文件上传解析链路的来源判定漂移；前端上传后统一从 `project/parse` 提取 `data.source_content`，并在调用 `stream/analyze` 时显式发送 `source_type=file`；后端 `stream` handler 增加基于 `source_content` 的兼容推断，避免旧静态资源或缓存请求被误判为 Git 分析。
 - 2026-04-29：对后端 `parser`/`service` 与前端核心组件进行模块化拆分，消除超大文件（>500 行），以提升可维护性与复用性（无业务行为变更）。
@@ -46,6 +47,10 @@
 - **深度剖析与博客再生 (Deep Generation & Regeneration)**:
   - **思考模式与 JSON 模式**：通过调用 DeepSeek 的 `Thinking` 模式加强逻辑推理，并在大纲生成、技术栈提取等场景强制启用 `json_object` 模式配合极低的 `Temperature` (如 0.1) 确保严格的结构化稳定输出。
   - **上下文注入**：在 `regenerate` 更新重写阶段，系统会从数据库提取旧版博客（截断至 50万 字符）并注入 Prompt，指导大模型基于最新源码进行“松散参考重写”，有效避免优秀沉淀丢失。
+- **文档/课件解析管线**：
+  - 普通文件继续使用 `DocParser` 处理 `.pdf/.docx/.md/.markdown/.txt`。
+  - ZIP 课件包通过 `ArchiveParser` 进入单独管线：临时落盘 -> 安全解压 -> 白名单筛选 -> 文本提取 -> 规范化去重 -> 按路径顺序聚合为统一 `source_content`。
+  - ZIP 成功响应会附带 `archive_summary`，供前端展示保留、去重、忽略与失败统计；解析完成后临时 ZIP 与解压目录均立即清理，保持“阅后即焚”。
 - **数据推送**: 基于标准 HTTP `text/event-stream` 实现 SSE 推送机制。
 
 ### 2.3 基础设施 (Infrastructure)

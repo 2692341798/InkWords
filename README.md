@@ -10,7 +10,7 @@
 - ⚡ **全链路流式体验 (SSE)**：从分析 Git 仓库目录结构、拉取源码到底层大模型并行生成文章，全链路采用 Server-Sent Events (SSE) 技术实时推送进度与数据流。让耗时较长的大型项目解析过程彻底“白盒化”，拒绝黑盒等待焦虑。
 - 🎯 **精准按需阅读与后台静默生成**：大纲级别绑定源码文件，生成时仅动态提取强相关代码，拒绝“假大空”。流式生成任务全局接管，支持后台静默生成，切换页面或断网重连无缝衔接。
 - 🔄 **博客松散参考再生 (Regeneration)**：在仓库更新后的重写阶段，系统会将旧版博客作为上下文注入大模型，基于最新源码进行“松散参考重写”，既保留了历史优秀的业务解释，又确保代码逻辑的绝对实时。单篇博客严格要求“单点聚焦与深度剖析”，深度挖掘核心技术点。
-- 📑 **超大文件解析支持**：支持本地上传高达 100MB 的 PDF/Word/MD 技术文档，前后端与网关链路已做深度适配。支持根据大文件内容智能评估并拆分系列大纲，像处理 Git 仓库一样并发生成系列博客。
+- 📑 **超大文件与 ZIP 课件解析支持**：支持本地上传高达 100MB 的 PDF/DOCX/Markdown/TXT 技术文档与 ZIP 课件包；ZIP 会自动完成白名单筛选、去重聚合并返回解析摘要，再进入既有系列分析链路。
 - 🩹 **文件来源判定兼容修复**：文件上传分析链路会显式发送 `source_type=file`，后端也会在仅携带 `source_content` 且未传 `git_url` 时自动兜底识别为文件来源，避免旧静态资源或缓存请求误触发 `git_url is required for git source type`。
 - ✍️ **沉浸式极简创作体验**：内置类似 Notion 的双栏 Markdown 二次编辑器。首创基于底层 AST 行号注入的像素级双向滚动同步算法；支持对生成的图表进行纯净无样式（无 `style` 污染）的原生 Mermaid 渲染，并具备强大的正则表达式错误兼容与自动修复机制。
 - **手写博客入口**：侧边栏新增“写博客”，一键创建空白草稿并直接进入编辑器进行手写写作。
@@ -56,7 +56,14 @@ docker compose down && docker compose up -d --build
 ```
 启动前请先在 `backend/.env` 中配置必要环境变量（例如 `DEEPSEEK_API_KEY`、`DATABASE_URL`、`JWT_SECRET`、`OBSIDIAN_REST_API_KEY`）。当前 Docker 本地开发默认通过 `backend/.env` 中的 `OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY=true` 访问 Obsidian Local REST API，避免把宿主机错误文件挂载成证书；如需启用严格证书校验，请显式配置 `OBSIDIAN_REST_API_CERT_PATH` 指向真实插件证书，并将 `OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY=false`。
 如遇导出到 Obsidian 提示“无法解析 Obsidian 目录列表响应”，请确认后端版本已兼容 Obsidian Local REST API 目录列表 `{ "files": [...] }` 返回格式。
-如遇上传 PDF/Word/Markdown 后仍提示 `git_url is required for git source type`，请先执行 `docker compose down && docker compose up -d --build` 并强制刷新浏览器，以确保前端静态资源与后端兼容逻辑同步生效。
+如遇上传 PDF/DOCX/Markdown/TXT/ZIP 后仍提示 `git_url is required for git source type`，请先执行 `docker compose down && docker compose up -d --build` 并强制刷新浏览器，以确保前端静态资源与后端兼容逻辑同步生效。
+
+### 4.1.1 ZIP 课件包上传说明
+- 支持上传 `.zip` 课件包，后端会自动扫描其中的受支持文档与代码文本文件。
+- 当前支持的文档类包括：`.pdf`、`.docx`、`.md`、`.markdown`、`.txt`。
+- 当前支持的代码/文本类包括：`.go`、`.js`、`.ts`、`.tsx`、`.jsx`、`.py`、`.java`、`.cpp`、`.c`、`.h`、`.hpp`、`.rs`、`.sql`、`.sh`、`.json`、`.yaml`、`.yml`。
+- 当前不支持 `.doc`、`rar/7z/tar.gz`、图片 OCR 与音视频转写。
+- 上传成功后，前端会显示 ZIP 解析摘要，例如保留、去重、忽略与失败数量。
 由于后端仅提供 API 接口，前端服务由独立的 Nginx 容器代理。项目启动后：
 1. **必须通过前端入口**访问：`http://localhost` (映射于宿主机 80 端口)。
 
