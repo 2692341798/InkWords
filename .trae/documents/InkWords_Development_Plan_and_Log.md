@@ -70,6 +70,18 @@
 ## 4. 每日开发日志 (Dev Log)
 > 该区域将由 Vibe Coding 工程师（AI 助手）在每天/每次开发周期结束时，如实记录当天的完成事项、遇到的技术坑点及架构小规模调整。
 
+### [2026-05-24] Docs - `scenario_mode` 文档同步与验证
+- **开发模块**: [Docs-as-Code, Stream Analyze/Generate, README, Docker Compose]
+- **完成事项**:
+  1. 同步更新 API / Architecture / PRD / Conversation Log / README，记录 `scenario_mode` 的三种场景枚举、前端“创作场景”入口，以及 `git -> beginner_walkthrough`、其它来源 -> `ebook_interpretation` 的默认兜底策略。
+  2. 在文档中明确 `scenario_mode` 与 `article_style` 的边界：前者负责任务目标，后者负责写法风格，避免概念混淆。
+  3. 按 Task4 计划执行后端聚焦测试、前端聚焦测试和 `docker compose down && docker compose up -d --build` 重建验证，并记录结果。
+- **验证**:
+  - `cd backend && go test ./internal/service ./internal/domain/stream ./internal/transport/http/v1/api -v` 通过
+  - `cd frontend && npm test -- src/lib/scenarioMode.test.ts` 通过
+  - `docker compose down && docker compose up -d --build` 完成，`docker compose ps` 显示 `frontend/backend/db/redis/obsidian-bridge` 均已启动
+  - `curl -I http://localhost` 返回 `HTTP/1.1 200 OK`，首页标题为“墨言博客助手”
+
 ### [2026-05-21] Fix - Obsidian Docker 开发态证书兜底修复
 - **开发模块**: [Docker Compose, Obsidian REST Store, Docs-as-Code]
 - **完成事项**:

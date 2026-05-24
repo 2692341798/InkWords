@@ -1,6 +1,21 @@
 # 墨言博客助手 (InkWords) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 70：同步 `scenario_mode` 文档并执行测试与容器验证
+- **用户需求**：按计划 Task4 更新项目文档与 README，记录 `scenario_mode` 能力，并运行相关后端/前端测试和 `docker compose` 重建验证，返回修改文件与验证结果。
+- **AI 动作**：
+  1. 先回读 `docs/superpowers/plans/2026-05-24-scenario-mode-prompt-plan.md` 的 Task4，以及现有 API / Architecture / PRD / Development Log / README 文档，确认需要同步的范围。
+  2. 再核对实际代码实现，确认 `scenario_mode` 的枚举、默认兜底和前端中文场景入口已落地，避免把设计稿中的“建议行为”误写成“当前行为”。
+  3. 更新 `.trae/documents/InkWords_API.md`、`.trae/documents/InkWords_Architecture.md`、`.trae/documents/InkWords_Conversation_Log.md`、`.trae/documents/InkWords_Development_Plan_and_Log.md`、`.trae/documents/InkWords_PRD.md` 与 `README.md`，补齐接口字段、场景边界、默认值、用户入口和验证日志。
+  4. 按计划运行后端/前端聚焦测试，并执行 `docker compose down && docker compose up -d --build` 与容器可用性检查。
+- **决策/变更**：
+  - 文档中明确区分 `scenario_mode`（任务目标）与 `article_style`（写法风格），避免语义重叠。
+  - 默认值说明以当前代码为准：`git -> beginner_walkthrough`，其它来源 -> `ebook_interpretation`；不把 ZIP 单独默认“开卷复习”写成已落地行为。
+- **验证**：
+  - `cd backend && go test ./internal/service ./internal/domain/stream ./internal/transport/http/v1/api -v` 通过
+  - `cd frontend && npm test -- src/lib/scenarioMode.test.ts` 通过
+  - `docker compose down && docker compose up -d --build` 完成，`curl -I http://localhost` 返回 `HTTP/1.1 200 OK`
+
 ### 对话 69：为备考课件新增 ZIP 压缩包解析能力
 - **用户需求**：用户正在备考，课件通常是一组系列文件而不是单个 PDF，希望系统支持上传 ZIP 课件包；ZIP 内既有 PDF、DOCX、Markdown、TXT，也有代码文件，需要先查重去重、提炼出有用文件，再统一解析。
 - **AI 动作**：
