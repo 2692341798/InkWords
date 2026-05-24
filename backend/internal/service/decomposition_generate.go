@@ -222,9 +222,13 @@ func (s *DecompositionService) GenerateSeries(ctx context.Context, userID uuid.U
 				}
 			}
 
-			requirements := prompt.DefaultRequirements(prompt.ArticleStyleGeneral)
+			requirements := strings.TrimSpace(strings.Join([]string{
+				prompt.DefaultScenarioRequirements(prompt.DefaultScenarioModeForSource(sourceType)),
+				prompt.DefaultRequirements(prompt.ArticleStyleGeneral),
+			}, "\n\n"))
 			if s.promptReq != nil {
-				if resolved, err := s.promptReq.Resolve(ctx, userID, prompt.ArticleStyle(style)); err == nil && resolved != "" {
+				defaultScenario := prompt.DefaultScenarioModeForSource(sourceType)
+				if resolved, err := s.promptReq.Resolve(ctx, userID, defaultScenario, prompt.ArticleStyle(style)); err == nil && resolved != "" {
 					requirements = resolved
 				}
 			}
