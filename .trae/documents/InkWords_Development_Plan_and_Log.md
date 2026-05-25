@@ -70,6 +70,20 @@
 ## 4. 每日开发日志 (Dev Log)
 > 该区域将由 Vibe Coding 工程师（AI 助手）在每天/每次开发周期结束时，如实记录当天的完成事项、遇到的技术坑点及架构小规模调整。
 
+### [2026-05-25] Fix - 创作场景锁定与 Analyze/Generate 一致性修复
+- **开发模块**: [Frontend Generator, Zustand Stream Store, Docs-as-Code]
+- **完成事项**:
+  1. 定位“先选开卷复习，上传课件后 UI 切回电子书解读”的根因：`streamStore.setSource` 在来源切换时覆盖了用户手动选择的场景；同时文件 Analyze 请求存在读取旧渲染快照的风险。
+  2. 修复 `streamStore.setSource`，保证上传文件或切换来源时不再覆盖用户手动选择的 `scenario_mode`；新增 `fileAnalyzeRequest` 统一从最新 store 读取场景值，确保请求参数与界面展示一致。
+  3. 新增 `generatorViewState`，在大纲生成后隐藏“创作场景”选择区，并在大纲头部显示只读“当前创作场景”标签，避免用户误以为修改场景仍会影响当前大纲。
+  4. 补充前端回归测试，覆盖来源切换、请求参数读取时机、以及“大纲前可选 / 大纲后锁定”三类行为；随后执行容器重建，确认修复进入前端构建产物。
+- **验证**:
+  - `cd frontend && npm test -- src/store/streamStore.test.ts src/hooks/generator/fileAnalyzeRequest.test.ts src/hooks/generator/fileParserUtils.test.ts` 通过
+  - `cd frontend && npm test -- src/pages/generatorViewState.test.ts src/lib/scenarioMode.test.ts src/store/streamStore.test.ts` 通过
+  - `cd frontend && npm run lint` 通过（仅存在既有 `Editor.tsx` warning）
+  - `docker compose down && docker compose up -d --build` 完成
+  - `curl -I http://localhost` 返回 `HTTP/1.1 200 OK`
+
 ### [2026-05-25] Fix - 电子书解读系列历史树只显示导读
 - **开发模块**: [Frontend Sidebar, Backend Decomposition Generate, Docs-as-Code]
 - **完成事项**:

@@ -1,6 +1,7 @@
 # 墨言博客助手 (InkWords) - API 接口文档
 
 ## 0. 变更记录
+- 2026-05-25：修复前端“创作场景”在文件上传与大纲生成过程中的交互歧义；保持 `/api/v1/stream/analyze` 与 `/api/v1/stream/generate` 的 `scenario_mode` 请求结构不变，但前端在上传分析时改为读取最新场景值，并在大纲生成后锁定该场景（仅 UI/请求时机修复，无 API 路由变更）。
 - 2026-05-25：修复系列生成异常时历史博客只剩父级导读的问题；`/api/v1/stream/generate` 的后端实现改为先为每个章节创建子博客草稿，再在流式成功后回填正文、失败时标记错误状态。API 路由与请求结构不变，但 `/api/v1/blogs` 返回的系列 `children` 在章节失败场景下也会保留占位子节点。
 - 2026-05-24：`/api/v1/stream/analyze` 与 `/api/v1/stream/generate` 新增 `scenario_mode` 请求字段，支持 `ebook_interpretation`、`open_book_exam_review`、`beginner_walkthrough` 三种创作场景；后端缺省按来源兜底（`git -> beginner_walkthrough`，其它来源 -> `ebook_interpretation`）。
 - 2026-05-21：`/api/v1/project/parse` 新增 ZIP 课件包解析能力；支持返回 `data.archive_summary`，用于展示压缩包扫描、保留、去重、忽略与失败统计。
@@ -79,6 +80,9 @@
   - `file` 及其它来源 -> `ebook_interpretation`
 - 作用：
   - 控制大纲拆解偏向“章节解读 / 考点速查 / 学习路径”中的哪一种结构。
+- 前端交互约束：
+  - 用户可在发起 Analyze 前手动切换 `scenario_mode`。
+  - 大纲返回后，前端会锁定本次 Analyze 使用的 `scenario_mode`，隐藏选择器并以只读标签展示当前场景，避免“大纲按 A 分析、正文按 B 生成”的歧义。
 
 ### 4.3 `/api/v1/stream/generate` 请求补充说明
 - 新增字段：`scenario_mode`
@@ -88,6 +92,8 @@
   - 系列导读生成
 - 兼容策略：
   - 旧前端不传 `scenario_mode` 仍可调用，后端按 `source_type` 自动回填默认值。
+- 前端约束：
+  - 当本次任务已经生成大纲时，Generate 会沿用该次 Analyze 已锁定的 `scenario_mode`，不再允许用户在大纲生成后修改。
 
 ## 5. 博客管理模块 (BlogAPI)
 | 接口地址 | 请求方法 | 功能描述 | 参数 |

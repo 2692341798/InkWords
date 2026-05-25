@@ -2,11 +2,11 @@ import { useCallback } from 'react'
 import { useStreamStore } from '@/store/streamStore'
 import { fetchEventSourceWithAuth } from '@/services/sse'
 import {
-  buildFileAnalyzeRequest,
   extractArchiveSummary,
   extractParsedFileContent,
   formatArchiveSummaryMessage,
 } from './fileParserUtils'
+import { buildCurrentFileAnalyzeRequest } from './fileAnalyzeRequest'
 
 class StopStreamError extends Error {}
 
@@ -79,7 +79,7 @@ export const useFileParser = () => {
         signal: ctrl.signal,
         openWhenHidden: true,
         // Why: 显式声明 file 来源，避免后端将文档上传误判为 git 解析链路。
-        body: JSON.stringify(buildFileAnalyzeRequest(content, store.scenarioMode)),
+        body: JSON.stringify(buildCurrentFileAnalyzeRequest(content)),
         async onopen(response) {
           if (response.ok && response.headers.get('content-type')?.startsWith('text/event-stream')) {
             return;

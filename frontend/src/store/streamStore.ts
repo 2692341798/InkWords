@@ -119,12 +119,8 @@ export const useStreamStore = create<StreamState>((set, get) => ({
       sourceType: type,
       sourceContent: content,
       gitUrl: gitUrl || '',
-      // Why: 扫描、解析完成都会重复写回 source；只有来源类型真正变化时才回到推荐场景，
-      // 否则会把用户手动选择的场景误覆盖掉。
-      scenarioMode:
-        state.sourceType === type
-          ? state.scenarioMode
-          : defaultScenarioModeForSource(type),
+      // Why: 用户手动选择的创作场景优先级高于来源推荐，上传文件或切换来源时不应把它重置掉。
+      scenarioMode: state.scenarioMode,
     })),
   setSourceContent: (content) => set({ sourceContent: content }),
   setSeriesTitle: (title) => set({ seriesTitle: title }),
