@@ -1,6 +1,8 @@
 # 墨言博客助手 (InkWords) - 架构设计与工程规范
 
 ## 0. 变更记录
+- 2026-05-25：将本地文档上传链路上限从 100MB 提升到 888MB；前端上传页校验、前端 Nginx `client_max_body_size` 与后端 Gin `MaxMultipartMemory` 三层限制保持一致。
+- 2026-05-25：在后端 LLM 公共流式出口新增“正文净化”层，并在前端润色正文应用前增加兜底清洗；统一剥离 `<think>` 思考标签、`reasoning_content` 和开头的对话式前言，防止 AI 思考/套话进入正文。
 - 2026-05-25：修复前端“创作场景”在文件上传与大纲生成阶段的状态漂移；`streamStore.setSource` 不再因来源切换覆盖用户手动场景，文件 Analyze 请求统一从最新 store 读取 `scenario_mode`，生成器在 `outline` 出现后隐藏场景选择区，并在大纲头部显示只读“当前创作场景”标签。
 - 2026-05-25：修复系列生成“父级成功、子级缺失”链路；后端 `GenerateSeries` 先创建章节草稿再异步流式回填，确保系列树即使在章节流式失败时也能保留子节点结构；前端 `Sidebar` 在自动选中系列父节点或子节点时同步展开历史树，避免用户误判为“只生成了导读”。
 - 2026-05-24：新增 `scenario_mode` 场景切换能力；后端引入独立场景枚举与默认 Prompt 约束，分析与生成链路统一透传，前端生成器增加“创作场景”中文卡片入口。
@@ -57,12 +59,13 @@
   - ZIP 课件包通过 `ArchiveParser` 进入单独管线：临时落盘 -> 安全解压 -> 白名单筛选 -> 文本提取 -> 规范化去重 -> 按路径顺序聚合为统一 `source_content`。
   - ZIP 成功响应会附带 `archive_summary`，供前端展示保留、去重、忽略与失败统计；解析完成后临时 ZIP 与解压目录均立即清理，保持“阅后即焚”。
 - **数据推送**: 基于标准 HTTP `text/event-stream` 实现 SSE 推送机制。
+- **正文净化层**：`internal/infra/llm` 在流式输出进入业务层前统一做开头段落清洗，剥离 `<think>` 标签、跳过 `reasoning_content`，并删除“收到你的需求 / 作为高级全栈架构师”等非正文前言；前端润色应用正文前再做一次兜底提取，避免污染 `blogs.content`。
 
 ### 2.3 基础设施 (Infrastructure)
 - **数据库**: PostgreSQL 14 (Docker volume 挂载持久化)
 - **本地知识库导出**: 后端通过 Obsidian Local REST API（HTTPS + API Key）写入用户本地 Vault，并遵循 Karpathy LLM Wiki Pattern 将系列批量 Ingest 为 `sources/`、`concepts/`、`entities/` 并自动编织双向链接网络，同时自动生成 `sources/_index.md`、`concepts/_index.md`、`entities/_index.md`、`domains/_index.md` 等“地图索引页”以避免知识孤岛与空页面；容器通过 sidecar `obsidian-bridge`（27125）转发访问宿主机插件端口（27124）
 - **系列 PDF 导出**: 后端将系列 Markdown 渲染为 HTML（封面 + 目录 + 正文），并使用容器内 Chromium Headless 打印为 PDF（前端在侧边栏批量模式中逐个触发下载）。为保证中文正常显示，后端运行时镜像需安装 `chromium` 与 `font-noto-cjk` 等字体依赖。
-- **代理与网关**: Nginx (构建前端静态页面并反向代理后端 `/api/` 路径，配置 `client_max_body_size 100M` 以支持大文件解析)
+- **代理与网关**: Nginx (构建前端静态页面并反向代理后端 `/api/` 路径，配置 `client_max_body_size 888M` 以支持大文件解析)
 - **大语言模型**: DeepSeek-V4-Flash API (支持 128k 输出及 1M Token 上下文)
 
 ## 3. 并发生成架构

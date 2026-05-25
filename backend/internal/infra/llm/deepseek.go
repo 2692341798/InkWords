@@ -120,15 +120,8 @@ func (c *DeepSeekClient) Generate(ctx context.Context, model string, messages []
 	}
 
 	content := result.Choices[0].Message.Content
-	// Strip <think>...</think> tags if they exist in the content
-	if startIdx := strings.Index(content, "<think>"); startIdx != -1 {
-		if endIdx := strings.Index(content, "</think>"); endIdx != -1 {
-			content = content[:startIdx] + content[endIdx+len("</think>"):]
-			content = strings.TrimSpace(content)
-		}
-	}
-
-	return content, nil
+	content = thinkBlockPattern.ReplaceAllString(content, "")
+	return strings.TrimSpace(content), nil
 }
 
 // GenerateJSON calls the DeepSeek API with stream=false and response_format={"type": "json_object"}
@@ -189,15 +182,8 @@ func (c *DeepSeekClient) GenerateJSON(ctx context.Context, model string, message
 	}
 
 	content := result.Choices[0].Message.Content
-	// Strip <think>...</think> tags if they exist in the content
-	if startIdx := strings.Index(content, "<think>"); startIdx != -1 {
-		if endIdx := strings.Index(content, "</think>"); endIdx != -1 {
-			content = content[:startIdx] + content[endIdx+len("</think>"):]
-			content = strings.TrimSpace(content)
-		}
-	}
-
-	return content, nil
+	content = thinkBlockPattern.ReplaceAllString(content, "")
+	return strings.TrimSpace(content), nil
 }
 
 // GenerateStream calls the DeepSeek API with stream=true and parses the chunks
@@ -238,6 +224,19 @@ func (c *DeepSeekClient) GenerateStream(ctx context.Context, model string, messa
 
 	reader := bufio.NewReader(resp.Body)
 	var finalFinishReason string
+	var leadingBuffer strings.Builder
+	leadingFlushed := false
+	flushLeadingBuffer := func() {
+		if leadingFlushed {
+			return
+		}
+		sanitized := sanitizeLeadingGeneratedText(leadingBuffer.String())
+		if sanitized != "" {
+			chunkChan <- sanitized
+		}
+		leadingFlushed = true
+		leadingBuffer.Reset()
+	}
 
 	for {
 		select {
@@ -249,6 +248,7 @@ func (c *DeepSeekClient) GenerateStream(ctx context.Context, model string, messa
 		line, err := reader.ReadBytes('\n')
 		if err != nil {
 			if err == io.EOF {
+				flushLeadingBuffer()
 				return finalFinishReason, nil
 			}
 			return "", fmt.Errorf("failed to read stream: %w", err)
@@ -265,6 +265,7 @@ func (c *DeepSeekClient) GenerateStream(ctx context.Context, model string, messa
 
 		data := strings.TrimPrefix(lineStr, "data: ")
 		if data == "[DONE]" {
+			flushLeadingBuffer()
 			return finalFinishReason, nil
 		}
 
@@ -276,14 +277,30 @@ func (c *DeepSeekClient) GenerateStream(ctx context.Context, model string, messa
 		if len(chunk.Choices) > 0 {
 			delta := chunk.Choices[0].Delta
 
-			// Skip reasoning content so it doesn't appear in the final blog
 			if delta.Content != "" {
+				if !leadingFlushed {
+					leadingBuffer.WriteString(delta.Content)
+					buffer := leadingBuffer.String()
+					if shouldHoldLeadingSanitization(buffer) {
+						continue
+					}
+
+					sanitized := sanitizeLeadingGeneratedText(buffer)
+					if sanitized != "" {
+						chunkChan <- sanitized
+					}
+					leadingFlushed = true
+					leadingBuffer.Reset()
+					continue
+				}
+
 				chunkChan <- delta.Content
 			}
 
 			if chunk.Choices[0].FinishReason != nil {
 				finalFinishReason = *chunk.Choices[0].FinishReason
 				if finalFinishReason == "stop" || finalFinishReason == "length" {
+					flushLeadingBuffer()
 					return finalFinishReason, nil
 				}
 			}
