@@ -47,8 +47,8 @@ func main() {
 	// 创建一个默认的 Gin 引擎
 	r := gin.Default()
 
-	// 允许上传大文件，限制为 100MB
-	r.MaxMultipartMemory = 100 << 20
+	// 允许上传大文件，限制为 888MB
+	r.MaxMultipartMemory = 888 << 20
 
 	// 开放 uploads 目录以供静态资源访问
 	r.Static("/uploads", "./uploads")

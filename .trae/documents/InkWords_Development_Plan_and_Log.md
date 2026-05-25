@@ -70,6 +70,19 @@
 ## 4. 每日开发日志 (Dev Log)
 > 该区域将由 Vibe Coding 工程师（AI 助手）在每天/每次开发周期结束时，如实记录当天的完成事项、遇到的技术坑点及架构小规模调整。
 
+### [2026-05-25] Fix - 剥离 AI 思考/套话正文污染
+- **开发模块**: [Backend LLM Streaming, Frontend Editor Polish]
+- **完成事项**:
+  1. 定位到“好的，收到你的需求。作为高级全栈架构师...”并非 `reasoning_content` 泄露，而是模型输出的对话式前言被当作 Markdown 正文写入了润色预览与正文。
+  2. 在 `backend/internal/infra/llm` 新增公共输出清洗逻辑，仅对流式正文输出的开头段落做最小化剥离：去掉 `<think>` 标签块，以及匹配“角色自述/收到需求/根据你提供内容撰写”的前言段落。
+  3. 在前端 `frontend/src/lib/polishDraft.ts` 增加正文提取时的兜底清洗，确保即使后端遗漏，点击“应用润色结果”时也不会把套话落入正文。
+  4. 按 TDD 先补失败测试，再完成实现：后端新增 `GenerateStream` 前言剥离回归测试；前端新增润色正文提取的套话剥离测试。
+- **验证**:
+  - `cd backend && go test ./internal/infra/llm -run TestDeepSeekClient_GenerateStream_stripsLeadingConversationalPreamble -v` 通过
+  - `cd frontend && npm test -- src/lib/polishDraft.test.ts` 通过
+  - `cd backend && go test ./...` 通过
+  - `cd frontend && npm run build` 通过
+
 ### [2026-05-25] Fix - 创作场景锁定与 Analyze/Generate 一致性修复
 - **开发模块**: [Frontend Generator, Zustand Stream Store, Docs-as-Code]
 - **完成事项**:
