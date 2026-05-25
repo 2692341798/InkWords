@@ -15,12 +15,14 @@ describe('useStreamStore scenario mode', () => {
     expect(useStreamStore.getState().scenarioMode).toBe('ebook_interpretation')
   })
 
-  it('switches to the recommended mode when the source type changes', () => {
+  it('keeps the manual selection even when the source type changes', () => {
+    useStreamStore.getState().setScenarioMode('open_book_exam_review')
+
     useStreamStore.getState().setSource('git', '', 'https://github.com/inkwords/demo')
-    expect(useStreamStore.getState().scenarioMode).toBe('beginner_walkthrough')
+    expect(useStreamStore.getState().scenarioMode).toBe('open_book_exam_review')
 
     useStreamStore.getState().setSource('file', 'document content')
-    expect(useStreamStore.getState().scenarioMode).toBe('ebook_interpretation')
+    expect(useStreamStore.getState().scenarioMode).toBe('open_book_exam_review')
   })
 
   it('keeps the manual selection when the same source type refreshes', () => {

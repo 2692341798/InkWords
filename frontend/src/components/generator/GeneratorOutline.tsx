@@ -9,6 +9,7 @@ interface GeneratorOutlineProps {
   setShowChapterDeleteConfirm: Dispatch<SetStateAction<number | null>>
   handleGenerate: () => void
   stopGenerating: () => void
+  lockedScenarioLabel?: string | null
 }
 
 export function GeneratorOutline({
@@ -16,7 +17,8 @@ export function GeneratorOutline({
   setIsOutlineExpanded,
   setShowChapterDeleteConfirm,
   handleGenerate,
-  stopGenerating
+  stopGenerating,
+  lockedScenarioLabel,
 }: GeneratorOutlineProps) {
   const store = useStreamStore()
 
@@ -46,6 +48,11 @@ export function GeneratorOutline({
             <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
               可拖拽调整顺序，或点击生成开始写作
             </p>
+            {lockedScenarioLabel && (
+              <div className="mt-3 inline-flex items-center rounded-full border border-zinc-200 bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                当前创作场景：{lockedScenarioLabel}
+              </div>
+            )}
           </div>
         </div>
         

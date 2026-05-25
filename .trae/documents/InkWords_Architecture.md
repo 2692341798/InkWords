@@ -1,6 +1,7 @@
 # 墨言博客助手 (InkWords) - 架构设计与工程规范
 
 ## 0. 变更记录
+- 2026-05-25：修复前端“创作场景”在文件上传与大纲生成阶段的状态漂移；`streamStore.setSource` 不再因来源切换覆盖用户手动场景，文件 Analyze 请求统一从最新 store 读取 `scenario_mode`，生成器在 `outline` 出现后隐藏场景选择区，并在大纲头部显示只读“当前创作场景”标签。
 - 2026-05-25：修复系列生成“父级成功、子级缺失”链路；后端 `GenerateSeries` 先创建章节草稿再异步流式回填，确保系列树即使在章节流式失败时也能保留子节点结构；前端 `Sidebar` 在自动选中系列父节点或子节点时同步展开历史树，避免用户误判为“只生成了导读”。
 - 2026-05-24：新增 `scenario_mode` 场景切换能力；后端引入独立场景枚举与默认 Prompt 约束，分析与生成链路统一透传，前端生成器增加“创作场景”中文卡片入口。
 - 2026-05-21：本地文件解析链路新增 ZIP 课件包聚合能力；后端 `project parse` 在保留单文件解析的同时，新增 ZIP 安全解压、白名单筛选、文本去重与 `archive_summary` 摘要返回，前端生成器支持 `.zip` 上传并展示解析摘要。
@@ -30,6 +31,7 @@
 - **状态管理**: Zustand (含多 store：`blogStore`, `streamStore`, `authStore`)
 - **流式通信**: `@microsoft/fetch-event-source` 维持 SSE 连接
 - **Markdown 渲染**: `react-markdown` 配合 `rehype-highlight`、`remark-gfm` 和 `mermaid`。
+- **场景锁定策略**：生成器在大纲生成前展示“创作场景”卡片；一旦 `outline` 存在，页面立即隐藏场景选择区，并在大纲头部展示只读场景标签，保证 Analyze 与后续 Generate 使用同一场景语义。
 
 ### 2.2 后端 (Backend)
 - **核心语言**: Go 1.25+
@@ -86,11 +88,15 @@
   - `beginner_walkthrough`：面向源码仓库、项目教程、小白上手路径
 - **链路位置**：
   - 前端：`frontend/src/lib/scenarioMode.ts` 定义选项与中文描述，`frontend/src/pages/Generator.tsx` 提供交互入口。
+  - 前端展示状态：`frontend/src/pages/generatorViewState.ts` 统一控制“何时显示场景选择区”和“何时显示只读场景标签”。
   - HTTP：`stream/analyze` 与 `stream/generate` 请求体新增 `scenario_mode`。
   - 后端：`internal/prompt/scenario_mode.go` 与 `default_scenario_requirements.go` 提供场景枚举和默认约束，`PromptRequirementsService` 统一做 Prompt 组装。
 - **兼容性策略**：
   - `scenario_mode` 非必填，旧请求继续有效。
   - 后端统一做默认值与非法值兜底，避免前端静态资源版本漂移时出现链路回归。
+- **一致性策略**：
+  - `streamStore.setSource` 仅更新来源信息，不再在来源切换时覆盖用户手动选择的场景。
+  - 文件 Analyze 请求在发起时通过 `useStreamStore.getState()` 读取最新 `scenario_mode`，避免旧渲染快照导致“UI 显示 A、请求发送 B”。
 
 ## 4. 部署架构 (Docker-First)
 - **前端镜像**: 采用多阶段构建（Node.js 安装依赖并构建，Nginx 轻量级运行并作为反向代理网关）。映射宿主机 `80` 和 `5173` 端口（以解决 GitHub OAuth 回调端口兼容）。

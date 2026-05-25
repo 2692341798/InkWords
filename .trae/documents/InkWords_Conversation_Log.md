@@ -1,6 +1,23 @@
 # 墨言博客助手 (InkWords) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 72：修复创作场景被上传覆盖且大纲后仍可修改
+- **用户需求**：用户先手动选择“开卷复习”，上传课件 ZIP 后界面却切回“电子书解读”；同时大纲生成后仍能看到并修改场景，导致无法判断当前内容到底按哪个场景生成。要求定位、修复，并最终提交 GitHub、打标签、创建 PR。
+- **AI 动作**：
+  1. 结合知识库与前后端代码排查 `scenario_mode` 链路，定位到前端 `streamStore.setSource` 会在来源切换时覆盖用户手动场景，且 `useFileParser` 发起 Analyze 请求时存在读取旧渲染快照的风险。
+  2. 按 TDD 先补回归测试：覆盖“来源切换后仍保留手动场景”与“文件 Analyze 请求读取最新场景值”，再修改 `streamStore.ts` 与 `useFileParser.ts` 让 UI 与请求参数保持一致。
+  3. 继续按用户要求实现“大纲生成后隐藏场景选择区，并在大纲头部显示只读场景标签”，新增 `generatorViewState` 作为最小展示状态 helper，并补齐对应单测。
+  4. 发现用户浏览器仍停留在旧前端容器版本后，按约束执行 `docker compose down && docker compose up -d --build`，确认最新构建已经启动并提示用户强刷页面。
+- **决策/变更**：
+  - 用户手动选择的 `scenario_mode` 优先级高于来源推荐值，上传文件或切换来源时不应再被默认场景覆盖。
+  - Analyze 一旦产出 `outline`，前端就锁定本次任务的场景语义：隐藏场景选择区，只显示只读标签，确保后续 Generate 沿用同一场景。
+- **验证**：
+  - `cd frontend && npm test -- src/store/streamStore.test.ts src/hooks/generator/fileAnalyzeRequest.test.ts src/hooks/generator/fileParserUtils.test.ts` 通过
+  - `cd frontend && npm test -- src/pages/generatorViewState.test.ts src/lib/scenarioMode.test.ts src/store/streamStore.test.ts` 通过
+  - `cd frontend && npm run lint` 通过（仅保留仓库既有 `Editor.tsx` hooks warning）
+  - `docker compose down && docker compose up -d --build` 完成
+  - `curl -I http://localhost` 返回 `HTTP/1.1 200 OK`
+
 ### 对话 71：修复电子书解读系列历史博客只显示导读
 - **用户需求**：当用户选择“电子书解读”场景生成系列博客时，实际生成了十几篇文章，但左侧历史博客里只看到导读，希望定位并修复。
 - **AI 动作**：

@@ -10,10 +10,15 @@ import { GeneratorOutline } from '@/components/generator/GeneratorOutline'
 import { GeneratorStatus } from '@/components/generator/GeneratorStatus'
 import { scenarioModeOptions } from '@/lib/scenarioMode'
 import { cn } from '@/lib/utils'
+import { getGeneratorViewState } from './generatorViewState'
 
 export function Generator() {
   const store = useStreamStore()
   const { scanGit, analyzeGit, parseFile, generateSeries, generateSingle, stopAnalyzing, stopGenerating } = useBlogStream()
+  const viewState = getGeneratorViewState({
+    outline: store.outline,
+    scenarioMode: store.scenarioMode,
+  })
   const gitUrl = store.gitUrl
   const setGitUrl = store.setGitUrl
   const [isDragging, setIsDragging] = useState(false)
@@ -140,35 +145,37 @@ export function Generator() {
         stopAnalyzing={stopAnalyzing}
       />
 
-      <div className="mb-12 rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-        <div className="flex flex-col gap-2">
-          <h2 className="text-lg font-medium text-zinc-900 dark:text-zinc-100">创作场景</h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            系统会根据素材来源推荐默认场景，你也可以按本次任务目标手动切换。
-          </p>
+      {viewState.shouldShowScenarioSelector && (
+        <div className="mb-12 rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="flex flex-col gap-2">
+            <h2 className="text-lg font-medium text-zinc-900 dark:text-zinc-100">创作场景</h2>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              系统会根据素材来源推荐默认场景，你也可以按本次任务目标手动切换。
+            </p>
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            {scenarioModeOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => store.setScenarioMode(option.value)}
+                className={cn(
+                  'rounded-xl border px-4 py-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400',
+                  store.scenarioMode === option.value
+                    ? 'border-zinc-900 bg-zinc-50 dark:border-zinc-100 dark:bg-zinc-800/80'
+                    : 'border-zinc-200 bg-white hover:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:border-zinc-500',
+                )}
+                aria-pressed={store.scenarioMode === option.value}
+              >
+                <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{option.label}</div>
+                <div className="mt-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+                  {option.description}
+                </div>
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
-          {scenarioModeOptions.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => store.setScenarioMode(option.value)}
-              className={cn(
-                'rounded-xl border px-4 py-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400',
-                store.scenarioMode === option.value
-                  ? 'border-zinc-900 bg-zinc-50 dark:border-zinc-100 dark:bg-zinc-800/80'
-                  : 'border-zinc-200 bg-white hover:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:border-zinc-500',
-              )}
-              aria-pressed={store.scenarioMode === option.value}
-            >
-              <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{option.label}</div>
-              <div className="mt-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
-                {option.description}
-              </div>
-            </button>
-          ))}
-        </div>
-      </div>
+      )}
 
       {analyzingType === 'git' && (
         <GeneratorModules
@@ -183,6 +190,7 @@ export function Generator() {
         setShowChapterDeleteConfirm={setShowChapterDeleteConfirm}
         handleGenerate={handleGenerate}
         stopGenerating={stopGenerating}
+        lockedScenarioLabel={viewState.lockedScenarioLabel}
       />
 
       <GeneratorStatus />
