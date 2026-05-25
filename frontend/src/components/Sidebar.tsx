@@ -3,6 +3,7 @@ import { useStreamStore } from '@/store/streamStore'
 import { useBlogStore } from '@/store/blogStore'
 import type { BlogNode } from '@/store/blogStore'
 import { BookOpen, CheckSquare, ChevronDown, ChevronRight, Download, FileArchive, FilePenLine, FolderArchive, GitBranch, Loader2, LogOut, Plus, RefreshCw, Sparkles, Square, Trash2, User } from 'lucide-react'
+import { syncExpandedNodesWithSelection } from '@/lib/blogTreeSelection'
 import { cn } from '@/lib/utils'
 import { Button } from './ui/button'
 import { ConfirmDialog } from './ui/confirm-dialog'
@@ -41,6 +42,12 @@ export function Sidebar() {
   useEffect(() => {
     fetchBlogs()
   }, [fetchBlogs])
+
+  useEffect(() => {
+    // Why: 系列父博客在生成完成后会被自动选中，如果不同步展开状态，
+    // 左侧历史树看起来就像只有一篇导读，用户看不到刚生成的子文章。
+    setExpandedNodes((previous) => syncExpandedNodesWithSelection(previous, selectedBlog))
+  }, [selectedBlog])
 
   const toggleNode = (id: string) => {
     const newExpanded = new Set(expandedNodes)
@@ -209,7 +216,7 @@ export function Sidebar() {
         <div
           className={cn(
             "flex items-center py-2 px-3 hover:bg-zinc-100 rounded-md cursor-pointer text-sm gap-2 transition-colors",
-            isSelected && !hasChildren && !isBatchMode ? "bg-indigo-50 text-indigo-700 font-medium" : "text-zinc-700"
+            isSelected && !isBatchMode ? "bg-indigo-50 text-indigo-700 font-medium" : "text-zinc-700"
           )}
           style={{ paddingLeft: `${level * 16 + 12}px` }}
           onClick={() => {

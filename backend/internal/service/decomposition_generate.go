@@ -118,6 +118,32 @@ func (s *DecompositionService) GenerateSeries(
 		db.DB.WithContext(ctx).Where("parent_id = ? AND user_id = ?", parentID, userID).Delete(&model.Blog{})
 	}
 
+	// Why: 系列章节的实际生成是异步并带重试的，若请求中途失败或某章最终失败，
+	// 先落一条子博客草稿，历史树仍能展示完整系列结构，而不是只剩父级导读。
+	for i := range outline {
+		chapter := outline[i]
+		if chapter.ID != "" || chapter.Action == "skip" {
+			continue
+		}
+
+		draftBlog := &model.Blog{
+			UserID:      userID,
+			ParentID:    &parentID,
+			ChapterSort: chapter.Sort,
+			Title:       chapter.Title,
+			Content:     "正在生成章节内容...",
+			SourceType:  sourceType,
+			Status:      0,
+		}
+
+		if err := db.DB.WithContext(ctx).Create(draftBlog).Error; err != nil {
+			errChan <- fmt.Errorf("failed to create chapter draft %d: %w", chapter.Sort, err)
+			return
+		}
+
+		outline[i].ID = draftBlog.ID.String()
+	}
+
 	sendSystemProgress("开始生成系列博客内容...")
 	for i, chapter := range outline {
 		if ctx.Err() != nil {
@@ -423,6 +449,15 @@ func (s *DecompositionService) GenerateSeries(
 			}
 
 			if streamErr != nil {
+				if chapter.ID != "" {
+					if blogID, err := uuid.Parse(chapter.ID); err == nil {
+						db.DB.WithContext(ctx).Model(&model.Blog{}).Where("id = ? AND user_id = ?", blogID, userID).Updates(map[string]interface{}{
+							"status":  2,
+							"content": "章节生成失败，请重试。",
+						})
+					}
+				}
+
 				errMsg := map[string]interface{}{
 					"status":       "error",
 					"chapter_sort": chapter.Sort,
@@ -460,6 +495,8 @@ func (s *DecompositionService) GenerateSeries(
 						"content":      content,
 						"word_count":   wordCount,
 						"tech_stacks":  techStacks,
+						"source_type":  sourceType,
+						"status":       1,
 					}).Error; err != nil {
 						errMsg := map[string]interface{}{
 							"status":       "error",

@@ -1,6 +1,7 @@
 # 墨言博客助手 (InkWords) - API 接口文档
 
 ## 0. 变更记录
+- 2026-05-25：修复系列生成异常时历史博客只剩父级导读的问题；`/api/v1/stream/generate` 的后端实现改为先为每个章节创建子博客草稿，再在流式成功后回填正文、失败时标记错误状态。API 路由与请求结构不变，但 `/api/v1/blogs` 返回的系列 `children` 在章节失败场景下也会保留占位子节点。
 - 2026-05-24：`/api/v1/stream/analyze` 与 `/api/v1/stream/generate` 新增 `scenario_mode` 请求字段，支持 `ebook_interpretation`、`open_book_exam_review`、`beginner_walkthrough` 三种创作场景；后端缺省按来源兜底（`git -> beginner_walkthrough`，其它来源 -> `ebook_interpretation`）。
 - 2026-05-21：`/api/v1/project/parse` 新增 ZIP 课件包解析能力；支持返回 `data.archive_summary`，用于展示压缩包扫描、保留、去重、忽略与失败统计。
 - 2026-05-21：新增用户写作模板接口 `/api/v1/user/prompt-settings`（GET/PUT），并为 `/api/v1/stream/generate` 增加 `article_style` 请求字段，用于控制文章类型/写作要求模板。
