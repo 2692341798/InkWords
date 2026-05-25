@@ -70,6 +70,19 @@
 ## 4. 每日开发日志 (Dev Log)
 > 该区域将由 Vibe Coding 工程师（AI 助手）在每天/每次开发周期结束时，如实记录当天的完成事项、遇到的技术坑点及架构小规模调整。
 
+### [2026-05-25] Fix - 电子书解读系列历史树只显示导读
+- **开发模块**: [Frontend Sidebar, Backend Decomposition Generate, Docs-as-Code]
+- **完成事项**:
+  1. 定位“电子书解读”系列历史只显示导读的问题，确认现象并非单纯前端折叠，而是数据库中该系列父博客下真实缺少子博客记录。
+  2. 前端 `Sidebar` 新增选中联动展开逻辑：自动选中系列父节点或子节点时同步展开历史树并保留高亮，避免将已生成系列误判为“只剩导读”。
+  3. 后端 `GenerateSeries` 改为先为每个章节创建子博客草稿，再在流式成功后回填正文；若章节最终失败，保留子节点记录并写入失败占位内容，避免父级存在但 `children` 为空。
+  4. 新增前端回归测试 `frontend/src/lib/blogTreeSelection.test.ts` 与后端回归测试 `backend/internal/service/decomposition_generate_persist_test.go`。
+- **验证**:
+  - `cd frontend && npm test -- src/lib/blogTreeSelection.test.ts` 通过
+  - `cd frontend && npm run build` 通过
+  - `cd backend && go test ./internal/service` 通过
+  - `docker compose down && docker compose up -d --build` 完成
+
 ### [2026-05-24] Docs - `scenario_mode` 文档同步与验证
 - **开发模块**: [Docs-as-Code, Stream Analyze/Generate, README, Docker Compose]
 - **完成事项**:
