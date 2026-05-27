@@ -1148,3 +1148,29 @@
   3. 重构 `GeneratorStatus.tsx`，对 `store.outline` 进行遍历，为每个章节生成一个带图标与最新文本摘要的动态卡片。
   4. 生成完成后自动跳转并选中博客系列导读节点。
 - **结果**：极大地改善了视觉体验，将原始的流水日志转换为了直观的、具有科技感的并发监控仪表盘。
+
+### [2026-05-27] Frontend Flow Orchestration - 首页决策中心、单步聚焦工作台与共享 StepStrip
+- **开发模块**: [前端入口编排, 生成器流程 UI, 复习工作台, 共享组件]
+- **完成事项**:
+  1. **新增真实工作入口 `HomeEntry`**：将默认工作入口从直接落到生成器，改为先进入 `HomeEntry` 决策中心；用户可以在“生成博客 / 知识复习”两条主路径之间切换，并看到 Resume 与 Recent History。
+  2. **生成器改为单步聚焦**：抽取 `generatorViewState`，将页面主区明确收敛为 `input / configure / outline / processing` 四个步骤，只展示当前主步骤，避免表单、模块选择、大纲和处理中状态同时平铺。
+  3. **知识复习改为单步聚焦**：新增 `knowledgeReviewViewState`，将入口、选文与会话阶段拆成 `entry / picker / session` 三步，并为复习器与会话卡补充返回入口/关闭会话能力。
+  4. **抽取共享 `StepStrip`**：新增 `frontend/src/components/shared/StepStrip.tsx` 与测试文件，抽取共享 `StepStripItem` 类型和 `preview / progress` 双视觉变体，供 `HomeEntry`、`Generator`、`KnowledgeReview` 复用。
+  5. **视觉精修**：按 “More Elegant + Minimal Motion” 方向细化步骤条层次，通过 `data-step-state` 与 `data-step-emphasis` 显式区分 `preview / current / complete / upcoming` 语义。
+- **验证结果**:
+  1. 补充并通过前端状态编排与共享步骤条相关测试（`generatorViewState.test.ts`、`knowledgeReviewViewState.test.ts`、`homeEntryViewState.test.ts`、`StepStrip.test.tsx`）。
+  2. 执行 `docker compose down && docker compose up -d --build`，完成容器重启，验证新首页与流程型工作台已可在本地容器环境访问。
+- **风险与备注**:
+  - 本次主要调整前端编排与共享 UI 语义，不涉及后端 API 与数据库表结构；因此文档需要同步说明“无接口/数据库变化”，避免评审误判为后端联动需求。
+
+### [2026-05-27] Release Hygiene - GitHub 提交流程准备
+- **开发模块**: [Git 提交治理, Docs-as-Code, PR 准备]
+- **完成事项**:
+  1. 检查当前工作树、分支、远程与 tag，确认当前分支为 `front-development`，默认基线分支为 `main`，最近 tag 为 `v2.31.3`。
+  2. 回读并同步更新 `.trae/documents/InkWords_API.md`、`.trae/documents/InkWords_Architecture.md`、`.trae/documents/InkWords_Conversation_Log.md`、`.trae/documents/InkWords_Database.md`、`.trae/documents/InkWords_Development_Plan_and_Log.md`、`.trae/documents/InkWords_PRD.md` 与 `README.md`。
+  3. 发现本机未安装 `gh` CLI，因此改为预备使用 Git + GitHub MCP 的方式完成 push 与 PR 创建。
+- **验证结果**:
+  1. `git fetch origin --prune` 已执行，确认 `origin/main` 更新、`origin/front-development` 当前不存在。
+  2. `git tag --sort=-v:refname | head -n 20` 已确认版本基线。
+- **风险与备注**:
+  - 由于远端没有现成的 `origin/front-development`，首次 push 需要显式创建远端同名分支；PR base 应以 `main` 为准。

@@ -1119,3 +1119,48 @@
   5. 执行代码提交。
 - **决策/变更**：
   - **本地知识库直通**：通过 Docker Volume 映射，直接打通 Web 应用和用户的本地 Obsidian 知识库，省去了繁琐的下载和解压拖拽过程，实现了沉浸式的文档收集工作流。
+
+### 对话 58：流程型首页原型设计与 HTML Mockup
+- **用户需求**：认为现有页面功能区过于平铺，希望先通过一个 HTML 页面原型帮助选择新的流程型首页方案。
+- **AI 动作**：
+  1. 先按共创流程确认了首页方向，最终收敛为 `One Hub Page` + `Decision Center`，默认推荐“Generate Blog”。
+  2. 生成独立原型文件 `frontend/public/hub-homepage-mockup.html`，用纯 HTML/CSS/JS 展示路径选择、步骤预览、工作区和摘要区。
+  3. 通过静态预览确认原型可访问，并以此作为真实前端改造的视觉与交互参照。
+- **决策/变更**：
+  - 新首页不做“大而全 dashboard”，而是做引导式工作入口；用户先选路径，再进入真实工具页。
+
+### 对话 59：将真实前端改造成“同一时间只显示当前步骤”
+- **用户需求**：要求基于首页原型优化真实前端，确保用户任何时刻只看到当前步骤，而不是多个主任务区块平铺。
+- **AI 动作**：
+  1. 为博客生成页抽取 `generatorViewState`，明确 `input / configure / outline / processing` 四个步骤，并补充对应测试。
+  2. 重构 `Generator.tsx`，增加回退逻辑、右侧摘要区与当前流程条，只渲染当前主步骤。
+  3. 为知识复习页新增 `knowledgeReviewViewState`，明确 `entry / picker / session` 三个步骤，并调整 `KnowledgeReview.tsx`、`ReviewNotePicker.tsx`、`ReviewSessionCard.tsx` 与 `useKnowledgeReview.ts` 形成可回退、可清空的会话闭环。
+- **决策/变更**：
+  - 共享的是“步骤语义”，不是共享一个跨页面状态机；页面继续自行持有业务状态，避免过度抽象。
+
+### 对话 60：新增真实工作入口 `HomeEntry`
+- **用户需求**：要求把相同的 step model 应用到“dashboard/home entry”，澄清后明确目标是真实工作入口而不是个人中心仪表盘。
+- **AI 动作**：
+  1. 新增 `HomeEntry.tsx` 与 `homeEntryViewState.ts` / `homeEntryViewState.test.ts`，默认在“生成博客 / 知识复习”之间提供路径选择。
+  2. 调整 `blogStore.currentView` 默认值为 `home-entry`，并在 `App.tsx` 与 `Sidebar.tsx` 中接入新的入口分支。
+  3. 保留 Resume 与 Recent History 区域，让首页仍然是工作入口，而不是纯营销页。
+- **决策/变更**：
+  - 入口方案采用 `Hub First + Hybrid`，先在首页展示路径预览，再进入真实页面继续工作。
+
+### 对话 61：抽取共享 `StepStrip` 并完成视觉精修
+- **用户需求**：新增一个可复用于 `HomeEntry`、`Generator`、`KnowledgeReview` 的共享步骤条组件，并进一步优化视觉层次。
+- **AI 动作**：
+  1. 新增 `frontend/src/components/shared/StepStrip.tsx` 与 `StepStrip.test.tsx`，抽取共享 `StepStripItem` 类型和 `preview/progress` 双变体。
+  2. 将 `HomeEntry`、`Generator`、`KnowledgeReview` 全部切换为复用共享 `StepStrip`，保留页面层自身的状态编排。
+  3. 继续按“More Elegant + Minimal Motion”方向精修视觉，通过 `data-step-state` 与 `data-step-emphasis` 区分 `preview/current/complete/upcoming` 层级，不改变行为与 API。
+- **决策/变更**：
+  - 组件只做可复用展示契约，不接管业务状态；测试采用 `react-dom/server` 轻量渲染断言，避免把简单 UI 重构升级成测试栈迁移任务。
+
+### 对话 62：容器验证与 GitHub 提交流程准备
+- **用户需求**：先重启项目验证，再提交到 GitHub 并创建 PR。
+- **AI 动作**：
+  1. 按仓库约束执行 `docker compose down && docker compose up -d --build`，完成本地容器重启验证。
+  2. 检查当前分支、远程、tag、diff 与必改文档清单，确认默认基线为 `main`、当前工作分支为 `front-development`。
+  3. 由于本机未安装 `gh` CLI，改为准备通过 Git 与 GitHub MCP 完成 push 和 PR 创建，并先同步更新 `.trae/documents/*` 与 `README.md`。
+- **决策/变更**：
+  - 在提交前先做 Docs-as-Code 同步与 tag/base branch 检查，避免把“代码已改但文档仍停留旧状态”的内容直接推上远端。

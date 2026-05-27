@@ -158,11 +158,20 @@ export function useKnowledgeReview() {
     await loadHistory(5)
   }, [currentSession, loadHistory, persistSessionID, setCurrentSession, setFinalFeedback])
 
+  const clearSession = useCallback(() => {
+    setCurrentSession(null)
+    setLatestHint(null)
+    setLatestStageFeedback(null)
+    setFinalFeedback(null)
+    persistSessionID(null)
+  }, [persistSessionID, setCurrentSession, setFinalFeedback, setLatestHint, setLatestStageFeedback])
+
   return {
     initialize,
     startSession,
     respond,
     requestHint,
     finish,
+    clearSession,
   }
 }

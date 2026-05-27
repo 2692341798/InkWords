@@ -1,0 +1,1366 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>墨言博客助手 - Hub 首页流程稿</title>
+    <style>
+      :root {
+        --bg: #f5f7fb;
+        --surface: #ffffff;
+        --surface-soft: #f8f8ff;
+        --surface-accent: #f2f0ff;
+        --text: #16181d;
+        --muted: #667085;
+        --muted-strong: #475467;
+        --line: #e7eaf2;
+        --line-strong: #d8def0;
+        --primary: #5b4bff;
+        --primary-soft: #ece9ff;
+        --primary-strong: #4636f0;
+        --success-soft: #e9f8f0;
+        --success: #1f9d68;
+        --warning-soft: #fff3df;
+        --warning: #b26b00;
+        --shadow: 0 24px 60px rgba(15, 23, 42, 0.08);
+        --radius-xl: 28px;
+        --radius-lg: 20px;
+        --radius-md: 14px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family:
+          "Inter",
+          "PingFang SC",
+          "Hiragino Sans GB",
+          "Microsoft YaHei",
+          sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top left, rgba(91, 75, 255, 0.1), transparent 24%),
+          linear-gradient(180deg, #f8f9ff 0%, var(--bg) 100%);
+      }
+
+      button,
+      input {
+        font: inherit;
+      }
+
+      .app-shell {
+        max-width: 1260px;
+        margin: 0 auto;
+        padding: 32px 24px 48px;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: 1.2fr 0.8fr;
+        gap: 24px;
+        align-items: stretch;
+      }
+
+      .hero-card,
+      .resume-card,
+      .decision-card,
+      .strip-card,
+      .panel,
+      .support-card {
+        background: rgba(255, 255, 255, 0.92);
+        border: 1px solid var(--line);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(16px);
+      }
+
+      .hero-card {
+        border-radius: var(--radius-xl);
+        padding: 30px 32px;
+      }
+
+      .hero-topline,
+      .section-tag,
+      .status-badge,
+      .mini-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        border-radius: 999px;
+        padding: 8px 12px;
+        font-size: 13px;
+        line-height: 1;
+      }
+
+      .hero-topline {
+        color: var(--primary);
+        background: var(--primary-soft);
+        font-weight: 700;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+
+      .brand-mark {
+        width: 42px;
+        height: 42px;
+        border-radius: 14px;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(135deg, var(--primary), #7a6dff);
+        color: #fff;
+        box-shadow: 0 14px 30px rgba(91, 75, 255, 0.28);
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      .hero-heading {
+        margin-top: 20px;
+        font-size: 42px;
+        line-height: 1.12;
+        letter-spacing: -0.04em;
+      }
+
+      .hero-copy {
+        max-width: 720px;
+        margin-top: 14px;
+        font-size: 16px;
+        line-height: 1.8;
+        color: var(--muted-strong);
+      }
+
+      .hero-points {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 26px;
+      }
+
+      .mini-badge {
+        color: var(--muted-strong);
+        background: var(--surface-soft);
+        border: 1px solid var(--line);
+        font-weight: 600;
+      }
+
+      .resume-card {
+        border-radius: var(--radius-xl);
+        padding: 28px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+
+      .resume-card .section-tag {
+        width: fit-content;
+        background: var(--warning-soft);
+        color: var(--warning);
+        font-weight: 700;
+      }
+
+      .resume-title {
+        margin-top: 18px;
+        font-size: 24px;
+        line-height: 1.35;
+      }
+
+      .resume-copy {
+        margin-top: 10px;
+        color: var(--muted);
+        line-height: 1.7;
+      }
+
+      .resume-summary {
+        margin-top: 22px;
+        border-radius: var(--radius-lg);
+        padding: 18px;
+        background: var(--surface-soft);
+        border: 1px solid var(--line);
+      }
+
+      .resume-summary strong {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 15px;
+      }
+
+      .resume-actions {
+        display: flex;
+        gap: 12px;
+        margin-top: 22px;
+      }
+
+      .button {
+        border: 0;
+        border-radius: 14px;
+        padding: 12px 18px;
+        cursor: pointer;
+        transition:
+          transform 0.18s ease,
+          box-shadow 0.18s ease,
+          background 0.18s ease,
+          border-color 0.18s ease;
+      }
+
+      .button:hover {
+        transform: translateY(-1px);
+      }
+
+      .button-primary {
+        color: #fff;
+        background: linear-gradient(135deg, var(--primary), #7769ff);
+        box-shadow: 0 16px 30px rgba(91, 75, 255, 0.28);
+      }
+
+      .button-secondary {
+        color: var(--text);
+        background: #fff;
+        border: 1px solid var(--line-strong);
+      }
+
+      .decision-card,
+      .strip-card,
+      .panel,
+      .support-card {
+        border-radius: var(--radius-xl);
+      }
+
+      .decision-card {
+        margin-top: 24px;
+        padding: 24px;
+      }
+
+      .section-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 20px;
+      }
+
+      .section-tag {
+        background: var(--surface-soft);
+        color: var(--muted-strong);
+        border: 1px solid var(--line);
+        font-weight: 700;
+      }
+
+      .section-meta {
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .decision-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+      }
+
+      .lane-card {
+        width: 100%;
+        text-align: left;
+        padding: 24px;
+        border-radius: 22px;
+        border: 1px solid var(--line);
+        background: linear-gradient(180deg, #ffffff 0%, #fafbff 100%);
+        cursor: pointer;
+        transition:
+          border-color 0.18s ease,
+          transform 0.18s ease,
+          box-shadow 0.18s ease,
+          background 0.18s ease;
+      }
+
+      .lane-card:hover {
+        transform: translateY(-2px);
+      }
+
+      .lane-card.is-active {
+        border-color: rgba(91, 75, 255, 0.36);
+        background: linear-gradient(180deg, #f8f6ff 0%, #ffffff 100%);
+        box-shadow: 0 16px 40px rgba(91, 75, 255, 0.14);
+      }
+
+      .lane-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .lane-title {
+        font-size: 24px;
+        font-weight: 800;
+      }
+
+      .lane-copy {
+        margin-top: 14px;
+        color: var(--muted-strong);
+        line-height: 1.75;
+      }
+
+      .lane-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 18px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .status-badge {
+        background: var(--primary-soft);
+        color: var(--primary);
+        font-weight: 700;
+      }
+
+      .status-badge.secondary {
+        background: var(--success-soft);
+        color: var(--success);
+      }
+
+      .helper-banner {
+        margin-top: 16px;
+        border-radius: 18px;
+        border: 1px dashed rgba(91, 75, 255, 0.26);
+        background: rgba(91, 75, 255, 0.06);
+        padding: 14px 16px;
+        color: var(--primary-strong);
+        font-size: 14px;
+        font-weight: 600;
+      }
+
+      .strip-card {
+        margin-top: 24px;
+        padding: 22px 24px;
+      }
+
+      .flow-steps {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .step-card {
+        position: relative;
+        border-radius: 18px;
+        border: 1px solid var(--line);
+        background: var(--surface-soft);
+        padding: 18px 16px;
+        min-height: 108px;
+      }
+
+      .step-card.is-current {
+        border-color: rgba(91, 75, 255, 0.4);
+        background: linear-gradient(180deg, var(--primary-soft) 0%, #ffffff 100%);
+      }
+
+      .step-card.is-future {
+        opacity: 0.72;
+      }
+
+      .step-index {
+        width: 30px;
+        height: 30px;
+        border-radius: 999px;
+        display: grid;
+        place-items: center;
+        background: #fff;
+        border: 1px solid var(--line-strong);
+        color: var(--muted-strong);
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .step-card.is-current .step-index {
+        color: #fff;
+        background: var(--primary);
+        border-color: var(--primary);
+      }
+
+      .step-title {
+        margin-top: 16px;
+        font-size: 17px;
+        font-weight: 700;
+      }
+
+      .step-copy {
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.65;
+      }
+
+      .workspace-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.45fr) minmax(340px, 0.9fr);
+        gap: 24px;
+        margin-top: 24px;
+      }
+
+      .panel {
+        padding: 24px;
+      }
+
+      .workspace-panel {
+        min-height: 620px;
+      }
+
+      .summary-panel {
+        position: sticky;
+        top: 18px;
+        align-self: start;
+      }
+
+      .stack {
+        display: grid;
+        gap: 16px;
+      }
+
+      .choice-block {
+        border-radius: 22px;
+        border: 1px solid var(--line);
+        background: linear-gradient(180deg, #ffffff 0%, #fbfbfe 100%);
+        padding: 20px;
+      }
+
+      .choice-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+      }
+
+      .choice-title {
+        font-size: 20px;
+        font-weight: 800;
+      }
+
+      .choice-copy {
+        margin-top: 8px;
+        color: var(--muted);
+        line-height: 1.7;
+      }
+
+      .chip-row,
+      .scenario-grid,
+      .entry-grid,
+      .history-list {
+        margin-top: 18px;
+      }
+
+      .chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+
+      .choice-chip,
+      .scenario-card,
+      .entry-card,
+      .history-item {
+        border: 1px solid var(--line);
+        background: var(--surface-soft);
+        transition:
+          border-color 0.18s ease,
+          transform 0.18s ease,
+          box-shadow 0.18s ease,
+          background 0.18s ease;
+      }
+
+      .choice-chip {
+        border-radius: 999px;
+        padding: 12px 16px;
+        color: var(--muted-strong);
+        cursor: pointer;
+      }
+
+      .choice-chip.is-active,
+      .scenario-card.is-active,
+      .entry-card.is-active {
+        border-color: rgba(91, 75, 255, 0.36);
+        background: var(--primary-soft);
+        color: var(--primary-strong);
+        box-shadow: 0 12px 24px rgba(91, 75, 255, 0.1);
+      }
+
+      .scenario-grid,
+      .entry-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .scenario-card,
+      .entry-card {
+        width: 100%;
+        text-align: left;
+        border-radius: 18px;
+        padding: 18px;
+        cursor: pointer;
+      }
+
+      .card-title {
+        font-size: 16px;
+        font-weight: 800;
+      }
+
+      .card-copy {
+        margin-top: 8px;
+        color: var(--muted);
+        line-height: 1.6;
+        font-size: 14px;
+      }
+
+      .inline-input,
+      .dropzone {
+        margin-top: 18px;
+        border-radius: 18px;
+        border: 1px solid var(--line);
+        background: #fff;
+      }
+
+      .inline-input {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 12px;
+        padding: 12px;
+      }
+
+      .inline-input input {
+        width: 100%;
+        border: 0;
+        outline: 0;
+        background: transparent;
+        color: var(--text);
+      }
+
+      .dropzone {
+        padding: 24px;
+        border-style: dashed;
+        background: linear-gradient(180deg, #fafaff 0%, #ffffff 100%);
+      }
+
+      .dropzone strong,
+      .preview-card strong,
+      .summary-block strong,
+      .history-item strong {
+        display: block;
+      }
+
+      .dropzone-copy,
+      .preview-copy {
+        margin-top: 8px;
+        color: var(--muted);
+        line-height: 1.7;
+      }
+
+      .preview-card {
+        margin-top: 18px;
+        border-radius: 18px;
+        padding: 18px;
+        background: var(--surface-soft);
+        border: 1px solid var(--line);
+      }
+
+      .summary-panel .section-head {
+        margin-bottom: 16px;
+      }
+
+      .summary-block {
+        border-radius: 18px;
+        padding: 18px;
+        background: var(--surface-soft);
+        border: 1px solid var(--line);
+      }
+
+      .summary-grid {
+        display: grid;
+        gap: 12px;
+        margin-top: 16px;
+      }
+
+      .summary-line {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+      }
+
+      .summary-label {
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .summary-value {
+        text-align: right;
+        font-weight: 700;
+        color: var(--text);
+      }
+
+      .summary-next {
+        margin-top: 14px;
+        padding-top: 14px;
+        border-top: 1px dashed var(--line-strong);
+        color: var(--muted-strong);
+        line-height: 1.7;
+      }
+
+      .summary-actions {
+        display: grid;
+        gap: 12px;
+        margin-top: 16px;
+      }
+
+      .support-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 24px;
+        margin-top: 24px;
+      }
+
+      .support-card {
+        padding: 24px;
+      }
+
+      .history-list {
+        display: grid;
+        gap: 12px;
+      }
+
+      .history-item {
+        border-radius: 18px;
+        padding: 16px;
+        background: #fff;
+      }
+
+      .history-copy {
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.65;
+      }
+
+      .history-meta {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        margin-top: 12px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .footer-note {
+        margin-top: 24px;
+        text-align: center;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      @media (max-width: 1100px) {
+        .hero,
+        .workspace-grid,
+        .support-grid,
+        .scenario-grid,
+        .entry-grid,
+        .flow-steps {
+          grid-template-columns: 1fr;
+        }
+
+        .summary-panel {
+          position: static;
+        }
+      }
+
+      @media (max-width: 760px) {
+        .app-shell {
+          padding: 20px 16px 36px;
+        }
+
+        .hero-heading {
+          font-size: 32px;
+        }
+
+        .decision-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .inline-input {
+          grid-template-columns: 1fr;
+        }
+
+        .resume-actions {
+          flex-direction: column;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-shell">
+      <section class="hero">
+        <article class="hero-card">
+          <div class="brand">
+            <div class="brand-mark" aria-hidden="true">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M7 18V6m0 0 5 3m-5-3-3 2m8 1v6m0-6 5-3m-5 9 5 3"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </div>
+            <div>
+              <span class="hero-topline">墨言博客助手 · Hub 首页流程稿</span>
+            </div>
+          </div>
+          <h1 class="hero-heading">从资料到博客，从博客到复习，把知识变成可输出的成果</h1>
+          <p class="hero-copy">
+            这个首页不再把所有功能平铺给用户，而是先帮助用户判断现在要做什么，再把下一步需要完成的动作收敛成一个清晰的流程工作台。
+          </p>
+          <div class="hero-points">
+            <span class="mini-badge">先做选择，再看流程</span>
+            <span class="mini-badge">一次只展开一个主任务</span>
+            <span class="mini-badge">右侧始终告诉你下一步</span>
+          </div>
+        </article>
+
+        <aside class="resume-card">
+          <span class="section-tag">继续上次任务</span>
+          <div>
+            <h2 class="resume-title">InkWords 内容生成平台架构解析系列</h2>
+            <p class="resume-copy">上次停留在「选择写作场景」之前。现在可以直接继续生成，也可以切换到知识复习把最近导出的内容重新讲一遍。</p>
+            <div class="resume-summary">
+              <strong>当前建议</strong>
+              先继续完成博客生成，再从最近导出的知识卡中抽一篇做复习，形成「生成 -> 内化」的闭环。
+            </div>
+          </div>
+          <div class="resume-actions">
+            <button class="button button-primary" type="button">继续生成</button>
+            <button class="button button-secondary" type="button">改做知识复习</button>
+          </div>
+        </aside>
+      </section>
+
+      <section class="decision-card">
+        <div class="section-head">
+          <div>
+            <span class="section-tag">决策中心</span>
+            <h2 style="margin-top: 12px; font-size: 28px">今天你想先完成哪一种任务？</h2>
+          </div>
+          <p class="section-meta">默认推荐从博客生成开始，知识复习作为后续内化路径。</p>
+        </div>
+        <div class="decision-grid" id="decision-lanes"></div>
+        <div class="helper-banner" id="helper-banner"></div>
+      </section>
+
+      <section class="strip-card">
+        <div class="section-head">
+          <div>
+            <span class="section-tag">流程预览</span>
+            <h2 style="margin-top: 12px; font-size: 24px" id="flow-heading">生成博客流程</h2>
+          </div>
+          <p class="section-meta" id="flow-meta">用四个轻量步骤告诉用户：现在在哪一步，接下来会发生什么。</p>
+        </div>
+        <div class="flow-steps" id="flow-steps"></div>
+      </section>
+
+      <main class="workspace-grid">
+        <section class="panel workspace-panel">
+          <div class="section-head">
+            <div>
+              <span class="section-tag">当前工作台</span>
+              <h2 style="margin-top: 12px; font-size: 28px" id="workspace-heading">生成博客</h2>
+            </div>
+            <p class="section-meta" id="workspace-meta">一次只展开一个工作流，让用户只看与当前任务相关的内容。</p>
+          </div>
+          <div id="workspace-content"></div>
+        </section>
+
+        <aside class="panel summary-panel">
+          <div class="section-head">
+            <div>
+              <span class="section-tag">任务摘要</span>
+              <h2 style="margin-top: 12px; font-size: 24px">你已经做出的选择</h2>
+            </div>
+          </div>
+          <div id="summary-content"></div>
+        </aside>
+      </main>
+
+      <section class="support-grid">
+        <article class="support-card">
+          <div class="section-head">
+            <div>
+              <span class="section-tag">最近项目</span>
+              <h2 style="margin-top: 12px; font-size: 24px">博客生成记录</h2>
+            </div>
+          </div>
+          <div class="history-list">
+            <div class="history-item">
+              <strong>muduo 网络库源码深度解析系列</strong>
+              <p class="history-copy">已完成项目解析，等待确认最终创作场景后开始批量生成系列文章。</p>
+              <div class="history-meta">
+                <span>状态：待生成</span>
+                <span>动作：继续处理</span>
+              </div>
+            </div>
+            <div class="history-item">
+              <strong>DevSecOps 工程与自动化系列教程</strong>
+              <p class="history-copy">已生成首篇大纲和两篇正文草稿，适合继续沿用当前结构扩写。</p>
+              <div class="history-meta">
+                <span>状态：进行中</span>
+                <span>动作：继续生成</span>
+              </div>
+            </div>
+            <div class="history-item">
+              <strong>《孙子兵法》深度解析系列</strong>
+              <p class="history-copy">导出到 Obsidian 完成，可以作为知识复习的后续素材来源。</p>
+              <div class="history-meta">
+                <span>状态：已导出</span>
+                <span>动作：去复习</span>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article class="support-card">
+          <div class="section-head">
+            <div>
+              <span class="section-tag">最近复习记录</span>
+              <h2 style="margin-top: 12px; font-size: 24px">知识内化进度</h2>
+            </div>
+          </div>
+          <div class="history-list">
+            <div class="history-item">
+              <strong>并发控制与速率限制</strong>
+              <p class="history-copy">本次采用轻提示复述，主线讲清楚了，但还可以补上限流与 goroutine 池的关系。</p>
+              <div class="history-meta">
+                <span>模式：轻提示复述</span>
+                <span>动作：再练一次</span>
+              </div>
+            </div>
+            <div class="history-item">
+              <strong>前后端流式通信实现：SSE 与事件源</strong>
+              <p class="history-copy">已经抓住交互主线，下一次更适合用细致提问确认边界与异常处理。</p>
+              <div class="history-meta">
+                <span>模式：细致提问</span>
+                <span>动作：继续深入</span>
+              </div>
+            </div>
+            <div class="history-item">
+              <strong>项目整体架构与设计理念</strong>
+              <p class="history-copy">最近一周未复习，适合在完成当前博客生成后回到这篇内容做一次迁移式复盘。</p>
+              <div class="history-meta">
+                <span>模式：待开始</span>
+                <span>动作：安排今日复习</span>
+              </div>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <div class="footer-note">这是一个用于产品方向确认的独立 HTML 流程稿，重点验证首页的层级、路径和交互节奏。</div>
+    </div>
+
+    <script>
+      const lanes = [
+        {
+          key: "blog",
+          badge: "推荐",
+          title: "生成博客",
+          copy: "从 GitHub 仓库或本地文档开始，先完成资料解析，再选择写作场景，最后进入生成。",
+          footer: "更适合第一次进入系统时使用",
+          helper: "推荐先从博客生成开始，再进入知识复习做内化。",
+        },
+        {
+          key: "review",
+          badge: "复习路径",
+          badgeClass: "secondary",
+          title: "知识复习",
+          copy: "从知识库中抽取重点内容，先做入口选择，再进入复述或追问训练，最后获得反馈总结。",
+          footer: "更适合导出知识卡之后继续使用",
+          helper: "当内容已经沉淀到知识库时，可以直接进入复习，把知识从存档变成能力。",
+        },
+      ]
+
+      const flowSteps = {
+        blog: [
+          {
+            title: "选择来源",
+            copy: "先告诉系统这次是来自 GitHub 仓库还是本地文档。",
+          },
+          {
+            title: "完成解析",
+            copy: "确认扫描或解析入口，让系统知道要处理哪些内容。",
+          },
+          {
+            title: "选择写作场景",
+            copy: "根据目标读者和输出风格，决定最适合的创作方式。",
+          },
+          {
+            title: "开始生成",
+            copy: "带着当前选择进入生成链路，只保留一个明确主动作。",
+          },
+        ],
+        review: [
+          {
+            title: "选择入口",
+            copy: "决定从今日推荐、随机抽题还是手动选文开始。",
+          },
+          {
+            title: "选择模式",
+            copy: "先决定这次是轻提示复述，还是更深入的细致提问。",
+          },
+          {
+            title: "开始复述",
+            copy: "先说出你理解的主线，系统再逐步给提示和追问。",
+          },
+          {
+            title: "查看反馈",
+            copy: "最后收敛到你已经掌握、仍然欠缺和下次应补的重点。",
+          },
+        ],
+      }
+
+      const blogSourceMeta = {
+        github: {
+          title: "GitHub 仓库",
+          previewTitle: "仓库解析入口",
+          previewCopy: "适合解析开源项目、官方教程仓库或你的私有学习项目，重点保留目录、代码结构和实现脉络。",
+          inputPlaceholder: "https://github.com/user/repo",
+          ctaLabel: "扫描目录",
+          output: "项目解析 + 可选系列博客草稿",
+        },
+        local: {
+          title: "本地文档",
+          previewTitle: "文档解析入口",
+          previewCopy: "适合 PDF、DOCX、Markdown、TXT 或 ZIP 包，先统一提取正文，再根据目标场景组织表达方式。",
+          output: "文档解读 + 小白友好博客草稿",
+        },
+      }
+
+      const blogScenarioMeta = {
+        guide: {
+          title: "小白教程",
+          copy: "突出环境准备、主线路径和排错说明，更适合让读者真正复现。",
+          output: "步骤清晰的教程型文章",
+        },
+        ebook: {
+          title: "电子书解读",
+          copy: "适合章节拆解、观点提炼和连续阅读，帮助内容更适合长期沉淀。",
+          output: "结构化的章节解读",
+        },
+        unpack: {
+          title: "开箱复习",
+          copy: "适合课程、项目和知识点速查，用较强的框架感帮助用户快速回顾。",
+          output: "更偏总结与复盘的文章",
+        },
+      }
+
+      const reviewEntryMeta = {
+        today: {
+          title: "今日推荐",
+          copy: "由系统根据最近导入和最近复习情况，给出一个今天最值得练的主题。",
+          previewTitle: "并发控制与速率限制",
+          previewCopy: "这是你最近导入但还没系统复述过的一篇内容，适合先用自己的话讲一遍。",
+          estimate: "约 5 分钟",
+        },
+        random: {
+          title: "随机抽一篇",
+          copy: "适合快速进入状态，弱化挑选成本，保持知识漫游的轻启动感。",
+          previewTitle: "前后端流式通信实现：SSE 与事件源",
+          previewCopy: "你已经看过这篇内容，但最近没有再讲出来，适合重新验证理解链路。",
+          estimate: "约 6 分钟",
+        },
+        manual: {
+          title: "手动选择文章",
+          copy: "当你已经知道要复习哪个主题时，直接进入最想补强的那篇内容。",
+          previewTitle: "项目整体架构与设计理念",
+          previewCopy: "适合做迁移式复盘，把之前写过的系列重新压缩成自己的表达框架。",
+          estimate: "约 8 分钟",
+        },
+      }
+
+      const reviewModeMeta = {
+        light: {
+          title: "轻提示复述",
+          copy: "压力更低，先让用户主动讲，再逐步补提示。",
+          next: "先说出主线，再按提示补细节。",
+        },
+        detailed: {
+          title: "细致提问",
+          copy: "更适合做主旨、细节、迁移三轮确认，帮助理解更完整。",
+          next: "进入三轮提问，逐步检查理解深度。",
+        },
+      }
+
+      const state = {
+        activeFlow: "blog",
+        blog: {
+          source: "github",
+          scenario: "guide",
+          repoUrl: "https://github.com/inkwords/inkwords",
+        },
+        review: {
+          entry: "today",
+          mode: "light",
+        },
+      }
+
+      const decisionRoot = document.getElementById("decision-lanes")
+      const helperBanner = document.getElementById("helper-banner")
+      const flowHeading = document.getElementById("flow-heading")
+      const flowMeta = document.getElementById("flow-meta")
+      const flowStepsRoot = document.getElementById("flow-steps")
+      const workspaceHeading = document.getElementById("workspace-heading")
+      const workspaceMeta = document.getElementById("workspace-meta")
+      const workspaceContent = document.getElementById("workspace-content")
+      const summaryContent = document.getElementById("summary-content")
+
+      function renderDecisionLanes() {
+        decisionRoot.innerHTML = lanes
+          .map((lane) => {
+            const activeClass = lane.key === state.activeFlow ? "is-active" : ""
+            const badgeClass = lane.badgeClass ? ` ${lane.badgeClass}` : ""
+            return `
+              <button class="lane-card ${activeClass}" type="button" data-flow="${lane.key}">
+                <div class="lane-top">
+                  <span class="lane-title">${lane.title}</span>
+                  <span class="status-badge${badgeClass}">${lane.badge}</span>
+                </div>
+                <p class="lane-copy">${lane.copy}</p>
+                <div class="lane-footer">
+                  <span>${lane.footer}</span>
+                  <span>${lane.key === state.activeFlow ? "当前已选" : "点击切换"}</span>
+                </div>
+              </button>
+            `
+          })
+          .join("")
+
+        helperBanner.textContent = lanes.find((lane) => lane.key === state.activeFlow).helper
+
+        decisionRoot.querySelectorAll("[data-flow]").forEach((button) => {
+          button.addEventListener("click", () => {
+            state.activeFlow = button.dataset.flow
+            render()
+          })
+        })
+      }
+
+      function renderFlowSteps() {
+        const isBlog = state.activeFlow === "blog"
+        flowHeading.textContent = isBlog ? "生成博客流程" : "知识复习流程"
+        flowMeta.textContent = isBlog
+          ? "先决定来源，再组织输出场景，最后给出唯一明确的生成动作。"
+          : "先选择入口和训练方式，再进入复述与反馈闭环。"
+
+        flowStepsRoot.innerHTML = flowSteps[state.activeFlow]
+          .map((step, index) => {
+            const classes = index === 0 ? "step-card is-current" : "step-card is-future"
+            return `
+              <article class="${classes}">
+                <div class="step-index">${index + 1}</div>
+                <h3 class="step-title">${step.title}</h3>
+                <p class="step-copy">${step.copy}</p>
+              </article>
+            `
+          })
+          .join("")
+      }
+
+      function renderBlogWorkspace() {
+        const sourceMeta = blogSourceMeta[state.blog.source]
+        const scenarioCards = Object.entries(blogScenarioMeta)
+          .map(([key, item]) => {
+            const activeClass = state.blog.scenario === key ? "is-active" : ""
+            return `
+              <button class="scenario-card ${activeClass}" type="button" data-scenario="${key}">
+                <div class="card-title">${item.title}</div>
+                <p class="card-copy">${item.copy}</p>
+              </button>
+            `
+          })
+          .join("")
+
+        return `
+          <div class="stack">
+            <section class="choice-block">
+              <div class="choice-head">
+                <div>
+                  <h3 class="choice-title">选择内容来源</h3>
+                  <p class="choice-copy">先决定这次的起点是什么，系统会根据来源类型调整后续交互和预期产物。</p>
+                </div>
+                <span class="section-tag">第一步</span>
+              </div>
+              <div class="chip-row">
+                <button class="choice-chip ${state.blog.source === "github" ? "is-active" : ""}" type="button" data-source="github">GitHub 仓库</button>
+                <button class="choice-chip ${state.blog.source === "local" ? "is-active" : ""}" type="button" data-source="local">本地文档</button>
+              </div>
+              ${
+                state.blog.source === "github"
+                  ? `
+                    <div class="inline-input">
+                      <input id="repo-input" type="text" value="${state.blog.repoUrl}" aria-label="仓库地址" />
+                      <button class="button button-primary" type="button">${sourceMeta.ctaLabel}</button>
+                    </div>
+                  `
+                  : `
+                    <div class="dropzone">
+                      <strong>${sourceMeta.previewTitle}</strong>
+                      <p class="dropzone-copy">拖拽 PDF、DOCX、Markdown、TXT 或 ZIP 文件到这里，先做统一解析，再进入创作目标选择。</p>
+                    </div>
+                  `
+              }
+              <div class="preview-card">
+                <strong>${sourceMeta.previewTitle}</strong>
+                <p class="preview-copy">${sourceMeta.previewCopy}</p>
+              </div>
+            </section>
+
+            <section class="choice-block">
+              <div class="choice-head">
+                <div>
+                  <h3 class="choice-title">选择写作场景</h3>
+                  <p class="choice-copy">让系统知道这次的目标读者和内容节奏，避免一开始就把所有创作模式平铺出来。</p>
+                </div>
+                <span class="section-tag">第二步</span>
+              </div>
+              <div class="scenario-grid">${scenarioCards}</div>
+            </section>
+
+            <section class="choice-block">
+              <div class="choice-head">
+                <div>
+                  <h3 class="choice-title">准备开始</h3>
+                  <p class="choice-copy">现在已经完成路径选择，下一步只保留一个主动作，减少用户犹豫。</p>
+                </div>
+                <span class="section-tag">第三步</span>
+              </div>
+              <div class="preview-card">
+                <strong>当前组合</strong>
+                <p class="preview-copy">你已选择「${sourceMeta.title} + ${blogScenarioMeta[state.blog.scenario].title}」，系统将先做资料解析，再按目标场景组织结构和语言风格。</p>
+              </div>
+            </section>
+          </div>
+        `
+      }
+
+      function renderReviewWorkspace() {
+        const entryCards = Object.entries(reviewEntryMeta)
+          .map(([key, item]) => {
+            const activeClass = state.review.entry === key ? "is-active" : ""
+            return `
+              <button class="entry-card ${activeClass}" type="button" data-entry="${key}">
+                <div class="card-title">${item.title}</div>
+                <p class="card-copy">${item.copy}</p>
+              </button>
+            `
+          })
+          .join("")
+
+        const entryMeta = reviewEntryMeta[state.review.entry]
+
+        return `
+          <div class="stack">
+            <section class="choice-block">
+              <div class="choice-head">
+                <div>
+                  <h3 class="choice-title">选择复习入口</h3>
+                  <p class="choice-copy">先决定这次从哪里开始，帮助用户快速进入状态，而不是一开始就看到全部复习模块。</p>
+                </div>
+                <span class="section-tag">第一步</span>
+              </div>
+              <div class="entry-grid">${entryCards}</div>
+            </section>
+
+            <section class="choice-block">
+              <div class="choice-head">
+                <div>
+                  <h3 class="choice-title">选择复习方式</h3>
+                  <p class="choice-copy">让用户清楚知道这次是轻量复述还是深度追问，避免流程目标模糊。</p>
+                </div>
+                <span class="section-tag">第二步</span>
+              </div>
+              <div class="chip-row">
+                <button class="choice-chip ${state.review.mode === "light" ? "is-active" : ""}" type="button" data-mode="light">轻提示复述</button>
+                <button class="choice-chip ${state.review.mode === "detailed" ? "is-active" : ""}" type="button" data-mode="detailed">细致提问</button>
+              </div>
+              <div class="preview-card">
+                <strong>${entryMeta.previewTitle}</strong>
+                <p class="preview-copy">${entryMeta.previewCopy}</p>
+              </div>
+            </section>
+
+            <section class="choice-block">
+              <div class="choice-head">
+                <div>
+                  <h3 class="choice-title">准备开始</h3>
+                  <p class="choice-copy">先确认入口和训练方式，再让系统把用户推进到一个明确的复习动作中。</p>
+                </div>
+                <span class="section-tag">第三步</span>
+              </div>
+              <div class="preview-card">
+                <strong>当前组合</strong>
+                <p class="preview-copy">你将从「${entryMeta.title}」进入，采用「${reviewModeMeta[state.review.mode].title}」模式，先输出自己的理解，再获取补盲反馈。</p>
+              </div>
+            </section>
+          </div>
+        `
+      }
+
+      function renderWorkspace() {
+        const isBlog = state.activeFlow === "blog"
+        workspaceHeading.textContent = isBlog ? "生成博客" : "知识复习"
+        workspaceMeta.textContent = isBlog
+          ? "左侧负责做决策，右侧负责告诉用户：你已经选了什么、接下来该做什么。"
+          : "复习工作台保留入口选择、模式选择和开始动作，避免一进来就出现过多信息。"
+
+        workspaceContent.innerHTML = isBlog ? renderBlogWorkspace() : renderReviewWorkspace()
+
+        workspaceContent.querySelectorAll("[data-source]").forEach((button) => {
+          button.addEventListener("click", () => {
+            state.blog.source = button.dataset.source
+            render()
+          })
+        })
+
+        const repoInput = workspaceContent.querySelector("#repo-input")
+        if (repoInput) {
+          repoInput.addEventListener("input", (event) => {
+            state.blog.repoUrl = event.target.value
+            renderSummary()
+          })
+        }
+
+        workspaceContent.querySelectorAll("[data-scenario]").forEach((button) => {
+          button.addEventListener("click", () => {
+            state.blog.scenario = button.dataset.scenario
+            render()
+          })
+        })
+
+        workspaceContent.querySelectorAll("[data-entry]").forEach((button) => {
+          button.addEventListener("click", () => {
+            state.review.entry = button.dataset.entry
+            render()
+          })
+        })
+
+        workspaceContent.querySelectorAll("[data-mode]").forEach((button) => {
+          button.addEventListener("click", () => {
+            state.review.mode = button.dataset.mode
+            render()
+          })
+        })
+      }
+
+      function renderSummary() {
+        if (state.activeFlow === "blog") {
+          const sourceMeta = blogSourceMeta[state.blog.source]
+          const scenarioMeta = blogScenarioMeta[state.blog.scenario]
+          summaryContent.innerHTML = `
+            <div class="summary-block">
+              <strong>本次任务摘要</strong>
+              <div class="summary-grid">
+                <div class="summary-line">
+                  <span class="summary-label">主路径</span>
+                  <span class="summary-value">生成博客</span>
+                </div>
+                <div class="summary-line">
+                  <span class="summary-label">内容来源</span>
+                  <span class="summary-value">${sourceMeta.title}</span>
+                </div>
+                <div class="summary-line">
+                  <span class="summary-label">创作场景</span>
+                  <span class="summary-value">${scenarioMeta.title}</span>
+                </div>
+                <div class="summary-line">
+                  <span class="summary-label">预计输出</span>
+                  <span class="summary-value">${scenarioMeta.output}</span>
+                </div>
+              </div>
+              <div class="summary-next">
+                下一步：先完成 ${sourceMeta.title} 的解析入口，再根据「${scenarioMeta.title}」组织文章结构，让用户只面对一个明确动作。
+              </div>
+            </div>
+            <div class="summary-block" style="margin-top: 14px;">
+              <strong>当前输入</strong>
+              <div class="summary-next" style="margin-top: 10px; padding-top: 0; border-top: 0;">
+                ${
+                  state.blog.source === "github"
+                    ? `仓库地址：${state.blog.repoUrl || "请填写仓库地址"}`
+                    : "文件入口：等待拖拽本地文档后进入解析"
+                }
+              </div>
+            </div>
+            <div class="summary-actions">
+              <button class="button button-primary" type="button">开始解析并生成</button>
+              <button class="button button-secondary" type="button">切换到知识复习</button>
+            </div>
+          `
+        } else {
+          const entryMeta = reviewEntryMeta[state.review.entry]
+          const modeMeta = reviewModeMeta[state.review.mode]
+          summaryContent.innerHTML = `
+            <div class="summary-block">
+              <strong>本次复习摘要</strong>
+              <div class="summary-grid">
+                <div class="summary-line">
+                  <span class="summary-label">主路径</span>
+                  <span class="summary-value">知识复习</span>
+                </div>
+                <div class="summary-line">
+                  <span class="summary-label">开始方式</span>
+                  <span class="summary-value">${entryMeta.title}</span>
+                </div>
+                <div class="summary-line">
+                  <span class="summary-label">训练模式</span>
+                  <span class="summary-value">${modeMeta.title}</span>
+                </div>
+                <div class="summary-line">
+                  <span class="summary-label">预计耗时</span>
+                  <span class="summary-value">${entryMeta.estimate}</span>
+                </div>
+              </div>
+              <div class="summary-next">
+                下一步：${modeMeta.next} 当前推荐主题为「${entryMeta.previewTitle}」，让用户先输出，再逐步获得提示和反馈。
+              </div>
+            </div>
+            <div class="summary-block" style="margin-top: 14px;">
+              <strong>当前主题预览</strong>
+              <div class="summary-next" style="margin-top: 10px; padding-top: 0; border-top: 0;">
+                ${entryMeta.previewCopy}
+              </div>
+            </div>
+            <div class="summary-actions">
+              <button class="button button-primary" type="button">开始本次复习</button>
+              <button class="button button-secondary" type="button">切换到生成博客</button>
+            </div>
+          `
+        }
+      }
+
+      function render() {
+        renderDecisionLanes()
+        renderFlowSteps()
+        renderWorkspace()
+        renderSummary()
+      }
+
+      render()
+    </script>
+  </body>
+</html>

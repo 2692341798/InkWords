@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useBlogStore } from '@/store/blogStore'
 import { Sidebar } from '@/components/Sidebar'
+import { HomeEntry } from '@/pages/HomeEntry'
 import { Generator } from '@/pages/Generator'
 import { Editor } from '@/pages/Editor'
 import { Login } from '@/pages/Login'
@@ -36,6 +37,8 @@ function App() {
       <Sidebar />
       {selectedBlog ? (
         <Editor key={selectedBlog.id} />
+      ) : currentView === 'home-entry' ? (
+        <HomeEntry />
       ) : currentView === 'dashboard' ? (
         <Dashboard />
       ) : currentView === 'knowledge-review' ? (

@@ -12,6 +12,7 @@ interface ReviewSessionCardProps {
   onRespond: (answer: string) => Promise<void> | void
   onRequestHint: () => Promise<void> | void
   onFinish: () => Promise<void> | void
+  onClose?: () => void
 }
 
 const modeLabels: Record<ReviewMode, string> = {
@@ -29,6 +30,7 @@ export function ReviewSessionCard({
   onRespond,
   onRequestHint,
   onFinish,
+  onClose,
 }: ReviewSessionCardProps) {
   const [answer, setAnswer] = useState('')
 
@@ -71,6 +73,11 @@ export function ReviewSessionCard({
           <Button variant={selectedMode === 'detailed_qa' ? 'default' : 'outline'} onClick={() => onModeChange('detailed_qa')}>
             细致提问
           </Button>
+          {onClose ? (
+            <Button variant="outline" onClick={onClose}>
+              返回入口
+            </Button>
+          ) : null}
         </div>
       </div>
 

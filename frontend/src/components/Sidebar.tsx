@@ -297,11 +297,11 @@ export function Sidebar() {
             if (streamStore.isGenerating || streamStore.isAnalyzing) {
               if (window.confirm('当前有任务正在执行，确定要终止并开启新工作区吗？')) {
                 streamStore.reset()
-                setCurrentView('generator')
+                setCurrentView('home-entry')
               }
             } else {
               streamStore.reset()
-              setCurrentView('generator')
+              setCurrentView('home-entry')
             }
           }}
         >
