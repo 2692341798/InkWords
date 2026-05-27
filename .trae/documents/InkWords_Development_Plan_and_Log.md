@@ -1,4 +1,4 @@
-# 墨言博客助手 (InkWords) - 开发计划与日志
+# 墨言知识训练平台 (InkWords Trainer) - 开发计划与日志
 > **目标**：跟踪项目的核心开发模块、里程碑进度以及每日开发记录。
 
 ## 1. 里程碑划分 (Milestones)
@@ -146,7 +146,7 @@
   - `cd backend && go test ./internal/service ./internal/domain/stream ./internal/transport/http/v1/api -v` 通过
   - `cd frontend && npm test -- src/lib/scenarioMode.test.ts` 通过
   - `docker compose down && docker compose up -d --build` 完成，`docker compose ps` 显示 `frontend/backend/db/redis/obsidian-bridge` 均已启动
-  - `curl -I http://localhost` 返回 `HTTP/1.1 200 OK`，首页标题为“墨言博客助手”
+  - `curl -I http://localhost` 返回 `HTTP/1.1 200 OK`，首页标题为“墨言知识训练平台”
 
 ### [2026-05-21] Fix - Obsidian Docker 开发态证书兜底修复
 - **开发模块**: [Docker Compose, Obsidian REST Store, Docs-as-Code]
@@ -713,7 +713,7 @@
 
 ### [2026-04-04] 新增“新建博客 / 返回首页”全局交互按钮
 - **完成事项**：
-  - 修改了 `frontend/src/components/Sidebar.tsx`，在左侧边栏顶部“墨言博客助手”Logo下方，增加了一个醒目的“新建博客 / 返回首页”主按钮。
+  - 修改了 `frontend/src/components/Sidebar.tsx`，在左侧边栏顶部“墨言知识训练平台”Logo下方，增加了一个醒目的“新建博客 / 返回首页”主按钮。
   - 通过调用 `selectBlog(null)`，实现了在浏览/编辑历史博客时，随时可以清空当前选中状态，回到 `<Generator />` 首页继续新建或生成下一篇博客的交互闭环。
 - **技术坑点与调整**：
   - 之前因为缺乏全局入口，用户在点击进入单篇博客（`<Editor />`）后，如果不再使用“新建任务”面板，就没有入口返回到生成首页。通过在 Sidebar 添加常驻操作按钮，统一了返回首页和新建任务的心智模型。
