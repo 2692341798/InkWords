@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -10,6 +12,7 @@ import (
 	authdomain "inkwords-backend/internal/domain/auth"
 	blogdomain "inkwords-backend/internal/domain/blog"
 	projectdomain "inkwords-backend/internal/domain/project"
+	reviewdomain "inkwords-backend/internal/domain/review"
 	streamdomain "inkwords-backend/internal/domain/stream"
 	userdomain "inkwords-backend/internal/domain/user"
 	"inkwords-backend/internal/infra/cache"
@@ -89,6 +92,11 @@ func main() {
 	projectDomainService := projectdomain.NewService(decompositionService, gitFetcher, docParser, userService)
 	projectDomainHandler := projectdomain.NewHandler(projectDomainService)
 
+	reviewRepo := reviewdomain.NewGormRepository(db.DB)
+	reviewNoteSource := buildReviewNoteSource()
+	reviewDomainService := reviewdomain.NewService(reviewRepo, reviewNoteSource)
+	reviewDomainHandler := reviewdomain.NewHandler(reviewDomainService)
+
 	authAPI := api.NewAuthAPIWithDeps(authDomainHandler)
 	userAPI := api.NewUserAPIWithDeps(userService, userDomainHandler)
 	streamAPI := api.NewStreamAPIWithDeps(generatorService, decompositionService, userService, streamDomainHandler)
@@ -134,6 +142,17 @@ func main() {
 			AnalyzeStreamHandler:  streamAPI.AnalyzeStreamHandler,
 			GenerateStreamHandler: streamAPI.GenerateBlogStreamHandler,
 		},
+		Review: transportv1.ReviewHandlers{
+			GetTodayCard:  reviewDomainHandler.GetTodayCard,
+			GetHistory:    reviewDomainHandler.GetHistory,
+			PickRandom:    reviewDomainHandler.PickRandom,
+			ListNotes:     reviewDomainHandler.ListNotes,
+			CreateSession: reviewDomainHandler.CreateSession,
+			GetSession:    reviewDomainHandler.GetSession,
+			Respond:       reviewDomainHandler.Respond,
+			RequestHint:   reviewDomainHandler.RequestHint,
+			Finish:        reviewDomainHandler.Finish,
+		},
 	})
 
 	// 启动服务，默认监听 8080 端口
@@ -141,4 +160,27 @@ func main() {
 	if err := r.Run(":8080"); err != nil {
 		log.Fatalf("Server startup failed: %v", err)
 	}
+}
+
+type unavailableReviewNoteSource struct {
+	err error
+}
+
+func (s unavailableReviewNoteSource) ListEligibleNotes(context.Context) ([]reviewdomain.ReviewNote, error) {
+	return nil, s.err
+}
+
+func buildReviewNoteSource() reviewdomain.NoteSource {
+	store, err := service.NewObsidianStoreFromEnv()
+	if err != nil {
+		log.Printf("Review note source initialization failed: %v", err)
+		return unavailableReviewNoteSource{err: err}
+	}
+
+	rootDir := strings.TrimSpace(os.Getenv("OBSIDIAN_WIKI_DIR"))
+	if rootDir == "" {
+		rootDir = "wiki"
+	}
+
+	return reviewdomain.NewReviewNoteSource(store, rootDir)
 }

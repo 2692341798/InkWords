@@ -1,6 +1,7 @@
 # 墨言博客助手 (InkWords) - 数据库设计文档
 
 ## 0. 变更记录
+- 2026-05-27：为“知识漫游复习”新增 `review_sessions`、`review_turns` 两张表，并接入后端启动时的 GORM `AutoMigrate`，用于持久化复习会话主记录与轮次记录。
 - 2026-05-25：修复 AI 思考/对话式前言混入正文的问题；通过后端流式正文清洗和前端正文应用前兜底清洗，确保写入 `blogs.content` 的 Markdown 不再包含 `<think>` 标签或“收到你的需求 / 作为高级全栈架构师”等开头套话（无表结构变更）。
 - 2026-05-25：将本地文档上传上限提升至 888MB；仅调整网关、前端与应用层上传阈值，不涉及数据库表结构变更。
 - 2026-05-25：修复前端 `scenario_mode` 的场景锁定与展示一致性问题；仅调整前端状态管理与交互约束，不涉及数据库表结构、字段或写入时机变更。
@@ -79,12 +80,65 @@
 | `created_at` | TIMESTAMP | | 创建时间 |
 | `updated_at` | TIMESTAMP | | 更新时间 |
 
+### 2.4 复习会话表 (`review_sessions`)
+存储一次“知识漫游复习”训练的主记录与最终反馈快照。
+
+| 字段名 | 数据类型 | 约束/索引 | 描述 |
+| ------ | -------- | --------- | ---- |
+| `id` | UUID | Primary Key | 复习会话唯一标识 |
+| `user_id` | UUID | Index | 关联 `users.id` |
+| `note_path` | TEXT | Not Null, Index | 对应 Obsidian `concept` 笔记路径 |
+| `note_title` | VARCHAR(255) | Not Null | 复习笔记标题 |
+| `source_title` | VARCHAR(255) | Nullable | 所属来源或系列标题 |
+| `entry_type` | VARCHAR(32) | Not Null | 进入方式 (`today` / `manual_random` / `manual_select`) |
+| `mode` | VARCHAR(32) | Not Null | 训练模式 (`light_recall` / `detailed_qa`) |
+| `status` | VARCHAR(32) | Not Null, Index | 会话状态 (`created` / `in_progress` / `completed` / `abandoned`) |
+| `review_reason` | TEXT | Nullable | 推荐理由 |
+| `estimated_minutes` | INTEGER | Default 0 | 预估训练耗时（分钟） |
+| `content_digest` | TEXT | Nullable | 训练快照摘要或正文摘要 |
+| `summary_snapshot` | TEXT | Nullable | 会话创建时保存的摘要快照 |
+| `key_points_snapshot` | JSONB | Not Null, Default `[]` | 关键点快照 |
+| `metadata_snapshot` | JSONB | Not Null, Default `{}` | 其他结构化元数据 |
+| `hint_used_count` | INTEGER | Not Null, Default 0 | 已使用提示次数 |
+| `max_hint_count` | INTEGER | Not Null, Default 2 | 最多可用提示次数 |
+| `turn_count` | INTEGER | Not Null, Default 0 | 已产生轮次数 |
+| `final_summary` | TEXT | Nullable | 最终复习总结 |
+| `strengths` | JSONB | Not Null, Default `[]` | 已掌握点 |
+| `gaps` | JSONB | Not Null, Default `[]` | 薄弱点 |
+| `next_focus` | JSONB | Not Null, Default `[]` | 下次优先补强点 |
+| `feedback_tags` | JSONB | Not Null, Default `[]` | 结构化反馈标签 |
+| `started_at` | TIMESTAMP | Not Null | 会话开始时间 |
+| `completed_at` | TIMESTAMP | Nullable | 完成时间 |
+| `abandoned_at` | TIMESTAMP | Nullable | 放弃时间 |
+| `created_at` | TIMESTAMP | | 创建时间 |
+| `updated_at` | TIMESTAMP | | 更新时间 |
+| `deleted_at` | TIMESTAMP | Index | 软删除标识 |
+
+### 2.5 复习轮次表 (`review_turns`)
+存储一次复习训练中的系统提问、提示、阶段反馈与用户回答。
+
+| 字段名 | 数据类型 | 约束/索引 | 描述 |
+| ------ | -------- | --------- | ---- |
+| `id` | UUID | Primary Key | 轮次唯一标识 |
+| `session_id` | UUID | Not Null, Unique Composite Index | 关联 `review_sessions.id` |
+| `turn_index` | INTEGER | Not Null, Unique Composite Index | 在一次 session 内的轮次序号 |
+| `role` | VARCHAR(16) | Not Null | 发言角色 (`system` / `user`) |
+| `turn_type` | VARCHAR(32) | Not Null | 轮次类型（开场、提问、回答、提示、反馈等） |
+| `content` | TEXT | Not Null | 轮次正文 |
+| `evaluation_tags` | JSONB | Not Null, Default `[]` | 该轮结构化评价标签 |
+| `extra_payload` | JSONB | Not Null, Default `{}` | 该轮附加结构化数据 |
+| `created_at` | TIMESTAMP | | 创建时间 |
+| `updated_at` | TIMESTAMP | | 更新时间 |
+
 ## 3. 关联关系 (Associations)
 - **User (1) <-> (N) Blog**: 一个用户可以拥有多篇博客历史记录。
 - **Blog (1) <-> (N) Blog**: 自引用（Self-Referencing）。一个父级 Blog（代表系列入口，例如 "Hydrogen语言系列"）可以拥有多个子级 Blog（代表具体章节内容，例如 "第 1 篇：架构概览"）。通过 `parent_id` 建立一对多父子关系。
+- **User (1) <-> (N) ReviewSession**: 一个用户可以发起多次“知识漫游复习”训练；通过 `review_sessions.user_id` 关联用户维度的复习历史。
+- **ReviewSession (1) <-> (N) ReviewTurn**: 一次复习会话包含多轮系统追问、提示与用户回答；通过 `review_turns.session_id` + `turn_index` 保证同一 session 内轮次有序且唯一。
 
 ## 4. 迁移策略 (Migration)
 - 系统在启动时，会通过 GORM 的 `AutoMigrate` 功能自动根据 Go 模型结构 (`internal/model`) 同步创建或更新数据库表。
+- `review_sessions` 与 `review_turns` 已纳入 `backend/internal/infra/db/db.go` 的统一迁移列表，避免主程序启动与测试路径使用不同的迁移集合。
 - 敏感数据如密码，在存入数据库之前必须经过 `golang.org/x/crypto/bcrypt` 进行哈希加密。
 
 ## 5. 外部数据持久化 (External Persistence)

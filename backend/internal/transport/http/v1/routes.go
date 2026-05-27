@@ -45,12 +45,26 @@ type StreamHandlers struct {
 	GenerateStreamHandler gin.HandlerFunc
 }
 
+// ReviewHandlers 聚合知识漫游复习模块的所有 HTTP 入口。
+type ReviewHandlers struct {
+	GetTodayCard  gin.HandlerFunc
+	GetHistory    gin.HandlerFunc
+	PickRandom    gin.HandlerFunc
+	ListNotes     gin.HandlerFunc
+	CreateSession gin.HandlerFunc
+	GetSession    gin.HandlerFunc
+	Respond       gin.HandlerFunc
+	RequestHint   gin.HandlerFunc
+	Finish        gin.HandlerFunc
+}
+
 type Handlers struct {
 	Auth    AuthHandlers
 	User    UserHandlers
 	Blog    BlogHandlers
 	Project ProjectHandlers
 	Stream  StreamHandlers
+	Review  ReviewHandlers
 }
 
 func Register(r *gin.Engine, authMiddleware gin.HandlerFunc, handlers Handlers) {
@@ -112,6 +126,20 @@ func Register(r *gin.Engine, authMiddleware gin.HandlerFunc, handlers Handlers) 
 			streamGroup.POST("/analyze", handlers.Stream.AnalyzeStreamHandler)
 			streamGroup.POST("/generate", handlers.Stream.GenerateStreamHandler)
 		}
+
+		reviewGroup := v1.Group("/review")
+		reviewGroup.Use(authMiddleware)
+		{
+			reviewGroup.GET("/today", handlers.Review.GetTodayCard)
+			reviewGroup.GET("/history", handlers.Review.GetHistory)
+			reviewGroup.POST("/pick", handlers.Review.PickRandom)
+			reviewGroup.GET("/notes", handlers.Review.ListNotes)
+			reviewGroup.POST("/sessions", handlers.Review.CreateSession)
+			reviewGroup.GET("/sessions/:id", handlers.Review.GetSession)
+			reviewGroup.POST("/sessions/:id/respond", handlers.Review.Respond)
+			reviewGroup.POST("/sessions/:id/hint", handlers.Review.RequestHint)
+			reviewGroup.POST("/sessions/:id/finish", handlers.Review.Finish)
+		}
 	}
 }
 
@@ -148,6 +176,16 @@ func validateHandlers(h Handlers) {
 	must(h.Stream.ScanStreamHandler, "Stream.ScanStreamHandler")
 	must(h.Stream.AnalyzeStreamHandler, "Stream.AnalyzeStreamHandler")
 	must(h.Stream.GenerateStreamHandler, "Stream.GenerateStreamHandler")
+
+	must(h.Review.GetTodayCard, "Review.GetTodayCard")
+	must(h.Review.GetHistory, "Review.GetHistory")
+	must(h.Review.PickRandom, "Review.PickRandom")
+	must(h.Review.ListNotes, "Review.ListNotes")
+	must(h.Review.CreateSession, "Review.CreateSession")
+	must(h.Review.GetSession, "Review.GetSession")
+	must(h.Review.Respond, "Review.Respond")
+	must(h.Review.RequestHint, "Review.RequestHint")
+	must(h.Review.Finish, "Review.Finish")
 }
 
 func must(fn gin.HandlerFunc, name string) {

@@ -58,6 +58,7 @@ func TestRegister_PanicsWhenHandlerMissing(t *testing.T) {
 			AnalyzeStreamHandler:  ok,
 			GenerateStreamHandler: ok,
 		},
+		Review: ReviewHandlers{},
 	})
 }
 
@@ -108,6 +109,17 @@ func TestRegister_RoutesAreReachable(t *testing.T) {
 			AnalyzeStreamHandler:  ok,
 			GenerateStreamHandler: ok,
 		},
+		Review: ReviewHandlers{
+			GetTodayCard:  ok,
+			GetHistory:    ok,
+			PickRandom:    ok,
+			ListNotes:     ok,
+			CreateSession: ok,
+			GetSession:    ok,
+			Respond:       ok,
+			RequestHint:   ok,
+			Finish:        ok,
+		},
 	})
 
 	for _, tc := range []struct {
@@ -121,6 +133,9 @@ func TestRegister_RoutesAreReachable(t *testing.T) {
 		{http.MethodGet, "/api/v1/blogs"},
 		{http.MethodPost, "/api/v1/project/scan"},
 		{http.MethodPost, "/api/v1/stream/generate"},
+		{http.MethodGet, "/api/v1/review/today"},
+		{http.MethodGet, "/api/v1/review/history"},
+		{http.MethodPost, "/api/v1/review/sessions"},
 	} {
 		req := httptest.NewRequest(tc.method, tc.path, nil)
 		w := httptest.NewRecorder()

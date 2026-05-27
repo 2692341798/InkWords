@@ -32,6 +32,11 @@ type restAPIStore struct {
 	client  *http.Client
 }
 
+// NewObsidianStoreFromEnv 根据环境变量创建 ObsidianStore。
+func NewObsidianStoreFromEnv() (ObsidianStore, error) {
+	return newRestAPIStoreFromEnv()
+}
+
 func newRestAPIStoreFromEnv() (*restAPIStore, error) {
 	base := strings.TrimSpace(os.Getenv("OBSIDIAN_REST_API_BASE_URL"))
 	if base == "" {

@@ -21,13 +21,7 @@ func InitDB(dsn string) error {
 		return err
 	}
 
-	// 执行自动迁移
-	err = DB.AutoMigrate(
-		&model.User{},
-		&model.Blog{},
-		&model.OAuthToken{},
-		&model.UserPromptSettings{},
-	)
+	err = autoMigrate(DB)
 	if err != nil {
 		log.Printf("Failed to auto migrate database: %v", err)
 		return err
@@ -35,4 +29,16 @@ func InitDB(dsn string) error {
 
 	log.Println("Database connection and migration successful")
 	return nil
+}
+
+// autoMigrate 将所有持久化模型集中在一个入口，避免启动路径和测试路径出现迁移清单漂移。
+func autoMigrate(database *gorm.DB) error {
+	return database.AutoMigrate(
+		&model.User{},
+		&model.Blog{},
+		&model.OAuthToken{},
+		&model.UserPromptSettings{},
+		&model.ReviewSession{},
+		&model.ReviewTurn{},
+	)
 }

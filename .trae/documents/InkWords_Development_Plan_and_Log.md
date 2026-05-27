@@ -70,6 +70,32 @@
 ## 4. 每日开发日志 (Dev Log)
 > 该区域将由 Vibe Coding 工程师（AI 助手）在每天/每次开发周期结束时，如实记录当天的完成事项、遇到的技术坑点及架构小规模调整。
 
+### [2026-05-27] Docs - 知识漫游复习文档同步、全量验证与 Docker 联调
+- **开发模块**: [Docs-as-Code, Review API, Docker Compose, Validation]
+- **完成事项**:
+  1. 按 Task 8 同步更新 `.trae/documents/InkWords_API.md`、`InkWords_Architecture.md`、`InkWords_Database.md`、`InkWords_PRD.md` 与 `README.md`，补齐“知识漫游复习”的接口路由、字段约束、前端入口、后端领域边界和数据库关系。
+  2. 明确 review 能力当前真实落地范围：后端新增 `internal/domain/review` 与 `/api/v1/review/*` 路由，前端新增“知识漫游复习”独立工作台，数据库新增 `review_sessions` / `review_turns` 两张表。
+  3. 执行后端 `go test ./...`、前端 `npm test` 与 `npm run build`，确认代码级验证全部通过。
+  4. 执行 `docker compose down && docker compose up -d --build` 做容器联调时，镜像构建成功，但 `backend` 容器启动被宿主机 `8081` 端口占用阻塞；经排查，当前占用者为外部容器 `compile_server_1`，因此未继续强行修改端口配置。
+- **验证**:
+  - `cd backend && go test ./...` 通过
+  - `cd frontend && npm test` 通过（16 个测试文件、45 个测试全部通过）
+  - `cd frontend && npm run build` 通过（存在既有 Vite 大 chunk warning，不阻塞构建）
+  - `docker compose down && docker compose up -d --build` 失败：`Bind for 0.0.0.0:8081 failed: port is already allocated`
+  - `docker compose ps -a` 显示 `inkwords-backend` 与 `inkwords-frontend` 因后端端口绑定失败停留在 `Created`
+  - `docker ps` 确认外部容器 `compile_server_1` 占用 `0.0.0.0:8081->8081/tcp`
+
+### [2026-05-27] Feat - Review 模型与数据库自动迁移
+- **开发模块**: [Backend Model, GORM AutoMigrate, Docs-as-Code]
+- **完成事项**:
+  1. 为“知识漫游复习”新增 `backend/internal/model/review.go`，落地 `ReviewSession` 与 `ReviewTurn` 两个持久化模型，并补齐 UUID `BeforeCreate` 钩子。
+  2. 在 `backend/internal/infra/db/db.go` 提炼 `autoMigrate` 入口，把 `ReviewSession`、`ReviewTurn` 加入启动迁移清单，避免启动路径与测试路径的迁移模型列表漂移。
+  3. 按 TDD 先补失败测试，再完成最小实现：新增 `backend/internal/model/review_test.go` 校验 UUID 自动生成；新增 `backend/internal/infra/db/db_test.go` 校验 review 表能通过自动迁移创建。
+  4. 同步更新数据库文档，补充 `review_sessions` 与 `review_turns` 表结构说明。
+- **验证**:
+  - `cd backend && go test ./internal/model ./internal/infra/db -run 'Review|AutoMigrate' -v` 通过
+  - `cd backend && go test ./internal/model ./internal/infra/db -v` 通过
+
 ### [2026-05-25] Fix - 剥离 AI 思考/套话正文污染
 - **开发模块**: [Backend LLM Streaming, Frontend Editor Polish]
 - **完成事项**:

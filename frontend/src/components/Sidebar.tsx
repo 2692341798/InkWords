@@ -463,6 +463,17 @@ export function Sidebar() {
           variant="ghost"
           className={cn(
             "w-full flex items-center justify-start gap-2",
+            currentView === 'knowledge-review' && !selectedBlog ? "bg-indigo-50 text-indigo-700 font-medium" : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
+          )}
+          onClick={() => setCurrentView('knowledge-review')}
+        >
+          <Sparkles className="w-4 h-4" />
+          知识漫游复习
+        </Button>
+        <Button
+          variant="ghost"
+          className={cn(
+            "w-full flex items-center justify-start gap-2",
             currentView === 'dashboard' && !selectedBlog ? "bg-indigo-50 text-indigo-700 font-medium" : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900"
           )}
           onClick={() => setCurrentView('dashboard')}
