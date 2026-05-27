@@ -1,4 +1,4 @@
-# 墨言博客助手 (InkWords) - AI 对话与决策摘要 (Conversation Log)
+# 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
 ### 对话 74：执行 Task 8，同步 review 文档并做全量验证 / Docker 联调
