@@ -5,6 +5,7 @@ import { Generator } from '@/pages/Generator'
 import { Editor } from '@/pages/Editor'
 import { Login } from '@/pages/Login'
 import { Dashboard } from '@/pages/Dashboard'
+import { KnowledgeReview } from '@/pages/KnowledgeReview'
 import { Toaster } from '@/components/ui/sonner'
 
 function App() {
@@ -33,7 +34,15 @@ function App() {
   return (
     <div className="h-screen overflow-hidden bg-zinc-50 flex print:bg-white print:block print:h-auto print:overflow-visible">
       <Sidebar />
-      {selectedBlog ? <Editor key={selectedBlog.id} /> : currentView === 'dashboard' ? <Dashboard /> : <Generator />}
+      {selectedBlog ? (
+        <Editor key={selectedBlog.id} />
+      ) : currentView === 'dashboard' ? (
+        <Dashboard />
+      ) : currentView === 'knowledge-review' ? (
+        <KnowledgeReview />
+      ) : (
+        <Generator />
+      )}
       <Toaster />
     </div>
   )

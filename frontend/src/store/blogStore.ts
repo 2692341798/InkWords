@@ -17,11 +17,11 @@ interface BlogState {
   blogs: BlogNode[]
   isLoading: boolean
   selectedBlog: BlogNode | null
-  currentView: 'generator' | 'dashboard'
+  currentView: 'generator' | 'dashboard' | 'knowledge-review'
   fetchBlogs: () => Promise<void>
   createDraftBlog: () => Promise<BlogNode>
   selectBlog: (blog: BlogNode | null) => void
-  setCurrentView: (view: 'generator' | 'dashboard') => void
+  setCurrentView: (view: 'generator' | 'dashboard' | 'knowledge-review') => void
   updateBlog: (id: string, updates: { title?: string; content?: string }) => Promise<void>
   updateBlogLocal: (id: string, updates: { title?: string; content?: string }) => void
   batchDeleteBlogs: (ids: string[]) => Promise<void>

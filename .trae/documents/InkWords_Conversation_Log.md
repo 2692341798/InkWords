@@ -1,6 +1,23 @@
 # 墨言博客助手 (InkWords) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 74：执行 Task 8，同步 review 文档并做全量验证 / Docker 联调
+- **用户需求**：执行实现计划中的 Task 8，为“知识漫游复习”同步项目文档，跑完后端与前端全量验证，再执行 Docker Compose 联调，并返回改动文件、测试结果与阻塞点。
+- **AI 动作**：
+  1. 先回读 `docs/superpowers/plans/2026-05-27-knowledge-roaming-review-plan.md` 的 Task 8，确认需要同步 `.trae/documents/InkWords_API.md`、`InkWords_Architecture.md`、`InkWords_Conversation_Log.md`、`InkWords_Database.md`、`InkWords_Development_Plan_and_Log.md`、`InkWords_PRD.md` 与 `README.md`。
+  2. 再核对当前代码实现，确认 review 已落地 `internal/domain/review`、`/api/v1/review/*`、前端 `KnowledgeReview` 页面与 `review_sessions` / `review_turns` 表，而不是仅停留在设计稿。
+  3. 按最小改动原则更新 API、架构、数据库、PRD 与 README 文档，补齐 review 路由、请求响应字段、前端入口、会话模式、持久化边界与 Docker 运行依赖说明。
+  4. 执行 `cd backend && go test ./...`、`cd frontend && npm test`、`cd frontend && npm run build`；随后执行 `docker compose down && docker compose up -d --build`，发现后端容器因宿主机 `8081` 端口被外部容器占用而无法启动，并继续用 `docker compose ps -a`、`lsof` 与 `docker ps` 固化阻塞证据。
+- **决策/变更**：
+  - 文档同步以“当前真实实现”为准，既补接口/表结构，也明确“知识漫游复习”是登录后独立主视图，不夸大为已完成的全链路手工验收。
+  - Docker 联调遇到宿主机端口占用时不擅自改 `docker-compose.yml`，避免把环境冲突误改成产品行为变更；先保留当前端口约定并将其作为明确阻塞点上报。
+- **验证**：
+  - `cd backend && go test ./...` 通过
+  - `cd frontend && npm test` 通过（16 个测试文件、45 个测试）
+  - `cd frontend && npm run build` 通过（仅有 Vite 大 chunk warning）
+  - `docker compose down && docker compose up -d --build` 失败：`Bind for 0.0.0.0:8081 failed: port is already allocated`
+  - `docker ps` 确认占用来源为外部容器 `compile_server_1`
+
 ### 对话 73：修复 AI 思考/对话式前言混入正文
 - **用户需求**：用户明确表示“不希望 AI 的思考内容也存在于正文当中”，并提供编辑器截图，显示润色预览与正文中出现“好的，收到你的需求。作为高级全栈架构师...”这类对话式前言。
 - **AI 动作**：

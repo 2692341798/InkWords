@@ -1,6 +1,7 @@
 # 墨言博客助手 (InkWords) - API 接口文档
 
 ## 0. 变更记录
+- 2026-05-27：新增“知识漫游复习”接口族 `/api/v1/review/*`，覆盖今日推荐、随机抽题、手动选文、会话创建、追问、提示、结束训练与最近记录查询；所有接口均要求 JWT Bearer Token。
 - 2026-05-25：将 `/api/v1/project/parse` 的文件上传上限从 100MB 提升到 888MB，并同步更新前端文件选择校验与 Nginx `client_max_body_size`，避免网关层和应用层限制不一致。
 - 2026-05-25：修复 AI 思考/对话式前言混入正文的问题；流式正文输出链路新增统一清洗，默认剥离 `<think>...</think>` 与“好的，收到你的需求 / 作为高级全栈架构师”等开头套话，`/api/v1/stream/generate`、`/api/v1/blogs/:id/continue`、`/api/v1/blogs/:id/polish` 均受此约束。
 - 2026-05-25：修复前端“创作场景”在文件上传与大纲生成过程中的交互歧义；保持 `/api/v1/stream/analyze` 与 `/api/v1/stream/generate` 的 `scenario_mode` 请求结构不变，但前端在上传分析时改为读取最新场景值，并在大纲生成后锁定该场景（仅 UI/请求时机修复，无 API 路由变更）。
@@ -109,7 +110,70 @@
 - 设计目标：
   - 用户最终看到和落库的正文应只包含 Markdown 正文内容，不应混入模型思考过程或对话式套话
 
-## 5. 博客管理模块 (BlogAPI)
+## 5. 知识漫游复习模块 (ReviewAPI)
+| 接口地址 | 请求方法 | 功能描述 | 参数 |
+| -------- | -------- | -------- | ---- |
+| `/api/v1/review/today` | GET | 获取今日推荐复习题卡 | JWT Bearer Token |
+| `/api/v1/review/pick` | POST | 手动随机抽一篇可复习文章 | JWT Bearer Token |
+| `/api/v1/review/notes` | GET | 获取可手动选择复习的文章列表 | `query`, `series_title`, `page`, `page_size` |
+| `/api/v1/review/history` | GET | 获取最近复习记录摘要 | `limit` |
+| `/api/v1/review/sessions` | POST | 创建一次复习会话 | `{ note_path, mode, entry_type }` |
+| `/api/v1/review/sessions/:id` | GET | 获取复习会话当前状态与轮次 | 路径参数 `id` |
+| `/api/v1/review/sessions/:id/respond` | POST | 提交一轮回答并推进会话 | `{ answer }` |
+| `/api/v1/review/sessions/:id/hint` | POST | 请求一条提示 | `{}` |
+| `/api/v1/review/sessions/:id/finish` | POST | 主动结束当前训练 | `{}` |
+
+### 5.1 题卡与候选列表字段
+- `GET /api/v1/review/today` 与 `POST /api/v1/review/pick` 返回：
+  - `note_path`: Obsidian 笔记路径
+  - `title`: 题卡标题
+  - `source_title`: 所属来源或系列标题
+  - `review_reason`: 推荐原因
+  - `estimated_minutes`: 预估耗时
+  - `available_modes`: 可选训练模式数组（`light_recall` / `detailed_qa`）
+- `GET /api/v1/review/notes` 返回：
+  - `items[].note_path`
+  - `items[].title`
+  - `items[].source_title`
+  - `items[].last_reviewed_at`
+  - `items[].preferred_mode`
+  - `total`, `page`, `page_size`
+
+### 5.2 会话与反馈字段
+- `POST /api/v1/review/sessions`、`GET /api/v1/review/sessions/:id` 返回：
+  - `session_id`, `status`, `mode`, `title`
+  - `opening_prompt`: 开场提问
+  - `initial_hints`: 初始提示列表
+  - `next_question`: 下一轮问题（可选）
+  - `turn_index`: 当前轮次
+  - `turns[]`: 已落库的轮次记录（仅会话详情接口返回）
+- `POST /api/v1/review/sessions/:id/respond` 返回：
+  - `session_id`, `session_status`, `turn_index`
+  - `stage_feedback`: 当前阶段反馈（可选）
+  - `next_question`: 下一轮问题（可选）
+  - `completed`: 是否已结束
+  - `final_feedback.summary / strengths / gaps / next_focus`
+- `POST /api/v1/review/sessions/:id/hint` 返回：
+  - `session_id`, `hint_text`, `remaining_hint_count`
+- `POST /api/v1/review/sessions/:id/finish` 返回：
+  - `session_id`, `session_status`
+  - `final_feedback.summary / strengths / gaps / next_focus`
+
+### 5.3 复习枚举约束
+- `entry_type`：
+  - `today`：今日推荐入口
+  - `manual_random`：手动随机抽题入口
+  - `manual_select`：手动选文入口
+- `mode`：
+  - `light_recall`：轻提示复述
+  - `detailed_qa`：细致问答
+- `status`：
+  - `created`
+  - `in_progress`
+  - `completed`
+  - `abandoned`
+
+## 6. 博客管理模块 (BlogAPI)
 | 接口地址 | 请求方法 | 功能描述 | 参数 |
 | -------- | -------- | -------- | ---- |
 | `/api/v1/blogs` | GET | 获取用户的博客历史列表 (含系列结构) | 无 |
