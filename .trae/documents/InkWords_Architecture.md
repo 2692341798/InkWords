@@ -1,6 +1,7 @@
 # 墨言博客助手 (InkWords) - 架构设计与工程规范
 
 ## 0. 变更记录
+- 2026-05-27：前端入口改为 `HomeEntry` 引导式工作台；生成器与知识复习页统一采用“单次只显示当前主步骤”的流程编排，并抽取共享 `StepStrip` 组件（`preview` / `progress` 双变体）承载首页预览和页内进度条。
 - 2026-05-27：新增“知识漫游复习”主链路；后端引入独立 `internal/domain/review` 垂直切片与 `review_sessions` / `review_turns` 持久化模型，前端新增独立主视图“知识漫游复习”，承接今日推荐、随机抽题、手动选文、会话追问、提示与最近记录。
 - 2026-05-25：将本地文档上传链路上限从 100MB 提升到 888MB；前端上传页校验、前端 Nginx `client_max_body_size` 与后端 Gin `MaxMultipartMemory` 三层限制保持一致。
 - 2026-05-25：在后端 LLM 公共流式出口新增“正文净化”层，并在前端润色正文应用前增加兜底清洗；统一剥离 `<think>` 思考标签、`reasoning_content` 和开头的对话式前言，防止 AI 思考/套话进入正文。
@@ -35,6 +36,7 @@
 - **流式通信**: `@microsoft/fetch-event-source` 维持 SSE 连接
 - **Markdown 渲染**: `react-markdown` 配合 `rehype-highlight`、`remark-gfm` 和 `mermaid`。
 - **场景锁定策略**：生成器在大纲生成前展示“创作场景”卡片；一旦 `outline` 存在，页面立即隐藏场景选择区，并在大纲头部展示只读场景标签，保证 Analyze 与后续 Generate 使用同一场景语义。
+- **流程型工作台编排**：默认入口为 `HomeEntry`；`Generator`、`KnowledgeReview`、`HomeEntry` 三处共享 `StepStrip` 展示流程预览/进度，但业务状态仍保留在页面层，通过 `generatorViewState`、`knowledgeReviewViewState`、`homeEntryViewState` 做纯前端编排，避免把共享 UI 组件耦合成全局状态机。
 - **知识漫游复习工作台**：新增 `KnowledgeReview` 主视图，入口位于侧边栏；同一页面内收敛“开始今日复习 / 随机抽一篇 / 选择文章复习 / 当前会话 / 最近记录”五类状态，避免在多个页面间来回跳转。
 
 ### 2.2 后端 (Backend)
