@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 import { useStreamStore } from '@/store/streamStore'
 import { fetchEventSourceWithAuth } from '@/services/sse'
+import { projectService } from '@/services/project'
 import {
   extractArchiveSummary,
   extractParsedFileContent,
@@ -29,31 +30,10 @@ export const useFileParser = () => {
     store.setAbortController(ctrl)
 
     try {
-      const token = localStorage.getItem('token')
       const formData = new FormData()
       formData.append('file', file)
 
-      const uploadRes = await fetch('/api/v1/project/parse', {
-        method: 'POST',
-        headers: {
-          'Authorization': token ? `Bearer ${token}` : ''
-        },
-        body: formData,
-        signal: ctrl.signal
-      })
-
-      if (uploadRes.status === 401) {
-        localStorage.removeItem('token')
-        window.location.reload()
-        throw new Error('登录已过期，请重新登录')
-      }
-
-      if (!uploadRes.ok) {
-        const errorData = await uploadRes.json()
-        throw new Error(errorData.error || '文件解析失败')
-      }
-
-      const data = await uploadRes.json()
+      const data = await projectService.parseProjectFile(formData, ctrl.signal)
       const content = extractParsedFileContent(data)
       const archiveSummary = extractArchiveSummary(data)
       if (!content) {

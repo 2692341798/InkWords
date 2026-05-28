@@ -9,6 +9,7 @@ import { usePolishStream } from '@/hooks/usePolishStream'
 import { extractPolishedBody } from '@/lib/polishDraft'
 import { normalizeMarkdown } from '@/lib/markdownNormalize'
 import { fetchEventSourceWithAuth } from '@/services/sse'
+import { blogService } from '@/services/blog'
 import { EditorHeader } from '@/components/editor/EditorHeader'
 import { EditorBody } from '@/components/editor/EditorBody'
 
@@ -257,18 +258,10 @@ export function Editor() {
 
   const exportSeriesZip = async () => {
     if (!selectedBlog) return
-    const token = localStorage.getItem('token')
-    
+
     try {
       toast.loading('正在打包系列博客...', { id: 'export-zip' })
-      const res = await fetch(`/api/v1/blogs/${selectedBlog.id}/export`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
-      if (!res.ok) throw new Error('Export failed')
-      
-      const blob = await res.blob()
+      const blob = await blogService.exportSeriesZip(selectedBlog.id)
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -289,48 +282,28 @@ export function Editor() {
   }
 
   const handleExportToObsidian = async () => {
-    if (!selectedBlog?.id) return;
+    if (!selectedBlog?.id) return
     try {
       toast.loading('正在同步单篇到 Obsidian...', { id: 'export-obsidian' })
-      const response = await fetch(`/api/v1/blogs/${selectedBlog.id}/export/obsidian`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      const data = await response.json();
-      if (data.code === 200) {
-        toast.success('成功同步单篇到 Obsidian 仓库', { id: 'export-obsidian' });
-      } else {
-        toast.error(data.message || '同步失败', { id: 'export-obsidian' });
-      }
+      await blogService.exportBlogToObsidian(selectedBlog.id)
+      toast.success('成功同步单篇到 Obsidian 仓库', { id: 'export-obsidian' })
     } catch (error) {
-      console.error('Export error:', error);
-      toast.error('同步时发生网络错误', { id: 'export-obsidian' });
+      console.error('Export error:', error)
+      toast.error('同步时发生网络错误', { id: 'export-obsidian' })
     }
-  };
+  }
 
   const handleExportSeriesToObsidian = async () => {
-    if (!selectedBlog?.id) return;
+    if (!selectedBlog?.id) return
     try {
       toast.loading('正在同步整个系列到 Obsidian...', { id: 'export-series-obsidian' })
-      const response = await fetch(`/api/v1/blogs/${selectedBlog.id}/export/obsidian/series`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      const data = await response.json();
-      if (data.code === 200) {
-        toast.success('成功同步系列到 Obsidian 仓库，已建立知识网络', { id: 'export-series-obsidian' });
-      } else {
-        toast.error(data.message || '同步系列失败', { id: 'export-series-obsidian' });
-      }
+      await blogService.exportSeriesToObsidian(selectedBlog.id)
+      toast.success('成功同步系列到 Obsidian 仓库，已建立知识网络', { id: 'export-series-obsidian' })
     } catch (error) {
-      console.error('Export series error:', error);
-      toast.error('同步系列时发生网络错误', { id: 'export-series-obsidian' });
+      console.error('Export series error:', error)
+      toast.error('同步系列时发生网络错误', { id: 'export-series-obsidian' })
     }
-  };
+  }
 
   const handleContinueGenerating = async () => {
     if (!selectedBlog || isContinuing || isVoiceListening || isPolishing) return

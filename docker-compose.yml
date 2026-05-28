@@ -1,3 +1,5 @@
+name: inkwords
+
 services:
   obsidian-bridge:
     image: alpine/socat:latest
@@ -5,22 +7,28 @@ services:
     command: ["-d", "-d", "TCP-LISTEN:27125,fork,reuseaddr", "TCP:host.docker.internal:27124"]
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    expose:
+      - "27125"
+    networks:
+      - inkwords-network
     restart: unless-stopped
 
   db:
     image: postgres:14-alpine
     container_name: inkwords-db
     environment:
-      POSTGRES_USER: inkwords
-      POSTGRES_PASSWORD: inkwords_password
-      POSTGRES_DB: inkwords_db
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: ${POSTGRES_USER:-inkwords}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-inkwords_password}
+      POSTGRES_DB: ${POSTGRES_DB:-inkwords_db}
+    expose:
+      - "5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    networks:
+      - inkwords-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U inkwords -d inkwords_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-inkwords} -d ${POSTGRES_DB:-inkwords_db}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -33,17 +41,22 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      # 覆盖 .env 中的本地数据库连接，强制使用 Docker 内部网络连接 db 容器
-      - DATABASE_URL=postgres://inkwords:inkwords_password@db:5432/inkwords_db?sslmode=disable
-      - REDIS_URL=redis://redis:6379/0
-      - FRONTEND_URL=http://localhost
-      - OBSIDIAN_REST_API_BASE_URL=${OBSIDIAN_REST_API_BASE_URL:-https://obsidian-bridge:27125}
-      - OBSIDIAN_WIKI_DIR=${OBSIDIAN_WIKI_DIR:-wiki}
-    ports:
-      - "8081:8080"
+      # Why: keep service-to-service connectivity on the internal Docker network and
+      # let operators override runtime values from backend/.env without editing compose.
+      DATABASE_URL: postgres://${POSTGRES_USER:-inkwords}:${POSTGRES_PASSWORD:-inkwords_password}@db:5432/${POSTGRES_DB:-inkwords_db}?sslmode=disable
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
+      OBSIDIAN_REST_API_BASE_URL: ${OBSIDIAN_REST_API_BASE_URL:-https://obsidian-bridge:27125}
+      OBSIDIAN_WIKI_DIR: ${OBSIDIAN_WIKI_DIR:-wiki}
+    expose:
+      - "8080"
     volumes:
       - uploads:/app/uploads
-      - ${OBSIDIAN_VAULT_PATH:-/Users/huangqijun/Documents/obsidian_knowledge/knowledge/wiki}:/app/obsidian
+      # Why: require an explicit host wiki path instead of silently binding a
+      # machine-specific absolute path that only works on one workstation.
+      - type: bind
+        source: ${OBSIDIAN_VAULT_PATH:?Set OBSIDIAN_VAULT_PATH in backend/.env or your shell environment}
+        target: /app/obsidian
     depends_on:
       db:
         condition: service_healthy
@@ -51,17 +64,21 @@ services:
         condition: service_started
       obsidian-bridge:
         condition: service_started
+    networks:
+      - inkwords-network
     restart: unless-stopped
 
   redis:
     image: redis/redis-stack-server:latest
     container_name: inkwords-redis
-    ports:
-      - "6379:6379"
+    expose:
+      - "6379"
     environment:
       - REDIS_ARGS=--maxmemory 1gb --maxmemory-policy allkeys-lru
     volumes:
       - redisdata:/data
+    networks:
+      - inkwords-network
     restart: unless-stopped
 
   frontend:
@@ -71,10 +88,15 @@ services:
     container_name: inkwords-frontend
     ports:
       - "80:80"
-      - "5173:80"
     depends_on:
       - backend
+    networks:
+      - inkwords-network
     restart: unless-stopped
+
+networks:
+  inkwords-network:
+    driver: bridge
 
 volumes:
   pgdata:
