@@ -13,6 +13,11 @@ import { scenarioModeOptions } from '@/lib/scenarioMode'
 import { cn } from '@/lib/utils'
 import { getGeneratorViewState } from './generatorViewState'
 
+/**
+ * Coordinates the step-focused generator workspace, including source input,
+ * scenario locking, outline confirmation, and processing-state handoff to the
+ * shared stream store and generator hooks.
+ */
 export function Generator() {
   const store = useStreamStore()
   const { scanGit, analyzeGit, parseFile, generateSeries, generateSingle, stopAnalyzing, stopGenerating } = useBlogStream()

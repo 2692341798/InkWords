@@ -5,6 +5,11 @@ import { useProjectAnalyzer } from './generator/useProjectAnalyzer'
 import { useFileParser } from './generator/useFileParser'
 import { useSeriesGenerator } from './generator/useSeriesGenerator'
 
+/**
+ * Provides a single orchestration surface for the generator workflow so pages
+ * can trigger scan, analyze, parse, generate, and stop actions without knowing
+ * how each sub-hook coordinates with the shared stream store.
+ */
 export const useBlogStream = () => {
   const store = useStreamStore()
   const { scanGit } = useProjectScanner()

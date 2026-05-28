@@ -1,6 +1,30 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 76：执行 Task 5，加固 Docker Compose 网络与运行时配置
+- **用户需求**：实现计划中的 Task 5：加固 `docker-compose.yml` 的网络与环境变量配置，尽可能减少默认宿主机端口暴露，移除机器私有挂载默认值，更新 `README` 运行说明，并用 `docker compose config` 做验证后汇总改动文件与结果。
+- **AI 动作**：
+  1. 先读取知识库 `[[concepts/部署与 Docker 构建]]`、项目架构文档与 Task 5 计划，确认前端应继续作为唯一公开入口，而后端/数据库/缓存优先通过容器内部网络通信。
+  2. 以最小改动更新 `docker-compose.yml`：新增显式网络 `inkwords-network`；移除 `backend`、`db`、`redis` 的默认宿主机 `ports` 暴露，改为容器内 `expose`；将 PostgreSQL 运行时凭据改为 Compose 变量替换；把 `OBSIDIAN_VAULT_PATH` 从机器私有绝对路径回退改为必须显式提供。
+  3. 同步更新 `README.md` 与 `InkWords_Architecture.md`，统一 `docker compose --env-file backend/.env ...` 的运行约定，并补充 Docker 模式下的前端入口、必填变量和 GitHub OAuth 本地回调说明。
+  4. 执行 `docker compose --env-file backend/.env config` 验证渲染结果，确认新的 Compose 配置可成功展开。
+- **决策/变更**：
+  - 保留 `frontend` 的 `80:80` 暴露，确保 `http://localhost` 仍是唯一标准入口；不再默认暴露 `backend:8080`、`db:5432`、`redis:6379` 到宿主机，缩小开发态攻击面并避免端口冲突重演。
+  - 采用 `--env-file backend/.env` 作为 Compose 运行时入口，而不是继续依赖根目录 `.env` 或机器私有默认路径；这样既能复用现有后端环境文件，也避免把宿主机路径硬编码进版本库。
+- **验证**：
+  - `docker compose --env-file backend/.env config` 通过
+
+### 对话 75：继续 Task 4，执行前端中文文案/JSDoc/store 清理与验证
+- **用户需求**：在承接同一执行流中 Task 3 的前端改动基础上，继续 Task 4：规范限定文件中的中文界面文案、为导出的 Hook/复杂组件补 JSDoc、审查并移除 `frontend/src/store/index.ts`、仅在必要时继续缩减 `Sidebar.tsx`，最后运行前端测试与构建并汇总改动文件。
+- **AI 动作**：
+  1. 先确认与 `Sidebar.tsx`、`Login.tsx`、`Dashboard.tsx` 等文件重叠的未提交改动确属同一执行流中的 Task 3 结果，因此选择“保留并在其基础上继续”，不回滚已有工作。
+  2. 回读 Task 4 计划、知识库页面 `[[concepts/前端整体架构与状态管理]]`、`[[concepts/前端组件体系：Dashboard 与 Sidebar]]` 与 `[[concepts/前端自定义 Hooks：useBlogStream 与 useDebounce]]`，再同步查看 `.trae/documents/InkWords_PRD.md`、`InkWords_Architecture.md`、`InkWords_API.md` 与 `InkWords_Database.md`，确认本次仅做前端工程规范收尾，不涉及 API/数据库契约变化。
+  3. 在限定文件中完成最小改动：将登录邮箱占位符与图片 `alt` 文案改成中文；为 `useKnowledgeReview`、`useBlogStream`、`Generator`、`Sidebar` 增加 JSDoc；通过引用检索确认 `frontend/src/store/index.ts` 已无使用方后删除。
+  4. 复查 `Sidebar.tsx` 文件体积，确认在保留 Task 3 服务抽离结果的前提下补注释后文件为 491 行，仍低于 500 行警戒线，因此不再强行拆分；随后同步更新开发日志并准备执行前端验证。
+- **决策/变更**：
+  - 对于纯展示文案、注释补齐与死文件删除，不新增低价值 UI 测试，而是依赖现有 Vitest 套件与 `npm run build` 做回归验证。
+  - `Sidebar.tsx` 当前已满足单文件体积约束，避免为了“完成计划项”而做无收益拆分，保持最小改动原则。
+
 ### 对话 74：执行 Task 8，同步 review 文档并做全量验证 / Docker 联调
 - **用户需求**：执行实现计划中的 Task 8，为“知识漫游复习”同步项目文档，跑完后端与前端全量验证，再执行 Docker Compose 联调，并返回改动文件、测试结果与阻塞点。
 - **AI 动作**：

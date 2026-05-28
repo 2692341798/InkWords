@@ -10,6 +10,9 @@ import (
 	"inkwords-backend/internal/model"
 )
 
+// ErrBlogNotFound indicates that the requested blog does not exist for the user.
+var ErrBlogNotFound = errors.New("blog not found")
+
 // Service 提供 Blog 领域的业务能力。
 type Service struct {
 	repo Repository
@@ -111,7 +114,7 @@ func (s *Service) UpdateBlog(ctx context.Context, id uuid.UUID, userID uuid.UUID
 		return err
 	}
 	if rowsAffected == 0 {
-		return errors.New("blog not found or no permission")
+		return ErrBlogNotFound
 	}
 	return nil
 }
@@ -137,4 +140,3 @@ func (s *Service) CreateDraftBlog(ctx context.Context, userID uuid.UUID) (model.
 	}
 	return blog, nil
 }
-

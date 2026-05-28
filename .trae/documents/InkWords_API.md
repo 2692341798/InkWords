@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - API 接口文档
 
 ## 0. 变更记录
+- 2026-05-28：工程规范收尾与提交前同步：本次未新增或删除后端 API 路由，但统一收紧了部分既有接口的外部错误输出约定。`/api/v1/blogs` 相关接口不再直接透出内部错误详情，`/api/v1/blogs/:id` 在目标不存在时明确返回 `404 blog not found`；流式接口 `/api/v1/stream/generate`、`/api/v1/blogs/:id/continue`、`/api/v1/blogs/:id/polish`、`/api/v1/stream/analyze`、`/api/v1/stream/scan` 的 SSE `error` 事件统一返回稳定错误文案，避免泄漏底层数据库/系统异常文本。
 - 2026-05-27：项目定位升级为“墨言知识训练平台（InkWords Trainer）”，口号“把资料变成知识，把知识变成能力”；本次仅同步文档命名口径，不新增、不修改任何后端 API 路由或请求结构。
 - 2026-05-27：前端新增 `HomeEntry` 引导入口、共享 `StepStrip` 步骤条，以及“同一时间只显示当前主步骤”的流程式工作台；本次仅调整前端编排与交互，不新增、不修改任何后端 API 路由或请求结构。
 - 2026-05-27：新增“知识漫游复习”接口族 `/api/v1/review/*`，覆盖今日推荐、随机抽题、手动选文、会话创建、追问、提示、结束训练与最近记录查询；所有接口均要求 JWT Bearer Token。

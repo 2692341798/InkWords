@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Mail, Lock, User, Loader2, ArrowRight } from 'lucide-react'
+import { authService } from '@/services/auth'
 
 // Custom GitHub SVG icon since it was removed from lucide-react
 const GithubIcon = ({ className }: { className?: string }) => (
@@ -50,11 +51,8 @@ export function Login() {
 
   const fetchCaptcha = async () => {
     try {
-      const res = await fetch('/api/v1/auth/captcha')
-      const data = await res.json()
-      if (data.code === 200) {
-        setCaptcha(prev => ({ ...prev, id: data.data.captcha_id, image: data.data.image, value: '' }))
-      }
+      const data = await authService.fetchCaptcha()
+      setCaptcha(prev => ({ ...prev, id: data.captcha_id, image: data.image, value: '' }))
     } catch (err: unknown) {
       console.error('获取验证码失败', err)
     }
@@ -98,44 +96,44 @@ export function Login() {
     setError('')
     setIsLoading(true)
 
-    let endpoint = '/api/v1/auth/login'
-    let payload: Record<string, unknown> = {}
-
-    if (mode === 'login') {
-      payload = { email: formData.email, password: formData.password, captcha_id: captcha.id, captcha_value: captcha.value, remember_me: rememberMe }
-    } else if (mode === 'register') {
-      endpoint = '/api/v1/auth/register'
-      payload = { username: formData.name, email: formData.email, password: formData.password, captcha_id: captcha.id, captcha_value: captcha.value }
-    } else if (mode === 'bind') {
-      endpoint = '/api/v1/auth/bind-github'
-      payload = { email: formData.email, password: formData.password, github_id: formData.githubId, username: formData.name, avatar_url: formData.avatarUrl }
-    }
-
     try {
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      })
+      // Why: 登录、注册、绑定都共用同一套错误归一化规则，
+      // 统一走 authService 可以避免页面组件重复维护接口细节。
+      const data =
+        mode === 'login'
+          ? await authService.login({
+              email: formData.email,
+              password: formData.password,
+              captcha_id: captcha.id,
+              captcha_value: captcha.value,
+              remember_me: rememberMe,
+            })
+          : mode === 'register'
+            ? await authService.register({
+                username: formData.name,
+                email: formData.email,
+                password: formData.password,
+                captcha_id: captcha.id,
+                captcha_value: captcha.value,
+              })
+            : await authService.bindGithub({
+                email: formData.email,
+                password: formData.password,
+                github_id: formData.githubId,
+                username: formData.name,
+                avatar_url: formData.avatarUrl,
+              })
 
-      const data = await response.json()
-
-      if (!response.ok || data.code !== 200) {
-        if (data.message && data.message.includes('图形验证码')) {
-          setLoginNeedsCaptcha(true)
-        }
-        throw new Error(data.message || '操作失败，请重试')
-      }
-
-      if (data.data?.token) {
-        localStorage.setItem('token', data.data.token)
+      if (data.token) {
+        localStorage.setItem('token', data.token)
       }
 
       window.location.reload()
     } catch (err: unknown) {
       if (err instanceof Error) {
+        if (err.message.includes('图形验证码')) {
+          setLoginNeedsCaptcha(true)
+        }
         setError(err.message || '网络错误，请稍后重试')
       } else {
         setError('网络错误，请稍后重试')
@@ -200,7 +198,7 @@ export function Login() {
                 required
                 readOnly={mode === 'bind'}
                 className={`w-full pl-10 pr-3 py-2 border border-zinc-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900/20 focus:border-zinc-900 transition-colors ${mode === 'bind' ? 'bg-zinc-100 text-zinc-500 cursor-not-allowed' : ''}`}
-                placeholder="name@example.com"
+                placeholder="请输入邮箱地址"
               />
             </div>
           </div>
@@ -223,7 +221,7 @@ export function Login() {
                   title="点击刷新验证码"
                 >
                   {captcha.image ? (
-                    <img src={captcha.image} alt="captcha" className="w-full h-full object-cover" />
+                    <img src={captcha.image} alt="图形验证码" className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full bg-zinc-100 flex items-center justify-center text-xs text-zinc-400">加载中...</div>
                   )}

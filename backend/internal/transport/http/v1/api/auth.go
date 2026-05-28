@@ -4,17 +4,10 @@ import (
 	"github.com/gin-gonic/gin"
 
 	authdomain "inkwords-backend/internal/domain/auth"
-	"inkwords-backend/internal/infra/db"
 )
 
 type AuthAPI struct {
 	authDomainHandler *authdomain.Handler
-}
-
-func NewAuthAPI() *AuthAPI {
-	repo := authdomain.NewGormRepository(db.DB)
-	domainService := authdomain.NewService(repo)
-	return NewAuthAPIWithDeps(authdomain.NewHandler(domainService))
 }
 
 func NewAuthAPIWithDeps(authDomainHandler *authdomain.Handler) *AuthAPI {

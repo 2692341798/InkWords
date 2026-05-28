@@ -43,6 +43,16 @@
 | | 类似 Notion 的二次编辑器与状态同步 | 中 | 2 天 |
 | **Integration** | 第三方发文 OpenAPI 对接与 Token 加密 | 高 (各平台不一) | 3 天 |
 
+### [2026-05-28] Chore - Docker Compose 网络与运行时配置加固
+- **开发模块**: [Docker Compose, README, Docs-as-Code]
+- **完成事项**:
+  1. 为 `docker-compose.yml` 显式声明 `inkwords-network`，并将 `frontend`、`backend`、`db`、`redis`、`obsidian-bridge` 统一接入该内部网络。
+  2. 将 `db`/`redis`/`backend` 的宿主机 `ports` 暴露收敛为容器内 `expose`，默认仅保留前端 `80:80`，降低本地运行时默认攻击面。
+  3. 将 PostgreSQL 凭据改为 Compose 变量替换；移除 `OBSIDIAN_VAULT_PATH` 的机器私有默认绝对路径，要求通过 `backend/.env` 或外部环境显式提供。
+  4. 更新 `README.md` 运行说明，明确 `docker compose --env-file backend/.env ...` 的启动/重启方式、前端唯一入口、必填环境变量与 Docker 模式下的 OAuth 回调约定。
+- **验证**:
+  - `docker compose --env-file backend/.env config` 通过
+
 ## 3. 测试与联调计划
 遵循 Vibe Coding **“小步迭代与强制验证”** 的铁律，在实际开发过程中，严禁越过测试环节强行合并代码。
 
@@ -69,6 +79,17 @@
 
 ## 4. 每日开发日志 (Dev Log)
 > 该区域将由 Vibe Coding 工程师（AI 助手）在每天/每次开发周期结束时，如实记录当天的完成事项、遇到的技术坑点及架构小规模调整。
+
+### [2026-05-28] Chore - Frontend Task 4 scoped compliance cleanup
+- **开发模块**: [Frontend UI Copy, JSDoc, Store Hygiene, Validation]
+- **完成事项**:
+  1. 按 Task 4 在限定前端文件内清理剩余英文界面文案，将登录邮箱占位符、验证码图片 `alt` 与个人中心头像 `alt` 统一改为中文，避免前端展示层出现中英混杂。
+  2. 为 `frontend/src/hooks/useKnowledgeReview.ts`、`frontend/src/hooks/useBlogStream.ts`、`frontend/src/pages/Generator.tsx` 与 `frontend/src/components/Sidebar.tsx` 补齐 JSDoc，明确用途、输入输出与副作用边界，满足核心 Hook/复杂组件注释约束。
+  3. 复查 `frontend/src/store/index.ts` 的引用情况，确认仅为历史演示计数器且已无任何导入方后删除，减少 Zustand store 入口歧义。
+  4. 检查 `Sidebar.tsx` 文件规模；在 Task 3 已完成服务抽离基础上，本次补注释后文件维持 491 行，低于 500 行警戒线，因此不额外做拆分。
+- **验证**:
+  - `cd frontend && npm test` 通过（23 个测试文件、72 个测试全部通过）
+  - `cd frontend && npm run build` 通过（存在既有 Vite chunk size warning，不阻塞构建）
 
 ### [2026-05-27] Docs - 知识漫游复习文档同步、全量验证与 Docker 联调
 - **开发模块**: [Docs-as-Code, Review API, Docker Compose, Validation]

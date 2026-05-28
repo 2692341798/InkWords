@@ -47,14 +47,29 @@
 ## 5. 快速开始 (Quick Start)
 
 ### 5.1 推荐：Docker 一键部署
-项目已提供完整的容器化支持，只需一行命令即可拉起前后端与数据库：
+项目已提供完整的容器化支持。Docker Compose 运行时约定统一从 `backend/.env` 读取环境变量，再拉起前后端与数据库：
 ```bash
-# 使用 Docker Compose 一键启动
-docker compose down && docker compose up -d --build
+# 标准启动命令
+docker compose --env-file backend/.env up -d --build
 ```
-启动前请先在 `backend/.env` 中配置必要环境变量（例如 `DEEPSEEK_API_KEY`、`DATABASE_URL`、`JWT_SECRET`、`OBSIDIAN_REST_API_KEY`）。当前 Docker 本地开发默认通过 `backend/.env` 中的 `OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY=true` 访问 Obsidian Local REST API，避免把宿主机错误文件挂载成证书；如需启用严格证书校验，请显式配置 `OBSIDIAN_REST_API_CERT_PATH` 指向真实插件证书，并将 `OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY=false`。
+如需应用新代码或完整重启，请使用：
+```bash
+# 标准重启命令
+docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build
+```
+
+启动前请先在 `backend/.env` 中配置必要环境变量：
+- **必须配置**：`DEEPSEEK_API_KEY`、`JWT_SECRET`、`OBSIDIAN_REST_API_KEY`、`OBSIDIAN_VAULT_PATH`
+- **Docker 运行时建议显式维护**：`POSTGRES_USER`、`POSTGRES_PASSWORD`、`POSTGRES_DB`
+- **按需覆盖**：`FRONTEND_URL`、`REDIS_URL`、`OBSIDIAN_REST_API_BASE_URL`、`OBSIDIAN_WIKI_DIR`
+
+当前 Docker 默认仅暴露前端入口 `http://localhost`；`backend`、`db`、`redis` 仅在 Docker 内部网络 `inkwords-network` 中互通，不再默认暴露宿主机端口。当前 Docker 本地开发仍默认通过 `backend/.env` 中的 `OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY=true` 访问 Obsidian Local REST API，避免把宿主机错误文件挂载成证书；如需启用严格证书校验，请显式配置 `OBSIDIAN_REST_API_CERT_PATH` 指向真实插件证书，并将 `OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY=false`。
+
+如果你需要在 Docker 模式下使用 GitHub OAuth，本地回调地址应配置为 `http://localhost/api/v1/auth/callback/github`；如果你运行的是 Vite 本地开发服务器，再改回 `http://localhost:5173/api/v1/auth/callback/github`。
+
+`OBSIDIAN_VAULT_PATH` 不再提供任何机器私有的默认绝对路径。请显式把它设置为你的 Obsidian `wiki/` 根目录，否则容器启动前的 Compose 渲染会直接报错，避免静默挂载到错误位置。
 如遇导出到 Obsidian 提示“无法解析 Obsidian 目录列表响应”，请确认后端版本已兼容 Obsidian Local REST API 目录列表 `{ "files": [...] }` 返回格式。
-如遇上传 PDF/DOCX/Markdown/TXT/ZIP 后仍提示 `git_url is required for git source type`，请先执行 `docker compose down && docker compose up -d --build` 并强制刷新浏览器，以确保前端静态资源与后端兼容逻辑同步生效。
+如遇上传 PDF/DOCX/Markdown/TXT/ZIP 后仍提示 `git_url is required for git source type`，请先执行标准重启命令并强制刷新浏览器，以确保前端静态资源与后端兼容逻辑同步生效。
 
 ### 5.1.1 ZIP 课件包上传说明
 - 支持上传 `.zip` 课件包，后端会自动扫描其中的受支持文档与代码文本文件。
