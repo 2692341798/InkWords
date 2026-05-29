@@ -61,7 +61,7 @@ export function useKnowledgeReview() {
 
   const initialize = useCallback(async () => {
     await Promise.all([
-      useReviewStore.getState().loadToday(),
+      useReviewStore.getState().loadRecommendation(),
       useReviewStore.getState().loadHistory(5),
     ])
 

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useReviewStore } from './reviewStore'
-import { reviewService } from '@/services/review'
+import { type ReviewCardResponse, reviewService } from '@/services/review'
 
 vi.mock('@/services/review', () => ({
   reviewService: {
@@ -12,6 +12,22 @@ vi.mock('@/services/review', () => ({
 }))
 
 const mockedReviewService = vi.mocked(reviewService)
+const randomCard: ReviewCardResponse = {
+  note_path: 'wiki/concepts/random.md',
+  title: '随机复习',
+  source_title: '知识库',
+  review_reason: '这是一次随机抽取的复习内容',
+  estimated_minutes: 5,
+  available_modes: ['light_recall', 'detailed_qa'],
+}
+const refreshedCard: ReviewCardResponse = {
+  note_path: 'wiki/concepts/refreshed.md',
+  title: '刷新后的推荐',
+  source_title: '知识库',
+  review_reason: '换一篇继续复习',
+  estimated_minutes: 8,
+  available_modes: ['light_recall'],
+}
 
 describe('useReviewStore', () => {
   beforeEach(() => {
@@ -19,30 +35,56 @@ describe('useReviewStore', () => {
     vi.clearAllMocks()
   })
 
-  it('loads today card into store', async () => {
-    mockedReviewService.getToday.mockResolvedValue({
-      note_path: 'wiki/concepts/today.md',
-      title: '今日复习',
-      source_title: '知识库',
-      review_reason: '今天适合回顾这篇内容',
-      estimated_minutes: 5,
-      available_modes: ['light_recall', 'detailed_qa'],
-    })
+  it('loads the automatic entry card from the random-pick endpoint', async () => {
+    mockedReviewService.pickRandom.mockResolvedValue(randomCard)
 
-    await useReviewStore.getState().loadToday()
+    await useReviewStore.getState().loadRecommendation()
 
-    expect(useReviewStore.getState().todayCard?.note_path).toBe('wiki/concepts/today.md')
+    expect(mockedReviewService.getToday).not.toHaveBeenCalled()
+    expect(mockedReviewService.pickRandom).toHaveBeenCalledTimes(1)
+    expect(useReviewStore.getState().recommendationCard?.note_path).toBe(randomCard.note_path)
   })
 
-  it('loads random card and note options into store', async () => {
-    mockedReviewService.pickRandom.mockResolvedValue({
-      note_path: 'wiki/concepts/random.md',
-      title: '随机复习',
-      source_title: '知识库',
-      review_reason: '随机抽题',
-      estimated_minutes: 8,
-      available_modes: ['light_recall'],
+  it('refreshes the recommendation card with a different random article when available', async () => {
+    mockedReviewService.pickRandom.mockResolvedValue(refreshedCard)
+
+    useReviewStore.setState({
+      recommendationCard: randomCard,
     })
+
+    await useReviewStore.getState().refreshRecommendation()
+
+    expect(useReviewStore.getState().recommendationCard?.note_path).toBe(refreshedCard.note_path)
+  })
+
+  it('keeps the current random card when refresh returns the same article', async () => {
+    mockedReviewService.pickRandom.mockResolvedValue(randomCard)
+
+    useReviewStore.setState({
+      recommendationCard: randomCard,
+    })
+
+    await useReviewStore.getState().refreshRecommendation()
+
+    expect(useReviewStore.getState().recommendationCard?.note_path).toBe(randomCard.note_path)
+  })
+
+  it('retries refresh when the first random result matches the current article', async () => {
+    mockedReviewService.pickRandom
+      .mockResolvedValueOnce(randomCard)
+      .mockResolvedValueOnce(refreshedCard)
+
+    useReviewStore.setState({
+      recommendationCard: randomCard,
+    })
+
+    await useReviewStore.getState().refreshRecommendation()
+
+    expect(mockedReviewService.pickRandom).toHaveBeenCalledTimes(2)
+    expect(useReviewStore.getState().recommendationCard?.note_path).toBe(refreshedCard.note_path)
+  })
+
+  it('loads note options into store', async () => {
     mockedReviewService.listNotes.mockResolvedValue({
       items: [
         {
@@ -58,10 +100,8 @@ describe('useReviewStore', () => {
       page_size: 20,
     })
 
-    await useReviewStore.getState().loadRandom()
     await useReviewStore.getState().loadNotes('并发')
 
-    expect(useReviewStore.getState().randomCard?.note_path).toBe('wiki/concepts/random.md')
     expect(useReviewStore.getState().noteOptions).toHaveLength(1)
     expect(mockedReviewService.listNotes).toHaveBeenCalledWith({ query: '并发' })
   })
@@ -69,14 +109,7 @@ describe('useReviewStore', () => {
   it('updates selected mode and reset clears review state', () => {
     useReviewStore.getState().setSelectedMode('detailed_qa')
     useReviewStore.setState({
-      todayCard: {
-        note_path: 'wiki/concepts/today.md',
-        title: '今日复习',
-        source_title: '知识库',
-        review_reason: '今天适合回顾这篇内容',
-        estimated_minutes: 5,
-        available_modes: ['light_recall', 'detailed_qa'],
-      },
+      recommendationCard: randomCard,
     })
 
     expect(useReviewStore.getState().selectedMode).toBe('detailed_qa')
@@ -84,7 +117,7 @@ describe('useReviewStore', () => {
     useReviewStore.getState().reset()
 
     expect(useReviewStore.getState().selectedMode).toBe('light_recall')
-    expect(useReviewStore.getState().todayCard).toBeNull()
+    expect(useReviewStore.getState().recommendationCard).toBeNull()
     expect(useReviewStore.getState().noteOptions).toEqual([])
   })
 

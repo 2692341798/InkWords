@@ -59,6 +59,23 @@
   - `docker compose down && docker compose up -d --build` 失败：`Bind for 0.0.0.0:8081 failed: port is already allocated`
   - `docker ps` 确认占用来源为外部容器 `compile_server_1`
 
+### 对话 75：移除重复的今日推荐入口并提交 PR
+- **用户需求**：用户认为“开始今日复习”与“随机抽一篇”功能重复，要求删除红框中的模块；在页面仍显示旧模块后，要求重启项目；最终要求提交到 GitHub 并创建 PR。
+- **AI 动作**：
+  1. 先回读 review 页面与 store 实现，确认入口区仍存在自动推荐语义与随机抽题语义混用的问题，再与用户确认保留“随机抽题 + 手动选文”双入口。
+  2. 按 TDD 先更新前端测试，再将 `ReviewEntryCards`、`KnowledgeReview`、`ReviewSessionCard` 与 `reviewStore` 改为随机抽题主入口，并让首屏加载直接调用 `pickRandom()`。
+  3. 同步修复后端 `review` 随机选题逻辑，确保 `PickRandom` 从候选池中真正随机选择，而不是固定返回首个候选。
+  4. 发现浏览器仍加载旧静态资源后，按约束使用 `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build` 重启整套项目，并确认容器恢复正常。
+  5. 为避免把旧任务分支的 6 个历史提交混入 PR，基于 `origin/main` 创建隔离 worktree，仅搬运本次修复相关文件、补齐最小 docs 更新、重新验证后再准备 PR。
+- **决策/变更**：
+  - 将 review 主入口收敛为“随机抽题 + 手动选文”，不再在前端主视图展示“今日推荐”卡片，但保留服务端 `today` 枚举与路由以兼容历史数据和旧客户端。
+  - PR 必须从干净分支发起，不能直接复用已偏离 `origin/main` 的旧任务分支，避免把不相关提交和文档历史一并带入评审。
+- **验证**：
+  - `cd frontend && npm run test -- src/components/review/ReviewEntryCards.test.tsx src/store/reviewStore.test.ts src/services/review.test.ts src/pages/knowledgeReviewViewState.test.ts` 通过
+  - `cd frontend && npx tsc -p tsconfig.app.json --noEmit` 通过
+  - `cd backend && go test ./internal/domain/review/...` 通过
+  - `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build` 完成
+
 ### 对话 73：修复 AI 思考/对话式前言混入正文
 - **用户需求**：用户明确表示“不希望 AI 的思考内容也存在于正文当中”，并提供编辑器截图，显示润色预览与正文中出现“好的，收到你的需求。作为高级全栈架构师...”这类对话式前言。
 - **AI 动作**：

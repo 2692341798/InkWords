@@ -42,7 +42,7 @@ export function ReviewSessionCard({
         <div className="space-y-3">
           <h2 className="text-lg font-semibold text-zinc-900">当前会话</h2>
           <p className="text-sm leading-6 text-zinc-600">
-            先从“今日推荐 / 随机抽一篇 / 选择文章复习”任一入口开始，系统会在这里承接会话、提示和复盘。
+            先从“随机抽一篇 / 选择文章复习”任一入口开始，系统会在这里承接会话、提示和复盘。
           </p>
         </div>
         <div className="mt-5 flex gap-3">
