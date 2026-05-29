@@ -1,6 +1,34 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 79：修复知识复习随机抽题的顺序偏置
+- **用户需求**：在 `InkWords` 仓库内以 TDD 方式修复后端 review random picker：先补失败测试，再让 `PickRandom` 真正从可选笔记池中随机返回题卡，执行 Go 测试并汇总改动文件与结果。
+- **AI 动作**：
+  1. 先回读 `internal/domain/review/picker.go`、`picker_test.go` 与 review service 实现，确认 `PickRandom` 当前总是返回首个非 recent 笔记，存在明显顺序偏置。
+  2. 按 TDD 先新增失败测试：一组锁定“存在多个 eligible 笔记时，多次调用应出现不止一个结果”，另一组锁定“当全部笔记都 recent 时，也应从完整池中随机轮换”。
+  3. 在确认新测试红灯后，对 `PickRandom` 做最小实现：先构建 eligible pool，没有 eligible 时退回完整 pool，再按随机索引返回一篇题卡。
+  4. 执行 focused review tests 与 `go test ./...` 全量后端回归，确认未引入其它包回归。
+- **决策/变更**：
+  - 手动“换一篇/随机抽题”必须对输入顺序去偏置，否则固定排序的知识库会让用户长期只看到前排文章，违背随机入口的体验预期。
+  - 当全部候选都处于 recent window 内时，不再固定返回第一篇，而是退回完整候选池继续随机，保持接口语义稳定且避免顺序固化。
+- **验证**：
+  - `cd backend && go test ./internal/domain/review -run 'TestPicker_PickRandom_(ReturnsDifferentEligibleItemsAcrossCalls|UsesFullPoolWhenAllItemsAreRecent)' -count=1` 先失败、后通过
+  - `cd backend && go test ./... -count=1` 通过
+
+### 对话 78：合并知识复习入口为单一推荐卡并补齐前端测试
+- **用户需求**：在 `InkWords` 仓库内以 TDD 方式实现前端 review entry merge：用一张 recommendation 卡替代 today/random 两张自动卡片，刷新时轮换文章，补充/更新测试，执行聚焦前端测试并汇总结果。
+- **AI 动作**：
+  1. 先回读现有设计与实现计划 `2026-05-29-review-entry-merge-design.md` / `plan.md`，再核对 `reviewStore.ts`、`ReviewEntryCards.tsx`、`KnowledgeReview.tsx` 当前仍保留 `todayCard` 和 `randomCard` 双状态。
+  2. 按 TDD 先改测试：把 `reviewStore.test.ts` 改写为 `recommendationCard` / `loadRecommendation` / `refreshRecommendation` 语义，并新增 `ReviewEntryCards.test.tsx` 锁定“推荐一篇”单卡文案；执行目标 Vitest，确认其先因缺少新 API 和旧文案而失败。
+  3. 再做最小实现：`reviewStore` 收敛为单一推荐状态；`useKnowledgeReview` 初始化改用 `loadRecommendation`；`KnowledgeReview` 与 `HomeEntry` 切换到新的 store API；`ReviewEntryCards` 删掉随机卡，只保留推荐卡与手动选文卡。
+  4. 完成实现后执行聚焦前端测试与 TypeScript 检查，并同步更新 PRD / Architecture / README / Dev Log 中关于知识复习入口的文档描述。
+- **决策/变更**：
+  - 推荐入口统一承接“默认今日推荐 + 刷新随机轮换”的双重语义，但在界面上只暴露一张推荐卡，降低用户在两个近似入口之间的选择负担。
+  - 当前前端刷新逻辑在随机接口返回同一篇文章时保留当前卡片，避免 UI 误导；不在本次前端范围内新增接口参数或重试策略。
+- **验证**：
+  - `cd frontend && npm run test -- src/store/reviewStore.test.ts src/components/review/ReviewEntryCards.test.tsx src/pages/knowledgeReviewViewState.test.ts src/services/review.test.ts` 通过
+  - `cd frontend && npx tsc -p tsconfig.app.json --noEmit` 通过
+
 ### 对话 76：执行 Task 5，加固 Docker Compose 网络与运行时配置
 - **用户需求**：实现计划中的 Task 5：加固 `docker-compose.yml` 的网络与环境变量配置，尽可能减少默认宿主机端口暴露，移除机器私有挂载默认值，更新 `README` 运行说明，并用 `docker compose config` 做验证后汇总改动文件与结果。
 - **AI 动作**：
