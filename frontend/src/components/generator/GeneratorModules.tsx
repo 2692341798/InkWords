@@ -16,7 +16,7 @@ export function GeneratorModules({
   if (!store.modules || store.modules.length === 0) return null
 
   return (
-    <div className="mb-12">
+    <div>
       <div className="flex items-center justify-between mb-6">
         <div>
           <h3 className="text-lg font-medium text-zinc-900 dark:text-zinc-100">请选择要深入解析的目录</h3>

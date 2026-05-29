@@ -53,6 +53,19 @@
 - **验证**:
   - `docker compose --env-file backend/.env config` 通过
 
+### [2026-05-29] Feat - 生成器改为三步流并内嵌进度
+- **开发模块**: [Frontend Generator, StepStrip, File Upload Flow, Docs-as-Code]
+- **完成事项**:
+  1. 将生成器顶层阶段从 `source / configure / outline / progress` 收敛为 `source / configure / outline` 三步，顶部流程条同步调整为“选择来源 / 配置解析 / 确认大纲”。
+  2. 保留 `GeneratorStatus` 作为可复用内嵌进度卡片，并把解析/分析进度挂载到 `GeneratorConfigureStage`、把写作进度挂载到 `GeneratorOutlineStage`，去除独立进度页心智模型。
+  3. 拆分文件上传链路：`useFileParser` 在 `/api/v1/project/parse` 成功后仅负责落地 `source_content` 并停留在“配置解析”；用户在选择创作场景后通过“生成大纲”按钮显式触发 `/api/v1/stream/analyze`，修复 ZIP/课件上传跳过场景选择的问题。
+  4. 为 `generatorViewState`、阶段包装组件和文件解析 helper 补充/更新回归测试，确保三步模型、步内进度和文件上传顺序都被锁定；随后执行前端构建并重新构建 Docker。
+- **验证**:
+  - `cd frontend && npm run test -- src/pages/generatorViewState.test.ts src/components/generator/GeneratorStageViews.test.tsx src/components/shared/StepStrip.test.tsx src/hooks/generator/useFileParser.test.ts` 通过
+  - `cd frontend && npm run build` 通过（存在既有 Vite chunk size warning，不阻塞构建）
+  - `OBSIDIAN_VAULT_PATH='/Users/huangqijun/Documents/obsidian_knowledge/knowledge' docker compose up -d --build` 完成
+  - `curl -I http://localhost` 返回 `HTTP/1.1 200 OK`
+
 ## 3. 测试与联调计划
 遵循 Vibe Coding **“小步迭代与强制验证”** 的铁律，在实际开发过程中，严禁越过测试环节强行合并代码。
 
