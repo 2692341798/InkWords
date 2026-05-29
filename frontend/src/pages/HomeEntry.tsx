@@ -21,8 +21,8 @@ export function HomeEntry() {
   }, [blogs.length, fetchBlogs])
 
   useEffect(() => {
-    if (!reviewStore.todayCard && !reviewStore.isLoadingToday) {
-      void reviewStore.loadToday()
+    if (!reviewStore.recommendationCard && !reviewStore.isLoadingRecommendation) {
+      void reviewStore.loadRecommendation()
     }
     if (reviewStore.historyItems.length === 0 && !reviewStore.isLoadingHistory) {
       void reviewStore.loadHistory(3)

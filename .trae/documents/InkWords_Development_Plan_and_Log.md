@@ -43,6 +43,16 @@
 | | 类似 Notion 的二次编辑器与状态同步 | 中 | 2 天 |
 | **Integration** | 第三方发文 OpenAPI 对接与 Token 加密 | 高 (各平台不一) | 3 天 |
 
+### [2026-05-29] Fix - Review 随机抽题去除顺序偏置
+- **开发模块**: [Backend Review Domain, Picker, TDD, Docs-as-Code]
+- **完成事项**:
+  1. 先为 `backend/internal/domain/review/picker_test.go` 增加两组红灯测试，分别锁定“多个 eligible 笔记时应出现不同结果”和“全部笔记 recent 时也应随机轮换”。
+  2. 将 `PickRandom` 改为先收集 eligible pool，再从 pool 中按随机索引返回题卡，消除当前“永远返回首个非 recent 笔记”的顺序偏置。
+  3. 当 recent window 覆盖全部笔记时，退回完整候选池继续随机，而不是固定回落到第一篇，保证随机入口的行为与用户心智一致。
+- **验证**:
+  - `cd backend && go test ./internal/domain/review -run 'TestPicker_PickRandom_(ReturnsDifferentEligibleItemsAcrossCalls|UsesFullPoolWhenAllItemsAreRecent)' -count=1` 先失败、后通过
+  - `cd backend && go test ./... -count=1` 通过
+
 ### [2026-05-28] Chore - Docker Compose 网络与运行时配置加固
 - **开发模块**: [Docker Compose, README, Docs-as-Code]
 - **完成事项**:
@@ -65,6 +75,17 @@
   - `cd frontend && npm run build` 通过（存在既有 Vite chunk size warning，不阻塞构建）
   - `OBSIDIAN_VAULT_PATH='/Users/huangqijun/Documents/obsidian_knowledge/knowledge' docker compose up -d --build` 完成
   - `curl -I http://localhost` 返回 `HTTP/1.1 200 OK`
+
+### [2026-05-29] Feat - Review 入口合并为单一推荐卡
+- **开发模块**: [Frontend Review, Zustand Store, Docs-as-Code]
+- **完成事项**:
+  1. 将知识漫游复习入口从 `todayCard + randomCard` 双自动卡片收敛为单一 `recommendationCard`，初始加载使用 `today` 接口，页面只保留“推荐一篇 + 手动选文”两张卡片。
+  2. 为 `reviewStore` 新增 `loadRecommendation` 与 `refreshRecommendation`，让“换一篇”统一走随机抽题接口；当随机接口返回同一篇文章时保留当前卡片，避免误导用户已发生轮换。
+  3. 更新 `KnowledgeReview` 与 `HomeEntry` 对 review store 的引用，移除旧的 `todayCard` / `randomCard` / `loadToday` / `loadRandom` 依赖。
+  4. 按 TDD 先补失败测试，再新增 `ReviewEntryCards.test.tsx` 与更新 `reviewStore.test.ts`，锁定单一推荐卡文案与推荐刷新行为。
+- **验证**:
+  - `cd frontend && npm run test -- src/store/reviewStore.test.ts src/components/review/ReviewEntryCards.test.tsx src/pages/knowledgeReviewViewState.test.ts src/services/review.test.ts` 通过
+  - `cd frontend && npx tsc -p tsconfig.app.json --noEmit` 通过
 
 ## 3. 测试与联调计划
 遵循 Vibe Coding **“小步迭代与强制验证”** 的铁律，在实际开发过程中，严禁越过测试环节强行合并代码。

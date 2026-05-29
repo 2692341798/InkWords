@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - 架构设计与工程规范
 
 ## 0. 变更记录
+- 2026-05-29：知识漫游复习入口收敛为“推荐一篇 + 手动选文”两张卡片；前端 `reviewStore` 改用单一 `recommendationCard` 状态承接 `today` 默认题卡与“换一篇”后的随机结果，避免 `todayCard` / `randomCard` 双状态导致的重复入口与刷新歧义。
 - 2026-05-29：生成器工作流从“四步 + 独立处理页”收敛为“三步 + 步内进度”模型；`generatorViewState` 顶层阶段只保留 `source / configure / outline`，`GeneratorStatus` 退化为可复用的内嵌进度面板，分别挂载到 `GeneratorConfigureStage` 与 `GeneratorOutlineStage`。文件上传链路拆分为“先 parse、再在配置页显式触发 analyze”，避免 ZIP/课件上传后直接跳入独立进度页并倒序回到大纲。
 - 2026-05-28：Docker Compose 部署基线加固：显式声明 `inkwords-network`，默认仅暴露前端 `http://localhost`，后端/Redis/PostgreSQL 改为容器内互通；`OBSIDIAN_VAULT_PATH` 不再回退到机器私有绝对路径，需由 `backend/.env` 或外部环境显式提供。
 - 2026-05-27：项目定位升级为“墨言知识训练平台（InkWords Trainer）”，口号“把资料变成知识，把知识变成能力”；文档口径同步更新（不涉及架构与实现层面的强制改造）。
@@ -41,7 +42,7 @@
 - **场景锁定策略**：生成器在大纲生成前展示“创作场景”卡片；一旦 `outline` 存在，页面立即隐藏场景选择区，并在大纲头部展示只读场景标签，保证 Analyze 与后续 Generate 使用同一场景语义。
 - **流程型工作台编排**：默认入口为 `HomeEntry`；`Generator`、`KnowledgeReview`、`HomeEntry` 三处共享 `StepStrip` 展示流程预览/进度，但业务状态仍保留在页面层，通过 `generatorViewState`、`knowledgeReviewViewState`、`homeEntryViewState` 做纯前端编排，避免把共享 UI 组件耦合成全局状态机。
 - **生成器三步模型**：`Generator` 当前固定为 `选择来源 -> 配置解析 -> 确认大纲` 三步；解析/分析时仍停留在 `configure` 并内嵌展示 `GeneratorStatus`，正文生成时仍停留在 `outline` 并内嵌展示章节进度，`progress` 不再是顶层页面阶段。
-- **知识漫游复习工作台**：新增 `KnowledgeReview` 主视图，入口位于侧边栏；同一页面内收敛“开始今日复习 / 随机抽一篇 / 选择文章复习 / 当前会话 / 最近记录”五类状态，避免在多个页面间来回跳转。
+- **知识漫游复习工作台**：新增 `KnowledgeReview` 主视图，入口位于侧边栏；当前同一页面内收敛“推荐一篇 / 选择文章复习 / 当前会话 / 最近记录”四类状态，其中推荐入口默认展示 `today` 结果，并通过“换一篇”触发随机轮换。
 
 ### 2.2 后端 (Backend)
 - **核心语言**: Go 1.25+

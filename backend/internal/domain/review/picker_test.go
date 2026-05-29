@@ -59,17 +59,47 @@ func TestPicker_PickRandom_AvoidsRecentItems(t *testing.T) {
 	require.Equal(t, "wiki/concepts/b.md", got.NotePath)
 }
 
-func TestPicker_PickRandom_FallsBackToFirstWhenAllRecent(t *testing.T) {
+func TestPicker_PickRandom_ReturnsDifferentEligibleItemsAcrossCalls(t *testing.T) {
 	t.Parallel()
 
 	notes := []ReviewNote{
 		{NotePath: "wiki/concepts/a.md", Title: "A"},
 		{NotePath: "wiki/concepts/b.md", Title: "B"},
+		{NotePath: "wiki/concepts/c.md", Title: "C"},
+		{NotePath: "wiki/concepts/d.md", Title: "D"},
+	}
+	recent := map[string]bool{
+		"wiki/concepts/a.md": true,
 	}
 
-	got := PickRandom(notes, map[string]bool{
+	picked := make(map[string]struct{})
+	for range 128 {
+		got := PickRandom(notes, recent)
+		require.NotEqual(t, "wiki/concepts/a.md", got.NotePath)
+		picked[got.NotePath] = struct{}{}
+	}
+
+	require.Greater(t, len(picked), 1, "expected random picker to choose more than one eligible note across repeated calls")
+}
+
+func TestPicker_PickRandom_UsesFullPoolWhenAllItemsAreRecent(t *testing.T) {
+	t.Parallel()
+
+	notes := []ReviewNote{
+		{NotePath: "wiki/concepts/a.md", Title: "A"},
+		{NotePath: "wiki/concepts/b.md", Title: "B"},
+		{NotePath: "wiki/concepts/c.md", Title: "C"},
+	}
+
+	picked := make(map[string]struct{})
+	for range 128 {
+		got := PickRandom(notes, map[string]bool{
 		"wiki/concepts/a.md": true,
 		"wiki/concepts/b.md": true,
-	})
-	require.Equal(t, "wiki/concepts/a.md", got.NotePath)
+			"wiki/concepts/c.md": true,
+		})
+		picked[got.NotePath] = struct{}{}
+	}
+
+	require.Greater(t, len(picked), 1, "expected random picker to use the full pool when every note is recent")
 }

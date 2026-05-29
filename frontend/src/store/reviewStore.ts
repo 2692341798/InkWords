@@ -11,8 +11,7 @@ import {
 } from '@/services/review'
 
 interface ReviewState {
-  todayCard: ReviewCardResponse | null
-  randomCard: ReviewCardResponse | null
+  recommendationCard: ReviewCardResponse | null
   noteOptions: ReviewNoteOption[]
   notesPagination: Omit<ListNotesResponse, 'items'>
   currentSession: ReviewSessionResponse | null
@@ -21,12 +20,11 @@ interface ReviewState {
   latestStageFeedback: string | null
   latestHint: string | null
   finalFeedback: FinalFeedback | null
-  isLoadingToday: boolean
-  isLoadingRandom: boolean
+  isLoadingRecommendation: boolean
   isLoadingNotes: boolean
   isLoadingHistory: boolean
-  loadToday: () => Promise<void>
-  loadRandom: () => Promise<void>
+  loadRecommendation: () => Promise<void>
+  refreshRecommendation: () => Promise<void>
   loadNotes: (query?: string) => Promise<void>
   loadHistory: (limit?: number) => Promise<void>
   setSelectedMode: (mode: ReviewMode) => void
@@ -44,9 +42,8 @@ const initialPagination = {
 }
 
 // Why: 复习入口会在多个页面和交互阶段之间共享，单独 store 可以避免把 review 状态塞进 blog/generator 现有链路里。
-export const useReviewStore = create<ReviewState>((set) => ({
-  todayCard: null,
-  randomCard: null,
+export const useReviewStore = create<ReviewState>((set, get) => ({
+  recommendationCard: null,
   noteOptions: [],
   notesPagination: initialPagination,
   currentSession: null,
@@ -55,28 +52,39 @@ export const useReviewStore = create<ReviewState>((set) => ({
   latestStageFeedback: null,
   latestHint: null,
   finalFeedback: null,
-  isLoadingToday: false,
-  isLoadingRandom: false,
+  isLoadingRecommendation: false,
   isLoadingNotes: false,
   isLoadingHistory: false,
 
-  loadToday: async () => {
-    set({ isLoadingToday: true })
+  loadRecommendation: async () => {
+    set({ isLoadingRecommendation: true })
     try {
-      const todayCard = await reviewService.getToday()
-      set({ todayCard })
+      const recommendationCard = await reviewService.pickRandom()
+      set({ recommendationCard })
     } finally {
-      set({ isLoadingToday: false })
+      set({ isLoadingRecommendation: false })
     }
   },
 
-  loadRandom: async () => {
-    set({ isLoadingRandom: true })
+  refreshRecommendation: async () => {
+    set({ isLoadingRecommendation: true })
     try {
-      const randomCard = await reviewService.pickRandom()
-      set({ randomCard })
+      const currentRecommendation = get().recommendationCard
+      let nextRecommendation: ReviewCardResponse | null = null
+
+      // Why: 随机接口本身不知道当前 UI 正在展示哪一篇，所以前端最多重试几次，
+      // 尽量帮用户换到另一篇内容，而不是第一次命中相同文章就直接停住。
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const candidate = await reviewService.pickRandom()
+        if (!currentRecommendation || candidate.note_path !== currentRecommendation.note_path) {
+          nextRecommendation = candidate
+          break
+        }
+      }
+
+      set({ recommendationCard: nextRecommendation ?? currentRecommendation })
     } finally {
-      set({ isLoadingRandom: false })
+      set({ isLoadingRecommendation: false })
     }
   },
 
@@ -119,8 +127,7 @@ export const useReviewStore = create<ReviewState>((set) => ({
 
   reset: () =>
     set({
-      todayCard: null,
-      randomCard: null,
+      recommendationCard: null,
       noteOptions: [],
       notesPagination: initialPagination,
       currentSession: null,
@@ -129,8 +136,7 @@ export const useReviewStore = create<ReviewState>((set) => ({
       latestStageFeedback: null,
       latestHint: null,
       finalFeedback: null,
-      isLoadingToday: false,
-      isLoadingRandom: false,
+      isLoadingRecommendation: false,
       isLoadingNotes: false,
       isLoadingHistory: false,
     }),
