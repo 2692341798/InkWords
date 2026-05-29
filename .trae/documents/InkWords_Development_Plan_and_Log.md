@@ -114,16 +114,18 @@
 ## 4. 每日开发日志 (Dev Log)
 > 该区域将由 Vibe Coding 工程师（AI 助手）在每天/每次开发周期结束时，如实记录当天的完成事项、遇到的技术坑点及架构小规模调整。
 
-### [2026-05-28] Chore - Frontend Task 4 scoped compliance cleanup
-- **开发模块**: [Frontend UI Copy, JSDoc, Store Hygiene, Validation]
+### [2026-05-29] Fix - 收敛知识漫游复习入口并修复随机抽题
+- **开发模块**: [Frontend Review Entry, Backend Review Picker, Docs-as-Code]
 - **完成事项**:
-  1. 按 Task 4 在限定前端文件内清理剩余英文界面文案，将登录邮箱占位符、验证码图片 `alt` 与个人中心头像 `alt` 统一改为中文，避免前端展示层出现中英混杂。
-  2. 为 `frontend/src/hooks/useKnowledgeReview.ts`、`frontend/src/hooks/useBlogStream.ts`、`frontend/src/pages/Generator.tsx` 与 `frontend/src/components/Sidebar.tsx` 补齐 JSDoc，明确用途、输入输出与副作用边界，满足核心 Hook/复杂组件注释约束。
-  3. 复查 `frontend/src/store/index.ts` 的引用情况，确认仅为历史演示计数器且已无任何导入方后删除，减少 Zustand store 入口歧义。
-  4. 检查 `Sidebar.tsx` 文件规模；在 Task 3 已完成服务抽离基础上，本次补注释后文件维持 491 行，低于 500 行警戒线，因此不额外做拆分。
+  1. 收敛 `KnowledgeReview` 的自动入口，移除与随机抽题职责重复的“开始今日复习”卡片，仅保留“随机抽一篇 / 选择文章复习”。
+  2. 前端 `reviewStore` 首次加载改为直接调用 `pickRandom()`；“再抽一篇”在命中当前题卡时最多重试 3 次，尽量切换到不同文章。
+  3. 后端 `backend/internal/domain/review/picker.go` 修复为真正随机选题，不再固定返回首个符合条件的候选。
+  4. 补充并更新前后端回归测试，随后执行 Docker 重建确认新静态资源生效。
 - **验证**:
-  - `cd frontend && npm test` 通过（23 个测试文件、72 个测试全部通过）
-  - `cd frontend && npm run build` 通过（存在既有 Vite chunk size warning，不阻塞构建）
+  - `cd frontend && npm run test -- src/components/review/ReviewEntryCards.test.tsx src/store/reviewStore.test.ts src/services/review.test.ts src/pages/knowledgeReviewViewState.test.ts` 通过
+  - `cd frontend && npx tsc -p tsconfig.app.json --noEmit` 通过
+  - `cd backend && go test ./internal/domain/review/...` 通过
+  - `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build` 完成
 
 ### [2026-05-27] Docs - 知识漫游复习文档同步、全量验证与 Docker 联调
 - **开发模块**: [Docs-as-Code, Review API, Docker Compose, Validation]
