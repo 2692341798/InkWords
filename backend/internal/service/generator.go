@@ -114,8 +114,11 @@ func (s *GeneratorService) GenerateBlogStream(
 				}
 			case chunk, ok := <-internalChunkChan:
 				if !ok {
-					// Stream finished successfully, save to DB
-					s.saveToDB(ctx, userID, sourceType, fullContent)
+					// Why: a finished stream that fails to persist still needs to surface a stable failure
+					// to the caller, otherwise the UI sees a successful generation that never lands in history.
+					if err := s.saveToDB(ctx, userID, sourceType, fullContent); err != nil {
+						errChan <- err
+					}
 					return
 				}
 				if !timer.Stop() {
@@ -311,8 +314,12 @@ func (s *GeneratorService) GeneratePolishDraftStream(ctx context.Context, title 
 	}()
 }
 
-// saveToDB persists the generated markdown to PostgreSQL
-func (s *GeneratorService) saveToDB(ctx context.Context, userID uuid.UUID, sourceType string, content string) {
+// saveToDB persists the generated markdown to PostgreSQL.
+func (s *GeneratorService) saveToDB(ctx context.Context, userID uuid.UUID, sourceType string, content string) error {
+	if db.DB == nil {
+		return fmt.Errorf("persist generated blog: database not configured")
+	}
+
 	title := "文件解析生成的博客"
 
 	// Calculate word count
@@ -329,12 +336,14 @@ func (s *GeneratorService) saveToDB(ctx context.Context, userID uuid.UUID, sourc
 		modelType = envModel
 	}
 
-	extractedJSON, err := s.llmClient.GenerateJSON(ctx, modelType, messages)
-	if err == nil && len(extractedJSON) > 0 {
-		// basic validation that it is a json array
-		var parsed []string
-		if json.Unmarshal([]byte(extractedJSON), &parsed) == nil {
-			techStacks = datatypes.JSON(extractedJSON)
+	if s.llmClient != nil {
+		extractedJSON, err := s.llmClient.GenerateJSON(ctx, modelType, messages)
+		if err == nil && len(extractedJSON) > 0 {
+			// basic validation that it is a json array
+			var parsed []string
+			if json.Unmarshal([]byte(extractedJSON), &parsed) == nil {
+				techStacks = datatypes.JSON(extractedJSON)
+			}
 		}
 	}
 
@@ -349,13 +358,28 @@ func (s *GeneratorService) saveToDB(ctx context.Context, userID uuid.UUID, sourc
 		TechStacks:  techStacks,
 	}
 
-	if err := db.DB.WithContext(ctx).Create(blog).Error; err != nil {
-		fmt.Printf("Failed to save generated blog to DB: %v\n", err)
-	} else {
-		fmt.Printf("Saved generated blog to DB (ID: %s, Length: %d, TechStacks: %s)\n", blog.ID, len(content), string(techStacks))
+	// Why: persisting the generated blog and its token accounting must stay consistent.
+	// A transaction avoids silently storing a blog row while skipping the quota update.
+	estimatedTokens := len([]rune(content)) * 2
+	if err := db.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(blog).Error; err != nil {
+			return fmt.Errorf("create blog record: %w", err)
+		}
 
-		// Update user tokens used (rough estimation: 1 token ≈ 1.5 chars, let's just use rune count for simplicity)
-		estimatedTokens := len([]rune(content)) * 2
-		db.DB.Model(&model.User{}).Where("id = ?", userID).UpdateColumn("tokens_used", gorm.Expr("tokens_used + ?", estimatedTokens))
+		tokenUpdateResult := tx.Model(&model.User{}).
+			Where("id = ?", userID).
+			UpdateColumn("tokens_used", gorm.Expr("tokens_used + ?", estimatedTokens))
+		if tokenUpdateResult.Error != nil {
+			return fmt.Errorf("update user tokens: %w", tokenUpdateResult.Error)
+		}
+		if tokenUpdateResult.RowsAffected == 0 {
+			return fmt.Errorf("update user tokens: user not found")
+		}
+
+		return nil
+	}); err != nil {
+		return fmt.Errorf("persist generated blog: %w", err)
 	}
+
+	return nil
 }

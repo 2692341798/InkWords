@@ -1,6 +1,8 @@
 package review
 
 import (
+	cryptorand "crypto/rand"
+	"math/big"
 	"sort"
 	"time"
 )
@@ -42,11 +44,30 @@ func PickRandom(notes []ReviewNote, recent map[string]bool) ReviewNote {
 		return ReviewNote{}
 	}
 
+	// Why: the manual random entry should rotate across the whole eligible pool
+	// instead of always biasing toward the first non-recent note in source order.
+	eligible := make([]ReviewNote, 0, len(notes))
 	for _, note := range notes {
 		if !recent[note.NotePath] {
-			return note
+			eligible = append(eligible, note)
 		}
 	}
 
-	return notes[0]
+	if len(eligible) == 0 {
+		eligible = notes
+	}
+
+	return eligible[randomIndex(len(eligible))]
+}
+
+func randomIndex(length int) int {
+	if length <= 1 {
+		return 0
+	}
+
+	index, err := cryptorand.Int(cryptorand.Reader, big.NewInt(int64(length)))
+	if err != nil {
+		return int(time.Now().UnixNano() % int64(length))
+	}
+	return int(index.Int64())
 }

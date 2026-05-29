@@ -35,10 +35,10 @@ export function KnowledgeReview() {
     ? reviewStore.currentSession.title
     : effectiveIsPickerOpen
       ? '手动选择文章'
-      : '今日推荐 / 随机抽题 / 手动挑题'
+      : '随机抽题 / 手动挑题'
   const nextActionText =
     viewState.currentStep === 'entry'
-      ? '下一步：先决定从今日推荐、随机抽一篇，还是手动挑一篇进入复习。'
+      ? '下一步：先决定是随机抽一篇开始，还是手动挑一篇进入复习。'
       : viewState.currentStep === 'picker'
         ? '下一步：在候选列表中锁定一篇文章，系统会用推荐模式直接开启会话。'
         : '下一步：围绕当前主题持续作答或请求提示，直到形成最终反馈。'
@@ -59,7 +59,7 @@ export function KnowledgeReview() {
             <div className="space-y-2">
               <h1 className="text-3xl font-semibold tracking-tight text-zinc-900">把知识库里的重点内容重新讲出来</h1>
               <p className="max-w-3xl text-sm leading-6 text-zinc-600">
-                这里会承接今日推荐、随机抽题和手动选文三种入口，并把会话提示、追问和最近记录收敛在同一个复习工作台里。
+                这里会承接随机抽题和手动选文两种入口，并把会话提示、追问和最近记录收敛在同一个复习工作台里。
               </p>
             </div>
           </div>
@@ -84,26 +84,14 @@ export function KnowledgeReview() {
           <div className="space-y-6">
             {viewState.shouldShowEntryStep && (
               <ReviewEntryCards
-                todayCard={reviewStore.todayCard}
-                randomCard={reviewStore.randomCard}
-                isLoadingToday={reviewStore.isLoadingToday}
-                isLoadingRandom={reviewStore.isLoadingRandom}
-                onRefreshToday={() => reviewStore.loadToday()}
-                onRefreshRandom={() => reviewStore.loadRandom()}
-                onStartToday={async () => {
-                  if (!reviewStore.todayCard) {
-                    await reviewStore.loadToday()
+                recommendationCard={reviewStore.recommendationCard}
+                isLoadingRecommendation={reviewStore.isLoadingRecommendation}
+                onRefreshRecommendation={() => reviewStore.refreshRecommendation()}
+                onStartRecommendation={async () => {
+                  if (!reviewStore.recommendationCard) {
+                    await reviewStore.loadRecommendation()
                   }
-                  const card = useReviewStore.getState().todayCard
-                  if (card) {
-                    await startSession(card, 'today')
-                  }
-                }}
-                onStartRandom={async () => {
-                  if (!reviewStore.randomCard) {
-                    await reviewStore.loadRandom()
-                  }
-                  const card = useReviewStore.getState().randomCard
+                  const card = useReviewStore.getState().recommendationCard
                   if (card) {
                     await startSession(card, 'manual_random')
                   }

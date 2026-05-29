@@ -29,23 +29,23 @@ export function GeneratorStatus() {
     return null
   }
 
-  // Only render GeneratorStatus if we are actually doing work or have content.
-  // We avoid rendering the loading UI multiple times.
+  // Why: Task 3 turns progress into embeddable page content, so this component
+  // should only own the progress card itself and not a fullscreen overlay shell.
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-zinc-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden flex flex-col w-full max-w-2xl h-[80vh] max-h-[600px] animate-in zoom-in-95 duration-200">
-        <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/50 flex items-center justify-between">
-          <h3 className="font-medium text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-            <span className={`w-2.5 h-2.5 rounded-full ${isWorking ? 'bg-blue-500 dark:bg-blue-400 animate-pulse' : 'bg-green-500 dark:bg-green-400'}`}></span>
-            {title}
-          </h3>
-          {store.currentChapterTitle && !isParsing && (
-            <span className="text-sm text-zinc-500 dark:text-zinc-400 bg-white dark:bg-zinc-800 px-3 py-1 rounded-full border border-zinc-200 dark:border-zinc-700 shadow-sm">
-              正在生成: {store.currentChapterTitle}
-            </span>
-          )}
-        </div>
-        <div className="flex-1 overflow-y-auto p-6 bg-zinc-50/30 dark:bg-zinc-900/30 prose dark:prose-invert max-w-none custom-scrollbar">
+    <div className="overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="flex items-center justify-between border-b border-zinc-200 bg-zinc-50 px-6 py-4 dark:border-zinc-800 dark:bg-zinc-800/50">
+        <h3 className="flex items-center gap-2 font-medium text-zinc-900 dark:text-zinc-100">
+          <span className={`h-2.5 w-2.5 rounded-full ${isWorking ? 'bg-blue-500 dark:bg-blue-400 animate-pulse' : 'bg-green-500 dark:bg-green-400'}`}></span>
+          {title}
+        </h3>
+        {store.currentChapterTitle && !isParsing && (
+          <span className="rounded-full border border-zinc-200 bg-white px-3 py-1 text-sm text-zinc-500 shadow-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">
+            正在生成: {store.currentChapterTitle}
+          </span>
+        )}
+      </div>
+      <div className="max-h-[70vh] overflow-y-auto p-6 custom-scrollbar">
+        <div className="prose max-w-none bg-zinc-50/30 dark:prose-invert dark:bg-zinc-900/30">
         {!isParsing && currentStatusMessage && (
           <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 rounded-lg border border-blue-100 dark:border-blue-800/50 font-mono text-sm shadow-sm flex items-center gap-3">
             {isWorking && (
@@ -204,8 +204,8 @@ export function GeneratorStatus() {
             )}
           </div>
         )}
+        </div>
       </div>
-    </div>
     </div>
   )
 }

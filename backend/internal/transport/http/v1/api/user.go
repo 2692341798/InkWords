@@ -3,24 +3,13 @@ package api
 import (
 	"github.com/gin-gonic/gin"
 	userdomain "inkwords-backend/internal/domain/user"
-	"inkwords-backend/internal/infra/db"
 	"inkwords-backend/internal/service"
 )
 
+// UserAPI adapts user-related HTTP routes onto the user domain handler.
 type UserAPI struct {
 	userService       *service.UserService
 	userDomainHandler *userdomain.Handler
-}
-
-// NewUserAPI 创建 UserAPI 实例
-func NewUserAPI(userService *service.UserService) *UserAPI {
-	repo := userdomain.NewGormRepository(db.DB)
-	domainService := userdomain.NewService(repo)
-
-	return &UserAPI{
-		userService:       userService,
-		userDomainHandler: userdomain.NewHandler(domainService),
-	}
 }
 
 // GetProfile 获取个人中心配置与额度
@@ -43,14 +32,17 @@ func (a *UserAPI) GetUserStats(c *gin.Context) {
 	a.userDomainHandler.GetUserStats(c)
 }
 
+// GetPromptSettings proxies prompt-settings reads to the user domain handler.
 func (a *UserAPI) GetPromptSettings(c *gin.Context) {
 	a.userDomainHandler.GetPromptSettings(c)
 }
 
+// UpdatePromptSettings proxies prompt-settings updates to the user domain handler.
 func (a *UserAPI) UpdatePromptSettings(c *gin.Context) {
 	a.userDomainHandler.UpdatePromptSettings(c)
 }
 
+// NewUserAPIWithDeps creates a UserAPI with explicitly injected dependencies.
 func NewUserAPIWithDeps(userService *service.UserService, userDomainHandler *userdomain.Handler) *UserAPI {
 	return &UserAPI{
 		userService:       userService,

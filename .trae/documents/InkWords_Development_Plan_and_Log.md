@@ -43,6 +43,50 @@
 | | 类似 Notion 的二次编辑器与状态同步 | 中 | 2 天 |
 | **Integration** | 第三方发文 OpenAPI 对接与 Token 加密 | 高 (各平台不一) | 3 天 |
 
+### [2026-05-29] Fix - Review 随机抽题去除顺序偏置
+- **开发模块**: [Backend Review Domain, Picker, TDD, Docs-as-Code]
+- **完成事项**:
+  1. 先为 `backend/internal/domain/review/picker_test.go` 增加两组红灯测试，分别锁定“多个 eligible 笔记时应出现不同结果”和“全部笔记 recent 时也应随机轮换”。
+  2. 将 `PickRandom` 改为先收集 eligible pool，再从 pool 中按随机索引返回题卡，消除当前“永远返回首个非 recent 笔记”的顺序偏置。
+  3. 当 recent window 覆盖全部笔记时，退回完整候选池继续随机，而不是固定回落到第一篇，保证随机入口的行为与用户心智一致。
+- **验证**:
+  - `cd backend && go test ./internal/domain/review -run 'TestPicker_PickRandom_(ReturnsDifferentEligibleItemsAcrossCalls|UsesFullPoolWhenAllItemsAreRecent)' -count=1` 先失败、后通过
+  - `cd backend && go test ./... -count=1` 通过
+
+### [2026-05-28] Chore - Docker Compose 网络与运行时配置加固
+- **开发模块**: [Docker Compose, README, Docs-as-Code]
+- **完成事项**:
+  1. 为 `docker-compose.yml` 显式声明 `inkwords-network`，并将 `frontend`、`backend`、`db`、`redis`、`obsidian-bridge` 统一接入该内部网络。
+  2. 将 `db`/`redis`/`backend` 的宿主机 `ports` 暴露收敛为容器内 `expose`，默认仅保留前端 `80:80`，降低本地运行时默认攻击面。
+  3. 将 PostgreSQL 凭据改为 Compose 变量替换；移除 `OBSIDIAN_VAULT_PATH` 的机器私有默认绝对路径，要求通过 `backend/.env` 或外部环境显式提供。
+  4. 更新 `README.md` 运行说明，明确 `docker compose --env-file backend/.env ...` 的启动/重启方式、前端唯一入口、必填环境变量与 Docker 模式下的 OAuth 回调约定。
+- **验证**:
+  - `docker compose --env-file backend/.env config` 通过
+
+### [2026-05-29] Feat - 生成器改为三步流并内嵌进度
+- **开发模块**: [Frontend Generator, StepStrip, File Upload Flow, Docs-as-Code]
+- **完成事项**:
+  1. 将生成器顶层阶段从 `source / configure / outline / progress` 收敛为 `source / configure / outline` 三步，顶部流程条同步调整为“选择来源 / 配置解析 / 确认大纲”。
+  2. 保留 `GeneratorStatus` 作为可复用内嵌进度卡片，并把解析/分析进度挂载到 `GeneratorConfigureStage`、把写作进度挂载到 `GeneratorOutlineStage`，去除独立进度页心智模型。
+  3. 拆分文件上传链路：`useFileParser` 在 `/api/v1/project/parse` 成功后仅负责落地 `source_content` 并停留在“配置解析”；用户在选择创作场景后通过“生成大纲”按钮显式触发 `/api/v1/stream/analyze`，修复 ZIP/课件上传跳过场景选择的问题。
+  4. 为 `generatorViewState`、阶段包装组件和文件解析 helper 补充/更新回归测试，确保三步模型、步内进度和文件上传顺序都被锁定；随后执行前端构建并重新构建 Docker。
+- **验证**:
+  - `cd frontend && npm run test -- src/pages/generatorViewState.test.ts src/components/generator/GeneratorStageViews.test.tsx src/components/shared/StepStrip.test.tsx src/hooks/generator/useFileParser.test.ts` 通过
+  - `cd frontend && npm run build` 通过（存在既有 Vite chunk size warning，不阻塞构建）
+  - `OBSIDIAN_VAULT_PATH='/Users/huangqijun/Documents/obsidian_knowledge/knowledge' docker compose up -d --build` 完成
+  - `curl -I http://localhost` 返回 `HTTP/1.1 200 OK`
+
+### [2026-05-29] Feat - Review 入口合并为单一推荐卡
+- **开发模块**: [Frontend Review, Zustand Store, Docs-as-Code]
+- **完成事项**:
+  1. 将知识漫游复习入口从 `todayCard + randomCard` 双自动卡片收敛为单一 `recommendationCard`，初始加载使用 `today` 接口，页面只保留“推荐一篇 + 手动选文”两张卡片。
+  2. 为 `reviewStore` 新增 `loadRecommendation` 与 `refreshRecommendation`，让“换一篇”统一走随机抽题接口；当随机接口返回同一篇文章时保留当前卡片，避免误导用户已发生轮换。
+  3. 更新 `KnowledgeReview` 与 `HomeEntry` 对 review store 的引用，移除旧的 `todayCard` / `randomCard` / `loadToday` / `loadRandom` 依赖。
+  4. 按 TDD 先补失败测试，再新增 `ReviewEntryCards.test.tsx` 与更新 `reviewStore.test.ts`，锁定单一推荐卡文案与推荐刷新行为。
+- **验证**:
+  - `cd frontend && npm run test -- src/store/reviewStore.test.ts src/components/review/ReviewEntryCards.test.tsx src/pages/knowledgeReviewViewState.test.ts src/services/review.test.ts` 通过
+  - `cd frontend && npx tsc -p tsconfig.app.json --noEmit` 通过
+
 ## 3. 测试与联调计划
 遵循 Vibe Coding **“小步迭代与强制验证”** 的铁律，在实际开发过程中，严禁越过测试环节强行合并代码。
 
@@ -78,7 +122,21 @@
   3. 将 decomposition generate 相关辅助逻辑拆成更小文件，并补齐对应测试与 Vite 兼容性测试。
   4. 同步更新 README 与核心架构/API/数据库/PRD/对话日志文档，说明本次为工程化重构而非产品行为变更。
 - **验证**:
-  - 待提交前由开发者在该分支继续执行对应聚焦测试/构建命令
+  - `cd backend && go test ./internal/domain/review ./internal/service` 通过
+  - `cd frontend && npm run test -- src/components/sidebar/SidebarBatchActionBar.test.tsx src/components/sidebar/SidebarShell.test.tsx src/hooks/useSidebarBatchSelection.test.tsx src/lib/sidebarSelection.test.ts src/services/sidebarExport.test.ts src/vitePermissionCompatibility.test.ts` 通过
+
+### [2026-05-29] Fix - 收敛知识漫游复习入口并修复随机抽题
+- **开发模块**: [Frontend Review Entry, Backend Review Picker, Docs-as-Code]
+- **完成事项**:
+  1. 收敛 `KnowledgeReview` 的自动入口，移除与随机抽题职责重复的“开始今日复习”卡片，仅保留“随机抽一篇 / 选择文章复习”。
+  2. 前端 `reviewStore` 首次加载改为直接调用 `pickRandom()`；“再抽一篇”在命中当前题卡时最多重试 3 次，尽量切换到不同文章。
+  3. 后端 `backend/internal/domain/review/picker.go` 修复为真正随机选题，不再固定返回首个符合条件的候选。
+  4. 补充并更新前后端回归测试，随后执行 Docker 重建确认新静态资源生效。
+- **验证**:
+  - `cd frontend && npm run test -- src/components/review/ReviewEntryCards.test.tsx src/store/reviewStore.test.ts src/services/review.test.ts src/pages/knowledgeReviewViewState.test.ts` 通过
+  - `cd frontend && npx tsc -p tsconfig.app.json --noEmit` 通过
+  - `cd backend && go test ./internal/domain/review/...` 通过
+  - `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build` 完成
 
 ### [2026-05-27] Docs - 知识漫游复习文档同步、全量验证与 Docker 联调
 - **开发模块**: [Docs-as-Code, Review API, Docker Compose, Validation]

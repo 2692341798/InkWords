@@ -2,6 +2,7 @@ package blog
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -35,13 +36,13 @@ func NewHandlerWithLegacy(service *Service, legacyExporter LegacyExporter) *Hand
 func (h *Handler) GetUserBlogs(c *gin.Context) {
 	userIDStr, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "未授权的访问", "data": nil})
+		c.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "unauthorized", "data": nil})
 		return
 	}
 
 	uid, ok := userIDStr.(uuid.UUID)
 	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "用户 ID 类型错误", "data": nil})
+		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "internal server error", "data": nil})
 		return
 	}
 
@@ -56,7 +57,7 @@ func (h *Handler) GetUserBlogs(c *gin.Context) {
 
 	blogs, err := h.service.GetUserBlogs(c.Request.Context(), uid, page, size)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error(), "data": nil})
+		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "failed to load blogs", "data": nil})
 		return
 	}
 
@@ -66,19 +67,19 @@ func (h *Handler) GetUserBlogs(c *gin.Context) {
 func (h *Handler) CreateDraftBlog(c *gin.Context) {
 	userIDStr, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "未授权的访问", "data": nil})
+		c.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "unauthorized", "data": nil})
 		return
 	}
 
 	uid, ok := userIDStr.(uuid.UUID)
 	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "用户 ID 类型错误", "data": nil})
+		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "internal server error", "data": nil})
 		return
 	}
 
 	draft, err := h.service.CreateDraftBlog(c.Request.Context(), uid)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error(), "data": nil})
+		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "failed to create draft blog", "data": nil})
 		return
 	}
 
@@ -101,29 +102,29 @@ func (h *Handler) CreateDraftBlog(c *gin.Context) {
 func (h *Handler) BatchDeleteBlogs(c *gin.Context) {
 	userIDStr, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "未授权的访问", "data": nil})
+		c.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "unauthorized", "data": nil})
 		return
 	}
 
 	uid, ok := userIDStr.(uuid.UUID)
 	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "用户 ID 类型错误", "data": nil})
+		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "internal server error", "data": nil})
 		return
 	}
 
 	var req BatchDeleteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "请求参数格式错误", "data": nil})
+		c.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "invalid request body", "data": nil})
 		return
 	}
 
 	if len(req.BlogIDs) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "blog_ids 不能为空", "data": nil})
+		c.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "blog_ids must not be empty", "data": nil})
 		return
 	}
 
 	if err := h.service.BatchDeleteBlogs(c.Request.Context(), uid, req.BlogIDs); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error(), "data": nil})
+		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "failed to delete blogs", "data": nil})
 		return
 	}
 
@@ -133,31 +134,35 @@ func (h *Handler) BatchDeleteBlogs(c *gin.Context) {
 func (h *Handler) UpdateBlog(c *gin.Context) {
 	userIDStr, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "未授权的访问", "data": nil})
+		c.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "unauthorized", "data": nil})
 		return
 	}
 
 	uid, ok := userIDStr.(uuid.UUID)
 	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "用户 ID 类型错误", "data": nil})
+		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "internal server error", "data": nil})
 		return
 	}
 
 	blogIDStr := c.Param("id")
 	blogID, err := uuid.Parse(blogIDStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "无效的博客 ID", "data": nil})
+		c.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "invalid blog id", "data": nil})
 		return
 	}
 
 	var req UpdateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "请求参数格式错误", "data": nil})
+		c.JSON(http.StatusBadRequest, gin.H{"code": http.StatusBadRequest, "message": "invalid request body", "data": nil})
 		return
 	}
 
 	if err := h.service.UpdateBlog(c.Request.Context(), blogID, uid, req); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": err.Error(), "data": nil})
+		if errors.Is(err, ErrBlogNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"code": http.StatusNotFound, "message": "blog not found", "data": nil})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "failed to update blog", "data": nil})
 		return
 	}
 

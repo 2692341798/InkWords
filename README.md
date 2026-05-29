@@ -8,23 +8,17 @@
 它依然支持将资料进一步生成小白友好、可复现的系列技术博客，但 README 的主叙事将更聚焦在“知识沉淀 → 复习闭环 → 可选的对外输出（博客/导出）”。
 
 ## 2. 核心特性 (Features)
-- **工程化模块拆分（Phase 1）**：持续将 `Sidebar`、review 领域服务和分解生成辅助逻辑拆成更小的组件、hooks 与同包多文件，降低超大文件体积并提升可维护性。
 - **一键知识摄入（Ingest）**：支持解析 Git 仓库、本地文档（PDF/DOCX/Markdown/TXT）与 ZIP 课件包，自动生成符合 Karpathy LLM Wiki Pattern 的 `sources/`、`concepts/`、`entities/` 卡片与双向链接。
 - **知识库“热缓存 + 索引 + 日志”自动维护**：自动更新 `wiki/index.md`、`wiki/hot.md` 与 `wiki/log.md`，避免知识孤岛，让知识库可持续演进。
-- **知识漫游复习工作台（核心主链路）**：支持“今日推荐 / 随机抽题 / 手动选文”，并提供 `light_recall / detailed_qa` 两种训练模式，形成中文反馈闭环与最近记录。
+- **知识漫游复习工作台（核心主链路）**：支持“随机抽一篇 / 手动选文”两种入口，并提供 `light_recall / detailed_qa` 两种训练模式，形成中文反馈闭环与最近记录。
 - **流程型入口与单步聚焦体验**：默认入口 `HomeEntry` 帮你在“知识复习 / 内容生成”之间选择路径，页面同一时间只聚焦一个主步骤，减少平铺与注意力分散。
+- **生成器三步流与步内进度**：博客生成工作台固定为“选择来源 → 配置解析 → 确认大纲”三步；解析/分析进度展示在“配置解析”内部，正文生成进度展示在“确认大纲”内部，不再跳入独立进度页。
 - **全链路流式体验（SSE）**：从解析、分析到生成与润色，全链路使用 SSE 推送进度与内容，让过程可见、可中断、可续写。
 - **阅后即焚的安全策略**：解析源文件只在内存中处理，任务完成后立即清理临时产物；对用户可见正文做净化，剥离 `<think>` 与对话式前言。
 - **可选的对外输出：博客生成与导出**：在知识沉淀基础上，支持生成可复现的系列技术博客、导读串联，以及批量导出为 Markdown ZIP 或直通 Obsidian Vault。
 - **超大规模资料处理**：对超长文本/大型仓库支持 Map-Reduce 分块并发分析，降低上下文遗忘并提升稳定性。
 
-## 3. 使用路径（推荐）
-1. **先摄入**：上传文档/ZIP 或输入 Git 仓库地址，完成解析与聚合。
-2. **再沉淀**：将结果导出到本地 Obsidian Vault（自动生成索引与双向链接）。
-3. **再复习**：进入“知识漫游复习”，用题卡与追问把知识变成可调用的能力。
-4. **再输出（可选）**：需要对外表达时，再把内容组织成系列博客并导出。
-
-## 4. 技术栈与架构 (Tech Stack)
+## 3. 技术栈与架构 (Tech Stack)
 本项目采用前后端完全分离的 **Monorepo** 结构。
 
 - **前端 (`frontend/`)**：
@@ -48,14 +42,29 @@
 ## 5. 快速开始 (Quick Start)
 
 ### 5.1 推荐：Docker 一键部署
-项目已提供完整的容器化支持，只需一行命令即可拉起前后端与数据库：
+项目已提供完整的容器化支持。Docker Compose 运行时约定统一从 `backend/.env` 读取环境变量，再拉起前后端与数据库：
 ```bash
-# 使用 Docker Compose 一键启动
-docker compose down && docker compose up -d --build
+# 标准启动命令
+docker compose --env-file backend/.env up -d --build
 ```
-启动前请先在 `backend/.env` 中配置必要环境变量（例如 `DEEPSEEK_API_KEY`、`DATABASE_URL`、`JWT_SECRET`、`OBSIDIAN_REST_API_KEY`）。当前 Docker 本地开发默认通过 `backend/.env` 中的 `OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY=true` 访问 Obsidian Local REST API，避免把宿主机错误文件挂载成证书；如需启用严格证书校验，请显式配置 `OBSIDIAN_REST_API_CERT_PATH` 指向真实插件证书，并将 `OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY=false`。
+如需应用新代码或完整重启，请使用：
+```bash
+# 标准重启命令
+docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build
+```
+
+启动前请先在 `backend/.env` 中配置必要环境变量：
+- **必须配置**：`DEEPSEEK_API_KEY`、`JWT_SECRET`、`OBSIDIAN_REST_API_KEY`、`OBSIDIAN_VAULT_PATH`
+- **Docker 运行时建议显式维护**：`POSTGRES_USER`、`POSTGRES_PASSWORD`、`POSTGRES_DB`
+- **按需覆盖**：`FRONTEND_URL`、`REDIS_URL`、`OBSIDIAN_REST_API_BASE_URL`、`OBSIDIAN_WIKI_DIR`
+
+当前 Docker 默认仅暴露前端入口 `http://localhost`；`backend`、`db`、`redis` 仅在 Docker 内部网络 `inkwords-network` 中互通，不再默认暴露宿主机端口。当前 Docker 本地开发仍默认通过 `backend/.env` 中的 `OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY=true` 访问 Obsidian Local REST API，避免把宿主机错误文件挂载成证书；如需启用严格证书校验，请显式配置 `OBSIDIAN_REST_API_CERT_PATH` 指向真实插件证书，并将 `OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY=false`。
+
+如果你需要在 Docker 模式下使用 GitHub OAuth，本地回调地址应配置为 `http://localhost/api/v1/auth/callback/github`；如果你运行的是 Vite 本地开发服务器，再改回 `http://localhost:5173/api/v1/auth/callback/github`。
+
+`OBSIDIAN_VAULT_PATH` 不再提供任何机器私有的默认绝对路径。请显式把它设置为你的 Obsidian `wiki/` 根目录，否则容器启动前的 Compose 渲染会直接报错，避免静默挂载到错误位置。
 如遇导出到 Obsidian 提示“无法解析 Obsidian 目录列表响应”，请确认后端版本已兼容 Obsidian Local REST API 目录列表 `{ "files": [...] }` 返回格式。
-如遇上传 PDF/DOCX/Markdown/TXT/ZIP 后仍提示 `git_url is required for git source type`，请先执行 `docker compose down && docker compose up -d --build` 并强制刷新浏览器，以确保前端静态资源与后端兼容逻辑同步生效。
+如遇上传 PDF/DOCX/Markdown/TXT/ZIP 后仍提示 `git_url is required for git source type`，请先执行标准重启命令并强制刷新浏览器，以确保前端静态资源与后端兼容逻辑同步生效。
 
 ### 5.1.1 ZIP 课件包上传说明
 - 支持上传 `.zip` 课件包，后端会自动扫描其中的受支持文档与代码文本文件。
@@ -78,8 +87,7 @@ docker compose down && docker compose up -d --build
 
 ### 5.1.3 知识漫游复习说明
 - 侧边栏新增“知识漫游复习”入口，登录后可直接进入独立工作台。
-- 当前支持三种进入方式：
-  - 开始今日复习
+- 当前支持两种进入方式：
   - 随机抽一篇
   - 选择文章复习
 - 当前支持两种训练模式：

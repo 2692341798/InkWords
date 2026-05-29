@@ -2,10 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { getGeneratorViewState } from './generatorViewState'
 
 describe('getGeneratorViewState', () => {
-  it('starts from the input step before the source is fully configured', () => {
+  it('stays on source before any source is ready', () => {
     expect(
       getGeneratorViewState({
         sourceType: null,
+        sourceContent: '',
         modules: null,
         outline: null,
         scenarioMode: 'open_book_exam_review',
@@ -13,84 +14,52 @@ describe('getGeneratorViewState', () => {
         isAnalyzing: false,
         isGenerating: false,
       }),
-    ).toEqual({
-      currentStep: 'input',
+    ).toMatchObject({
+      currentStage: 'source',
       currentStepIndex: 0,
-      shouldShowInputStep: true,
-      shouldShowConfigureStep: false,
-      shouldShowOutlineStep: false,
-      shouldShowScenarioSelector: true,
-      lockedScenarioLabel: null,
-      isProcessing: false,
-    })
-  })
-
-  it('switches to the configure step after git scan returns modules', () => {
-    expect(
-      getGeneratorViewState({
-        sourceType: 'git',
-        modules: [{ path: 'cmd', name: 'cmd', description: '入口目录' }],
-        outline: null,
-        scenarioMode: 'open_book_exam_review',
-        isScanning: false,
-        isAnalyzing: false,
-        isGenerating: false,
-      }),
-    ).toEqual({
-      currentStep: 'configure',
-      currentStepIndex: 1,
-      shouldShowInputStep: false,
-      shouldShowConfigureStep: true,
-      shouldShowOutlineStep: false,
-      shouldShowScenarioSelector: true,
-      lockedScenarioLabel: null,
-      isProcessing: false,
-    })
-  })
-
-  it('switches to the outline step after outline generation', () => {
-    expect(
-      getGeneratorViewState({
-        sourceType: 'git',
-        modules: [{ path: 'cmd', name: 'cmd', description: '入口目录' }],
-        outline: [{ sort: 1, title: '章节一', summary: '摘要' }],
-        scenarioMode: 'open_book_exam_review',
-        isScanning: false,
-        isAnalyzing: false,
-        isGenerating: false,
-      }),
-    ).toEqual({
-      currentStep: 'outline',
-      currentStepIndex: 2,
-      shouldShowInputStep: false,
-      shouldShowConfigureStep: false,
-      shouldShowOutlineStep: true,
+      shouldShowInlineProgress: false,
+      progressHostStage: null,
       shouldShowScenarioSelector: false,
-      lockedScenarioLabel: '开卷复习',
-      isProcessing: false,
     })
   })
 
-  it('marks the page as processing while a scan or generation is running', () => {
+  it('keeps parsing and analysis inside configure instead of switching to a progress stage', () => {
     expect(
       getGeneratorViewState({
-        sourceType: 'git',
+        sourceType: 'file',
+        sourceContent: 'parsed zip content',
         modules: null,
         outline: null,
-        scenarioMode: 'open_book_exam_review',
-        isScanning: true,
-        isAnalyzing: false,
+        scenarioMode: 'ebook_interpretation',
+        isScanning: false,
+        isAnalyzing: true,
         isGenerating: false,
       }),
-    ).toEqual({
-      currentStep: 'processing',
-      currentStepIndex: 3,
-      shouldShowInputStep: false,
-      shouldShowConfigureStep: false,
-      shouldShowOutlineStep: false,
-      shouldShowScenarioSelector: false,
-      lockedScenarioLabel: null,
-      isProcessing: true,
+    ).toMatchObject({
+      currentStage: 'configure',
+      currentStepIndex: 1,
+      shouldShowInlineProgress: true,
+      progressHostStage: 'configure',
+    })
+  })
+
+  it('keeps generation inside outline instead of switching to a progress stage', () => {
+    expect(
+      getGeneratorViewState({
+        sourceType: 'git',
+        sourceContent: 'repo summary',
+        modules: [{ path: 'cmd', name: 'cmd', description: '入口目录' }],
+        outline: [{ sort: 1, title: '第一篇', summary: '摘要' }],
+        scenarioMode: 'ebook_interpretation',
+        isScanning: false,
+        isAnalyzing: false,
+        isGenerating: true,
+      }),
+    ).toMatchObject({
+      currentStage: 'outline',
+      currentStepIndex: 2,
+      shouldShowInlineProgress: true,
+      progressHostStage: 'outline',
     })
   })
 })

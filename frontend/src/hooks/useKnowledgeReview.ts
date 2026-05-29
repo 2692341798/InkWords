@@ -28,6 +28,11 @@ const appendTurn = (
   return nextTurns
 }
 
+/**
+ * Encapsulates the full knowledge-review session lifecycle, including restore,
+ * start, answer, hint, finish, and local persistence boundaries, so the page
+ * can focus on presenting the current review state.
+ */
 // Why: 复习会话需要把“创建 / 继续 / 回答 / 提示 / 结束”封装成单一交互入口，页面只关心触发动作和展示状态。
 export function useKnowledgeReview() {
   const {
@@ -56,7 +61,7 @@ export function useKnowledgeReview() {
 
   const initialize = useCallback(async () => {
     await Promise.all([
-      useReviewStore.getState().loadToday(),
+      useReviewStore.getState().loadRecommendation(),
       useReviewStore.getState().loadHistory(5),
     ])
 
