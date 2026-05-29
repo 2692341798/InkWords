@@ -14,7 +14,7 @@ export const useBlogStream = () => {
   const store = useStreamStore()
   const { scanGit } = useProjectScanner()
   const { analyzeGit } = useProjectAnalyzer()
-  const { parseFile } = useFileParser()
+  const { parseFile, analyzeParsedFile } = useFileParser()
   const { generateSeries, generateSingle } = useSeriesGenerator()
 
   const stopAnalyzing = useCallback(() => {
@@ -40,6 +40,7 @@ export const useBlogStream = () => {
     scanGit,
     analyzeGit,
     parseFile,
+    analyzeParsedFile,
     generateSeries,
     generateSingle,
     stopAnalyzing,

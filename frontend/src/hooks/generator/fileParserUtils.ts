@@ -10,7 +10,7 @@ export interface ArchiveSummary {
   kept_paths?: string[]
 }
 
-interface ParseFileResponse {
+export interface ParseFileResponse {
   content?: string
   data?: {
     source_content?: string

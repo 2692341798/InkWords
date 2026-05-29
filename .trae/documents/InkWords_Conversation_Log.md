@@ -14,6 +14,23 @@
 - **验证**：
   - `docker compose --env-file backend/.env config` 通过
 
+### 对话 77：重构生成器为三步流并将进度内嵌到步骤内
+- **用户需求**：用户先后提出两类问题：一是希望生成器不要把所有流程平铺在同一页，而要形成清晰的步骤流；二是在实际测试后发现“处理进度”不应是独立步骤，因为 step 2 和 step 3 都要在原步骤内展示进度，且文件上传不应跳过场景选择直接进入进度页。
+- **AI 动作**：
+  1. 先读取知识库 `wiki/hot.md`、`wiki/index.md` 与 `[[concepts/前端组件体系：Generator 系列]]`，结合 `Generator.tsx`、`generatorViewState.ts`、`useFileParser.ts` 排查当前生成器的阶段编排与文件上传链路。
+  2. 先按用户初始要求写出“四步 + 独立处理页”的设计与实现计划，随后在真实测试反馈下修正设计：移除独立 `progress` 顶层阶段，改为 `选择来源 -> 配置解析 -> 确认大纲` 三步模型，并新增内嵌进度设计稿与计划。
+  3. 严格按 TDD 分任务落地：先收敛 `generatorViewState` 为三步顶层阶段；再保留 `GeneratorStatus` 作为纯内嵌进度面板；最后把解析/分析进度嵌入 `GeneratorConfigureStage`、把写作进度嵌入 `GeneratorOutlineStage`，并将文件上传链路拆成“先 parse、后 analyze”两步，修复 ZIP/课件上传后跳过场景选择的问题。
+  4. 对每个子任务执行 focused tests / build / Docker rebuild，并在用户通过 `http://localhost` 验证旧页面或错误流程时，多次执行 `docker compose up -d --build` 让静态资源与后端状态同步。
+- **决策/变更**：
+  - 顶部 `StepStrip` 从 4 步调整为 3 步；`处理进度` 不再作为独立步骤存在。
+  - `GeneratorStatus` 只作为内嵌进度卡片复用：分析进度属于 `配置解析`，生成进度属于 `确认大纲`。
+  - 文件上传仅在 `/api/v1/project/parse` 成功后进入配置页；真正的大纲分析需要用户在配置页选择场景后手动点击“生成大纲”，不再自动串联到 `/api/v1/stream/analyze`。
+- **验证**：
+  - `cd frontend && npm run test -- src/pages/generatorViewState.test.ts src/components/generator/GeneratorStageViews.test.tsx src/components/shared/StepStrip.test.tsx` 通过
+  - `cd frontend && npm run build` 通过
+  - `OBSIDIAN_VAULT_PATH=... docker compose up -d --build` 完成
+  - `curl -I http://localhost` 返回 `HTTP/1.1 200 OK`
+
 ### 对话 75：继续 Task 4，执行前端中文文案/JSDoc/store 清理与验证
 - **用户需求**：在承接同一执行流中 Task 3 的前端改动基础上，继续 Task 4：规范限定文件中的中文界面文案、为导出的 Hook/复杂组件补 JSDoc、审查并移除 `frontend/src/store/index.ts`、仅在必要时继续缩减 `Sidebar.tsx`，最后运行前端测试与构建并汇总改动文件。
 - **AI 动作**：
