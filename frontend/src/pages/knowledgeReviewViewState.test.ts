@@ -1,15 +1,52 @@
 import { describe, expect, it } from 'vitest'
-import { createElement } from 'react'
-import { renderToStaticMarkup } from 'react-dom/server'
-import { KnowledgeReview } from './KnowledgeReview'
+import { getKnowledgeReviewViewState } from './knowledgeReviewViewState'
 
-describe('KnowledgeReview', () => {
-  it('shows the three entry actions and recent history section', () => {
-    const html = renderToStaticMarkup(createElement(KnowledgeReview))
+describe('getKnowledgeReviewViewState', () => {
+  it('starts from the entry step when no picker or session is active', () => {
+    expect(
+      getKnowledgeReviewViewState({
+        hasSession: false,
+        isPickerOpen: false,
+      }),
+    ).toEqual({
+      currentStep: 'entry',
+      currentStepIndex: 0,
+      shouldShowEntryStep: true,
+      shouldShowPickerStep: false,
+      shouldShowSessionStep: false,
+      shouldShowHistory: true,
+    })
+  })
 
-    expect(html).toContain('开始今日复习')
-    expect(html).toContain('随机抽一篇')
-    expect(html).toContain('选择文章复习')
-    expect(html).toContain('最近复习记录')
+  it('switches to the picker step when manual selection is opened', () => {
+    expect(
+      getKnowledgeReviewViewState({
+        hasSession: false,
+        isPickerOpen: true,
+      }),
+    ).toEqual({
+      currentStep: 'picker',
+      currentStepIndex: 1,
+      shouldShowEntryStep: false,
+      shouldShowPickerStep: true,
+      shouldShowSessionStep: false,
+      shouldShowHistory: false,
+    })
+  })
+
+  it('switches to the session step when a review session exists', () => {
+    expect(
+      getKnowledgeReviewViewState({
+        hasSession: true,
+        isPickerOpen: true,
+      }),
+    ).toEqual({
+      currentStep: 'session',
+      currentStepIndex: 2,
+      shouldShowEntryStep: false,
+      shouldShowPickerStep: false,
+      shouldShowSessionStep: true,
+      shouldShowHistory: false,
+    })
   })
 })

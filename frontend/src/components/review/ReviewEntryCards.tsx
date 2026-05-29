@@ -1,17 +1,13 @@
 import type { ComponentType } from 'react'
-import { BookOpen, Clock3, Shuffle, Sparkles } from 'lucide-react'
+import { BookOpen, Clock3, Shuffle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { ReviewCardResponse } from '@/services/review'
 
 interface ReviewEntryCardsProps {
-  todayCard: ReviewCardResponse | null
-  randomCard: ReviewCardResponse | null
-  isLoadingToday: boolean
-  isLoadingRandom: boolean
-  onRefreshToday: () => Promise<void> | void
-  onRefreshRandom: () => Promise<void> | void
-  onStartToday: () => Promise<void> | void
-  onStartRandom: () => Promise<void> | void
+  recommendationCard: ReviewCardResponse | null
+  isLoadingRecommendation: boolean
+  onRefreshRecommendation: () => Promise<void> | void
+  onStartRecommendation: () => Promise<void> | void
   onOpenPicker: () => Promise<void> | void
 }
 
@@ -76,28 +72,17 @@ function ReviewCard({
 
 export function ReviewEntryCards(props: ReviewEntryCardsProps) {
   return (
-    <section className="grid gap-4 md:grid-cols-3">
-      <ReviewCard
-        title="开始今日复习"
-        description="优先推荐今天最值得回顾的一篇内容。"
-        icon={Sparkles}
-        detail={props.todayCard}
-        loading={props.isLoadingToday}
-        actionLabel="开始今日复习"
-        refreshLabel="刷新推荐"
-        onAction={props.onStartToday}
-        onRefresh={props.onRefreshToday}
-      />
+    <section className="grid gap-4 md:grid-cols-2">
       <ReviewCard
         title="随机抽一篇"
-        description="适合快速进入状态，打散固定复习路径。"
+        description="适合快速进入状态，先从一篇随机文章开始复习。"
         icon={Shuffle}
-        detail={props.randomCard}
-        loading={props.isLoadingRandom}
+        detail={props.recommendationCard}
+        loading={props.isLoadingRecommendation}
         actionLabel="用这篇开始"
         refreshLabel="再抽一篇"
-        onAction={props.onStartRandom}
-        onRefresh={props.onRefreshRandom}
+        onAction={props.onStartRecommendation}
+        onRefresh={props.onRefreshRecommendation}
       />
       <article className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
         <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 text-zinc-700">

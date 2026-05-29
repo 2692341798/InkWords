@@ -12,6 +12,7 @@ interface ReviewSessionCardProps {
   onRespond: (answer: string) => Promise<void> | void
   onRequestHint: () => Promise<void> | void
   onFinish: () => Promise<void> | void
+  onClose?: () => void
 }
 
 const modeLabels: Record<ReviewMode, string> = {
@@ -29,6 +30,7 @@ export function ReviewSessionCard({
   onRespond,
   onRequestHint,
   onFinish,
+  onClose,
 }: ReviewSessionCardProps) {
   const [answer, setAnswer] = useState('')
 
@@ -40,7 +42,7 @@ export function ReviewSessionCard({
         <div className="space-y-3">
           <h2 className="text-lg font-semibold text-zinc-900">当前会话</h2>
           <p className="text-sm leading-6 text-zinc-600">
-            先从“今日推荐 / 随机抽一篇 / 选择文章复习”任一入口开始，系统会在这里承接会话、提示和复盘。
+            先从“随机抽一篇 / 选择文章复习”任一入口开始，系统会在这里承接会话、提示和复盘。
           </p>
         </div>
         <div className="mt-5 flex gap-3">
@@ -71,6 +73,11 @@ export function ReviewSessionCard({
           <Button variant={selectedMode === 'detailed_qa' ? 'default' : 'outline'} onClick={() => onModeChange('detailed_qa')}>
             细致提问
           </Button>
+          {onClose ? (
+            <Button variant="outline" onClick={onClose}>
+              返回入口
+            </Button>
+          ) : null}
         </div>
       </div>
 

@@ -8,9 +8,10 @@ interface ReviewNotePickerProps {
   onSearch: (query: string) => Promise<void> | void
   onModeSync: (mode: ReviewMode) => void
   onSelect: (card: ReviewCardResponse) => Promise<void> | void
+  onBack?: () => void
 }
 
-export function ReviewNotePicker({ notes, isLoading, onSearch, onModeSync, onSelect }: ReviewNotePickerProps) {
+export function ReviewNotePicker({ notes, isLoading, onSearch, onModeSync, onSelect, onBack }: ReviewNotePickerProps) {
   const [query, setQuery] = useState('')
 
   return (
@@ -20,16 +21,23 @@ export function ReviewNotePicker({ notes, isLoading, onSearch, onModeSync, onSel
           <h2 className="text-lg font-semibold text-zinc-900">选择文章复习</h2>
           <p className="mt-1 text-sm leading-6 text-zinc-600">只展示适合复习的概念卡，避免抽到索引页或空白页。</p>
         </div>
-        <div className="flex w-full gap-3 md:max-w-xl">
+        <div className="flex w-full flex-col gap-3 md:max-w-xl md:flex-row">
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="按标题关键字搜索，例如：并发"
             className="h-10 flex-1 rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm text-zinc-900 outline-none transition focus:border-indigo-300 focus:bg-white"
           />
-          <Button variant="outline" onClick={() => onSearch(query)} disabled={isLoading}>
-            搜索
-          </Button>
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={() => onSearch(query)} disabled={isLoading}>
+              搜索
+            </Button>
+            {onBack ? (
+              <Button variant="outline" onClick={onBack}>
+                返回入口
+              </Button>
+            ) : null}
+          </div>
         </div>
       </div>
 
