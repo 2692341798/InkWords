@@ -2,10 +2,10 @@ package api
 
 import (
 	streamdomain "inkwords-backend/internal/domain/stream"
-	"inkwords-backend/internal/infra/db"
 	"inkwords-backend/internal/service"
 )
 
+// StreamAPI adapts stream-related HTTP routes onto the stream domain handler.
 type StreamAPI struct {
 	generatorService     *service.GeneratorService
 	decompositionService *service.DecompositionService
@@ -13,14 +13,7 @@ type StreamAPI struct {
 	streamDomainHandler  *streamdomain.Handler
 }
 
-func NewStreamAPI(userService *service.UserService) *StreamAPI {
-	promptReqService := service.NewPromptRequirementsService(db.DB)
-	generatorService := service.NewGeneratorService(promptReqService)
-	decompositionService := service.NewDecompositionService(promptReqService)
-	streamService := streamdomain.NewService(generatorService, decompositionService, userService)
-	return NewStreamAPIWithDeps(generatorService, decompositionService, userService, streamdomain.NewHandler(streamService, streamdomain.NewGormBlogReadable()))
-}
-
+// NewStreamAPIWithDeps creates a StreamAPI with explicitly injected dependencies.
 func NewStreamAPIWithDeps(generatorService *service.GeneratorService, decompositionService *service.DecompositionService, userService *service.UserService, streamDomainHandler *streamdomain.Handler) *StreamAPI {
 	return &StreamAPI{
 		generatorService:     generatorService,

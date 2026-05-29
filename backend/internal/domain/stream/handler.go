@@ -2,15 +2,28 @@ package stream
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 
 	"inkwords-backend/internal/prompt"
+)
+
+type streamOperation string
+
+const (
+	streamOperationGenerate streamOperation = "generate"
+	streamOperationContinue streamOperation = "continue"
+	streamOperationPolish   streamOperation = "polish"
+	streamOperationAnalyze  streamOperation = "analyze"
+	streamOperationScan     streamOperation = "scan"
 )
 
 type Handler struct {
@@ -35,12 +48,37 @@ func (h *Handler) maybeCheckQuota(c *gin.Context) bool {
 	if userID, exists := c.Get("user_id"); exists {
 		if uid, ok := userID.(uuid.UUID); ok {
 			if err := h.service.CheckQuota(uid); err != nil {
-				c.JSON(http.StatusPaymentRequired, gin.H{"error": err.Error()})
+				c.JSON(http.StatusPaymentRequired, gin.H{"error": "quota exceeded"})
 				return false
 			}
 		}
 	}
 	return true
+}
+
+func externalStreamErrorMessage(operation streamOperation, err error) string {
+	if err == nil {
+		return ""
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return "request canceled"
+	}
+	if errors.Is(err, gorm.ErrRecordNotFound) || strings.Contains(strings.ToLower(err.Error()), "blog not found") {
+		return "blog not found"
+	}
+
+	switch operation {
+	case streamOperationContinue:
+		return "blog continuation failed"
+	case streamOperationPolish:
+		return "blog polish failed"
+	case streamOperationAnalyze:
+		return "blog analysis failed"
+	case streamOperationScan:
+		return "project scan failed"
+	default:
+		return "blog generation failed"
+	}
 }
 
 func (h *Handler) GenerateBlogStreamHandler(c *gin.Context) {
@@ -50,7 +88,7 @@ func (h *Handler) GenerateBlogStreamHandler(c *gin.Context) {
 
 	var req GenerateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
 
@@ -94,7 +132,7 @@ func (h *Handler) GenerateBlogStreamHandler(c *gin.Context) {
 			return false
 		case err, ok := <-errChan:
 			if ok && err != nil {
-				c.SSEvent("error", err.Error())
+				c.SSEvent("error", externalStreamErrorMessage(streamOperationGenerate, err))
 				return false
 			}
 			if !ok {
@@ -123,7 +161,7 @@ func (h *Handler) ContinueBlogStreamHandler(c *gin.Context) {
 	blogIDStr := c.Param("id")
 	blogID, err := uuid.Parse(blogIDStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid blog ID"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid blog id"})
 		return
 	}
 
@@ -166,7 +204,7 @@ func (h *Handler) ContinueBlogStreamHandler(c *gin.Context) {
 			return false
 		case err, ok := <-errChan:
 			if ok && err != nil {
-				c.SSEvent("error", err.Error())
+				c.SSEvent("error", externalStreamErrorMessage(streamOperationContinue, err))
 				return false
 			}
 			if !ok {
@@ -195,7 +233,7 @@ func (h *Handler) PolishBlogStreamHandler(c *gin.Context) {
 	blogIDStr := c.Param("id")
 	blogID, err := uuid.Parse(blogIDStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid blog ID"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid blog id"})
 		return
 	}
 
@@ -212,7 +250,7 @@ func (h *Handler) PolishBlogStreamHandler(c *gin.Context) {
 
 	var req PolishRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
 
@@ -247,7 +285,7 @@ func (h *Handler) PolishBlogStreamHandler(c *gin.Context) {
 			return false
 		case err, ok := <-errChan:
 			if ok && err != nil {
-				c.SSEvent("error", err.Error())
+				c.SSEvent("error", externalStreamErrorMessage(streamOperationPolish, err))
 				return false
 			}
 			if !ok {
@@ -275,7 +313,7 @@ func (h *Handler) AnalyzeStreamHandler(c *gin.Context) {
 
 	var req GenerateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
 
@@ -336,7 +374,7 @@ func (h *Handler) AnalyzeStreamHandler(c *gin.Context) {
 			return false
 		case err, ok := <-errChan:
 			if ok && err != nil {
-				c.SSEvent("error", err.Error())
+				c.SSEvent("error", externalStreamErrorMessage(streamOperationAnalyze, err))
 				return false
 			}
 			if !ok {
@@ -385,7 +423,7 @@ func (h *Handler) ScanStreamHandler(c *gin.Context) {
 		GitURL string `json:"git_url" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
 		return
 	}
 
@@ -432,7 +470,7 @@ func (h *Handler) ScanStreamHandler(c *gin.Context) {
 			return false
 		case err, ok := <-errChan:
 			if ok && err != nil {
-				c.SSEvent("error", err.Error())
+				c.SSEvent("error", externalStreamErrorMessage(streamOperationScan, err))
 				return false
 			}
 			return true

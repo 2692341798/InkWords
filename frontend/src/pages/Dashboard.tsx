@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { Coins, FileText, Hash, User, Loader2, Upload, BookOpen } from 'lucide-react'
+import { userService } from '@/services/user'
 
 interface TechStackStat {
   name: string
@@ -33,21 +34,10 @@ export function Dashboard() {
 
   const fetchData = async () => {
     try {
-      const token = localStorage.getItem('token')
-      const [statsRes, profileRes] = await Promise.all([
-        fetch('/api/v1/user/stats', { headers: { Authorization: `Bearer ${token}` } }),
-        fetch('/api/v1/user/profile', { headers: { Authorization: `Bearer ${token}` } })
-      ])
-
-      if (statsRes.ok) {
-        const json = await statsRes.json()
-        setStats(json.data)
-      }
-      if (profileRes.ok) {
-        const json = await profileRes.json()
-        setProfile(json.data)
-        setNewUsername(json.data.username)
-      }
+      const { stats, profile } = await userService.getDashboardData()
+      setStats(stats)
+      setProfile(profile)
+      setNewUsername(profile.username)
     } catch (e) {
       console.error('Failed to fetch dashboard data:', e)
     } finally {
@@ -66,18 +56,8 @@ export function Dashboard() {
     }
     
     try {
-      const token = localStorage.getItem('token')
-      const res = await fetch('/api/v1/user/profile', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({ username: newUsername })
-      })
-      if (res.ok) {
-        setProfile(prev => prev ? { ...prev, username: newUsername } : null)
-      }
+      await userService.updateUsername(newUsername)
+      setProfile(prev => prev ? { ...prev, username: newUsername } : null)
     } catch (e) {
       console.error('Failed to update username:', e)
     } finally {
@@ -99,23 +79,11 @@ export function Dashboard() {
     formData.append('avatar', file)
 
     try {
-      const token = localStorage.getItem('token')
-      const res = await fetch('/api/v1/user/avatar', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`
-        },
-        body: formData
-      })
-      if (res.ok) {
-        const json = await res.json()
-        setProfile(prev => prev ? { ...prev, avatar_url: json.data.avatar_url } : null)
-      } else {
-        const json = await res.json()
-        alert(json.message || '上传失败')
-      }
+      const avatarUrl = await userService.uploadAvatar(formData)
+      setProfile(prev => prev ? { ...prev, avatar_url: avatarUrl } : null)
     } catch (e) {
       console.error('Failed to upload avatar:', e)
+      alert(e instanceof Error ? e.message : '上传失败')
     } finally {
       setUploadingAvatar(false)
     }
@@ -161,7 +129,7 @@ export function Dashboard() {
           <div className="relative group">
             <div className="w-20 h-20 rounded-full bg-zinc-100 border border-zinc-200 overflow-hidden flex items-center justify-center shrink-0">
               {profile?.avatar_url ? (
-                <img src={profile.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+                <img src={profile.avatar_url} alt="用户头像" className="w-full h-full object-cover" />
               ) : (
                 <User className="w-10 h-10 text-zinc-400" />
               )}

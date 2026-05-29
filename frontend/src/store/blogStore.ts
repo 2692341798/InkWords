@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { blogService } from '@/services/blog'
 
 export interface BlogNode {
   id: string
@@ -17,11 +18,11 @@ interface BlogState {
   blogs: BlogNode[]
   isLoading: boolean
   selectedBlog: BlogNode | null
-  currentView: 'generator' | 'dashboard' | 'knowledge-review'
+  currentView: 'home-entry' | 'generator' | 'dashboard' | 'knowledge-review'
   fetchBlogs: () => Promise<void>
   createDraftBlog: () => Promise<BlogNode>
   selectBlog: (blog: BlogNode | null) => void
-  setCurrentView: (view: 'generator' | 'dashboard' | 'knowledge-review') => void
+  setCurrentView: (view: 'home-entry' | 'generator' | 'dashboard' | 'knowledge-review') => void
   updateBlog: (id: string, updates: { title?: string; content?: string }) => Promise<void>
   updateBlogLocal: (id: string, updates: { title?: string; content?: string }) => void
   batchDeleteBlogs: (ids: string[]) => Promise<void>
@@ -31,36 +32,13 @@ export const useBlogStore = create<BlogState>((set, get) => ({
   blogs: [],
   isLoading: false,
   selectedBlog: null,
-  currentView: 'generator',
+  currentView: 'home-entry',
   
   fetchBlogs: async () => {
     set({ isLoading: true })
     try {
-      const token = localStorage.getItem('token')
-      const res = await fetch('/api/v1/blogs', {
-        headers: {
-          'Authorization': token ? `Bearer ${token}` : ''
-        }
-      })
-      if (res.status === 401) {
-        localStorage.removeItem('token')
-        window.location.href = '/'
-        return
-      }
-      const text = await res.text()
-      if (!text) {
-        console.log('Empty response received')
-        return
-      }
-      
-      try {
-        const json = JSON.parse(text)
-        if (json.code === 200) {
-          set({ blogs: json.data || [] })
-        }
-      } catch (e) {
-        console.error('Failed to parse JSON:', e, text)
-      }
+      const blogs = await blogService.fetchBlogTree()
+      set({ blogs: blogs as BlogNode[] })
     } catch (error) {
       console.error('Failed to fetch blogs:', error)
     } finally {
@@ -69,25 +47,7 @@ export const useBlogStore = create<BlogState>((set, get) => ({
   },
 
   createDraftBlog: async () => {
-    const token = localStorage.getItem('token')
-    const res = await fetch('/api/v1/blogs/draft', {
-      method: 'POST',
-      headers: {
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-      }
-    })
-
-    const data = await res.json().catch(() => null)
-    if (res.status === 401) {
-      localStorage.removeItem('token')
-      window.location.href = '/'
-      throw new Error('登录已过期，请重新登录')
-    }
-    if (!res.ok || data?.code !== 200 || !data?.data) {
-      throw new Error(data?.message || '创建草稿失败')
-    }
-
-    const draft = data.data as BlogNode
+    const draft = (await blogService.createDraftBlog()) as BlogNode
     set((state) => {
       const nextBlogs = [draft, ...state.blogs.filter(b => b.id !== draft.id)]
       return { blogs: nextBlogs, selectedBlog: draft }
@@ -134,25 +94,7 @@ export const useBlogStore = create<BlogState>((set, get) => ({
     try {
       // Optimistic update
       get().updateBlogLocal(id, updates)
-
-      const token = localStorage.getItem('token')
-      const res = await fetch(`/api/v1/blogs/${id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': token ? `Bearer ${token}` : ''
-        },
-        body: JSON.stringify(updates)
-      })
-      
-      if (res.status === 401) {
-        localStorage.removeItem('token')
-        window.location.href = '/'
-        return
-      }
-      if (!res.ok) {
-        throw new Error('Failed to update blog')
-      }
+      await blogService.updateBlog(id, updates)
     } catch (error) {
       console.error('Failed to update blog:', error)
       // We could revert the optimistic update here if needed
@@ -162,24 +104,7 @@ export const useBlogStore = create<BlogState>((set, get) => ({
 
   batchDeleteBlogs: async (ids: string[]) => {
     try {
-      const token = localStorage.getItem('token')
-      const res = await fetch('/api/v1/blogs', {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': token ? `Bearer ${token}` : ''
-        },
-        body: JSON.stringify({ blog_ids: ids })
-      })
-
-      if (res.status === 401) {
-        localStorage.removeItem('token')
-        window.location.href = '/'
-        throw new Error('登录已过期，请重新登录')
-      }
-      if (!res.ok) {
-        throw new Error('Failed to batch delete blogs')
-      }
+      await blogService.batchDeleteBlogs(ids)
 
       // 刷新列表并清除选中状态
       await get().fetchBlogs()

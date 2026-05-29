@@ -11,7 +11,13 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { toast } from 'sonner'
 import { useBatchExportZip } from '@/hooks/useBatchExportZip'
 import { StreamOutlineSection } from './sidebar/StreamOutlineSection'
+import { blogService } from '@/services/blog'
 
+/**
+ * Renders the primary workspace sidebar for navigation, history-tree browsing,
+ * batch export/delete actions, and entry points into the app's main views
+ * while coordinating with blog and stream stores.
+ */
 export function Sidebar() {
   const streamStore = useStreamStore()
   const { blogs, fetchBlogs, createDraftBlog, selectedBlog, selectBlog, currentView, setCurrentView } = useBlogStore()
@@ -95,23 +101,12 @@ export function Sidebar() {
     }
 
     setIsSyncingSeriesToObsidian(true)
-    const token = localStorage.getItem('token')
 
     try {
       toast.loading('正在同步系列到 Obsidian...', { id: 'sync-series-obsidian' })
 
       for (const series of selectedSeriesRoots) {
-        const res = await fetch(`/api/v1/blogs/${series.id}/export/obsidian/series`, {
-          method: 'POST',
-          headers: {
-            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-          }
-        })
-
-        const data = await res.json().catch(() => null)
-        if (!res.ok || data?.code !== 200) {
-          throw new Error(data?.message || '同步系列失败')
-        }
+        await blogService.exportSeriesToObsidian(series.id)
       }
 
       toast.success(`成功同步 ${selectedSeriesRoots.length} 个系列到 Obsidian`, { id: 'sync-series-obsidian' })
@@ -139,7 +134,6 @@ export function Sidebar() {
       return
     }
 
-    const token = localStorage.getItem('token')
     setIsExportingPDF(true)
 
     try {
@@ -148,18 +142,7 @@ export function Sidebar() {
       let done = 0
       for (const series of selectedSeriesRoots) {
         try {
-          const res = await fetch(`/api/v1/blogs/${series.id}/export/pdf`, {
-            headers: {
-              ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-            }
-          })
-
-          if (!res.ok) {
-            const data = await res.json().catch(() => null)
-            throw new Error(data?.message || '导出失败')
-          }
-
-          const blob = await res.blob()
+          const blob = await blogService.exportSeriesPdf(series.id)
           const url = URL.createObjectURL(blob)
           const a = document.createElement('a')
           a.href = url
@@ -297,11 +280,11 @@ export function Sidebar() {
             if (streamStore.isGenerating || streamStore.isAnalyzing) {
               if (window.confirm('当前有任务正在执行，确定要终止并开启新工作区吗？')) {
                 streamStore.reset()
-                setCurrentView('generator')
+                setCurrentView('home-entry')
               }
             } else {
               streamStore.reset()
-              setCurrentView('generator')
+              setCurrentView('home-entry')
             }
           }}
         >

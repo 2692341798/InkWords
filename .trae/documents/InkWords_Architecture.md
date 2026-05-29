@@ -1,6 +1,10 @@
-# 墨言博客助手 (InkWords) - 架构设计与工程规范
+# 墨言知识训练平台 (InkWords Trainer) - 架构设计与工程规范
 
 ## 0. 变更记录
+- 2026-05-29：生成器工作流从“四步 + 独立处理页”收敛为“三步 + 步内进度”模型；`generatorViewState` 顶层阶段只保留 `source / configure / outline`，`GeneratorStatus` 退化为可复用的内嵌进度面板，分别挂载到 `GeneratorConfigureStage` 与 `GeneratorOutlineStage`。文件上传链路拆分为“先 parse、再在配置页显式触发 analyze”，避免 ZIP/课件上传后直接跳入独立进度页并倒序回到大纲。
+- 2026-05-28：Docker Compose 部署基线加固：显式声明 `inkwords-network`，默认仅暴露前端 `http://localhost`，后端/Redis/PostgreSQL 改为容器内互通；`OBSIDIAN_VAULT_PATH` 不再回退到机器私有绝对路径，需由 `backend/.env` 或外部环境显式提供。
+- 2026-05-27：项目定位升级为“墨言知识训练平台（InkWords Trainer）”，口号“把资料变成知识，把知识变成能力”；文档口径同步更新（不涉及架构与实现层面的强制改造）。
+- 2026-05-27：前端入口改为 `HomeEntry` 引导式工作台；生成器与知识复习页统一采用“单次只显示当前主步骤”的流程编排，并抽取共享 `StepStrip` 组件（`preview` / `progress` 双变体）承载首页预览和页内进度条。
 - 2026-05-27：新增“知识漫游复习”主链路；后端引入独立 `internal/domain/review` 垂直切片与 `review_sessions` / `review_turns` 持久化模型，前端新增独立主视图“知识漫游复习”，承接今日推荐、随机抽题、手动选文、会话追问、提示与最近记录。
 - 2026-05-29：收敛“知识漫游复习”入口，前端移除与随机抽题职责重复的“今日推荐”卡片，保留“随机抽一篇 / 选择文章复习”两种入口；后端 `review` 随机选题改为真正随机而非固定返回首个候选。
 - 2026-05-25：将本地文档上传链路上限从 100MB 提升到 888MB；前端上传页校验、前端 Nginx `client_max_body_size` 与后端 Gin `MaxMultipartMemory` 三层限制保持一致。
@@ -110,10 +114,11 @@
   - 文件 Analyze 请求在发起时通过 `useStreamStore.getState()` 读取最新 `scenario_mode`，避免旧渲染快照导致“UI 显示 A、请求发送 B”。
 
 ## 4. 部署架构 (Docker-First)
-- **前端镜像**: 采用多阶段构建（Node.js 安装依赖并构建，Nginx 轻量级运行并作为反向代理网关）。映射宿主机 `80` 和 `5173` 端口（以解决 GitHub OAuth 回调端口兼容）。
-- **后端镜像**: 采用多阶段构建（Go 官方镜像编译，Alpine 运行）。使用 `FRONTEND_URL` 和 `DATABASE_URL` 环境变量控制运行逻辑。
-- **数据库**: PostgreSQL，初始化 `inkwords_db`。
-- **容器互联**: 全部服务处于 `inkwords_default` 内部网络，后端连接数据库通过服务名 `db:5432` 互通。
+- **前端镜像**: 采用多阶段构建（Node.js 安装依赖并构建，Nginx 轻量级运行并作为反向代理网关）。默认仅映射宿主机 `80` 端口，统一以 `http://localhost` 作为前端入口。
+- **后端镜像**: 采用多阶段构建（Go 官方镜像编译，Alpine 运行）。使用 `FRONTEND_URL`、`DATABASE_URL`、`REDIS_URL` 等环境变量控制运行逻辑，但默认只在 Docker 内部网络暴露 `8080`，不直接对宿主机开放。
+- **数据库 / Redis**: PostgreSQL 与 Redis Stack 默认仅在容器网络内暴露，避免开发态无意开放宿主机调试端口。
+- **容器互联**: 全部服务显式加入 `inkwords-network` 内部网络，后端通过服务名 `db:5432`、`redis:6379`、`obsidian-bridge:27125` 与依赖互通。
+- **环境装载约定**: Docker Compose 运行时统一建议通过 `docker compose --env-file backend/.env ...` 启动；`OBSIDIAN_VAULT_PATH` 必须显式提供，不再回退到某台开发机的绝对路径。
 
 ## 4.1 仓库产物与敏感信息策略
 - 禁止提交构建产物与大文件（例如后端二进制、PDF、批量截图等），统一通过 `.gitignore` 管理本地产物目录。

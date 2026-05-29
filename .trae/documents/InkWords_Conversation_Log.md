@@ -1,5 +1,46 @@
-# 墨言博客助手 (InkWords) - AI 对话与决策摘要 (Conversation Log)
+# 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
+
+### 对话 76：执行 Task 5，加固 Docker Compose 网络与运行时配置
+- **用户需求**：实现计划中的 Task 5：加固 `docker-compose.yml` 的网络与环境变量配置，尽可能减少默认宿主机端口暴露，移除机器私有挂载默认值，更新 `README` 运行说明，并用 `docker compose config` 做验证后汇总改动文件与结果。
+- **AI 动作**：
+  1. 先读取知识库 `[[concepts/部署与 Docker 构建]]`、项目架构文档与 Task 5 计划，确认前端应继续作为唯一公开入口，而后端/数据库/缓存优先通过容器内部网络通信。
+  2. 以最小改动更新 `docker-compose.yml`：新增显式网络 `inkwords-network`；移除 `backend`、`db`、`redis` 的默认宿主机 `ports` 暴露，改为容器内 `expose`；将 PostgreSQL 运行时凭据改为 Compose 变量替换；把 `OBSIDIAN_VAULT_PATH` 从机器私有绝对路径回退改为必须显式提供。
+  3. 同步更新 `README.md` 与 `InkWords_Architecture.md`，统一 `docker compose --env-file backend/.env ...` 的运行约定，并补充 Docker 模式下的前端入口、必填变量和 GitHub OAuth 本地回调说明。
+  4. 执行 `docker compose --env-file backend/.env config` 验证渲染结果，确认新的 Compose 配置可成功展开。
+- **决策/变更**：
+  - 保留 `frontend` 的 `80:80` 暴露，确保 `http://localhost` 仍是唯一标准入口；不再默认暴露 `backend:8080`、`db:5432`、`redis:6379` 到宿主机，缩小开发态攻击面并避免端口冲突重演。
+  - 采用 `--env-file backend/.env` 作为 Compose 运行时入口，而不是继续依赖根目录 `.env` 或机器私有默认路径；这样既能复用现有后端环境文件，也避免把宿主机路径硬编码进版本库。
+- **验证**：
+  - `docker compose --env-file backend/.env config` 通过
+
+### 对话 77：重构生成器为三步流并将进度内嵌到步骤内
+- **用户需求**：用户先后提出两类问题：一是希望生成器不要把所有流程平铺在同一页，而要形成清晰的步骤流；二是在实际测试后发现“处理进度”不应是独立步骤，因为 step 2 和 step 3 都要在原步骤内展示进度，且文件上传不应跳过场景选择直接进入进度页。
+- **AI 动作**：
+  1. 先读取知识库 `wiki/hot.md`、`wiki/index.md` 与 `[[concepts/前端组件体系：Generator 系列]]`，结合 `Generator.tsx`、`generatorViewState.ts`、`useFileParser.ts` 排查当前生成器的阶段编排与文件上传链路。
+  2. 先按用户初始要求写出“四步 + 独立处理页”的设计与实现计划，随后在真实测试反馈下修正设计：移除独立 `progress` 顶层阶段，改为 `选择来源 -> 配置解析 -> 确认大纲` 三步模型，并新增内嵌进度设计稿与计划。
+  3. 严格按 TDD 分任务落地：先收敛 `generatorViewState` 为三步顶层阶段；再保留 `GeneratorStatus` 作为纯内嵌进度面板；最后把解析/分析进度嵌入 `GeneratorConfigureStage`、把写作进度嵌入 `GeneratorOutlineStage`，并将文件上传链路拆成“先 parse、后 analyze”两步，修复 ZIP/课件上传后跳过场景选择的问题。
+  4. 对每个子任务执行 focused tests / build / Docker rebuild，并在用户通过 `http://localhost` 验证旧页面或错误流程时，多次执行 `docker compose up -d --build` 让静态资源与后端状态同步。
+- **决策/变更**：
+  - 顶部 `StepStrip` 从 4 步调整为 3 步；`处理进度` 不再作为独立步骤存在。
+  - `GeneratorStatus` 只作为内嵌进度卡片复用：分析进度属于 `配置解析`，生成进度属于 `确认大纲`。
+  - 文件上传仅在 `/api/v1/project/parse` 成功后进入配置页；真正的大纲分析需要用户在配置页选择场景后手动点击“生成大纲”，不再自动串联到 `/api/v1/stream/analyze`。
+- **验证**：
+  - `cd frontend && npm run test -- src/pages/generatorViewState.test.ts src/components/generator/GeneratorStageViews.test.tsx src/components/shared/StepStrip.test.tsx` 通过
+  - `cd frontend && npm run build` 通过
+  - `OBSIDIAN_VAULT_PATH=... docker compose up -d --build` 完成
+  - `curl -I http://localhost` 返回 `HTTP/1.1 200 OK`
+
+### 对话 75：继续 Task 4，执行前端中文文案/JSDoc/store 清理与验证
+- **用户需求**：在承接同一执行流中 Task 3 的前端改动基础上，继续 Task 4：规范限定文件中的中文界面文案、为导出的 Hook/复杂组件补 JSDoc、审查并移除 `frontend/src/store/index.ts`、仅在必要时继续缩减 `Sidebar.tsx`，最后运行前端测试与构建并汇总改动文件。
+- **AI 动作**：
+  1. 先确认与 `Sidebar.tsx`、`Login.tsx`、`Dashboard.tsx` 等文件重叠的未提交改动确属同一执行流中的 Task 3 结果，因此选择“保留并在其基础上继续”，不回滚已有工作。
+  2. 回读 Task 4 计划、知识库页面 `[[concepts/前端整体架构与状态管理]]`、`[[concepts/前端组件体系：Dashboard 与 Sidebar]]` 与 `[[concepts/前端自定义 Hooks：useBlogStream 与 useDebounce]]`，再同步查看 `.trae/documents/InkWords_PRD.md`、`InkWords_Architecture.md`、`InkWords_API.md` 与 `InkWords_Database.md`，确认本次仅做前端工程规范收尾，不涉及 API/数据库契约变化。
+  3. 在限定文件中完成最小改动：将登录邮箱占位符与图片 `alt` 文案改成中文；为 `useKnowledgeReview`、`useBlogStream`、`Generator`、`Sidebar` 增加 JSDoc；通过引用检索确认 `frontend/src/store/index.ts` 已无使用方后删除。
+  4. 复查 `Sidebar.tsx` 文件体积，确认在保留 Task 3 服务抽离结果的前提下补注释后文件为 491 行，仍低于 500 行警戒线，因此不再强行拆分；随后同步更新开发日志并准备执行前端验证。
+- **决策/变更**：
+  - 对于纯展示文案、注释补齐与死文件删除，不新增低价值 UI 测试，而是依赖现有 Vitest 套件与 `npm run build` 做回归验证。
+  - `Sidebar.tsx` 当前已满足单文件体积约束，避免为了“完成计划项”而做无收益拆分，保持最小改动原则。
 
 ### 对话 74：执行 Task 8，同步 review 文档并做全量验证 / Docker 联调
 - **用户需求**：执行实现计划中的 Task 8，为“知识漫游复习”同步项目文档，跑完后端与前端全量验证，再执行 Docker Compose 联调，并返回改动文件、测试结果与阻塞点。
@@ -1136,3 +1177,48 @@
   5. 执行代码提交。
 - **决策/变更**：
   - **本地知识库直通**：通过 Docker Volume 映射，直接打通 Web 应用和用户的本地 Obsidian 知识库，省去了繁琐的下载和解压拖拽过程，实现了沉浸式的文档收集工作流。
+
+### 对话 58：流程型首页原型设计与 HTML Mockup
+- **用户需求**：认为现有页面功能区过于平铺，希望先通过一个 HTML 页面原型帮助选择新的流程型首页方案。
+- **AI 动作**：
+  1. 先按共创流程确认了首页方向，最终收敛为 `One Hub Page` + `Decision Center`，默认推荐“Generate Blog”。
+  2. 生成独立原型文件 `frontend/public/hub-homepage-mockup.html`，用纯 HTML/CSS/JS 展示路径选择、步骤预览、工作区和摘要区。
+  3. 通过静态预览确认原型可访问，并以此作为真实前端改造的视觉与交互参照。
+- **决策/变更**：
+  - 新首页不做“大而全 dashboard”，而是做引导式工作入口；用户先选路径，再进入真实工具页。
+
+### 对话 59：将真实前端改造成“同一时间只显示当前步骤”
+- **用户需求**：要求基于首页原型优化真实前端，确保用户任何时刻只看到当前步骤，而不是多个主任务区块平铺。
+- **AI 动作**：
+  1. 为博客生成页抽取 `generatorViewState`，明确 `input / configure / outline / processing` 四个步骤，并补充对应测试。
+  2. 重构 `Generator.tsx`，增加回退逻辑、右侧摘要区与当前流程条，只渲染当前主步骤。
+  3. 为知识复习页新增 `knowledgeReviewViewState`，明确 `entry / picker / session` 三个步骤，并调整 `KnowledgeReview.tsx`、`ReviewNotePicker.tsx`、`ReviewSessionCard.tsx` 与 `useKnowledgeReview.ts` 形成可回退、可清空的会话闭环。
+- **决策/变更**：
+  - 共享的是“步骤语义”，不是共享一个跨页面状态机；页面继续自行持有业务状态，避免过度抽象。
+
+### 对话 60：新增真实工作入口 `HomeEntry`
+- **用户需求**：要求把相同的 step model 应用到“dashboard/home entry”，澄清后明确目标是真实工作入口而不是个人中心仪表盘。
+- **AI 动作**：
+  1. 新增 `HomeEntry.tsx` 与 `homeEntryViewState.ts` / `homeEntryViewState.test.ts`，默认在“生成博客 / 知识复习”之间提供路径选择。
+  2. 调整 `blogStore.currentView` 默认值为 `home-entry`，并在 `App.tsx` 与 `Sidebar.tsx` 中接入新的入口分支。
+  3. 保留 Resume 与 Recent History 区域，让首页仍然是工作入口，而不是纯营销页。
+- **决策/变更**：
+  - 入口方案采用 `Hub First + Hybrid`，先在首页展示路径预览，再进入真实页面继续工作。
+
+### 对话 61：抽取共享 `StepStrip` 并完成视觉精修
+- **用户需求**：新增一个可复用于 `HomeEntry`、`Generator`、`KnowledgeReview` 的共享步骤条组件，并进一步优化视觉层次。
+- **AI 动作**：
+  1. 新增 `frontend/src/components/shared/StepStrip.tsx` 与 `StepStrip.test.tsx`，抽取共享 `StepStripItem` 类型和 `preview/progress` 双变体。
+  2. 将 `HomeEntry`、`Generator`、`KnowledgeReview` 全部切换为复用共享 `StepStrip`，保留页面层自身的状态编排。
+  3. 继续按“More Elegant + Minimal Motion”方向精修视觉，通过 `data-step-state` 与 `data-step-emphasis` 区分 `preview/current/complete/upcoming` 层级，不改变行为与 API。
+- **决策/变更**：
+  - 组件只做可复用展示契约，不接管业务状态；测试采用 `react-dom/server` 轻量渲染断言，避免把简单 UI 重构升级成测试栈迁移任务。
+
+### 对话 62：容器验证与 GitHub 提交流程准备
+- **用户需求**：先重启项目验证，再提交到 GitHub 并创建 PR。
+- **AI 动作**：
+  1. 按仓库约束执行 `docker compose down && docker compose up -d --build`，完成本地容器重启验证。
+  2. 检查当前分支、远程、tag、diff 与必改文档清单，确认默认基线为 `main`、当前工作分支为 `front-development`。
+  3. 由于本机未安装 `gh` CLI，改为准备通过 Git 与 GitHub MCP 完成 push 和 PR 创建，并先同步更新 `.trae/documents/*` 与 `README.md`。
+- **决策/变更**：
+  - 在提交前先做 Docs-as-Code 同步与 tag/base branch 检查，避免把“代码已改但文档仍停留旧状态”的内容直接推上远端。

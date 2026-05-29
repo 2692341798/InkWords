@@ -1,4 +1,4 @@
-# 墨言博客助手 (InkWords) - 数据库设计文档
+# 墨言知识训练平台 (InkWords Trainer) - 数据库设计文档
 
 ## 0. 变更记录
 - 2026-05-29：知识漫游复习入口从“三入口”收敛为“随机抽题 + 手动选文”双入口；仅影响前端入口与 review 随机选题逻辑，不涉及数据库表结构变更，`review_sessions.entry_type` 仍保留 `today / manual_random / manual_select` 以兼容历史记录与既有服务端枚举。

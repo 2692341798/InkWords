@@ -1,4 +1,4 @@
-# 墨言博客助手 (InkWords) - 开发计划与日志
+# 墨言知识训练平台 (InkWords Trainer) - 开发计划与日志
 > **目标**：跟踪项目的核心开发模块、里程碑进度以及每日开发记录。
 
 ## 1. 里程碑划分 (Milestones)
@@ -42,6 +42,29 @@
 | | Markdown 实时打字机渲染与 Mermaid 图表接管 | 高 (样式覆盖难) | 2.5 天 |
 | | 类似 Notion 的二次编辑器与状态同步 | 中 | 2 天 |
 | **Integration** | 第三方发文 OpenAPI 对接与 Token 加密 | 高 (各平台不一) | 3 天 |
+
+### [2026-05-28] Chore - Docker Compose 网络与运行时配置加固
+- **开发模块**: [Docker Compose, README, Docs-as-Code]
+- **完成事项**:
+  1. 为 `docker-compose.yml` 显式声明 `inkwords-network`，并将 `frontend`、`backend`、`db`、`redis`、`obsidian-bridge` 统一接入该内部网络。
+  2. 将 `db`/`redis`/`backend` 的宿主机 `ports` 暴露收敛为容器内 `expose`，默认仅保留前端 `80:80`，降低本地运行时默认攻击面。
+  3. 将 PostgreSQL 凭据改为 Compose 变量替换；移除 `OBSIDIAN_VAULT_PATH` 的机器私有默认绝对路径，要求通过 `backend/.env` 或外部环境显式提供。
+  4. 更新 `README.md` 运行说明，明确 `docker compose --env-file backend/.env ...` 的启动/重启方式、前端唯一入口、必填环境变量与 Docker 模式下的 OAuth 回调约定。
+- **验证**:
+  - `docker compose --env-file backend/.env config` 通过
+
+### [2026-05-29] Feat - 生成器改为三步流并内嵌进度
+- **开发模块**: [Frontend Generator, StepStrip, File Upload Flow, Docs-as-Code]
+- **完成事项**:
+  1. 将生成器顶层阶段从 `source / configure / outline / progress` 收敛为 `source / configure / outline` 三步，顶部流程条同步调整为“选择来源 / 配置解析 / 确认大纲”。
+  2. 保留 `GeneratorStatus` 作为可复用内嵌进度卡片，并把解析/分析进度挂载到 `GeneratorConfigureStage`、把写作进度挂载到 `GeneratorOutlineStage`，去除独立进度页心智模型。
+  3. 拆分文件上传链路：`useFileParser` 在 `/api/v1/project/parse` 成功后仅负责落地 `source_content` 并停留在“配置解析”；用户在选择创作场景后通过“生成大纲”按钮显式触发 `/api/v1/stream/analyze`，修复 ZIP/课件上传跳过场景选择的问题。
+  4. 为 `generatorViewState`、阶段包装组件和文件解析 helper 补充/更新回归测试，确保三步模型、步内进度和文件上传顺序都被锁定；随后执行前端构建并重新构建 Docker。
+- **验证**:
+  - `cd frontend && npm run test -- src/pages/generatorViewState.test.ts src/components/generator/GeneratorStageViews.test.tsx src/components/shared/StepStrip.test.tsx src/hooks/generator/useFileParser.test.ts` 通过
+  - `cd frontend && npm run build` 通过（存在既有 Vite chunk size warning，不阻塞构建）
+  - `OBSIDIAN_VAULT_PATH='/Users/huangqijun/Documents/obsidian_knowledge/knowledge' docker compose up -d --build` 完成
+  - `curl -I http://localhost` 返回 `HTTP/1.1 200 OK`
 
 ## 3. 测试与联调计划
 遵循 Vibe Coding **“小步迭代与强制验证”** 的铁律，在实际开发过程中，严禁越过测试环节强行合并代码。
@@ -159,7 +182,7 @@
   - `cd backend && go test ./internal/service ./internal/domain/stream ./internal/transport/http/v1/api -v` 通过
   - `cd frontend && npm test -- src/lib/scenarioMode.test.ts` 通过
   - `docker compose down && docker compose up -d --build` 完成，`docker compose ps` 显示 `frontend/backend/db/redis/obsidian-bridge` 均已启动
-  - `curl -I http://localhost` 返回 `HTTP/1.1 200 OK`，首页标题为“墨言博客助手”
+  - `curl -I http://localhost` 返回 `HTTP/1.1 200 OK`，首页标题为“墨言知识训练平台”
 
 ### [2026-05-21] Fix - Obsidian Docker 开发态证书兜底修复
 - **开发模块**: [Docker Compose, Obsidian REST Store, Docs-as-Code]
@@ -726,7 +749,7 @@
 
 ### [2026-04-04] 新增“新建博客 / 返回首页”全局交互按钮
 - **完成事项**：
-  - 修改了 `frontend/src/components/Sidebar.tsx`，在左侧边栏顶部“墨言博客助手”Logo下方，增加了一个醒目的“新建博客 / 返回首页”主按钮。
+  - 修改了 `frontend/src/components/Sidebar.tsx`，在左侧边栏顶部“墨言知识训练平台”Logo下方，增加了一个醒目的“新建博客 / 返回首页”主按钮。
   - 通过调用 `selectBlog(null)`，实现了在浏览/编辑历史博客时，随时可以清空当前选中状态，回到 `<Generator />` 首页继续新建或生成下一篇博客的交互闭环。
 - **技术坑点与调整**：
   - 之前因为缺乏全局入口，用户在点击进入单篇博客（`<Editor />`）后，如果不再使用“新建任务”面板，就没有入口返回到生成首页。通过在 Sidebar 添加常驻操作按钮，统一了返回首页和新建任务的心智模型。
@@ -1161,3 +1184,29 @@
   3. 重构 `GeneratorStatus.tsx`，对 `store.outline` 进行遍历，为每个章节生成一个带图标与最新文本摘要的动态卡片。
   4. 生成完成后自动跳转并选中博客系列导读节点。
 - **结果**：极大地改善了视觉体验，将原始的流水日志转换为了直观的、具有科技感的并发监控仪表盘。
+
+### [2026-05-27] Frontend Flow Orchestration - 首页决策中心、单步聚焦工作台与共享 StepStrip
+- **开发模块**: [前端入口编排, 生成器流程 UI, 复习工作台, 共享组件]
+- **完成事项**:
+  1. **新增真实工作入口 `HomeEntry`**：将默认工作入口从直接落到生成器，改为先进入 `HomeEntry` 决策中心；用户可以在“生成博客 / 知识复习”两条主路径之间切换，并看到 Resume 与 Recent History。
+  2. **生成器改为单步聚焦**：抽取 `generatorViewState`，将页面主区明确收敛为 `input / configure / outline / processing` 四个步骤，只展示当前主步骤，避免表单、模块选择、大纲和处理中状态同时平铺。
+  3. **知识复习改为单步聚焦**：新增 `knowledgeReviewViewState`，将入口、选文与会话阶段拆成 `entry / picker / session` 三步，并为复习器与会话卡补充返回入口/关闭会话能力。
+  4. **抽取共享 `StepStrip`**：新增 `frontend/src/components/shared/StepStrip.tsx` 与测试文件，抽取共享 `StepStripItem` 类型和 `preview / progress` 双视觉变体，供 `HomeEntry`、`Generator`、`KnowledgeReview` 复用。
+  5. **视觉精修**：按 “More Elegant + Minimal Motion” 方向细化步骤条层次，通过 `data-step-state` 与 `data-step-emphasis` 显式区分 `preview / current / complete / upcoming` 语义。
+- **验证结果**:
+  1. 补充并通过前端状态编排与共享步骤条相关测试（`generatorViewState.test.ts`、`knowledgeReviewViewState.test.ts`、`homeEntryViewState.test.ts`、`StepStrip.test.tsx`）。
+  2. 执行 `docker compose down && docker compose up -d --build`，完成容器重启，验证新首页与流程型工作台已可在本地容器环境访问。
+- **风险与备注**:
+  - 本次主要调整前端编排与共享 UI 语义，不涉及后端 API 与数据库表结构；因此文档需要同步说明“无接口/数据库变化”，避免评审误判为后端联动需求。
+
+### [2026-05-27] Release Hygiene - GitHub 提交流程准备
+- **开发模块**: [Git 提交治理, Docs-as-Code, PR 准备]
+- **完成事项**:
+  1. 检查当前工作树、分支、远程与 tag，确认当前分支为 `front-development`，默认基线分支为 `main`，最近 tag 为 `v2.31.3`。
+  2. 回读并同步更新 `.trae/documents/InkWords_API.md`、`.trae/documents/InkWords_Architecture.md`、`.trae/documents/InkWords_Conversation_Log.md`、`.trae/documents/InkWords_Database.md`、`.trae/documents/InkWords_Development_Plan_and_Log.md`、`.trae/documents/InkWords_PRD.md` 与 `README.md`。
+  3. 发现本机未安装 `gh` CLI，因此改为预备使用 Git + GitHub MCP 的方式完成 push 与 PR 创建。
+- **验证结果**:
+  1. `git fetch origin --prune` 已执行，确认 `origin/main` 更新、`origin/front-development` 当前不存在。
+  2. `git tag --sort=-v:refname | head -n 20` 已确认版本基线。
+- **风险与备注**:
+  - 由于远端没有现成的 `origin/front-development`，首次 push 需要显式创建远端同名分支；PR base 应以 `main` 为准。

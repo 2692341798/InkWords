@@ -18,12 +18,18 @@ import (
 )
 
 type stubRepo struct {
-	parents  []model.Blog
-	children []model.Blog
+	parents           []model.Blog
+	children          []model.Blog
+	listErr           error
+	createErr         error
+	updateErr         error
+	deleteErr         error
+	updateRows        int64
+	forceUpdateResult bool
 }
 
 func (s *stubRepo) ListTopLevelBlogs(ctx context.Context, userID uuid.UUID, page int, size int) ([]model.Blog, error) {
-	return s.parents, nil
+	return s.parents, s.listErr
 }
 
 func (s *stubRepo) ListChildrenByParentIDs(ctx context.Context, userID uuid.UUID, parentIDs []uuid.UUID) ([]model.Blog, error) {
@@ -39,6 +45,9 @@ func (s *stubRepo) GetSeriesBlogs(ctx context.Context, userID uuid.UUID, parentI
 }
 
 func (s *stubRepo) Create(ctx context.Context, blog *model.Blog) error {
+	if s.createErr != nil {
+		return s.createErr
+	}
 	if blog.ID == uuid.Nil {
 		blog.ID = uuid.New()
 	}
@@ -46,11 +55,14 @@ func (s *stubRepo) Create(ctx context.Context, blog *model.Blog) error {
 }
 
 func (s *stubRepo) Update(ctx context.Context, userID uuid.UUID, blogID uuid.UUID, updates map[string]any) (int64, error) {
-	return 1, nil
+	if !s.forceUpdateResult && s.updateErr == nil {
+		return 1, nil
+	}
+	return s.updateRows, s.updateErr
 }
 
 func (s *stubRepo) BatchDelete(ctx context.Context, userID uuid.UUID, blogIDs []uuid.UUID) error {
-	return nil
+	return s.deleteErr
 }
 
 func TestHandler_GetUserBlogs_Unauthorized(t *testing.T) {
@@ -104,8 +116,8 @@ func TestHandler_GetUserBlogs_OK(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 
 	var resp struct {
-		Code    int            `json:"code"`
-		Message string         `json:"message"`
+		Code    int              `json:"code"`
+		Message string           `json:"message"`
 		Data    []*blog.BlogNode `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
@@ -156,8 +168,8 @@ func TestHandler_CreateDraftBlog_OK(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 
 	var resp struct {
-		Code    int          `json:"code"`
-		Message string       `json:"message"`
+		Code    int           `json:"code"`
+		Message string        `json:"message"`
 		Data    blog.BlogNode `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
@@ -238,4 +250,62 @@ func TestHandler_BatchDeleteBlogs_OK(t *testing.T) {
 	r.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestHandler_GetUserBlogs_HidesInternalErrorDetails(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+
+	userID := uuid.New()
+	svc := blog.NewService(&stubRepo{listErr: context.DeadlineExceeded})
+	h := blog.NewHandler(svc)
+
+	r.GET("/blogs", func(c *gin.Context) {
+		c.Set("user_id", userID)
+		h.GetUserBlogs(c)
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/blogs?page=1&size=20", nil)
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusInternalServerError, w.Code)
+
+	var resp struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.Equal(t, http.StatusInternalServerError, resp.Code)
+	require.Equal(t, "failed to load blogs", resp.Message)
+}
+
+func TestHandler_UpdateBlog_ReturnsNotFoundForMissingBlog(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+
+	userID := uuid.New()
+	blogID := uuid.New()
+	svc := blog.NewService(&stubRepo{updateRows: 0, forceUpdateResult: true})
+	h := blog.NewHandler(svc)
+
+	r.PUT("/blogs/:id", func(c *gin.Context) {
+		c.Set("user_id", userID)
+		h.UpdateBlog(c)
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPut, "/blogs/"+blogID.String(), bytes.NewBufferString(`{"title":"t"}`))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusNotFound, w.Code)
+
+	var resp struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.Equal(t, http.StatusNotFound, resp.Code)
+	require.Equal(t, "blog not found", resp.Message)
 }
