@@ -1,6 +1,17 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 80：收口 structure-phase1 的模块化拆分并提交
+- **用户需求**：检查工作区和分支，把尚未提交的改动都整理后提交，并在后续继续推进合并到 `main`。
+- **AI 动作**：
+  1. 巡检本地 worktree 与分支，确认 `agent/structure-phase1` 保留了一组未提交的工程化拆分改动。
+  2. 复核该分支内容，确认核心变化为：review 领域 service 拆分、`Sidebar` 拆分为更小组件/Hook/Service、decomposition generate 辅助逻辑拆分，以及相关测试文件补齐。
+  3. 按提交门禁同步 `README.md`、`InkWords_API.md`、`InkWords_Architecture.md`、`InkWords_Database.md`、`InkWords_Development_Plan_and_Log.md`、`InkWords_PRD.md` 与本对话日志，明确本次是工程化重构，不夸大为产品需求变化。
+  4. 以独立 `refactor` 提交收口该分支，并在合并 `main` 时优先保留已落地主线行为，再接入结构拆分结果。
+- **决策/变更**：
+  - 将这组改动定义为“结构拆分 Phase 1”，重点是降低超大文件复杂度、提升模块边界清晰度，而不是引入新的对外 API 或数据库行为。
+  - 提交与合并策略按分支独立处理，避免多个 worktree 的不相关改动混入一个提交或一个冲突解决过程。
+
 ### 对话 79：修复知识复习随机抽题的顺序偏置
 - **用户需求**：在 `InkWords` 仓库内以 TDD 方式修复后端 review random picker：先补失败测试，再让 `PickRandom` 真正从可选笔记池中随机返回题卡，执行 Go 测试并汇总改动文件与结果。
 - **AI 动作**：

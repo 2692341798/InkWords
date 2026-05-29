@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - 架构设计与工程规范
 
 ## 0. 变更记录
+- 2026-05-29：工程化结构拆分 Phase 1 落地：review 领域 service 按题卡/历史/会话职责拆成同包多文件，`Sidebar` 拆成 shell、批量操作条、选择 hook 与导出 service，生成链路的 decomposition 辅助逻辑拆为更小文件；本次不新增 API 路由或数据库结构。
 - 2026-05-29：知识漫游复习入口最终收敛为“随机抽一篇 + 手动选文”两张卡片；前端主入口不再展示“今日推荐”卡片，并通过随机候选重试避免“再抽一篇”频繁返回同一文章。
 - 2026-05-29：生成器工作流从“四步 + 独立处理页”收敛为“三步 + 步内进度”模型；`generatorViewState` 顶层阶段只保留 `source / configure / outline`，`GeneratorStatus` 退化为可复用的内嵌进度面板，分别挂载到 `GeneratorConfigureStage` 与 `GeneratorOutlineStage`。文件上传链路拆分为“先 parse、再在配置页显式触发 analyze”，避免 ZIP/课件上传后直接跳入独立进度页并倒序回到大纲。
 - 2026-05-28：Docker Compose 部署基线加固：显式声明 `inkwords-network`，默认仅暴露前端 `http://localhost`，后端/Redis/PostgreSQL 改为容器内互通；`OBSIDIAN_VAULT_PATH` 不再回退到机器私有绝对路径，需由 `backend/.env` 或外部环境显式提供。

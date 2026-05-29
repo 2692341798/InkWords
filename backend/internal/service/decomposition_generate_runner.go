@@ -1,0 +1,191 @@
+package service
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/google/uuid"
+	"gorm.io/datatypes"
+
+	"inkwords-backend/internal/infra/llm"
+)
+
+func sendSeriesProgressPayload(progressChan chan<- string, payload map[string]interface{}) {
+	bytes, _ := json.Marshal(payload)
+	progressChan <- string(bytes)
+}
+
+func sendSeriesSystemProgress(progressChan chan<- string, message string) {
+	sendSeriesProgressPayload(progressChan, map[string]interface{}{
+		"status":  "progress",
+		"message": message,
+	})
+}
+
+func (s *DecompositionService) streamSeriesChapterContent(
+	ctx context.Context,
+	parentID uuid.UUID,
+	chapter Chapter,
+	messages []llm.Message,
+	progressChan chan<- string,
+) (string, error) {
+	var streamErr error
+	var content string
+	maxRetries := 3
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		default:
+		}
+
+		if attempt > 1 {
+			sendSeriesProgressPayload(progressChan, map[string]interface{}{
+				"status":       "retrying",
+				"chapter_sort": chapter.Sort,
+				"attempt":      attempt,
+				"parent_id":    parentID.String(),
+			})
+		} else {
+			sendSeriesProgressPayload(progressChan, map[string]interface{}{
+				"status":       "generating",
+				"chapter_sort": chapter.Sort,
+				"title":        chapter.Title,
+				"parent_id":    parentID.String(),
+			})
+		}
+
+		streamCtx, streamCancel := context.WithCancel(ctx)
+		chapterChunkChan := make(chan string, 100)
+		chapterErrChan := make(chan error, 1)
+		var fullContentBuilder strings.Builder
+
+		llmModel := "deepseek-v4-flash"
+		if envModel := os.Getenv("DEEPSEEK_MODEL"); envModel != "" {
+			llmModel = envModel
+		}
+
+		go func() {
+			defer close(chapterChunkChan)
+			defer close(chapterErrChan)
+
+			currentMessages := make([]llm.Message, len(messages))
+			copy(currentMessages, messages)
+
+			for {
+				tempChunkChan := make(chan string)
+				var assistantContent string
+				var waitGroup sync.WaitGroup
+				waitGroup.Add(1)
+
+				go func() {
+					defer waitGroup.Done()
+					for chunk := range tempChunkChan {
+						assistantContent += chunk
+						chapterChunkChan <- chunk
+					}
+				}()
+
+				finishReason, err := s.llmClient.GenerateStream(streamCtx, llmModel, currentMessages, tempChunkChan)
+				waitGroup.Wait()
+				if err != nil {
+					chapterErrChan <- err
+					return
+				}
+
+				currentMessages = append(currentMessages, llm.Message{Role: "assistant", Content: assistantContent})
+				if finishReason != "length" {
+					return
+				}
+
+				currentMessages = append(currentMessages, llm.Message{
+					Role:    "user",
+					Content: "刚才你的回答被截断了，请严格从上文最后一个字符开始无缝续写。绝对不要输出“好的，我们继续”等任何过渡性废话，直接输出后续的Markdown或代码内容。",
+				})
+			}
+		}()
+
+		idleTimeout := 60 * time.Second
+		timer := time.NewTimer(idleTimeout)
+		streamErr = nil
+		done := false
+
+		for !done {
+			select {
+			case <-ctx.Done():
+				streamCancel()
+				timer.Stop()
+				return "", ctx.Err()
+			case <-timer.C:
+				streamCancel()
+				streamErr = fmt.Errorf("AI generation idle timeout (no data for %v)", idleTimeout)
+				done = true
+			case err, ok := <-chapterErrChan:
+				if ok && err != nil {
+					streamErr = err
+					done = true
+				} else if !ok {
+					chapterErrChan = nil
+				}
+			case chunk, ok := <-chapterChunkChan:
+				if !ok {
+					done = true
+					continue
+				}
+
+				if !timer.Stop() {
+					select {
+					case <-timer.C:
+					default:
+					}
+				}
+				timer.Reset(idleTimeout)
+
+				fullContentBuilder.WriteString(chunk)
+				sendSeriesProgressPayload(progressChan, map[string]interface{}{
+					"status":       "streaming",
+					"chapter_sort": chapter.Sort,
+					"content":      chunk,
+				})
+			}
+		}
+
+		timer.Stop()
+		streamCancel()
+		if streamErr == nil {
+			content = fullContentBuilder.String()
+			break
+		}
+
+		time.Sleep(exponentialBackoff(attempt))
+	}
+
+	if streamErr != nil {
+		return "", streamErr
+	}
+
+	return content, nil
+}
+
+func (s *DecompositionService) extractSeriesChapterTechStacks(ctx context.Context, llmModel, content string) datatypes.JSON {
+	var techStacks datatypes.JSON
+	extractPrompt := "请从以下文章内容中提取出涉及的核心技术栈名称（如 React, Go, Docker 等），以 JSON 数组格式返回，不要有任何其他多余字符。\n\n例如：[\"React\", \"Go\"]\n\n文章内容：\n\n" + content
+	extractMessages := []llm.Message{{Role: "user", Content: extractPrompt}}
+	extractedJSON, err := s.llmClient.GenerateJSON(ctx, llmModel, extractMessages)
+	if err != nil || len(extractedJSON) == 0 {
+		return techStacks
+	}
+
+	var parsed []string
+	if json.Unmarshal([]byte(extractedJSON), &parsed) != nil {
+		return techStacks
+	}
+
+	return datatypes.JSON(extractedJSON)
+}

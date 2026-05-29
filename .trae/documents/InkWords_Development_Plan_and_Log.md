@@ -114,6 +114,17 @@
 ## 4. 每日开发日志 (Dev Log)
 > 该区域将由 Vibe Coding 工程师（AI 助手）在每天/每次开发周期结束时，如实记录当天的完成事项、遇到的技术坑点及架构小规模调整。
 
+### [2026-05-29] Refactor - 结构拆分 Phase 1（review service / Sidebar / decomposition helpers）
+- **开发模块**: [Backend Review Domain, Frontend Sidebar, Generator Decomposition, Docs-as-Code]
+- **完成事项**:
+  1. 将 `backend/internal/domain/review/service.go` 拆分为题卡、历史、会话与共享类型等同包多文件，降低超大文件复杂度并保持原有接口不变。
+  2. 将 `frontend/src/components/Sidebar.tsx` 拆出 `SidebarShell`、`SidebarBatchActionBar`、`useSidebarBatchSelection` 与 `sidebarExport`，把批量导出、副作用与壳层布局分离。
+  3. 将 decomposition generate 相关辅助逻辑拆成更小文件，并补齐对应测试与 Vite 兼容性测试。
+  4. 同步更新 README 与核心架构/API/数据库/PRD/对话日志文档，说明本次为工程化重构而非产品行为变更。
+- **验证**:
+  - `cd backend && go test ./internal/domain/review ./internal/service` 通过
+  - `cd frontend && npm run test -- src/components/sidebar/SidebarBatchActionBar.test.tsx src/components/sidebar/SidebarShell.test.tsx src/hooks/useSidebarBatchSelection.test.tsx src/lib/sidebarSelection.test.ts src/services/sidebarExport.test.ts src/vitePermissionCompatibility.test.ts` 通过
+
 ### [2026-05-29] Fix - 收敛知识漫游复习入口并修复随机抽题
 - **开发模块**: [Frontend Review Entry, Backend Review Picker, Docs-as-Code]
 - **完成事项**:
