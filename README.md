@@ -8,6 +8,7 @@
 它依然支持将资料进一步生成小白友好、可复现的系列技术博客，但 README 的主叙事将更聚焦在“知识沉淀 → 复习闭环 → 可选的对外输出（博客/导出）”。
 
 ## 2. 核心特性 (Features)
+- **工程化模块拆分（Phase 1）**：持续将 `Sidebar`、review 领域服务和分解生成辅助逻辑拆成更小的组件、hooks 与同包多文件，降低超大文件体积并提升可维护性。
 - **一键知识摄入（Ingest）**：支持解析 Git 仓库、本地文档（PDF/DOCX/Markdown/TXT）与 ZIP 课件包，自动生成符合 Karpathy LLM Wiki Pattern 的 `sources/`、`concepts/`、`entities/` 卡片与双向链接。
 - **知识库“热缓存 + 索引 + 日志”自动维护**：自动更新 `wiki/index.md`、`wiki/hot.md` 与 `wiki/log.md`，避免知识孤岛，让知识库可持续演进。
 - **知识漫游复习工作台（核心主链路）**：支持“今日推荐 / 随机抽题 / 手动选文”，并提供 `light_recall / detailed_qa` 两种训练模式，形成中文反馈闭环与最近记录。

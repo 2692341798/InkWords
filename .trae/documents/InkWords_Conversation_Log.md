@@ -1,6 +1,17 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 75：收口 structure-phase1 的模块化拆分并提交
+- **用户需求**：检查工作区和分支，把尚未提交的改动都整理后提交。
+- **AI 动作**：
+  1. 先巡检所有本地 worktree 与分支，确认 `agent/structure-phase1` 仍有一组未提交的工程化拆分改动。
+  2. 复核该分支内容，确认核心变化为：review 领域 service 拆分、`Sidebar` 拆分为更小组件/Hook/Service、decomposition generate 辅助逻辑拆分，以及相关测试文件补齐。
+  3. 按提交门禁补齐 `README.md`、`InkWords_API.md`、`InkWords_Architecture.md`、`InkWords_Database.md`、`InkWords_Development_Plan_and_Log.md`、`InkWords_PRD.md` 与本对话日志，明确本次是工程化重构，不夸大为产品需求变化。
+  4. 计划以独立 `refactor` 提交收口该分支，避免与当前分支上的 review 修复混在同一个 commit。
+- **决策/变更**：
+  - 将这组改动定义为“结构拆分 Phase 1”，重点是降低超大文件复杂度、提升模块边界清晰度，而不是引入新的对外 API 或数据库行为。
+  - 提交策略按分支分开处理，避免多个 worktree 的不相关改动混入一个 commit。
+
 ### 对话 74：执行 Task 8，同步 review 文档并做全量验证 / Docker 联调
 - **用户需求**：执行实现计划中的 Task 8，为“知识漫游复习”同步项目文档，跑完后端与前端全量验证，再执行 Docker Compose 联调，并返回改动文件、测试结果与阻塞点。
 - **AI 动作**：
