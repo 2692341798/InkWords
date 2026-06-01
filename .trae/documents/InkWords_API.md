@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - API 接口文档
 
 ## 0. 变更记录
+- 2026-06-01：仓库 Git 治理收尾；本次仅通过 `git rm --cached CONTRIBUTING.md` 取消本地协作辅助文件的版本跟踪，并继续由 `.gitignore` 忽略。无新增、删除或修改任何后端 API 路由、请求参数、响应结构或 SSE 事件。
 - 2026-06-01：文件来源 Analyze 链路新增“动态提示词 profile”锁定机制。`POST /api/v1/stream/analyze` 在完成大纲分析后会额外返回 `resolved_prompt_profile`（含 `key`、`display_name`、`document_kind`、`reason`）；`POST /api/v1/stream/generate` 请求新增 `prompt_profile_key`、`document_kind`，用于让单篇/系列生成沿用同一次 Analyze 已锁定的内容类型提示词。
 - 2026-06-01：知识漫游复习会话升级为“文章驱动提问 + 结构化反馈”；`POST /api/v1/review/sessions` 与 `GET /api/v1/review/sessions/:id` 新增 `session_outline`、`current_round_goal`，`POST /api/v1/review/sessions/:id/respond` 新增 `review_feedback` 与 `current_round_goal`，用于明确返回本轮目标、命中点、遗漏点与下一步建议。
 - 2026-05-29：工程化结构拆分 Phase 1：review 领域与 Sidebar/export 逻辑完成模块化拆分，生成链路辅助逻辑拆分为更小文件；本次不新增、不删除、不修改任何对外 API 路由或请求结构。
