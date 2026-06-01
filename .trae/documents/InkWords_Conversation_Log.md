@@ -1,6 +1,23 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 81：补齐知识复习“提问开始”入口并修复恢复会话逻辑
+- **用户需求**：用户先指出知识复习页和主页都看不到“提问按钮”，随后要求采用“方案 B”在随机推荐卡里增加显式 `提问开始` 按钮；后续又要求继续修复由此暴露出的模式传递、恢复会话和已完成会话误判问题，并最终提交到 GitHub 创建 PR。
+- **AI 动作**：
+  1. 先基于知识库 Query 与现有前端实现确认：当前“提问”能力被折叠为 `detailed_qa` 模式，没有在入口区提供直观按钮，因此用户对“功能缺失”的感知属实。
+  2. 通过 brainstorming + writing-plans 形成独立 spec/plan，随后按 TDD 落地：给 `ReviewEntryCards` 增加 `提问开始` 按钮；在 `KnowledgeReview` 中把该入口接到推荐卡启动流程；补齐 `ReviewEntryCards.test.tsx`、`KnowledgeReview.test.tsx`。
+  3. 在后续代码审查中发现高优问题：`提问开始` 实际仍可能用旧的 `selectedMode` 建会话，恢复会话会被 `initialize()` 重新打回入口，已完成会话在首页仍显示“可继续”，以及不支持 `detailed_qa` 的题卡仍会暴露 `提问开始`。随后继续按 TDD 补 `useKnowledgeReview.test.tsx`、`HomeEntry.test.tsx` 并做最小修复。
+  4. 为让运行态同步到最新代码，按 Docker-First 规范执行 `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build`，确认前端容器重建完成并重新提供 `http://localhost`。
+- **决策/变更**：
+  - 推荐卡新增显式动作 `提问开始`，但仅当题卡 `available_modes` 包含 `detailed_qa` 时可点击，避免 UI 允许发起后端不支持的模式。
+  - `useKnowledgeReview.startSession` 增加显式 `modeOverride` 参数，确保“入口按钮指定模式”优先于闭包中的旧 `selectedMode`。
+  - 恢复本地活动 session 时不再重置 `shouldResumeSessionOnOpen`；首页仅把 `status !== completed` 的 session 视为可继续任务。
+- **验证**：
+  - `cd frontend && npm run test -- src/components/review/ReviewEntryCards.test.tsx src/pages/KnowledgeReview.test.tsx src/pages/knowledgeReviewViewState.test.ts src/store/reviewStore.test.ts src/hooks/useKnowledgeReview.test.tsx src/pages/HomeEntry.test.tsx` 通过（18 tests）
+  - `cd frontend && npm run build` 通过
+  - `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build` 完成
+  - `curl -I http://localhost` 返回 `HTTP/1.1 200 OK`
+
 ### 对话 80：收口 structure-phase1 的模块化拆分并提交
 - **用户需求**：检查工作区和分支，把尚未提交的改动都整理后提交，并在后续继续推进合并到 `main`。
 - **AI 动作**：

@@ -1,5 +1,11 @@
 import { useCallback } from 'react'
-import { reviewService, type ReviewCardResponse, type ReviewEntryType, type ReviewTurnResponse } from '@/services/review'
+import {
+  reviewService,
+  type ReviewCardResponse,
+  type ReviewEntryType,
+  type ReviewMode,
+  type ReviewTurnResponse,
+} from '@/services/review'
 import { useReviewStore } from '@/store/reviewStore'
 
 const activeSessionStorageKey = 'inkwords-active-review-session'
@@ -38,7 +44,9 @@ export function useKnowledgeReview() {
   const {
     currentSession,
     selectedMode,
+    clearSessionState,
     setCurrentSession,
+    setShouldResumeSessionOnOpen,
     setLatestHint,
     setLatestStageFeedback,
     setFinalFeedback,
@@ -79,20 +87,31 @@ export function useKnowledgeReview() {
   }, [persistSessionID, setCurrentSession])
 
   const startSession = useCallback(
-    async (card: ReviewCardResponse, entryType: ReviewEntryType) => {
+    async (card: ReviewCardResponse, entryType: ReviewEntryType, modeOverride?: ReviewMode) => {
       const session = await reviewService.createSession({
         note_path: card.note_path,
-        mode: selectedMode,
+        // Why: 页面可能提供“提问开始”这类显式模式入口，创建会话时必须以本次点击指定的模式为准，
+        // 不能依赖尚未完成重渲染的闭包状态。
+        mode: modeOverride ?? selectedMode,
         entry_type: entryType,
       })
       setLatestHint(null)
       setLatestStageFeedback(null)
       setFinalFeedback(null)
       setCurrentSession(session)
+      setShouldResumeSessionOnOpen(true)
       persistSessionID(session.session_id)
       return session
     },
-    [persistSessionID, selectedMode, setCurrentSession, setFinalFeedback, setLatestHint, setLatestStageFeedback],
+    [
+      persistSessionID,
+      selectedMode,
+      setCurrentSession,
+      setFinalFeedback,
+      setLatestHint,
+      setLatestStageFeedback,
+      setShouldResumeSessionOnOpen,
+    ],
   )
 
   const respond = useCallback(
@@ -164,12 +183,9 @@ export function useKnowledgeReview() {
   }, [currentSession, loadHistory, persistSessionID, setCurrentSession, setFinalFeedback])
 
   const clearSession = useCallback(() => {
-    setCurrentSession(null)
-    setLatestHint(null)
-    setLatestStageFeedback(null)
-    setFinalFeedback(null)
+    clearSessionState()
     persistSessionID(null)
-  }, [persistSessionID, setCurrentSession, setFinalFeedback, setLatestHint, setLatestStageFeedback])
+  }, [clearSessionState, persistSessionID])
 
   return {
     initialize,

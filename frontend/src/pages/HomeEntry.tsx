@@ -34,15 +34,22 @@ export function HomeEntry() {
 
   const recentBlogs = useMemo(() => blogs.slice(0, 3), [blogs])
   const recentReviews = useMemo(() => reviewStore.historyItems.slice(0, 3), [reviewStore.historyItems])
+  const resumableReviewSession =
+    reviewStore.currentSession && reviewStore.currentSession.status !== 'completed'
+      ? reviewStore.currentSession
+      : null
 
-  const resumeCard = reviewStore.currentSession
+  const resumeCard = resumableReviewSession
     ? {
-        title: reviewStore.currentSession.title,
+        title: resumableReviewSession.title,
         description: `你上次停在知识复习，会话仍可继续，当前模式为 ${
-          reviewStore.currentSession.mode === 'detailed_qa' ? '细致提问' : '轻提示复述'
+          resumableReviewSession.mode === 'detailed_qa' ? '细致提问' : '轻提示复述'
         }。`,
         actionLabel: '继续知识复习',
-        onAction: () => setCurrentView('knowledge-review'),
+        onAction: () => {
+          reviewStore.setShouldResumeSessionOnOpen(true)
+          setCurrentView('knowledge-review')
+        },
       }
     : recentBlogs.length > 0
       ? {
@@ -154,7 +161,15 @@ export function HomeEntry() {
                   : '点击后会进入真实的知识复习页，在那里继续完成“选择入口 -> 开始会话 -> 获得反馈”的逐步流程。'}
               </div>
               <div className="mt-5">
-                <Button className="gap-2" onClick={() => setCurrentView(viewState.targetView)}>
+                <Button
+                  className="gap-2"
+                  onClick={() => {
+                    if (viewState.targetView === 'knowledge-review') {
+                      reviewStore.setShouldResumeSessionOnOpen(false)
+                    }
+                    setCurrentView(viewState.targetView)
+                  }}
+                >
                   {viewState.ctaLabel}
                   <ArrowRight className="h-4 w-4" />
                 </Button>
