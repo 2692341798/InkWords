@@ -1,6 +1,18 @@
 # 墨言知识训练平台 (InkWords Trainer) - 开发计划与日志
 > **目标**：跟踪项目的核心开发模块、里程碑进度以及每日开发记录。
 
+### [2026-06-01] Feat - 系列章节质量流水线 Task 1 基础门禁
+- **需求背景**：
+  1. 系列博客后续将切换到“章节理解 -> 章节写作 -> 章节审稿 -> 定向补强与轻统稿”的四段式质量流水线，需要先把结构化输出类型和基础门禁钉牢。
+  2. 当前目标仅完成 Task 1：先通过 TDD 建立章节质量结构体与硬门禁校验，为后续阶段解析、进度事件和缓存命中观测打底。
+- **本次完成**：
+  1. 在 `backend/internal/service/series_quality_pipeline_test.go` 先补三个红灯测试，分别锁定章节理解缺少 `must_explain/must_include_examples`、章节草稿缺少案例与复现覆盖、章节审稿缺少 `revision_actions` 时必须失败。
+  2. 新增 `backend/internal/service/series_quality_pipeline_types.go`，定义 `SeriesChapterUnderstanding`、`SeriesChapterCoverageCheck`、`SeriesChapterExample`、`SeriesChapterDraft`、`SeriesChapterReview`、`SeriesChapterFinal`、`SeriesChapterUsage`。
+  3. 为章节理解、草稿、审稿增加最小硬门禁校验函数，在结构化结果进入后续流水线前先拦截空心输出。
+- **验证记录**：
+  - `cd backend && go test ./internal/service -run 'ValidateSeriesChapter|SeriesChapterReview' -v` 先失败（未定义类型/函数）、后通过
+  - `cd backend && go test ./internal/service` 通过
+
 ### [2026-06-01] Fix - 超大 PDF 全量解析与章节覆盖率修复
 - **需求背景**：
   1. 用户反馈上传 800 多页 PDF 时，系统只能识别前面一部分内容，后续章节经常丢失。

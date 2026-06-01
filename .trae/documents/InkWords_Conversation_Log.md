@@ -1,6 +1,20 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 88：执行系列章节质量流水线 Task 1，先落类型与门禁
+- **用户需求**：按 `docs/superpowers/plans/2026-06-01-series-chapter-quality-pipeline.md` 执行 Task 1，用 TDD 实现章节质量结构体与硬门禁校验，运行测试并完成提交，最后返回改动文件、测试结果与提交哈希。
+- **AI 动作**：
+  1. 先回读计划文件，确认 Task 1 只包含两类代码文件：`series_quality_pipeline_test.go` 与 `series_quality_pipeline_types.go`，目标是为后续四段式流水线建立结构化基础，而不是直接改主生成链路。
+  2. 按 TDD 先新增三个失败测试，锁定章节理解缺少 `must_explain/must_include_examples`、章节草稿缺少案例/复现覆盖、章节审稿缺少 `revision_actions` 时必须报错；随后执行 `go test`，确认失败原因为类型和校验函数未定义。
+  3. 再以最小实现新增 `SeriesChapterUnderstanding / Draft / Review / Final / Usage` 等结构体，并补 `validateSeriesChapterUnderstanding`、`validateSeriesChapterDraft`、`validateSeriesChapterReview` 三个门禁函数，只覆盖 Task 1 需要的硬校验。
+  4. 红绿转换完成后，同步更新 API / Architecture / Database / PRD / Development Log / README，明确本次仅落地后端内部门禁基础，不夸大为已完成外部 API 或数据库契约变化。
+- **决策/变更**：
+  - Task 1 保持最小改动，不提前实现 Task 2 的前缀 builder、JSON 解析器或 Task 3 的流水线调度，避免把多主题混入同一提交。
+  - `SeriesChapterUsage` 先作为后续 usage 观测的占位结构落库到类型层，但本轮不接入 DeepSeek telemetry 与前端事件。
+- **验证**：
+  - `cd backend && go test ./internal/service -run 'ValidateSeriesChapter|SeriesChapterReview' -v` 先失败、后通过
+  - `cd backend && go test ./internal/service` 通过
+
 ### 对话 87：同步动态提示词 profile 文档并执行回归验证
 - **用户需求**：按既定 `Task4` 更新项目文档（`API/Architecture/Conversation_Log/Development_Plan_and_Log/PRD/README`），并执行后端、前端测试与 `docker compose` 回归验证，最终返回修改文件、测试和验证结果。
 - **AI 动作**：
