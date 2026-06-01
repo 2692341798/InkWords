@@ -39,13 +39,15 @@ func (s *DecompositionService) finalizeSeriesChapterDraft(
 ) (SeriesChapterFinal, error) {
 	chunkChan := make(chan string, 100)
 	errChan := make(chan error, 1)
+	usageChan := make(chan llm.CompletionUsage, 1)
 	var finalBuilder strings.Builder
 
 	go func() {
-		_, err := s.llmClient.GenerateStream(ctx, llmModel, []llm.Message{
+		_, usage, err := s.llmClient.GenerateStreamWithUsage(ctx, llmModel, []llm.Message{
 			{Role: "system", Content: seriesPrefix + "\n当前阶段：定向补强与轻统稿"},
 			{Role: "user", Content: buildSeriesFinalizePrompt(input, understanding, draft, review)},
 		}, chunkChan)
+		usageChan <- usage
 		errChan <- err
 	}()
 
@@ -62,6 +64,16 @@ func (s *DecompositionService) finalizeSeriesChapterDraft(
 	if err := <-errChan; err != nil {
 		return SeriesChapterFinal{}, err
 	}
+	usage := <-usageChan
+	sendSeriesProgressPayload(input.ProgressChan, map[string]interface{}{
+		"status":                   "usage",
+		"chapter_sort":             input.Chapter.Sort,
+		"title":                    input.Chapter.Title,
+		"prompt_tokens":            usage.PromptTokens,
+		"completion_tokens":        usage.CompletionTokens,
+		"prompt_cache_hit_tokens":  usage.PromptCacheHitTokens,
+		"prompt_cache_miss_tokens": usage.PromptCacheMissTokens,
+	})
 
 	return SeriesChapterFinal{
 		FinalMarkdown:  finalBuilder.String(),

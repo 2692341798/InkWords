@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - 架构设计与工程规范
 
 ## 0. 变更记录
+- 2026-06-01：系列章节质量流水线继续落地 Task 4。DeepSeek 客户端新增 `CompletionUsage` 与 `GenerateWithUsage / GenerateJSONWithUsage / GenerateStreamWithUsage`，用于从非流式响应体和流式尾块里统一回收 `prompt_tokens / completion_tokens / prompt_cache_hit_tokens / prompt_cache_miss_tokens`；系列章节终稿补强结束后会通过现有 SSE `progressChan` 追加 `usage` 事件，把单章节缓存命中情况透传给前端，为后续系列级成本观测与前缀复用优化打底。
 - 2026-06-01：系列章节质量流水线继续落地 Task 3。`GenerateSeriesWithProfile` 的章节主链路已切换到 `runSeriesChapterQualityPipeline()`：先执行章节理解、草稿写作、结构化审稿，再由 `finalizeSeriesChapterDraft()` 负责终稿补强并向前端流式输出；章节草稿与审稿中间态不再直接透给前端，避免用户看到未过门禁的半成品正文。
 - 2026-06-01：系列章节质量流水线继续落地 Task 2。后端新增 `internal/service/series_quality_pipeline.go`，先抽出 `buildSeriesSharedPromptPrefix()` 作为系列级稳定前缀 builder，再实现 `parseSeriesChapterUnderstanding()` 与 `generateSeriesChapterUnderstanding()`，用于把“系列级固定规则前置、章节级变量后置”的 Prompt 结构固化下来；`decomposition_generate_prompt_helpers.go` 同步新增 `buildSeriesReaderProfile()`，为后续质量流水线统一生成读者画像。当前仍未切换 `GenerateSeriesWithProfile` 主链路与前端 SSE 协议。
 - 2026-06-01：系列章节质量流水线开始落地 Task 1。后端在 `internal/service` 新增 `series_quality_pipeline_types.go`，统一定义 `SeriesChapterUnderstanding / Draft / Review / Final / Usage` 结构体，并在结构化输出进入后续阶段前增加硬门禁校验，先从类型边界拦截“缺机制解释、缺案例、缺修订动作”的空心结果；本次尚未切换 `GenerateSeriesWithProfile` 主链路和前端 SSE 协议。
@@ -108,6 +109,7 @@
    - 每个 `goroutine` 均拥有独立的错误隔离环境，通过同一个 `progressChan` 向前端推送包含自身 `chapter_sort` ID 的 Chunk（数据切片）。
   - 单篇生成、系列章节生成和系列导读生成都会复用同一份 `scenario_mode + article_style + resolved prompt profile` 组合后的 Prompt 约束，避免“大纲像心理学解读、正文回到通用技术博客”的割裂。
   - 系列章节当前内部执行顺序已升级为 `understanding -> drafting -> reviewing -> revising(streaming)`；只有终稿补强阶段会把正文 chunk 推给前端，前置阶段只发送状态事件。
+  - 终稿补强的流式收尾阶段还会额外发送 `usage` 事件，携带 `prompt_tokens / completion_tokens / prompt_cache_hit_tokens / prompt_cache_miss_tokens`，用于衡量稳定前缀是否真正提升了同系列多章节的 DeepSeek 原生前缀缓存命中率。
 4. **系列导读生成**：
    - 所有单篇博客生成完毕后（`wg.Wait()` 返回），主流程自动触发一次 AI 调用，生成“系列导读”文章，将其作为整个系列的父节点，将各个单篇博客串联成专栏。
 5. **前端批量更新防卡顿**：
@@ -152,3 +154,4 @@
 - **目标**：降低 DeepSeek Token 消耗，提高首字响应速度 (TTFT)。
 - **原生支持**：全面拥抱 DeepSeek V4 API 级别的原生前缀缓存 (Prompt Caching)。
 - **Prompt 结构重构**：将数百万字的巨量源码 `sourceContent` 提取至 `system` 消息并置于请求最前，将易变的“指令”置于 `user` 消息并置于请求尾部，以最大化原生缓存的命中率，将长文本输入成本降低 80% 以上。
+- **观测补强**：自 2026-06-01 的系列章节质量流水线 Task 4 起，后端会从 DeepSeek 非流式响应体与流式尾块中统一解析 `prompt_cache_hit_tokens / prompt_cache_miss_tokens`，并在系列章节终稿完成后把 usage 事件推给前端，避免“只设计缓存友好 Prompt，却无法验证是否真正命中”的黑盒状态。

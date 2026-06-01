@@ -1,6 +1,22 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 91：执行系列章节质量流水线 Task 4，补 DeepSeek usage 与缓存命中采集
+- **用户需求**：按 `docs/superpowers/plans/2026-06-01-series-chapter-quality-pipeline.md` 执行 Task 4，用 TDD 为 DeepSeek 客户端补 `usage / prompt cache hit` 采集，并把系列章节终稿阶段的 usage 事件透传到 SSE；不要修改 `CONTRIBUTING.md`，运行相关测试并提交。
+- **AI 动作**：
+  1. 先回读计划文档与现有 `deepseek.go`、`series_quality_pipeline.go`、`series_quality_pipeline_test.go`，确认当前只完成了 Task 3 的四段式章节流水线，还没有任何 `CompletionUsage` 解析、usage 流式尾块回收或前端可消费的 `usage` 事件。
+  2. 按 TDD 先补红灯测试：`deepseek_usage_test.go` 锁定 `parseCompletionUsage()` 与 `GenerateStreamWithUsage()`，`series_quality_pipeline_test.go` 锁定系列章节阶段序列必须扩展为 `understanding -> drafting -> reviewing -> revising -> streaming -> usage`，且 `usage` 事件要带上缓存命中字段。
+  3. 在 `deepseek.go` 中新增 `CompletionUsage`、`parseCompletionUsage()`、`doChatCompletion()`、`extractCompletionContent()`，并补 `GenerateWithUsage()`、`GenerateJSONWithUsage()`、`GenerateStreamWithUsage()`；原有 `Generate/GenerateJSON/GenerateStream` 则退化为对新方法的兼容封装。
+  4. 在流式解析里修正一个真实边界：DeepSeek 可能先发 `finish_reason`、后发 `usage` 尾块，因此实现改为“记录 finish_reason，但继续读到 `[DONE]`/EOF 再返回”，避免缓存命中统计被提前吞掉。
+  5. 在 `finalizeSeriesChapterDraft()` 中改用 `GenerateStreamWithUsage()`，在终稿正文流式完成后通过现有 `progressChan` 追加 `usage` 事件；同时同步更新 API / Architecture / Database / Development Log / PRD / README。
+- **决策/变更**：
+  - 本轮保持最小改动，不改前端 store 和 UI，仅把后端 telemetry 采集与 SSE usage 事件打通，为后续 Task 5 展示层消费做准备。
+  - `CONTRIBUTING.md` 与计划文档保持未触碰；工作区未跟踪文件不会被纳入提交。
+- **验证**：
+  - `cd backend && go test ./internal/infra/llm -run 'ParseCompletionUsage|GenerateStreamWithUsage' -v` 先失败、后通过
+  - `cd backend && go test ./internal/service -run 'RunSeriesChapterQualityPipeline_StreamsOnlyFinalStageAndPreservesStageOrder' -v` 先失败（缺少 usage 事件 / usage 丢失）、后通过
+  - `cd backend && go test ./internal/infra/llm ./internal/service -run 'ParseCompletionUsage|GenerateStreamWithUsage|RunSeriesChapterQualityPipeline|ValidateSeriesChapter|BuildSeriesSharedPromptPrefix|ParseSeriesChapterUnderstanding' -v` 通过
+
 ### 对话 90：执行系列章节质量流水线 Task 3，接入草稿/审稿/终稿补强主链路
 - **用户需求**：按 `docs/superpowers/plans/2026-06-01-series-chapter-quality-pipeline.md` 执行 Task 3，用 TDD 将“草稿 -> 审稿 -> 终稿流式补强”接入 `DecompositionService` 系列生成主链路，运行相关测试并完成提交。
 - **AI 动作**：
