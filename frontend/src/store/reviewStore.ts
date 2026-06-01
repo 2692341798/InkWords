@@ -29,12 +29,14 @@ interface ReviewState {
   loadNotes: (query?: string) => Promise<void>
   loadHistory: (limit?: number) => Promise<void>
   setSelectedMode: (mode: ReviewMode) => void
+  setShouldResumeSessionOnOpen: (shouldResume: boolean) => void
   setCurrentSession: (session: ReviewSessionResponse | null) => void
   setShouldResumeSessionOnOpen: (shouldResume: boolean) => void
   clearSessionState: () => void
   setLatestStageFeedback: (feedback: string | null) => void
   setLatestHint: (hint: string | null) => void
   setFinalFeedback: (feedback: FinalFeedback | null) => void
+  clearSessionState: () => void
   reset: () => void
 }
 
@@ -121,6 +123,8 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
 
   setSelectedMode: (mode) => set({ selectedMode: mode }),
 
+  setShouldResumeSessionOnOpen: (shouldResume) => set({ shouldResumeSessionOnOpen: shouldResume }),
+
   setCurrentSession: (session) => set({ currentSession: session }),
 
   setShouldResumeSessionOnOpen: (shouldResume) => set({ shouldResumeSessionOnOpen: shouldResume }),
@@ -139,6 +143,15 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
   setLatestHint: (hint) => set({ latestHint: hint }),
 
   setFinalFeedback: (feedback) => set({ finalFeedback: feedback }),
+
+  clearSessionState: () =>
+    set({
+      currentSession: null,
+      shouldResumeSessionOnOpen: false,
+      latestStageFeedback: null,
+      latestHint: null,
+      finalFeedback: null,
+    }),
 
   reset: () =>
     set({

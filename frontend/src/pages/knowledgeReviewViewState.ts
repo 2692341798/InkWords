@@ -13,7 +13,7 @@ export function getKnowledgeReviewViewState({
   isPickerOpen,
   shouldEnterSession,
 }: KnowledgeReviewViewStateInput) {
-  const currentStep = hasSession && shouldEnterSession ? 'session' : isPickerOpen ? 'picker' : 'entry'
+  const currentStep = hasSession || shouldEnterSession ? 'session' : isPickerOpen ? 'picker' : 'entry'
 
   return {
     currentStep,

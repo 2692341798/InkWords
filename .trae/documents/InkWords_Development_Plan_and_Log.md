@@ -56,6 +56,17 @@
   - `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build` 完成
   - `curl -I http://localhost` 返回 `HTTP/1.1 200 OK`
 
+### [2026-06-01] Fix - 知识复习会话记录区改为内部滚动
+- **开发模块**: [Frontend Review UI, Docs-as-Code]
+- **完成事项**:
+  1. 在 `frontend/src/components/review/ReviewSessionCard.tsx` 将“会话记录”改为 `h-96` 的固定高度滚动容器，并显式使用 `overflow-y-scroll`，让滑动条表现稳定，不再因为轮次增长把页面整体向下撑长。
+  2. 为保障恢复会话链路与类型安全，补齐 `frontend/src/store/reviewStore.ts` 中的 `shouldResumeSessionOnOpen / setShouldResumeSessionOnOpen / clearSessionState`，并同步修正 `frontend/src/pages/knowledgeReviewViewState.ts` 的输入模型。
+  3. 新增 `frontend/src/components/review/ReviewSessionCard.test.tsx`，并扩充 `reviewStore.test.ts`、`knowledgeReviewViewState.test.ts`，先红后绿锁定滚动区与恢复会话行为。
+- **验证**:
+  - `cd frontend && npm run test -- src/store/reviewStore.test.ts src/components/review/ReviewSessionCard.test.tsx src/pages/knowledgeReviewViewState.test.ts src/hooks/useKnowledgeReview.test.tsx src/pages/KnowledgeReview.test.tsx src/pages/HomeEntry.test.tsx` 通过
+  - `cd frontend && npx eslint src/store/reviewStore.ts src/hooks/useKnowledgeReview.ts src/pages/knowledgeReviewViewState.ts src/components/review/ReviewSessionCard.tsx src/components/review/ReviewSessionCard.test.tsx src/store/reviewStore.test.ts src/pages/knowledgeReviewViewState.test.ts` 通过
+  - `cd frontend && npm run build` 通过
+
 ### [2026-05-29] Fix - Review 随机抽题去除顺序偏置
 - **开发模块**: [Backend Review Domain, Picker, TDD, Docs-as-Code]
 - **完成事项**:

@@ -1,6 +1,22 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 82：将知识复习会话记录区改为内部滚动
+- **用户需求**：用户指出知识漫游复习页里的“会话记录”会随着轮次增加不断向下延伸，希望改成带滑动条的固定区域。
+- **AI 动作**：
+  1. 先做知识库 Query，确认 `[[前端复习组件与Hooks]]` 与 `[[复习系统领域：笔记源与会话构建]]` 都把 `ReviewSessionCard` 视为长链路会话承载区，因此本次适合做局部前端布局修正，不改会话状态流。
+  2. 回读 `ReviewSessionCard.tsx` 与 `KnowledgeReview.tsx`，确认问题源自“会话记录”直接按轮次自然渲染，没有独立滚动容器。
+  3. 先按 TDD 补红灯测试：锁定 `reviewStore` 必须提供恢复会话状态 API、`knowledgeReviewViewState` 必须支持显式恢复会话步骤、`ReviewSessionCard` 必须把会话记录渲染为固定高度滚动容器。
+  4. 以最小改动补齐 `reviewStore` 的 `shouldResumeSessionOnOpen / setShouldResumeSessionOnOpen / clearSessionState`，修正 `knowledgeReviewViewState` 输入，并把 `ReviewSessionCard` 改成 `h-96 + overflow-y-scroll` 的独立滚动区，同时补 `data-slot` 便于测试和后续定位。
+  5. 执行 focused tests、目标文件 `eslint` 与前端 build，确认红灯转绿，且此前阻塞构建的 TypeScript 报错已经消失。
+- **决策/变更**：
+  - 会话记录区从“最大高度”改为“固定高度 + 始终可纵向滚动”，让滚动条表现更稳定、更符合用户对“滑动条”的直观预期。
+  - 恢复会话相关状态回归到 `reviewStore` 显式维护，避免 `useKnowledgeReview`、`HomeEntry`、`KnowledgeReview` 分别引用不存在字段造成的类型断裂。
+- **验证**：
+  - `cd frontend && npm run test -- src/store/reviewStore.test.ts src/components/review/ReviewSessionCard.test.tsx src/pages/knowledgeReviewViewState.test.ts src/hooks/useKnowledgeReview.test.tsx src/pages/KnowledgeReview.test.tsx src/pages/HomeEntry.test.tsx` 通过（18 tests）
+  - `cd frontend && npx eslint src/store/reviewStore.ts src/hooks/useKnowledgeReview.ts src/pages/knowledgeReviewViewState.ts src/components/review/ReviewSessionCard.tsx src/components/review/ReviewSessionCard.test.tsx src/store/reviewStore.test.ts src/pages/knowledgeReviewViewState.test.ts` 通过
+  - `cd frontend && npm run build` 通过
+
 ### 对话 81：补齐知识复习“提问开始”入口并修复恢复会话逻辑
 - **用户需求**：用户先指出知识复习页和主页都看不到“提问按钮”，随后要求采用“方案 B”在随机推荐卡里增加显式 `提问开始` 按钮；后续又要求继续修复由此暴露出的模式传递、恢复会话和已完成会话误判问题，并最终提交到 GitHub 创建 PR。
 - **AI 动作**：

@@ -1,36 +1,42 @@
-import { describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
-
+import { describe, expect, it } from 'vitest'
 import { ReviewSessionCard } from './ReviewSessionCard'
 
 describe('ReviewSessionCard', () => {
-  it('locks the mode after a session has started so the UI does not imply a live mode switch', () => {
+  it('renders the session history inside a fixed-height scroll container', () => {
     const html = renderToStaticMarkup(
       <ReviewSessionCard
         session={{
           session_id: 'session-1',
           status: 'in_progress',
           mode: 'light_recall',
-          title: 'PostgreSQL 数据库设计',
-          opening_prompt: '先讲讲主线。',
-          initial_hints: ['先说明问题'],
-          next_question: '它的关键步骤是什么？',
+          title: '五事七计',
+          opening_prompt: '先讲主线',
+          initial_hints: [],
           turn_index: 2,
-          turns: [],
+          turns: [
+            {
+              turn_index: 1,
+              role: 'system',
+              turn_type: 'opening',
+              content: '先别看原文',
+            },
+          ],
         }}
-        selectedMode="detailed_qa"
+        selectedMode="light_recall"
         latestStageFeedback={null}
         latestHint={null}
         finalFeedback={null}
-        onModeChange={vi.fn()}
-        onRespond={vi.fn()}
-        onRequestHint={vi.fn()}
-        onFinish={vi.fn()}
+        onModeChange={() => {}}
+        onRespond={async () => {}}
+        onRequestHint={async () => {}}
+        onFinish={async () => {}}
       />,
     )
 
-    expect(html).toContain('当前主题：PostgreSQL 数据库设计 · 模式：轻提示复述')
-    expect(html).toContain('会话开始后模式已锁定')
+    expect(html).toContain('data-slot="session-history-scroll"')
+    expect(html).toContain('h-96')
+    expect(html).toContain('overflow-y-scroll')
+    expect(html).toContain('custom-scrollbar')
   })
 })
-
