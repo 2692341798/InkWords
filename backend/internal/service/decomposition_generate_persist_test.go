@@ -21,10 +21,40 @@ import (
 	"inkwords-backend/internal/prompt"
 )
 
-func TestDecompositionService_GenerateSeries_PersistsChildDraftBeforeStreaming(t *testing.T) {
-	testDB, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
+func openDecompositionPersistTestDB(t *testing.T) *gorm.DB {
+	t.Helper()
+
+	// Use a unique named in-memory database per test setup so parallel/adjacent
+	// cases do not accidentally share the same SQLite schema and user fixtures.
+	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", uuid.NewString())
+	testDB, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, testDB.AutoMigrate(&model.User{}, &model.Blog{}))
+
+	return testDB
+}
+
+func TestOpenDecompositionPersistTestDB_IsolatesUserFixtures(t *testing.T) {
+	firstDB := openDecompositionPersistTestDB(t)
+	secondDB := openDecompositionPersistTestDB(t)
+
+	firstUserID := uuid.New()
+	require.NoError(t, firstDB.Create(&model.User{
+		ID:       firstUserID,
+		Username: "tester",
+		Email:    "tester@example.com",
+	}).Error)
+
+	secondUserID := uuid.New()
+	require.NoError(t, secondDB.Create(&model.User{
+		ID:       secondUserID,
+		Username: "tester",
+		Email:    "tester@example.com",
+	}).Error)
+}
+
+func TestDecompositionService_GenerateSeries_PersistsChildDraftBeforeStreaming(t *testing.T) {
+	testDB := openDecompositionPersistTestDB(t)
 
 	previousDB := db.DB
 	db.DB = testDB
@@ -85,9 +115,7 @@ func TestDecompositionService_GenerateSeries_PersistsChildDraftBeforeStreaming(t
 }
 
 func TestGenerateSeries_PersistsFinalChapterFromQualityPipeline(t *testing.T) {
-	testDB, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, testDB.AutoMigrate(&model.User{}, &model.Blog{}))
+	testDB := openDecompositionPersistTestDB(t)
 
 	previousDB := db.DB
 	db.DB = testDB

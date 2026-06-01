@@ -117,7 +117,7 @@ docker compose --env-file backend/.env down && docker compose --env-file backend
 - 若进入页面后提示无法获取复习题卡，请优先检查：
   - 本地 Obsidian 知识库是否已存在可复习的 `wiki` 页面
   - `backend/.env` 中 Obsidian 相关变量是否已配置
-  - 是否已执行 `docker compose down && docker compose up -d --build` 让前后端与迁移保持一致
+  - 是否已执行 `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build` 让前后端与迁移保持一致
 
 ### 5.1.4 流程型入口说明
 - 当用户未打开具体博客编辑器时，应用默认先进入 `HomeEntry`，而不是直接落到生成器表单。
@@ -148,7 +148,7 @@ docker compose --env-file backend/.env ps
 curl -I http://localhost
 ```
 
-- 如果你坚持直接运行 `docker compose down && docker compose up -d --build`，请先把 `backend/.env` 中的 `OBSIDIAN_VAULT_PATH` 导出到当前 shell；否则 Compose 在解析 bind mount 时会直接报错。
+- 推荐始终使用 `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build`；这样 Compose 会显式加载 `backend/.env`，避免因 `OBSIDIAN_VAULT_PATH` 未注入而在解析 bind mount 时直接报错。
 
 由于后端仅提供 API 接口，前端服务由独立的 Nginx 容器代理。项目启动后：
 1. **必须通过前端入口**访问：`http://localhost` (映射于宿主机 80 端口)。

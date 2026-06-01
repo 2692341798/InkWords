@@ -1,6 +1,18 @@
 # 墨言知识训练平台 (InkWords Trainer) - 开发计划与日志
 > **目标**：跟踪项目的核心开发模块、里程碑进度以及每日开发记录。
 
+### [2026-06-01] Fix - service 测试隔离与 Compose 命令统一
+- **需求背景**：
+  1. 后端 `internal/service` 全量测试因 SQLite 共享内存 DSN 导致 `users.email` 唯一键冲突，阻塞了本轮提交收尾。
+  2. 同时，本轮相关文档里仍混有未显式声明 `--env-file backend/.env` 的 Compose 启动/重建命令，需要与当前 Docker-First 约束统一。
+- **本次完成**：
+  1. 在 `backend/internal/service/decomposition_generate_persist_test.go` 先补红灯用例 `TestOpenDecompositionPersistTestDB_IsolatesUserFixtures`，锁定“每次测试 setup 都应拿到独立 SQLite 库”的约束。
+  2. 将该文件中的 SQLite 测试 helper 改为每次生成唯一命名的内存 DSN，并让相关持久化测试复用同一入口，保留原有业务断言不变。
+  3. 同步补写 `API / Architecture / Conversation_Log / Database / PRD / README` 的本轮最小记录，并把遗漏的 Compose 启动命令统一为 `docker compose --env-file backend/.env ...`。
+- **验证记录**：
+  - `cd backend && go test ./internal/service -run TestOpenDecompositionPersistTestDB_IsolatesUserFixtures -count=1` 先失败、后通过
+  - `cd backend && go test ./internal/service -count=1` 通过
+
 ### [2026-06-01] Docs - 系列章节质量流水线 Task 6 文档同步与最终验证
 - **需求背景**：
   1. Task 1-5 已完成系列章节质量流水线、缓存命中 telemetry 与前端阶段展示，但还缺少面向交付的最终文档同步、全量测试记录和 Docker 冒烟留痕。
@@ -12,9 +24,9 @@
 - **验证记录**：
   - `cd backend && go test ./...` 未通过：`internal/service` 中 `TestGenerateSeries_PersistsFinalChapterFromQualityPipeline` 报 `UNIQUE constraint failed: users.email`
   - `cd frontend && npm run test -- --run` 通过（37 个测试文件、115 个测试）
-  - 直接执行 `docker compose down && docker compose up -d --build` 首次失败：当前 shell 未导出 `OBSIDIAN_VAULT_PATH`
+  - 未显式声明 `--env-file backend/.env` 的 Compose 链路首次失败：当前 shell 未装载 `OBSIDIAN_VAULT_PATH`
   - 导出 `backend/.env` 后再次执行 Compose 重建成功
-  - `docker compose ps` 显示 `inkwords-backend/frontend/db/redis/obsidian-bridge` 全部 `Up`
+  - `docker compose --env-file backend/.env ps` 显示 `inkwords-backend/frontend/db/redis/obsidian-bridge` 全部 `Up`
   - `curl -I http://localhost` 返回 `HTTP/1.1 200 OK`
 
 ### [2026-06-01] Feat - 系列章节质量流水线 Task 5 前端阶段显示与缓存摘要

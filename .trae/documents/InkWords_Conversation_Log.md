@@ -1,23 +1,38 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 94：最小可回滚修复 backend/internal/service 测试隔离，并统一本轮 Compose 命令
+- **用户需求**：做一个最小可回滚修复：1) 用 TDD 修复 `backend/internal/service` 全量测试中的 `users.email` 唯一键冲突，优先通过测试隔离而非删断言；2) 把项目中本轮相关文档/计划里遗漏的 Docker Compose 启动命令统一为显式 `--env-file backend/.env`；3) 不修改也不提交 `CONTRIBUTING.md` 与 `docs/superpowers/plans/2026-06-01-series-chapter-quality-pipeline.md`；4) 运行相关测试/验证并提交。
+- **AI 动作**：
+  1. 先按规则读取 `wiki/hot.md`、`wiki/index.md`、仓库文档与当前工作区状态，确认个人知识库里已有 InkWords 项目规则索引，但当前修复仍需以仓库中的测试实现和 Docker-First 文档约束为准。
+  2. 执行 `cd backend && go test ./internal/service -count=1` 复现失败，定位到 `TestGenerateSeries_PersistsFinalChapterFromQualityPipeline` 在 `decomposition_generate_persist_test.go` 中使用 `file::memory:?cache=shared` 打开 SQLite 测试库，导致相邻测试共享 `users` 表并触发 `users.email` 唯一键冲突。
+  3. 按 TDD 先新增 `TestOpenDecompositionPersistTestDB_IsolatesUserFixtures` 红灯用例，锁定“连续两次创建测试库仍可各自插入同一邮箱”的隔离约束；确认红灯失败后，把测试 helper 改为“每次生成唯一命名内存 DSN”，并让两个持久化测试统一复用该 helper。
+  4. 重新执行聚焦测试与 `go test ./internal/service -count=1`，确认后端服务测试恢复全绿；随后补齐 `API / Architecture / Conversation_Log / Database / Development_Plan_and_Log / PRD / README` 的最小同步，并把本轮相关的 Compose 启动命令统一为 `docker compose --env-file backend/.env ...`。
+  5. 全程保持 `CONTRIBUTING.md` 与 `docs/superpowers/plans/2026-06-01-series-chapter-quality-pipeline.md` 未修改、未纳入提交。
+- **决策/变更**：
+  - 本轮优先修测试隔离而非删断言或放宽唯一约束，避免把测试失败误修成业务行为变更。
+  - 修复范围限定在测试夹具与本轮相关文档，不改生产代码、不改 API 契约、不改数据库结构。
+- **验证**：
+  - `cd backend && go test ./internal/service -run TestOpenDecompositionPersistTestDB_IsolatesUserFixtures -count=1` 先失败（`UNIQUE constraint failed: users.email`）、修复后通过
+  - `cd backend && go test ./internal/service -count=1` 通过
+
 ### 对话 93：执行系列章节质量流水线 Task 6，补文档同步并做最终验证
-- **用户需求**：按 `docs/superpowers/plans/2026-06-01-series-chapter-quality-pipeline.md` 执行 Task 6，检查并补齐 `API / Architecture / Conversation_Log / Development_Plan_and_Log / PRD / README` 文档同步，运行后端/前端测试，执行 `docker compose down && docker compose up -d --build` 做冒烟验证，并提交最终文档/验证变更；不要触碰 `CONTRIBUTING.md`。
+- **用户需求**：按 `docs/superpowers/plans/2026-06-01-series-chapter-quality-pipeline.md` 执行 Task 6，检查并补齐 `API / Architecture / Conversation_Log / Development_Plan_and_Log / PRD / README` 文档同步，运行后端/前端测试，执行 `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build` 做冒烟验证，并提交最终文档/验证变更；不要触碰 `CONTRIBUTING.md`。
 - **AI 动作**：
   1. 先读取 `wiki/hot.md`、`wiki/index.md`、执行计划文档和当前工作区状态，确认知识库中没有与 “series chapter quality pipeline Task 6” 直接相关的专门页面，因此以仓库计划文档与现有实现为准；工作区仅存在未跟踪的 `CONTRIBUTING.md` 与计划文件，二者均保持不纳入提交。
   2. 回读现有文档与实现，确认 Task 1-5 的主体功能描述已大体同步，Task 6 主要缺口是“最终契约示例 + 本轮真实验证记录 + Docker 环境装载注意事项”。
   3. 执行 `cd backend && go test ./...` 时发现后端全量测试未全绿：`internal/service` 中 `TestGenerateSeries_PersistsFinalChapterFromQualityPipeline` 因 SQLite 测试库里 `users.email` 唯一键冲突失败；执行 `cd frontend && npm run test -- --run` 则全部通过（37 个测试文件、115 个测试）。
-  4. 首次直接执行 `docker compose down && docker compose up -d --build` 时，Compose 因缺少已导出的 `OBSIDIAN_VAULT_PATH` 失败；随后按 `source backend/.env` 导出环境后重新执行同一条 Compose 链路，镜像与容器全部成功拉起。
-  5. 使用 `docker compose ps`、`docker ps --format '{{.Names}}\t{{.Status}}'` 与 `curl -I http://localhost` 收尾验证，确认 `inkwords-backend/frontend/db/redis/obsidian-bridge` 均为 `Up`，前端入口返回 `HTTP/1.1 200 OK`；最后把这些真实结果补写到 API / Architecture / Development Log / PRD / README，并准备仅提交文档改动。
+  4. 首次使用未显式声明 `--env-file backend/.env` 的 Compose 链路时，Compose 因缺少已装载的 `OBSIDIAN_VAULT_PATH` 失败；随后改为 `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build` 后，镜像与容器全部成功拉起。
+  5. 使用 `docker compose --env-file backend/.env ps`、`docker ps --format '{{.Names}}\t{{.Status}}'` 与 `curl -I http://localhost` 收尾验证，确认 `inkwords-backend/frontend/db/redis/obsidian-bridge` 均为 `Up`，前端入口返回 `HTTP/1.1 200 OK`；最后把这些真实结果补写到 API / Architecture / Development Log / PRD / README，并准备仅提交文档改动。
 - **决策/变更**：
   - 本轮坚持 Task 6 最小范围，只改文档与验证留痕，不顺手修复后端测试隔离问题，也不改系列质量流水线实现代码。
   - `CONTRIBUTING.md` 与计划文档继续保持未触碰、未纳入提交；文档中显式写明 Docker 直跑前需先导出 `backend/.env`，避免后续误以为 Compose 命令本身失效。
 - **验证**：
   - `cd backend && go test ./...` 失败：`internal/service` 中 `TestGenerateSeries_PersistsFinalChapterFromQualityPipeline` 报 `UNIQUE constraint failed: users.email`
   - `cd frontend && npm run test -- --run` 通过（37 个测试文件、115 个测试）
-  - `docker compose down && docker compose up -d --build` 首次失败：缺少已导出的 `OBSIDIAN_VAULT_PATH`
+  - 未显式声明 `--env-file backend/.env` 的 Compose 链路首次失败：缺少已装载的 `OBSIDIAN_VAULT_PATH`
   - 导出 `backend/.env` 后再次执行 Compose 重建成功
-  - `docker compose ps` 显示 `inkwords-backend/frontend/db/redis/obsidian-bridge` 全部 `Up`
+  - `docker compose --env-file backend/.env ps` 显示 `inkwords-backend/frontend/db/redis/obsidian-bridge` 全部 `Up`
   - `curl -I http://localhost` 返回 `HTTP/1.1 200 OK`
 
 ### 对话 92：执行系列章节质量流水线 Task 5，补前端阶段显示与缓存命中摘要

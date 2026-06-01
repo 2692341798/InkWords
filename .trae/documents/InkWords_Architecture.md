@@ -1,7 +1,8 @@
 # 墨言知识训练平台 (InkWords Trainer) - 架构设计与工程规范
 
 ## 0. 变更记录
-- 2026-06-01：系列章节质量流水线完成 Task 6 文档同步与验证收尾。本轮未再改实现代码，但补齐了文档契约与验证记录：前端全量 Vitest 已通过；后端全量 `go test ./...` 暴露 `internal/service` 中 `TestGenerateSeries_PersistsFinalChapterFromQualityPipeline` 的既有隔离问题（SQLite 测试库里 `users.email` 唯一键冲突）；Docker 经导出 `backend/.env` 后成功执行 `docker compose down && docker compose up -d --build`，`inkwords-backend/frontend/db/redis/obsidian-bridge` 全部 `Up`，`http://localhost` 返回 `200 OK`。
+- 2026-06-01：最小可回滚修复：`backend/internal/service` 中依赖 SQLite 的持久化测试改为“每次 setup 使用唯一命名内存库”，消除 `users.email` 唯一键冲突；本轮相关文档里的 Docker 重建命令同步收敛为 `docker compose --env-file backend/.env ...`，避免再次依赖当前 shell 预先导出环境。
+- 2026-06-01：系列章节质量流水线完成 Task 6 文档同步与验证收尾。本轮未再改实现代码，但补齐了文档契约与验证记录：前端全量 Vitest 已通过；后端全量 `go test ./...` 暴露 `internal/service` 中 `TestGenerateSeries_PersistsFinalChapterFromQualityPipeline` 的既有隔离问题（SQLite 测试库里 `users.email` 唯一键冲突）；Docker 通过 `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build` 成功完成重建，`inkwords-backend/frontend/db/redis/obsidian-bridge` 全部 `Up`，`http://localhost` 返回 `200 OK`。
 - 2026-06-01：系列章节质量流水线继续落地 Task 5。前端 `streamStore` 新增 `chapterPhases` 与 `chapterUsage` 两块系列章节运行时状态，`useSeriesGenerator` 统一解析章节质量阶段 / usage 事件并写入 store，`GeneratorStatus` 进度卡开始直接展示中文“质量阶段”与“缓存命中 / 未命中”摘要；本次仅扩展前端消费层，不改后端 SSE 协议与数据库结构。
 - 2026-06-01：系列章节质量流水线继续落地 Task 4。DeepSeek 客户端新增 `CompletionUsage` 与 `GenerateWithUsage / GenerateJSONWithUsage / GenerateStreamWithUsage`，用于从非流式响应体和流式尾块里统一回收 `prompt_tokens / completion_tokens / prompt_cache_hit_tokens / prompt_cache_miss_tokens`；系列章节终稿补强结束后会通过现有 SSE `progressChan` 追加 `usage` 事件，把单章节缓存命中情况透传给前端，为后续系列级成本观测与前缀复用优化打底。
 - 2026-06-01：系列章节质量流水线继续落地 Task 3。`GenerateSeriesWithProfile` 的章节主链路已切换到 `runSeriesChapterQualityPipeline()`：先执行章节理解、草稿写作、结构化审稿，再由 `finalizeSeriesChapterDraft()` 负责终稿补强并向前端流式输出；章节草稿与审稿中间态不再直接透给前端，避免用户看到未过门禁的半成品正文。
@@ -148,7 +149,7 @@
 - **数据库 / Redis**: PostgreSQL 与 Redis Stack 默认仅在容器网络内暴露，避免开发态无意开放宿主机调试端口。
 - **容器互联**: 全部服务显式加入 `inkwords-network` 内部网络，后端通过服务名 `db:5432`、`redis:6379`、`obsidian-bridge:27125` 与依赖互通。
 - **环境装载约定**: Docker Compose 运行时统一建议通过 `docker compose --env-file backend/.env ...` 启动；`OBSIDIAN_VAULT_PATH` 必须显式提供，不再回退到某台开发机的绝对路径。
-- **Task 6 冒烟验证补充**: 若需要严格按 `docker compose down && docker compose up -d --build` 直跑，必须先把 `backend/.env` 中的 `OBSIDIAN_VAULT_PATH` 导出到当前 shell；否则 Compose 在解析 bind mount 时会直接失败。这也是当前“推荐使用 `--env-file backend/.env`”的工程原因。
+- **Task 6 冒烟验证补充**: 请直接使用 `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build`；这样 Compose 会显式加载 `backend/.env`，避免因 `OBSIDIAN_VAULT_PATH` 等变量缺失而在解析 bind mount 时直接失败。
 
 ## 4.1 仓库产物与敏感信息策略
 - 禁止提交构建产物与大文件（例如后端二进制、PDF、批量截图等），统一通过 `.gitignore` 管理本地产物目录。

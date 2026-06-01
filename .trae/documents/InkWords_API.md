@@ -1,7 +1,8 @@
 # 墨言知识训练平台 (InkWords Trainer) - API 接口文档
 
 ## 0. 变更记录
-- 2026-06-01：系列章节质量流水线完成 Task 6 文档同步与验证收尾。`/api/v1/stream/generate` 的系列章节 SSE 契约已与当前前端消费实现对齐：前端直接消费 `understanding / drafting / reviewing / revising / streaming / usage / completed / error`，其中 `content` 仅在 `streaming` 阶段出现，`usage` 阶段返回缓存命中统计；本轮已完成前端全量测试与 Docker `http://localhost` 冒烟验证。注意：若直接执行 `docker compose ...`，需先确保 `OBSIDIAN_VAULT_PATH` 已从 `backend/.env` 导出到当前 shell，或显式使用 `--env-file backend/.env`。
+- 2026-06-01：最小可回滚修复：本轮未新增或修改任何 API 路由、请求字段或 SSE 事件；仅通过 TDD 修复 `backend/internal/service` 的 SQLite 测试隔离问题，并把本轮交付文档中的 Compose 启动命令统一为 `docker compose --env-file backend/.env ...`，保证验证步骤与实际运行约定一致。
+- 2026-06-01：系列章节质量流水线完成 Task 6 文档同步与验证收尾。`/api/v1/stream/generate` 的系列章节 SSE 契约已与当前前端消费实现对齐：前端直接消费 `understanding / drafting / reviewing / revising / streaming / usage / completed / error`，其中 `content` 仅在 `streaming` 阶段出现，`usage` 阶段返回缓存命中统计；本轮已完成前端全量测试与 Docker `http://localhost` 冒烟验证。注意：本轮 Compose 验证命令统一为 `docker compose --env-file backend/.env ...`；不要再省略 `--env-file backend/.env`，否则 `OBSIDIAN_VAULT_PATH` 等变量可能不会被 Compose 正确加载。
 - 2026-06-01：系列章节质量流水线继续落地 Task 5。前端现已消费 `/api/v1/stream/generate` 既有系列章节 SSE 状态：`understanding`、`drafting`、`reviewing`、`revising`、`streaming`、`usage`、`completed`、`error`；接口路由与请求体不变，但这些状态现在会被前端进度卡直接显示为中文“质量阶段”和“缓存命中 / 未命中”摘要。
 - 2026-06-01：系列章节质量流水线继续落地 Task 4。`/api/v1/stream/generate` 的系列章节链路在终稿补强流式结束后会额外发送 `usage` 状态事件，携带 `prompt_tokens`、`completion_tokens`、`prompt_cache_hit_tokens`、`prompt_cache_miss_tokens`，用于观测同一系列稳定前缀带来的 DeepSeek Prompt Cache 命中情况；路由与请求体保持不变。
 - 2026-06-01：系列章节质量流水线继续落地 Task 3。`/api/v1/stream/generate` 的系列章节主链路已从“单次直接流式生成”切换为“章节理解 -> 草稿写作 -> 技术审稿 -> 定向补强终稿流式输出”；接口路由与请求字段保持不变，但系列章节 SSE 现在会额外发送 `understanding`、`drafting`、`reviewing`、`revising` 四类进度状态，且只有终稿补强阶段才会持续输出 `streaming` 内容块。
