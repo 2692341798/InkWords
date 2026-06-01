@@ -118,7 +118,7 @@ func (s *Service) Respond(ctx context.Context, userID uuid.UUID, sessionID uuid.
 	if session.Mode == model.ReviewModeDetailedQA {
 		answerCount := countUserAnswers(updatedTurns)
 		if answerCount >= maxDetailedQARounds {
-			feedback := buildFinalFeedback(answer)
+			feedback := buildFinalFeedback(session.Mode, updatedTurns)
 			if err := s.completeSession(ctx, &session, updatedTurns, feedback); err != nil {
 				return RespondResponse{}, err
 			}
@@ -199,7 +199,7 @@ func (s *Service) RequestHint(ctx context.Context, userID uuid.UUID, sessionID u
 	}
 
 	keyPoints := decodeStringSlice(session.KeyPointsSnapshot)
-	hintText := buildHintText(session, keyPoints)
+	hintText := buildHintText(session, turns, keyPoints)
 	hintTurn := model.ReviewTurn{
 		SessionID: session.ID,
 		TurnIndex: nextTurnIndex(turns),
@@ -243,7 +243,7 @@ func (s *Service) Finish(ctx context.Context, userID uuid.UUID, sessionID uuid.U
 		}, nil
 	}
 
-	feedback := buildFinalFeedback(lastUserAnswer(turns))
+	feedback := buildFinalFeedback(session.Mode, turns)
 	if err := s.completeSession(ctx, &session, turns, feedback); err != nil {
 		return FinishResponse{}, err
 	}
