@@ -1,6 +1,57 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 84：修复超大 PDF 只识别前段内容的问题
+- **用户需求**：用户反馈上传 800 多页 PDF 时，系统只能识别到前面一点部分，希望能够完整解析，并且章节数不要受限制。
+- **AI 动作**：
+  1. 先完成知识库 Query，回读 `[[hot]]`、`[[index]]` 与 `[[文档解析模块：PDF、DOCX、Markdown]]`，确认当前 PDF 解析基础链路是 `ledongthuc/pdf + 临时文件阅后即焚`，理论上并不是解析器只读了前半部分。
+  2. 回查仓库实现后定位到真正丢信息的位置在 `AnalyzeFileStream` 的长文件分析链路：超大文件会被按 `1,000,000` 字符粗粒度切块并做局部摘要，随后并发 append 摘要时不保证顺序，导致后半部分章节在大纲阶段容易被稀释或错序。
+  3. 按 TDD 先新增失败测试，分别锁定“超长文件应切得更细”和“并发摘要回收必须保持原始顺序”，确认红灯后再做最小实现。
+  4. 后端将长文件切块粒度收敛到 `120,000` 字符级别，新增 `resolveFileAnalyzeChunkSize`；同时将 `mapReduceAnalyzeFile` 改为按 chunk 索引回填摘要，确保顺序稳定。
+  5. 为避免章节再次在二级压缩中消失，文件分析路径不再对局部摘要做 Tree Reduce，而是直接把全部局部摘要送入大纲生成阶段；前端上传完成后也会对超大文档追加中文提示，告知会走更细粒度的全量分析。
+- **决策/变更**：
+  - 这次不引入 OCR，也不改 Git 仓库分析路径，保持最小改动，专注修复“超大 PDF 在文件分析阶段丢后半部分”这个问题。
+  - 对长文文件优先保障章节覆盖率，而不是继续追求摘要压缩率；因此保留全部局部摘要进入大纲阶段，比文件路径沿用 Git 仓库的 Tree Reduce 更符合用户预期。
+- **验证**：
+  - `cd backend && go test ./internal/service -run 'TestResolveFileAnalyzeChunkSize|TestMapReduceAnalyzeFile_PreservesOriginalChunkOrder'` 先失败、后通过
+  - `cd frontend && npm test -- --run src/hooks/generator/fileParserUtils.test.ts src/hooks/generator/useFileParser.test.ts` 通过
+  - 顺手修复既有失败测试 `TestResolveSeriesChapterSourceContent_TruncatesLongFallbackContent`，将截断长度断言改为基于实际后缀长度计算
+  - `cd backend && go test ./internal/service` 通过
+  - `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build` 完成
+  - `docker compose --env-file backend/.env ps` 显示核心容器全部 `Up`
+  - `curl -I http://localhost` 返回 `HTTP/1.1 200 OK`
+
+### 对话 85：为中文 PDF 乱码结果增加降级拦截
+- **用户需求**：用户提供真实文件 `/Users/huangqijun/Documents/墨言博客助手/InkWords/docs/[亲密关系](第6版). 罗兰·米勒.pdf` 做测试，并在方案选择中明确要求先做 `A`，即检测提取质量过低的 PDF 并返回稳定提示，而不是把乱码文本继续送到下游。
+- **AI 动作**：
+  1. 先用真实 PDF 本地直连 `DocParser` 做实测，确认该文件并非简单“后半部分被分析链路吃掉”，而是在 PDF 文本提取阶段就出现大面积乱码与失真。
+  2. 按 TDD 先在 `backend/internal/infra/parser/doc_parser_test.go` 增加红灯测试，锁定“严重乱码应判定为低质量提取”“正常可读中文不应误伤”。
+  3. 在 `backend/internal/infra/parser/doc_parser.go` 为 `parsePDF` 增加提取质量检测：当 `�` 替换字符数量、替换字符比例或异常控制字符比例过高时，直接返回中文降级错误，不再继续返回脏文本。
+  4. 执行 parser 定向测试，并再次用真实文件复测，确认现在会稳定输出“无法可靠解析该 PDF 文本”的中文提示。
+- **决策/变更**：
+  - 本轮不替换 PDF 库，也不接入 OCR，优先做最小可控修复：在解析层阻断严重乱码，避免错误进一步放大到大纲和正文生成阶段。
+  - 提取质量检测当前采用强信号策略，优先依赖替换字符与异常控制字符比例，尽量减少对正常英文/中文 PDF 的误伤。
+- **验证**：
+  - `cd backend && go test ./internal/infra/parser -run 'TestIsLowQualityPDFExtraction|TestDocParser_Parse_PDF|TestDocParser_Parse_PlainText|TestDocParser_Parse_UnsupportedExtension'` 通过
+  - 使用真实文件 `/Users/huangqijun/Documents/墨言博客助手/InkWords/docs/[亲密关系](第6版). 罗兰·米勒.pdf` 本地复测，返回：`无法可靠解析该 PDF 文本：检测到严重乱码，可能是扫描版、嵌入字体或当前解析库不兼容。请尝试导出为可复制文本的 PDF，或改用 DOCX/Markdown`
+
+### 对话 86：为中文 PDF 增加 `pdftotext` 自动回退
+- **用户需求**：在完成 `A` 的降级拦截后，用户要求“继续”，即继续推进更兼容中文 PDF 的可解析方案，而不只是拦截报错。
+- **AI 动作**：
+  1. 评估后选择“主提取 + 外部工具回退”的最小侵入方案：保留 `ledongthuc/pdf` 作为主路径，若其结果被判定为低质量，则自动回退到运行时 `pdftotext`。
+  2. 按 TDD 先在 `backend/internal/infra/parser/doc_parser_test.go` 新增红灯测试，锁定“主提取乱码时，若 `pdftotext` 可用则应回退成功；若不可用则保留稳定中文提示”。
+  3. 在 `backend/internal/infra/parser/doc_parser.go` 中抽出 `resolveReadablePDFText` 与 `extractPDFTextWithPdftotext`，将 `parsePDF` 改为“主提取 -> 质量检测 -> `pdftotext` 回退 -> 仍失败才报错”的双通道逻辑。
+  4. 在 `backend/Dockerfile` 运行时镜像安装 `poppler-utils`，确保 Docker 环境内存在 `/usr/bin/pdftotext`。
+  5. 用真实文件 `/Users/huangqijun/Documents/墨言博客助手/InkWords/docs/[亲密关系](第6版). 罗兰·米勒.pdf` 做运行时验证：容器内 `pdftotext` 输出约 `808k` 字符，且 `replacement_ratio=0`、`control_ratio=0`；随后在带 `pdftotext` 的 Go 容器里直接运行当前 `DocParser`，确认返回 `TOTAL_RUNES=808017`、`HAS_REPLACEMENT=false`，说明代码已经自动从降级报错切换为成功回退提取。
+- **决策/变更**：
+  - 本轮仍不引入 OCR，也不替换整个 PDF 库，而是用最小代价给现有链路加“可恢复能力”。
+  - 保留原有质量检测作为安全阀：只有主提取明显失真时才触发 `pdftotext`，避免普通 PDF 白白增加额外子进程开销。
+- **验证**：
+  - `cd backend && go test ./internal/infra/parser` 通过
+  - `docker exec inkwords-backend which pdftotext` 返回 `/usr/bin/pdftotext`
+  - `docker run --rm -v <docs> --entrypoint sh inkwords-backend -lc "pdftotext -enc UTF-8 -layout ... - | wc -m"` 返回 `808034`
+  - 在带 `pdftotext` 的 Go 容器中直接运行当前 `DocParser`，返回 `TOTAL_RUNES=808017`、`HAS_REPLACEMENT=false`
+
 ### 对话 83：把知识复习升级为文章驱动追问与结构化反馈
 - **用户需求**：用户明确指出当前复习功能“太过呆板，而且反馈很差，并不知道自己是说对了还是说错了”，要求根据复习文章的具体内容进行针对性提问。
 - **AI 动作**：

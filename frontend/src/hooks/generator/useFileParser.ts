@@ -4,6 +4,7 @@ import type { Chapter } from '@/store/streamStore'
 import { fetchEventSourceWithAuth } from '@/services/sse'
 import { projectService } from '@/services/project'
 import {
+  buildLargeFileAnalysisHint,
   extractArchiveSummary,
   extractParsedFileContent,
   formatArchiveSummaryMessage,
@@ -71,6 +72,14 @@ export async function parseUploadedFile({
     if (archiveSummary) {
       store.appendAnalysisHistory({
         message: formatArchiveSummaryMessage(archiveSummary),
+        status: 'parsed',
+      })
+    }
+
+    const largeFileHint = buildLargeFileAnalysisHint(content)
+    if (largeFileHint) {
+      store.appendAnalysisHistory({
+        message: largeFileHint,
         status: 'parsed',
       })
     }

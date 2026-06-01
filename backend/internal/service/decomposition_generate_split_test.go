@@ -38,7 +38,7 @@ func TestResolveSeriesChapterSourceContent_TruncatesLongFallbackContent(t *testi
 	})
 
 	require.Contains(t, got, "[Content Truncated due to length limits]")
-	require.Len(t, []rune(got), 1000042)
+	require.Len(t, []rune(got), seriesChapterSourceRuneLimit+len([]rune(seriesContentTruncatedSuffix)))
 }
 
 func TestStreamSeriesChapterContent_RetriesAndConcatenatesChunks(t *testing.T) {

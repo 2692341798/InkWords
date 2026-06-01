@@ -1,6 +1,32 @@
 # 墨言知识训练平台 (InkWords Trainer) - 开发计划与日志
 > **目标**：跟踪项目的核心开发模块、里程碑进度以及每日开发记录。
 
+### [2026-06-01] Fix - 超大 PDF 全量解析与章节覆盖率修复
+- **需求背景**：
+  1. 用户反馈上传 800 多页 PDF 时，系统只能识别前面一部分内容，后续章节经常丢失。
+  2. 目标是让超大 PDF 在文件分析链路中尽量覆盖整本文本，并且不要再被隐式章节上限限制。
+- **本次完成**：
+  1. 在 `backend/internal/service` 按 TDD 先补红灯测试，锁定两类问题：超长文件应采用更细粒度切块，以及并发局部摘要回收必须保持原始顺序。
+  2. 将长文件分析切块从粗粒度策略调整为 `120,000` 字符级别，并新增 `resolveFileAnalyzeChunkSize`，避免单块过大导致后半部分篇章在摘要阶段被稀释。
+  3. 修复 `mapReduceAnalyzeFile` 的并发回收顺序，改为按 chunk 索引回填摘要；同时移除文件分析路径上的二次 Tree Reduce 压缩，保留全部局部摘要直接进入大纲生成，优先保障章节覆盖率。
+  4. 前端 `useFileParser` 增加超大文档提示文案，明确告知用户会走更细粒度的全量分析，耗时会更长。
+- **验证记录**：
+  - `cd backend && go test ./internal/service -run 'TestResolveFileAnalyzeChunkSize|TestMapReduceAnalyzeFile_PreservesOriginalChunkOrder'` 先失败、后通过
+  - `cd frontend && npm test -- --run src/hooks/generator/fileParserUtils.test.ts src/hooks/generator/useFileParser.test.ts` 通过
+  - 修复既有测试 `TestResolveSeriesChapterSourceContent_TruncatesLongFallbackContent`：将硬编码长度断言改为基于 `seriesContentTruncatedSuffix` 的真实长度计算
+  - `cd backend && go test ./internal/service` 通过
+  - `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build` 完成
+  - `docker compose --env-file backend/.env ps` 显示 `frontend/backend/db/redis/obsidian-bridge` 均为 `Up`
+  - `curl -I http://localhost` 返回 `HTTP/1.1 200 OK`
+  - 补充 PDF 降级保护：为 `DocParser.parsePDF` 增加提取质量检测；当 `�` 替换字符或控制字符比例异常时，直接返回中文降级提示，避免把乱码文本继续送入大纲与生成链路
+  - `cd backend && go test ./internal/infra/parser -run 'TestIsLowQualityPDFExtraction|TestDocParser_Parse_PDF|TestDocParser_Parse_PlainText|TestDocParser_Parse_UnsupportedExtension'` 通过
+  - 使用真实文件 `/Users/huangqijun/Documents/墨言博客助手/InkWords/docs/[亲密关系](第6版). 罗兰·米勒.pdf` 本地复测，当前会稳定返回“无法可靠解析该 PDF 文本”的中文提示
+  - 新增 PDF 文本恢复回退：当 `ledongthuc/pdf` 提取结果被判定为低质量时，自动调用运行时 `pdftotext`（`poppler-utils`）恢复文本
+  - `cd backend && go test ./internal/infra/parser` 通过
+  - `docker exec inkwords-backend which pdftotext` 返回 `/usr/bin/pdftotext`
+  - 容器内对真实文件 `/Users/huangqijun/Documents/墨言博客助手/InkWords/docs/[亲密关系](第6版). 罗兰·米勒.pdf` 执行 `pdftotext -enc UTF-8 -layout`，输出 `808034` 字符；前后片段可读且 `replacement_ratio=0`、`control_ratio=0`
+  - 在带 `pdftotext` 的 Go 容器中直接运行当前 `DocParser` 解析该文件，返回 `TOTAL_RUNES=808017`、`HAS_REPLACEMENT=false`，确认已自动走回退文本而非降级报错
+
 ### [2026-06-01] Feature - 复习会话升级为文章驱动提问与结构化反馈
 - **需求背景**：
   1. 用户指出当前知识漫游复习“提问太呆板、反馈太泛”，回答后无法判断自己到底说对了还是说错了。

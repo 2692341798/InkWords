@@ -9,6 +9,7 @@
 
 ## 2. 核心特性 (Features)
 - **一键知识摄入（Ingest）**：支持解析 Git 仓库、本地文档（PDF/DOCX/Markdown/TXT）与 ZIP 课件包，自动生成符合 Karpathy LLM Wiki Pattern 的 `sources/`、`concepts/`、`entities/` 卡片与双向链接。
+- **中文 PDF 兼容回退**：PDF 默认先走 Go 原生提取；若检测到严重乱码，会自动回退到 `pdftotext` 恢复文本，减少中文嵌入字体 PDF 直接解析失败的概率。
 - **知识库“热缓存 + 索引 + 日志”自动维护**：自动更新 `wiki/index.md`、`wiki/hot.md` 与 `wiki/log.md`，避免知识孤岛，让知识库可持续演进。
 - **知识漫游复习工作台（核心主链路）**：支持“随机抽一篇 / 手动选文”两种入口；推荐卡支持 `用这篇开始 / 提问开始 / 再抽一篇`，并提供 `light_recall / detailed_qa` 两种训练模式。会话会基于文章内容进行结构化追问，回答后明确给出“本轮目标 / 答到的点 / 漏掉的点 / 下一步建议”，帮助判断是否真正讲对重点。
 - **流程型入口与单步聚焦体验**：默认入口 `HomeEntry` 帮你在“知识复习 / 内容生成”之间选择路径，页面同一时间只聚焦一个主步骤，减少平铺与注意力分散。
@@ -69,6 +70,7 @@ docker compose --env-file backend/.env down && docker compose --env-file backend
 ### 5.1.1 ZIP 课件包上传说明
 - 支持上传 `.zip` 课件包，后端会自动扫描其中的受支持文档与代码文本文件。
 - 当前支持的文档类包括：`.pdf`、`.docx`、`.md`、`.markdown`、`.txt`。
+- `.pdf` 当前采用“主提取 + 回退恢复”双通道策略：若主提取结果出现严重乱码，后端会自动尝试 `pdftotext`；若仍无法可靠恢复，则返回稳定中文提示，建议改用可复制文本的 PDF、DOCX 或 Markdown。
 - 当前支持的代码/文本类包括：`.go`、`.js`、`.ts`、`.tsx`、`.jsx`、`.py`、`.java`、`.cpp`、`.c`、`.h`、`.hpp`、`.rs`、`.sql`、`.sh`、`.json`、`.yaml`、`.yml`。
 - 当前不支持 `.doc`、`rar/7z/tar.gz`、图片 OCR 与音视频转写。
 - 上传成功后，前端会显示 ZIP 解析摘要，例如保留、去重、忽略与失败数量。

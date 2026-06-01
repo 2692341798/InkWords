@@ -33,6 +33,7 @@ RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
     git \
     harfbuzz \
     nss \
+    poppler-utils \
     ttf-freefont \
     tzdata && \
     cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \

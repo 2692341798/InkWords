@@ -13,8 +13,7 @@ import (
 )
 
 func (s *DecompositionService) mapReduceAnalyzeFile(ctx context.Context, chunks []parser.FileChunk, sendProgress func(int, string, interface{})) []string {
-	var summaries []string
-	var mu sync.Mutex
+	summaries := make([]string, len(chunks))
 
 	maxWorkers := maxWorkersFromEnv(len(chunks))
 
@@ -50,9 +49,7 @@ func (s *DecompositionService) mapReduceAnalyzeFile(ctx context.Context, chunks 
 			summary := s.generateFileLocalSummaryWithRetry(ctx, c, 3, sendProgress, idx+1, len(chunks), workerID)
 
 			if summary != "" {
-				mu.Lock()
-				summaries = append(summaries, summary)
-				mu.Unlock()
+				summaries[idx] = summary
 				sendProgress(2, fmt.Sprintf("分块 %d/%d 分析完成", idx+1, len(chunks)), map[string]interface{}{
 					"status":    "chunk_done",
 					"dir":       c.Dir,
@@ -64,7 +61,15 @@ func (s *DecompositionService) mapReduceAnalyzeFile(ctx context.Context, chunks 
 	}
 
 	wg.Wait()
-	return summaries
+
+	orderedSummaries := make([]string, 0, len(summaries))
+	for _, summary := range summaries {
+		if summary != "" {
+			orderedSummaries = append(orderedSummaries, summary)
+		}
+	}
+
+	return orderedSummaries
 }
 
 func (s *DecompositionService) generateFileLocalSummaryWithRetry(ctx context.Context, chunk parser.FileChunk, maxRetries int, sendProgress func(int, string, interface{}), idx int, total int, workerID int) string {

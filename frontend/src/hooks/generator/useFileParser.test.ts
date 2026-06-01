@@ -41,4 +41,28 @@ describe('parseUploadedFile', () => {
     expect(store.setAnalysisMessage).toHaveBeenLastCalledWith('文件解析完成，请选择创作场景')
     expect(store.setAnalyzing).toHaveBeenLastCalledWith(false)
   })
+
+  it('shows an extra hint when the parsed document is very large', async () => {
+    const store = createMockStore()
+    const parseProjectFile = vi.fn().mockResolvedValue({
+      data: {
+        source_content: 'A'.repeat(1000001),
+      },
+    })
+
+    await expect(
+      parseUploadedFile({
+        file: new File(['pdf'], 'course.pdf'),
+        store,
+        parseProjectFile,
+      }),
+    ).resolves.toHaveLength(1000001)
+
+    expect(store.appendAnalysisHistory).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining('超大文档'),
+        status: 'parsed',
+      }),
+    )
+  })
 })
