@@ -48,7 +48,24 @@ func nextDetailedQuestion(answerCount int) string {
 	}
 }
 
-func buildHintText(session model.ReviewSession, keyPoints []string) string {
+func buildHintText(session model.ReviewSession, turns []model.ReviewTurn, keyPoints []string) string {
+	if session.Mode == model.ReviewModeDetailedQA {
+		answerCount := countUserAnswers(turns)
+		currentQuestion := nextDetailedQuestion(answerCount)
+		if currentQuestion == "" {
+			currentQuestion = "把当前问题先拆成结论、依据和例子三层来回答。"
+		}
+
+		switch session.HintUsedCount + 1 {
+		case 1:
+			return "先只回答当前追问，不用一次讲完整篇。当前追问是：" + currentQuestion
+		case 2:
+			return "把回答聚焦在当前追问，并尽量补上一个关键概念、步骤关系或因果依据。当前追问是：" + currentQuestion
+		default:
+			return "如果卡住了，就围绕当前追问拆成三句：先给结论，再讲依据，最后补一个例子。当前追问是：" + currentQuestion
+		}
+	}
+
 	level := session.HintUsedCount + 1
 	if len(keyPoints) == 0 {
 		keyPoints = []string{
