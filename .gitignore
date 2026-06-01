@@ -48,6 +48,7 @@ backend/*.test
 
 # PDFs / large local assets
 pdf/*.pdf
+docs/\[亲密关系\](第6版). 罗兰·米勒.pdf
 
 # QA / dogfood artifacts (may contain auth tokens or large screenshots)
 dogfood-output/
