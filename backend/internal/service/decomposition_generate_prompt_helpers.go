@@ -45,6 +45,40 @@ func resolveSeriesOldContent(ctx context.Context, chapter Chapter) string {
 	return truncateSeriesContent(oldBlog.Content, seriesOldContentRuneLimit)
 }
 
+func normalizePromptProfile(profile prompt.PromptProfile, scenarioMode prompt.ScenarioMode) prompt.PromptProfile {
+	if !scenarioMode.IsValid() {
+		scenarioMode = prompt.ScenarioModeEbookInterpretation
+	}
+	if profile.Key == "" {
+		return prompt.FallbackPromptProfileForScenario(scenarioMode)
+	}
+
+	return prompt.ResolvePromptProfileKey(string(profile.Key), scenarioMode)
+}
+
+func normalizeResolvedPromptProfile(
+	profile prompt.PromptProfile,
+	resolved prompt.ResolvedPromptProfile,
+	defaultReason string,
+) prompt.ResolvedPromptProfile {
+	if strings.TrimSpace(defaultReason) == "" {
+		defaultReason = "已按场景默认提示词生成。"
+	}
+	if resolved.Key == "" {
+		return newResolvedPromptProfile(profile, profile.DocumentKind, defaultReason)
+	}
+	if resolved.DisplayName == "" {
+		resolved.DisplayName = profile.DisplayName
+	}
+	if resolved.DocumentKind == "" {
+		resolved.DocumentKind = profile.DocumentKind
+	}
+	if resolved.Reason == "" {
+		resolved.Reason = defaultReason
+	}
+	return resolved
+}
+
 func (s *DecompositionService) buildSeriesChapterMessages(
 	ctx context.Context,
 	userID uuid.UUID,
@@ -57,17 +91,23 @@ func (s *DecompositionService) buildSeriesChapterMessages(
 	scenarioMode prompt.ScenarioMode,
 	style string,
 	oldContent string,
+	profile prompt.PromptProfile,
 ) ([]llm.Message, string, error) {
 	if !scenarioMode.IsValid() {
 		scenarioMode = prompt.DefaultScenarioModeForSource(sourceType)
 	}
+	profile = normalizePromptProfile(profile, scenarioMode)
 
 	requirements := strings.TrimSpace(strings.Join([]string{
 		prompt.DefaultScenarioRequirements(scenarioMode),
 		prompt.DefaultStyleRequirements(scenarioMode, prompt.ArticleStyleGeneral),
 	}, "\n\n"))
+	requirements = strings.TrimSpace(strings.Join([]string{
+		profile.GenerateRequirements,
+		requirements,
+	}, "\n\n"))
 	if s.promptReq != nil {
-		if resolved, err := s.promptReq.Resolve(ctx, userID, scenarioMode, prompt.ArticleStyle(style)); err == nil && resolved != "" {
+		if resolved, err := s.promptReq.ResolveWithProfile(ctx, userID, scenarioMode, prompt.ArticleStyle(style), profile); err == nil && resolved != "" {
 			requirements = resolved
 		}
 	}
@@ -93,7 +133,7 @@ func (s *DecompositionService) buildSeriesChapterMessages(
 	}
 
 	messages := []llm.Message{
-		{Role: "system", Content: "你是一个高级全栈架构师和技术博主。\n\n项目源内容如下：\n" + chapterSourceContent},
+		{Role: "system", Content: profile.SystemRole + "\n\n项目源内容如下：\n" + chapterSourceContent},
 		{Role: "user", Content: promptText},
 	}
 

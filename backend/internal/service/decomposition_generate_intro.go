@@ -24,6 +24,7 @@ func (s *DecompositionService) generateSeriesIntro(
 	outline []Chapter,
 	scenarioMode prompt.ScenarioMode,
 	style prompt.ArticleStyle,
+	profile prompt.PromptProfile,
 	progressChan chan<- string,
 	errChan chan<- error,
 ) {
@@ -49,18 +50,23 @@ func (s *DecompositionService) generateSeriesIntro(
 	if !scenarioMode.IsValid() {
 		scenarioMode = prompt.ScenarioModeEbookInterpretation
 	}
+	profile = normalizePromptProfile(profile, scenarioMode)
 
 	requirements := strings.TrimSpace(strings.Join([]string{
 		prompt.DefaultScenarioRequirements(scenarioMode),
 		prompt.DefaultStyleRequirements(scenarioMode, prompt.ArticleStyleGeneral),
 	}, "\n\n"))
+	requirements = strings.TrimSpace(strings.Join([]string{
+		profile.GenerateRequirements,
+		requirements,
+	}, "\n\n"))
 	if s.promptReq != nil {
-		if resolved, err := s.promptReq.Resolve(ctx, userID, scenarioMode, style); err == nil && resolved != "" {
+		if resolved, err := s.promptReq.ResolveWithProfile(ctx, userID, scenarioMode, style, profile); err == nil && resolved != "" {
 			requirements = resolved
 		}
 	}
 
-	prompt := fmt.Sprintf(`你是一个高级技术博客作者。请根据以下系列文章的大纲，编写一篇高质量的“系列导读”或“总结”文章（约500-800字）。
+	promptText := fmt.Sprintf(`请根据以下系列文章的大纲，编写一篇高质量的“系列导读”或“总结”文章（约500-800字）。
 这篇文章将作为整个系列的入口，吸引读者阅读。
 系列标题：%s
 各章节大纲：
@@ -76,8 +82,8 @@ func (s *DecompositionService) generateSeriesIntro(
 `, seriesTitle, outlineStrBuilder.String(), requirements)
 
 	messages := []llm.Message{
-		{Role: "system", Content: "你是一个高级技术博客作者，擅长编写引人入胜的系列导读。"},
-		{Role: "user", Content: prompt},
+		{Role: "system", Content: profile.SystemRole + "\n\n你擅长编写引人入胜的系列导读。"},
+		{Role: "user", Content: promptText},
 	}
 
 	llmModel := "deepseek-v4-flash"

@@ -213,7 +213,22 @@ func (s *DecompositionService) AnalyzeStream(
 		}
 	}
 
-	outlineResult, err := s.GenerateOutline(ctx, finalContent.String(), scenarioMode, existingParent, existingChildren)
+	profile := prompt.FallbackPromptProfileForScenario(scenarioMode)
+	resolvedProfile := normalizeResolvedPromptProfile(
+		profile,
+		prompt.ResolvedPromptProfile{},
+		"当前来源未启用内容分类，已按场景默认提示词生成大纲。",
+	)
+
+	outlineResult, err := s.GenerateOutlineWithProfile(
+		ctx,
+		finalContent.String(),
+		scenarioMode,
+		profile,
+		resolvedProfile,
+		existingParent,
+		existingChildren,
+	)
 	if err != nil {
 		errChan <- fmt.Errorf("生成大纲失败: %w", err)
 		return
@@ -224,10 +239,11 @@ func (s *DecompositionService) AnalyzeStream(
 	}
 
 	sendProgress(4, "正在完成最后处理...", map[string]interface{}{
-		"series_title":   outlineResult.SeriesTitle,
-		"outline":        outlineResult.Chapters,
-		"source_content": finalContent.String(),
-		"parent_id":      outlineResult.ParentID,
+		"series_title":            outlineResult.SeriesTitle,
+		"outline":                 outlineResult.Chapters,
+		"source_content":          finalContent.String(),
+		"parent_id":               outlineResult.ParentID,
+		"resolved_prompt_profile": outlineResult.ResolvedPromptProfile,
 	})
 }
 
@@ -292,17 +308,33 @@ func (s *DecompositionService) AnalyzeFileStream(
 		finalContent.WriteString(sourceContent)
 	}
 
-	sendProgress(3, "评估大模型并生成全局大纲...", nil)
+	sendProgress(3, "正在识别内容类型并生成全局大纲...", nil)
 
-	outlineResult, err := s.GenerateOutline(ctx, finalContent.String(), scenarioMode, nil, nil)
+	profileResolver := NewPromptProfileResolver(s.llmClient)
+	profile, resolvedProfile, err := profileResolver.ResolveForFile(ctx, sourceContent, scenarioMode)
+	if err != nil {
+		errChan <- fmt.Errorf("识别提示词类型失败: %w", err)
+		return
+	}
+
+	outlineResult, err := s.GenerateOutlineWithProfile(
+		ctx,
+		finalContent.String(),
+		scenarioMode,
+		profile,
+		resolvedProfile,
+		nil,
+		nil,
+	)
 	if err != nil {
 		errChan <- fmt.Errorf("生成大纲失败: %w", err)
 		return
 	}
 
 	sendProgress(4, "正在完成最后处理...", map[string]interface{}{
-		"series_title":   outlineResult.SeriesTitle,
-		"outline":        outlineResult.Chapters,
-		"source_content": sourceContent,
+		"series_title":            outlineResult.SeriesTitle,
+		"outline":                 outlineResult.Chapters,
+		"source_content":          sourceContent,
+		"resolved_prompt_profile": outlineResult.ResolvedPromptProfile,
 	})
 }

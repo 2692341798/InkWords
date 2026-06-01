@@ -38,3 +38,9 @@ func TestDeepSeekClient_GenerateStream_stripsLeadingConversationalPreamble(t *te
 
 	require.Equal(t, "# Python 基础语法速通\n\n这里是正文。", builder.String())
 }
+
+func TestSanitizeLeadingGeneratedText_StripsTextInterpreterPreamble(t *testing.T) {
+	content := "我将以文本解读专家的身份，围绕原文逐章展开说明。\n\n# 非暴力沟通导读\n\n这里是正文。"
+
+	require.Equal(t, "# 非暴力沟通导读\n\n这里是正文。", sanitizeLeadingGeneratedText(content))
+}

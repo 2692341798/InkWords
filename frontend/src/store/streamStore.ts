@@ -28,6 +28,13 @@ export interface ModuleCard {
   description: string
 }
 
+export interface ResolvedPromptProfile {
+  key: string
+  displayName: string
+  documentKind: string
+  reason: string
+}
+
 interface StreamState {
   sourceType: 'git' | 'file' | null
   sourceContent: string
@@ -48,6 +55,9 @@ interface StreamState {
   analysisStep: number
   analysisMessage: string
   analysisHistory: { id: number; message: string; status?: string }[]
+  resolvedPromptProfile: ResolvedPromptProfile | null
+  classificationStatus: 'idle' | 'classifying' | 'resolved' | 'fallback'
+  classificationReason: string
   progress: string
   content: string
   currentChapterTitle: string
@@ -75,6 +85,10 @@ interface StreamState {
   setAnalysisMessage: (msg: string) => void
   appendAnalysisHistory: (item: { message: string; status?: string }) => void
   clearAnalysisHistory: () => void
+  setResolvedPromptProfile: (
+    profile: ResolvedPromptProfile | null,
+    status?: StreamState['classificationStatus'],
+  ) => void
   setProgress: (msg: string) => void
   setContent: (content: string) => void
   appendContent: (chunk: string) => void
@@ -109,6 +123,9 @@ export const useStreamStore = create<StreamState>((set, get) => ({
   analysisStep: -1,
   analysisMessage: '',
   analysisHistory: [],
+  resolvedPromptProfile: null,
+  classificationStatus: 'idle',
+  classificationReason: '',
   progress: '',
   content: '',
   currentChapterTitle: '',
@@ -237,6 +254,12 @@ export const useStreamStore = create<StreamState>((set, get) => ({
     return { analysisHistory: [...history, { id: Date.now() + Math.random(), ...item }] }
   }),
   clearAnalysisHistory: () => set({ analysisHistory: [] }),
+  setResolvedPromptProfile: (profile, status = 'idle') =>
+    set({
+      resolvedPromptProfile: profile,
+      classificationStatus: status,
+      classificationReason: profile?.reason ?? '',
+    }),
   setProgress: (msg) => set({ progress: msg }),
   setContent: (content) => set({ content }),
   appendContent: (chunk) => set((state) => ({ content: state.content + chunk })),
@@ -305,6 +328,9 @@ export const useStreamStore = create<StreamState>((set, get) => ({
       analysisStep: -1,
       analysisMessage: '',
       analysisHistory: [],
+      resolvedPromptProfile: null,
+      classificationStatus: 'idle',
+      classificationReason: '',
       progress: '',
       content: '',
       currentChapterTitle: '',

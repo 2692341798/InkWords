@@ -10,6 +10,7 @@ import (
 
 	"inkwords-backend/internal/infra/llm"
 	"inkwords-backend/internal/infra/parser"
+	"inkwords-backend/internal/prompt"
 )
 
 // exponentialBackoff 返回退避时间： 2^retryCount 秒 + 随机抖动
@@ -55,9 +56,10 @@ type Chapter struct {
 
 // OutlineResult represents the overall generated outline result
 type OutlineResult struct {
-	SeriesTitle string    `json:"series_title"`
-	Chapters    []Chapter `json:"chapters"`
-	ParentID    string    `json:"parent_id,omitempty"` // Existing parent ID
+	SeriesTitle           string                       `json:"series_title"`
+	Chapters              []Chapter                    `json:"chapters"`
+	ParentID              string                       `json:"parent_id,omitempty"` // Existing parent ID
+	ResolvedPromptProfile prompt.ResolvedPromptProfile `json:"resolved_prompt_profile"`
 }
 
 // ModuleCard represents a single module/directory extracted from the repository

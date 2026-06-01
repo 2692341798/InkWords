@@ -1,5 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { parseUploadedFile } from './useFileParser'
+import { useStreamStore } from '@/store/streamStore'
+import { analyzeParsedFileContent, parseUploadedFile } from './useFileParser'
+
+const { fetchEventSourceWithAuth } = vi.hoisted(() => ({
+  fetchEventSourceWithAuth: vi.fn(),
+}))
+
+vi.mock('@/services/sse', () => ({
+  fetchEventSourceWithAuth,
+}))
 
 describe('parseUploadedFile', () => {
   const createMockStore = () => ({
@@ -13,10 +22,13 @@ describe('parseUploadedFile', () => {
     setOutline: vi.fn(),
     setAbortController: vi.fn(),
     setSourceContent: vi.fn(),
+    setResolvedPromptProfile: vi.fn(),
   })
 
   beforeEach(() => {
     vi.restoreAllMocks()
+    fetchEventSourceWithAuth.mockReset()
+    useStreamStore.getState().reset()
   })
 
   it('stops after successful file parsing and leaves scene selection to the next step', async () => {
@@ -64,5 +76,49 @@ describe('parseUploadedFile', () => {
         status: 'parsed',
       }),
     )
+  })
+
+  it('writes the resolved prompt profile into the store when analyze completes', async () => {
+    fetchEventSourceWithAuth.mockImplementation(async (_url, options) => {
+      options.onmessage?.({
+        event: 'chunk',
+        data: JSON.stringify({
+          status: 'analyzing',
+          message: '正在识别文档内容类型',
+        }),
+      })
+      options.onmessage?.({
+        event: 'chunk',
+        data: JSON.stringify({
+          status: 'complete',
+          message: '大纲生成完成',
+          content: JSON.stringify({
+            source_content: '解析后的内容',
+            series_title: '《非暴力沟通》解读',
+            outline: [{ sort: 1, title: '第一章', summary: '观察与感受' }],
+            resolved_prompt_profile: {
+              key: 'psychology_communication_book',
+              display_name: '心理学经典解读',
+              document_kind: 'psychology_communication',
+              reason: '命中沟通与情绪表达主题',
+            },
+          }),
+        }),
+      })
+      options.onmessage?.({ event: 'done', data: '[DONE]' })
+    })
+
+    await analyzeParsedFileContent('解析后的内容')
+
+    expect(useStreamStore.getState()).toMatchObject({
+      classificationStatus: 'resolved',
+      classificationReason: '命中沟通与情绪表达主题',
+      seriesTitle: '《非暴力沟通》解读',
+      resolvedPromptProfile: {
+        key: 'psychology_communication_book',
+        displayName: '心理学经典解读',
+        documentKind: 'psychology_communication',
+      },
+    })
   })
 })
