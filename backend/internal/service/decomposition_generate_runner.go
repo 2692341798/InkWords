@@ -27,6 +27,49 @@ func sendSeriesSystemProgress(progressChan chan<- string, message string) {
 	})
 }
 
+// finalizeSeriesChapterDraft 只在终稿阶段向前端透出增量内容，避免草稿和审稿中间态污染用户正在阅读的正文。
+func (s *DecompositionService) finalizeSeriesChapterDraft(
+	ctx context.Context,
+	llmModel string,
+	input seriesQualityPipelineInput,
+	seriesPrefix string,
+	understanding SeriesChapterUnderstanding,
+	draft SeriesChapterDraft,
+	review SeriesChapterReview,
+) (SeriesChapterFinal, error) {
+	chunkChan := make(chan string, 100)
+	errChan := make(chan error, 1)
+	var finalBuilder strings.Builder
+
+	go func() {
+		_, err := s.llmClient.GenerateStream(ctx, llmModel, []llm.Message{
+			{Role: "system", Content: seriesPrefix + "\n当前阶段：定向补强与轻统稿"},
+			{Role: "user", Content: buildSeriesFinalizePrompt(input, understanding, draft, review)},
+		}, chunkChan)
+		errChan <- err
+	}()
+
+	for chunk := range chunkChan {
+		finalBuilder.WriteString(chunk)
+		sendSeriesProgressPayload(input.ProgressChan, map[string]interface{}{
+			"status":       "streaming",
+			"chapter_sort": input.Chapter.Sort,
+			"title":        input.Chapter.Title,
+			"content":      chunk,
+		})
+	}
+
+	if err := <-errChan; err != nil {
+		return SeriesChapterFinal{}, err
+	}
+
+	return SeriesChapterFinal{
+		FinalMarkdown:  finalBuilder.String(),
+		ResolvedIssues: append([]string(nil), review.RevisionActions...),
+		ResidualRisks:  nil,
+	}, nil
+}
+
 func (s *DecompositionService) streamSeriesChapterContent(
 	ctx context.Context,
 	parentID uuid.UUID,

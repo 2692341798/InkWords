@@ -1,6 +1,21 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 90：执行系列章节质量流水线 Task 3，接入草稿/审稿/终稿补强主链路
+- **用户需求**：按 `docs/superpowers/plans/2026-06-01-series-chapter-quality-pipeline.md` 执行 Task 3，用 TDD 将“草稿 -> 审稿 -> 终稿流式补强”接入 `DecompositionService` 系列生成主链路，运行相关测试并完成提交。
+- **AI 动作**：
+  1. 先完成知识库 Query、计划回读与工作区巡检，确认当前仓库只完成了 Task 1/2 的类型门禁和理解阶段，章节主链路仍停留在 `buildSeriesChapterMessages -> streamSeriesChapterContent` 的单次直出模式。
+  2. 按 TDD 先在 `series_quality_pipeline_test.go` 补两组红灯测试：一组锁定“审稿结果若没有 `revision_actions` 必须失败”，另一组锁定“流水线阶段顺序必须是 `understanding -> drafting -> reviewing -> revising -> streaming`，且只有终稿阶段才允许向前端流式输出正文”。
+  3. 再在 `decomposition_generate_persist_test.go` 增加主链路集成测试，通过记录真实 LLM 请求类型序列，锁定系列章节必须先发起 `json -> text -> json -> stream` 四步请求，再进入既有技术栈提取与系列导读阶段；这样旧的“单次直接流式生成”实现会直接红灯。
+  4. 在 `series_quality_pipeline.go` 新增 `seriesQualityPipelineInput`、草稿/审稿解析器、三段 Prompt builder，以及 `generateSeriesChapterDraft()`、`reviewSeriesChapterDraft()`、`runSeriesChapterQualityPipeline()`；在 `decomposition_generate_runner.go` 新增 `finalizeSeriesChapterDraft()`，只在终稿补强阶段把 chunk 以 `streaming` 状态推给前端。
+  5. 在 `decomposition_generate.go` 将系列章节主链路切换为 `runSeriesChapterQualityPipeline()`，保留原有错误落库、章节状态更新、技术栈提取和 `completed/error` 事件分支；最后执行聚焦测试并同步 API / Architecture / Database / Plan / PRD / README。
+- **决策/变更**：
+  - Task 3 仍坚持最小改动，只切后端章节主链路，不提前混入 Task 4 的 DeepSeek usage/cache telemetry 和 Task 5 的前端状态展示。
+  - 终稿阶段单独负责对前端流式输出，草稿与审稿阶段只发状态事件，避免中间态正文污染用户正在观看的章节内容。
+- **验证**：
+  - `cd backend && go test ./internal/service -run 'RunSeriesChapterQualityPipeline|GenerateSeries_PersistsFinalChapterFromQualityPipeline' -v` 先失败、后通过
+  - `cd backend && go test ./internal/service -run 'RunSeriesChapterQualityPipeline|TestStreamSeriesChapter|TestGenerateSeries' -v` 通过
+
 ### 对话 89：执行系列章节质量流水线 Task 2，抽稳定前缀与章节理解阶段
 - **用户需求**：按 `docs/superpowers/plans/2026-06-01-series-chapter-quality-pipeline.md` 执行 Task 2，用 TDD 实现稳定前缀 builder 与章节理解阶段，调整 `prompt_helpers`，运行测试并提交，最后返回改动文件、测试结果与提交哈希。
 - **AI 动作**：

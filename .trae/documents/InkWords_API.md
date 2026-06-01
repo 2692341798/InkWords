@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - API 接口文档
 
 ## 0. 变更记录
+- 2026-06-01：系列章节质量流水线继续落地 Task 3。`/api/v1/stream/generate` 的系列章节主链路已从“单次直接流式生成”切换为“章节理解 -> 草稿写作 -> 技术审稿 -> 定向补强终稿流式输出”；接口路由与请求字段保持不变，但系列章节 SSE 现在会额外发送 `understanding`、`drafting`、`reviewing`、`revising` 四类进度状态，且只有终稿补强阶段才会持续输出 `streaming` 内容块。
 - 2026-06-01：系列章节质量流水线继续落地 Task 2。后端新增稳定系列级提示词前缀 builder 与章节理解阶段 JSON 解析器，用于在后续“理解 -> 草稿 -> 审稿 -> 补强”多阶段之间复用固定前缀、提升提示词前缀稳定性；本次仍不新增、不删除、不修改任何对外 API 路由、请求字段或 SSE 事件。
 - 2026-06-01：系列章节质量流水线开始落地 Task 1。后端新增章节理解/草稿/审稿/终稿的结构化类型与硬门禁校验，用于后续 `/api/v1/stream/generate` 系列章节四段式流水线；本次不新增、不删除、不修改任何对外 API 路由、请求字段或 SSE 事件。
 - 2026-06-01：文件来源 Analyze 链路新增“动态提示词 profile”锁定机制。`POST /api/v1/stream/analyze` 在完成大纲分析后会额外返回 `resolved_prompt_profile`（含 `key`、`display_name`、`document_kind`、`reason`）；`POST /api/v1/stream/generate` 请求新增 `prompt_profile_key`、`document_kind`，用于让单篇/系列生成沿用同一次 Analyze 已锁定的内容类型提示词。
@@ -145,6 +146,19 @@
   - 去除开头的对话式前言/角色自述，例如“好的，收到你的需求”“作为高级全栈架构师……”“你是一位文本解读专家……”
 - 设计目标：
   - 用户最终看到和落库的正文应只包含 Markdown 正文内容，不应混入模型思考过程或对话式套话
+
+### 4.5 `/api/v1/stream/generate` 系列章节阶段事件
+- 适用范围：
+  - 仅系列章节生成链路；单篇生成与系列导读仍沿用既有事件语义。
+- 新增状态：
+  - `understanding`：章节理解阶段开始
+  - `drafting`：章节草稿生成阶段开始
+  - `reviewing`：章节技术审稿阶段开始
+  - `revising`：终稿补强准备阶段开始
+  - `streaming`：仅终稿补强阶段持续输出正文 chunk
+- 兼容说明：
+  - 路由、请求体、`completed/error` 终态事件不变。
+  - 旧前端即使暂未消费新增阶段，也仍可通过 `streaming/completed/error` 维持基本链路。
 
 ## 5. 知识漫游复习模块 (ReviewAPI)
 | 接口地址 | 请求方法 | 功能描述 | 参数 |
