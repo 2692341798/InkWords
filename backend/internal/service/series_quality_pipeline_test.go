@@ -47,3 +47,25 @@ func TestValidateSeriesChapterReview_RequiresRevisionActions(t *testing.T) {
 
 	require.ErrorContains(t, err, "revision_actions")
 }
+
+func TestBuildSeriesSharedPromptPrefix_StableAcrossStages(t *testing.T) {
+	prefixA := buildSeriesSharedPromptPrefix(
+		"Go 源码解析系列",
+		"面向小白",
+		[]Chapter{{Sort: 1, Title: "入口"}, {Sort: 2, Title: "调度"}},
+	)
+	prefixB := buildSeriesSharedPromptPrefix(
+		"Go 源码解析系列",
+		"面向小白",
+		[]Chapter{{Sort: 1, Title: "入口"}, {Sort: 2, Title: "调度"}},
+	)
+
+	require.Equal(t, prefixA, prefixB)
+	require.Contains(t, prefixA, "统一质量门禁")
+}
+
+func TestParseSeriesChapterUnderstanding_RejectsInvalidJSON(t *testing.T) {
+	_, err := parseSeriesChapterUnderstanding(`{"chapter_goal":"解释调度器","must_include_examples":["示例"]}`)
+
+	require.ErrorContains(t, err, "must_explain")
+}

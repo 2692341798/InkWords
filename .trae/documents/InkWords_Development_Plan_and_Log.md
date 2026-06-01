@@ -1,6 +1,18 @@
 # 墨言知识训练平台 (InkWords Trainer) - 开发计划与日志
 > **目标**：跟踪项目的核心开发模块、里程碑进度以及每日开发记录。
 
+### [2026-06-01] Feat - 系列章节质量流水线 Task 2 稳定前缀与章节理解阶段
+- **需求背景**：
+  1. 系列博客单章节质量流水线在完成 Task 1 的结构体与门禁后，需要继续为后续多阶段 Prompt 复用打基础，避免每个阶段临时拼接一份散乱规则。
+  2. 当前目标仅完成 Task 2：按 TDD 抽出稳定系列级前缀 builder，实现章节理解阶段解析器，并补充统一的读者画像 helper。
+- **本次完成**：
+  1. 在 `backend/internal/service/series_quality_pipeline_test.go` 先补两个红灯测试，锁定“稳定前缀相同输入必须完全一致”和“章节理解 JSON 即使能反序列化，也必须继续通过 `must_explain` 等门禁”。
+  2. 新增 `backend/internal/service/series_quality_pipeline.go`，实现 `buildSeriesSharedPromptPrefix`、`parseSeriesChapterUnderstanding`、`generateSeriesChapterUnderstanding`。
+  3. 在 `backend/internal/service/decomposition_generate_prompt_helpers.go` 补充 `buildSeriesReaderProfile`，统一维护场景模式到读者画像的映射，为后续流水线接入复用做准备。
+- **验证记录**：
+  - `cd backend && go test ./internal/service -run 'BuildSeriesSharedPromptPrefix|ParseSeriesChapterUnderstanding' -v` 先失败（函数未定义）、后通过
+  - `cd backend && go test ./internal/service -run 'ValidateSeriesChapter|BuildSeriesSharedPromptPrefix|ParseSeriesChapterUnderstanding' -v` 通过
+
 ### [2026-06-01] Feat - 系列章节质量流水线 Task 1 基础门禁
 - **需求背景**：
   1. 系列博客后续将切换到“章节理解 -> 章节写作 -> 章节审稿 -> 定向补强与轻统稿”的四段式质量流水线，需要先把结构化输出类型和基础门禁钉牢。

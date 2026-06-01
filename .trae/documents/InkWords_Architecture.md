@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - 架构设计与工程规范
 
 ## 0. 变更记录
+- 2026-06-01：系列章节质量流水线继续落地 Task 2。后端新增 `internal/service/series_quality_pipeline.go`，先抽出 `buildSeriesSharedPromptPrefix()` 作为系列级稳定前缀 builder，再实现 `parseSeriesChapterUnderstanding()` 与 `generateSeriesChapterUnderstanding()`，用于把“系列级固定规则前置、章节级变量后置”的 Prompt 结构固化下来；`decomposition_generate_prompt_helpers.go` 同步新增 `buildSeriesReaderProfile()`，为后续质量流水线统一生成读者画像。当前仍未切换 `GenerateSeriesWithProfile` 主链路与前端 SSE 协议。
 - 2026-06-01：系列章节质量流水线开始落地 Task 1。后端在 `internal/service` 新增 `series_quality_pipeline_types.go`，统一定义 `SeriesChapterUnderstanding / Draft / Review / Final / Usage` 结构体，并在结构化输出进入后续阶段前增加硬门禁校验，先从类型边界拦截“缺机制解释、缺案例、缺修订动作”的空心结果；本次尚未切换 `GenerateSeriesWithProfile` 主链路和前端 SSE 协议。
 - 2026-06-01：文件来源 Analyze 新增“动态提示词 profile 锁定”链路。后端在 `stream/analyze(file)` 阶段先做轻量内容分类并返回 `resolved_prompt_profile`，前端在大纲阶段展示“当前提示词类型”只读标签；后续 `stream/generate`（单篇/系列/导读）统一透传并沿用同一个 profile，避免 Analyze 与 Generate 语义漂移。
 - 2026-06-01：知识漫游复习从“固定模板问答”升级为“文章驱动的结构化追问”；后端 `review` 会在建 session 时提炼 `session_outline`，并在回答阶段返回结构化 `review_feedback`，前端 `ReviewSessionCard` 新增“本轮目标 / 你答到的点 / 你还漏掉的点 / 下一步建议”展示区。
