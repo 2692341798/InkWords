@@ -15,6 +15,7 @@ interface ReviewState {
   noteOptions: ReviewNoteOption[]
   notesPagination: Omit<ListNotesResponse, 'items'>
   currentSession: ReviewSessionResponse | null
+  shouldResumeSessionOnOpen: boolean
   historyItems: ReviewHistoryItem[]
   selectedMode: ReviewMode
   latestStageFeedback: string | null
@@ -29,6 +30,8 @@ interface ReviewState {
   loadHistory: (limit?: number) => Promise<void>
   setSelectedMode: (mode: ReviewMode) => void
   setCurrentSession: (session: ReviewSessionResponse | null) => void
+  setShouldResumeSessionOnOpen: (shouldResume: boolean) => void
+  clearSessionState: () => void
   setLatestStageFeedback: (feedback: string | null) => void
   setLatestHint: (hint: string | null) => void
   setFinalFeedback: (feedback: FinalFeedback | null) => void
@@ -47,6 +50,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
   noteOptions: [],
   notesPagination: initialPagination,
   currentSession: null,
+  shouldResumeSessionOnOpen: false,
   historyItems: [],
   selectedMode: 'light_recall',
   latestStageFeedback: null,
@@ -119,6 +123,17 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
 
   setCurrentSession: (session) => set({ currentSession: session }),
 
+  setShouldResumeSessionOnOpen: (shouldResume) => set({ shouldResumeSessionOnOpen: shouldResume }),
+
+  clearSessionState: () =>
+    set({
+      currentSession: null,
+      shouldResumeSessionOnOpen: false,
+      latestStageFeedback: null,
+      latestHint: null,
+      finalFeedback: null,
+    }),
+
   setLatestStageFeedback: (feedback) => set({ latestStageFeedback: feedback }),
 
   setLatestHint: (hint) => set({ latestHint: hint }),
@@ -131,6 +146,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
       noteOptions: [],
       notesPagination: initialPagination,
       currentSession: null,
+      shouldResumeSessionOnOpen: false,
       historyItems: [],
       selectedMode: 'light_recall',
       latestStageFeedback: null,
