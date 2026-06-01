@@ -55,6 +55,8 @@ func isLeadingMetaParagraph(paragraph string) bool {
 
 	hasRoleIntro := strings.Contains(trimmed, "作为高级") ||
 		strings.Contains(trimmed, "作为一名") ||
+		strings.Contains(trimmed, "文本解读专家") ||
+		strings.Contains(trimmed, "我将以") ||
 		(strings.Contains(trimmed, "作为") &&
 			(strings.Contains(trimmed, "架构师") ||
 				strings.Contains(trimmed, "博主") ||

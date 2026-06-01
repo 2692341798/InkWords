@@ -135,6 +135,7 @@ describe('Generator stage views', () => {
     const outlineStageHtml = renderToStaticMarkup(
       <GeneratorOutlineStage
         lockedScenarioLabel="开卷复习"
+        lockedPromptProfileLabel="心理学经典解读"
         outlineEditor={<div>大纲编辑器</div>}
         onBack={() => {}}
       />,
@@ -142,6 +143,7 @@ describe('Generator stage views', () => {
 
     expect(outlineStageHtml).toContain('确认并调整大纲')
     expect(outlineStageHtml).toContain('当前创作场景：开卷复习')
+    expect(outlineStageHtml).toContain('当前提示词类型：心理学经典解读')
     expect(outlineStageHtml).toContain('大纲编辑器')
     expect(outlineStageHtml).toContain('返回上一步')
   })

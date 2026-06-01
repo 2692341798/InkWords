@@ -18,6 +18,26 @@ func (s *DecompositionService) GenerateOutline(
 	existingParent *model.Blog,
 	existingChildren []model.Blog,
 ) (*OutlineResult, error) {
+	return s.GenerateOutlineWithProfile(
+		ctx,
+		sourceContent,
+		scenarioMode,
+		prompt.PromptProfile{},
+		prompt.ResolvedPromptProfile{},
+		existingParent,
+		existingChildren,
+	)
+}
+
+func (s *DecompositionService) GenerateOutlineWithProfile(
+	ctx context.Context,
+	sourceContent string,
+	scenarioMode prompt.ScenarioMode,
+	profile prompt.PromptProfile,
+	resolved prompt.ResolvedPromptProfile,
+	existingParent *model.Blog,
+	existingChildren []model.Blog,
+) (*OutlineResult, error) {
 	runes := []rune(sourceContent)
 	if len(runes) > 15000000 {
 		sourceContent = string(runes[:15000000]) + "\n\n... [Content Truncated due to length limits] ..."
@@ -26,9 +46,10 @@ func (s *DecompositionService) GenerateOutline(
 	if !scenarioMode.IsValid() {
 		scenarioMode = prompt.ScenarioModeEbookInterpretation
 	}
+	profile = normalizePromptProfile(profile, scenarioMode)
+	resolved = normalizeResolvedPromptProfile(profile, resolved, "已按当前提示词类型生成大纲。")
 
-	instruction := outlineBaseInstruction(scenarioMode)
-	instruction += "\n\n场景约束：\n" + outlineScenarioHint(scenarioMode)
+	systemRole, instruction := outlinePromptForProfile(scenarioMode, profile)
 
 	if existingParent != nil {
 		var existingOutlineBuilder strings.Builder
@@ -74,7 +95,7 @@ JSON 格式如下：
 	}
 
 	messages := []llm.Message{
-		{Role: "system", Content: systemLabel + sourceContent},
+		{Role: "system", Content: systemRole + "\n\n" + systemLabel + sourceContent},
 		{Role: "user", Content: instruction},
 	}
 
@@ -97,8 +118,17 @@ JSON 格式如下：
 	if err := json.Unmarshal([]byte(content), &outline); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal llm output: %w, output: %s", err, content)
 	}
+	outline.ResolvedPromptProfile = resolved
 
 	return &outline, nil
+}
+
+func outlinePromptForProfile(mode prompt.ScenarioMode, profile prompt.PromptProfile) (string, string) {
+	return profile.SystemRole, strings.TrimSpace(strings.Join([]string{
+		profile.AnalyzeRequirements,
+		outlineBaseInstruction(mode),
+		"场景约束：\n" + outlineScenarioHint(mode),
+	}, "\n\n"))
 }
 
 func outlineScenarioHint(mode prompt.ScenarioMode) string {
@@ -115,7 +145,7 @@ func outlineScenarioHint(mode prompt.ScenarioMode) string {
 // outlineBaseInstruction 返回不同场景下的大纲生成基础指令。
 func outlineBaseInstruction(mode prompt.ScenarioMode) string {
 	if mode == prompt.ScenarioModeEbookInterpretation {
-		return `你是一位文本解读专家。前面提供的是一本书或长篇文献的内容，请按原文自然篇章结构生成一个系列解读大纲。
+		return `前面提供的是一本书或长篇文献的内容，请按原文自然篇章结构生成一个系列解读大纲。
 我的核心要求是：按原文的章节或主题单元逐章拆分，每章聚焦该篇的核心思想与原文精义，而非现代应用或技术映射。
 
 请根据文本的章节数量充分规划：
@@ -124,7 +154,7 @@ func outlineBaseInstruction(mode prompt.ScenarioMode) string {
 - 不要将内容强行映射到现代商业、技术或管理场景`
 	}
 
-	return `你是一个高级架构师。请评估前面提供的项目文本，并生成一个系列博客的大纲。
+	return `请评估前面提供的项目文本，并生成一个系列博客的大纲。
 对于大型项目、源码仓库或复杂内容，必须拆分为系列博客。
 我的核心要求是：对于每个核心模块、业务逻辑或重要架构层，**都必须对应至少一篇博客进行详细说明**。不要担心生成的篇数过多！
 

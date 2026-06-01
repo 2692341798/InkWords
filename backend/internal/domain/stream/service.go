@@ -33,6 +33,7 @@ func (s *Service) Generate(ctx context.Context, userID uuid.UUID, req GenerateRe
 		style = "general"
 	}
 	scenarioMode := prompt.ScenarioMode(req.ScenarioMode)
+	profile := prompt.ResolvePromptProfileKey(req.PromptProfileKey, scenarioMode)
 
 	if len(req.Outline) > 0 {
 		outline := make([]service.Chapter, 0, len(req.Outline))
@@ -56,11 +57,35 @@ func (s *Service) Generate(ctx context.Context, userID uuid.UUID, req GenerateRe
 		if parentID == uuid.Nil {
 			parentID = uuid.New()
 		}
-		s.decomposition.GenerateSeries(ctx, userID, parentID, req.SeriesTitle, outline, req.SourceContent, req.SourceType, req.GitURL, scenarioMode, style, chunkChan, errChan)
+		s.decomposition.GenerateSeriesWithProfile(
+			ctx,
+			userID,
+			parentID,
+			req.SeriesTitle,
+			outline,
+			req.SourceContent,
+			req.SourceType,
+			req.GitURL,
+			scenarioMode,
+			style,
+			profile,
+			chunkChan,
+			errChan,
+		)
 		return
 	}
 
-	s.generator.GenerateBlogStream(ctx, userID, req.SourceContent, req.SourceType, scenarioMode, style, chunkChan, errChan)
+	s.generator.GenerateBlogStreamWithProfile(
+		ctx,
+		userID,
+		req.SourceContent,
+		req.SourceType,
+		scenarioMode,
+		style,
+		profile,
+		chunkChan,
+		errChan,
+	)
 }
 
 func (s *Service) Continue(bgCtx context.Context, userID uuid.UUID, blogID uuid.UUID, chunkChan chan<- string, errChan chan<- error) {

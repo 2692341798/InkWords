@@ -102,3 +102,26 @@ func TestPromptRequirementsService_Resolve_AvoidsTechnicalBlogDefaultForEbookInt
 	require.Contains(t, got, "原文摘录")
 	require.Contains(t, got, "历史背景")
 }
+
+func TestPromptRequirementsService_ResolveWithProfile_PrependsProfileRequirements(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.UserPromptSettings{}))
+
+	svc := NewPromptRequirementsService(db)
+	uid := uuid.New()
+	profile := prompt.ResolvePromptProfileKey("classic_text_interpretation", prompt.ScenarioModeEbookInterpretation)
+
+	got, err := svc.ResolveWithProfile(
+		context.Background(),
+		uid,
+		prompt.ScenarioModeEbookInterpretation,
+		prompt.ArticleStyleGeneral,
+		profile,
+	)
+	require.NoError(t, err)
+	require.Contains(t, got, profile.GenerateRequirements)
+	require.Contains(t, got, "电子书或长文本解读场景")
+	require.NotContains(t, got, "高质量技术博客")
+	require.NotContains(t, got, "可独立复现")
+}

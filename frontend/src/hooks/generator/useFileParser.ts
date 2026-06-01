@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import { useStreamStore } from '@/store/streamStore'
-import type { Chapter } from '@/store/streamStore'
+import type { Chapter, ResolvedPromptProfile } from '@/store/streamStore'
 import { fetchEventSourceWithAuth } from '@/services/sse'
 import { projectService } from '@/services/project'
 import {
@@ -25,6 +25,10 @@ interface ParseUploadedFileStore {
   setOutline: (outline: Chapter[] | null) => void
   setAbortController: (ctrl: AbortController | null) => void
   setSourceContent: (content: string) => void
+  setResolvedPromptProfile: (
+    profile: ResolvedPromptProfile | null,
+    status?: 'idle' | 'classifying' | 'resolved' | 'fallback',
+  ) => void
 }
 
 interface ParseUploadedFileInput {
@@ -49,6 +53,7 @@ export async function parseUploadedFile({
   store.appendAnalysisHistory({ message: '正在上传并解析文件...' })
   store.setSource('file', '')
   store.setOutline([])
+  store.setResolvedPromptProfile(null)
 
   if (store.abortController) {
     store.abortController.abort()
@@ -143,6 +148,9 @@ export async function analyzeParsedFileContent(sourceContent: string) {
           store.appendAnalysisHistory({ message: data.message, status: data.status })
           if (data.status === 'analyzing') {
             store.setAnalysisStep(2)
+            if (typeof data.message === 'string' && data.message.includes('识别')) {
+              store.setResolvedPromptProfile(null, 'classifying')
+            }
           } else if (data.status === 'outline') {
             store.setAnalysisStep(3)
           } else if (data.status === 'complete') {
@@ -152,6 +160,20 @@ export async function analyzeParsedFileContent(sourceContent: string) {
               outlineResult = JSON.parse(data.content)
             }
             store.setSource('file', outlineResult.source_content || outlineResult.series_title || '')
+            const resolvedProfile = outlineResult.resolved_prompt_profile
+            if (resolvedProfile) {
+              store.setResolvedPromptProfile(
+                {
+                  key: resolvedProfile.key,
+                  displayName: resolvedProfile.display_name,
+                  documentKind: resolvedProfile.document_kind,
+                  reason: resolvedProfile.reason,
+                },
+                resolvedProfile.reason?.includes('回退') ? 'fallback' : 'resolved',
+              )
+            } else {
+              store.setResolvedPromptProfile(null)
+            }
             store.setSeriesTitle(outlineResult.series_title || '')
             store.setOutline(outlineResult.outline || outlineResult.chapters)
             store.setAnalyzing(false)

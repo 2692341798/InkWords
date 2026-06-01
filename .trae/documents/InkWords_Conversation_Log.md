@@ -1,6 +1,24 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 87：同步动态提示词 profile 文档并执行回归验证
+- **用户需求**：按既定 `Task4` 更新项目文档（`API/Architecture/Conversation_Log/Development_Plan_and_Log/PRD/README`），并执行后端、前端测试与 `docker compose` 回归验证，最终返回修改文件、测试和验证结果。
+- **AI 动作**：
+  1. 先回读 `docs/superpowers/plans/2026-06-01-dynamic-prompt-profile.md` 的 Task 4，以及当前未提交代码差异，确认这次文档同步只围绕“动态提示词 profile 锁定”主线展开。
+  2. 逐项核对实现：后端新增 `PromptProfile` / `ResolvedPromptProfile`、`PromptProfileResolver`、`OutlineResult.resolved_prompt_profile`、`stream/generate` 的 `prompt_profile_key/document_kind` 透传；前端新增 `resolvedPromptProfile` 状态、分类状态字段和“当前提示词类型”只读标签。
+  3. 按 Docs-as-Code 最小改动原则更新 `API`、`Architecture`、`PRD` 与 `README`，补齐 Analyze 分类、Generate 透传、回退策略和前端展示说明；同时在 `Development_Plan_and_Log` 预留本次验证记录。
+  4. 随后执行后端 Go 测试、前端 Vitest 与 Docker Compose 回归；发现计划中写的 `useSeriesGenerator.test.ts` 与仓库当前真实测试文件名不一致，因此改为补跑 `useFileParser`、`streamRequestBuilders`、`generatorViewState`、`GeneratorStageViews`、`streamStore` 五个受影响前端测试文件，确保新增提示词类型锁定行为被真实覆盖。
+  5. 执行 `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build` 完成容器重建，再用 `docker compose ps` 与 `curl -I http://localhost` 验证核心容器 `Up` 且前端入口返回 `200 OK`。
+- **决策/变更**：
+  - 本次不改数据库文档，因为动态提示词 profile 当前仅属于运行时链路与前端状态，不引入新的持久化表结构。
+  - 文档口径明确区分三层语义：`scenario_mode` 是任务场景层，`article_style` 是写法层，`prompt_profile` 是文件内容类型层；Analyze 负责锁定 profile，Generate 负责沿用 profile。
+- **验证**：
+  - `cd backend && go test ./internal/service ./internal/domain/stream ./internal/transport/http/v1/api -v` 通过
+  - `cd frontend && npm run test -- src/hooks/generator/useFileParser.test.ts src/hooks/generator/streamRequestBuilders.test.ts src/pages/generatorViewState.test.ts src/components/generator/GeneratorStageViews.test.tsx src/store/streamStore.test.ts` 通过（5 个测试文件、22 个测试）
+  - `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build` 完成
+  - `docker compose --env-file backend/.env ps` 显示核心容器全部 `Up`
+  - `curl -I http://localhost` 返回 `HTTP/1.1 200 OK`
+
 ### 对话 84：修复超大 PDF 只识别前段内容的问题
 - **用户需求**：用户反馈上传 800 多页 PDF 时，系统只能识别到前面一点部分，希望能够完整解析，并且章节数不要受限制。
 - **AI 动作**：
