@@ -1,6 +1,20 @@
 # 墨言知识训练平台 (InkWords Trainer) - 开发计划与日志
 > **目标**：跟踪项目的核心开发模块、里程碑进度以及每日开发记录。
 
+### [2026-06-01] Feat - 系列章节质量流水线 Task 3 接入主链路
+- **需求背景**：
+  1. Task 1/2 已完成结构化类型、硬门禁与章节理解阶段，但 `GenerateSeriesWithProfile` 仍停留在“单次直接流式生成”老链路，尚未真正走四段式质量流水线。
+  2. 当前目标是按 TDD 把“草稿 -> 审稿 -> 终稿流式补强”接入系列章节主链路，同时保持原有章节落库、技术栈提取和导读生成逻辑可继续工作。
+- **本次完成**：
+  1. 在 `backend/internal/service/series_quality_pipeline_test.go` 先补红灯测试，锁定“缺失 `revision_actions` 的审稿结果必须失败”和“只有终稿阶段允许向前端流式输出正文”的顺序约束。
+  2. 在 `backend/internal/service/decomposition_generate_persist_test.go` 补主链路集成测试，通过记录 LLM 请求类型序列，锁定系列章节现在必须先走 `json -> text -> json -> stream` 的章节质量流水线，再进入技术栈提取和系列导读。
+  3. 在 `backend/internal/service/series_quality_pipeline.go` 新增草稿/审稿解析器、Prompt builder、`generateSeriesChapterDraft()`、`reviewSeriesChapterDraft()` 与 `runSeriesChapterQualityPipeline()`。
+  4. 在 `backend/internal/service/decomposition_generate_runner.go` 新增 `finalizeSeriesChapterDraft()`，只在终稿补强阶段以 `streaming` 状态向前端推送正文 chunk。
+  5. 在 `backend/internal/service/decomposition_generate.go` 将系列章节主链路切换到 `runSeriesChapterQualityPipeline()`，并保留既有失败落库、最终落库、技术栈提取与 `completed/error` 事件分支。
+- **验证记录**：
+  - `cd backend && go test ./internal/service -run 'RunSeriesChapterQualityPipeline|GenerateSeries_PersistsFinalChapterFromQualityPipeline' -v` 先失败（缺少流水线入口）、后通过
+  - `cd backend && go test ./internal/service -run 'RunSeriesChapterQualityPipeline|TestStreamSeriesChapter|TestGenerateSeries' -v` 通过
+
 ### [2026-06-01] Feat - 系列章节质量流水线 Task 2 稳定前缀与章节理解阶段
 - **需求背景**：
   1. 系列博客单章节质量流水线在完成 Task 1 的结构体与门禁后，需要继续为后续多阶段 Prompt 复用打基础，避免每个阶段临时拼接一份散乱规则。

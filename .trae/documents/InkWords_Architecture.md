@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - 架构设计与工程规范
 
 ## 0. 变更记录
+- 2026-06-01：系列章节质量流水线继续落地 Task 3。`GenerateSeriesWithProfile` 的章节主链路已切换到 `runSeriesChapterQualityPipeline()`：先执行章节理解、草稿写作、结构化审稿，再由 `finalizeSeriesChapterDraft()` 负责终稿补强并向前端流式输出；章节草稿与审稿中间态不再直接透给前端，避免用户看到未过门禁的半成品正文。
 - 2026-06-01：系列章节质量流水线继续落地 Task 2。后端新增 `internal/service/series_quality_pipeline.go`，先抽出 `buildSeriesSharedPromptPrefix()` 作为系列级稳定前缀 builder，再实现 `parseSeriesChapterUnderstanding()` 与 `generateSeriesChapterUnderstanding()`，用于把“系列级固定规则前置、章节级变量后置”的 Prompt 结构固化下来；`decomposition_generate_prompt_helpers.go` 同步新增 `buildSeriesReaderProfile()`，为后续质量流水线统一生成读者画像。当前仍未切换 `GenerateSeriesWithProfile` 主链路与前端 SSE 协议。
 - 2026-06-01：系列章节质量流水线开始落地 Task 1。后端在 `internal/service` 新增 `series_quality_pipeline_types.go`，统一定义 `SeriesChapterUnderstanding / Draft / Review / Final / Usage` 结构体，并在结构化输出进入后续阶段前增加硬门禁校验，先从类型边界拦截“缺机制解释、缺案例、缺修订动作”的空心结果；本次尚未切换 `GenerateSeriesWithProfile` 主链路和前端 SSE 协议。
 - 2026-06-01：文件来源 Analyze 新增“动态提示词 profile 锁定”链路。后端在 `stream/analyze(file)` 阶段先做轻量内容分类并返回 `resolved_prompt_profile`，前端在大纲阶段展示“当前提示词类型”只读标签；后续 `stream/generate`（单篇/系列/导读）统一透传并沿用同一个 profile，避免 Analyze 与 Generate 语义漂移。
@@ -106,6 +107,7 @@
    - 使用 `semaphore.NewWeighted(3)` 将全局并发数严格限制为 3。
    - 每个 `goroutine` 均拥有独立的错误隔离环境，通过同一个 `progressChan` 向前端推送包含自身 `chapter_sort` ID 的 Chunk（数据切片）。
   - 单篇生成、系列章节生成和系列导读生成都会复用同一份 `scenario_mode + article_style + resolved prompt profile` 组合后的 Prompt 约束，避免“大纲像心理学解读、正文回到通用技术博客”的割裂。
+  - 系列章节当前内部执行顺序已升级为 `understanding -> drafting -> reviewing -> revising(streaming)`；只有终稿补强阶段会把正文 chunk 推给前端，前置阶段只发送状态事件。
 4. **系列导读生成**：
    - 所有单篇博客生成完毕后（`wg.Wait()` 返回），主流程自动触发一次 AI 调用，生成“系列导读”文章，将其作为整个系列的父节点，将各个单篇博客串联成专栏。
 5. **前端批量更新防卡顿**：

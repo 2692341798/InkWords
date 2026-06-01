@@ -206,27 +206,17 @@ func (s *DecompositionService) GenerateSeriesWithProfile(
 
 			chapterSourceContent := resolveSeriesChapterSourceContent(sourceType, cachePath, sourceContent, chapter)
 			oldContent := resolveSeriesOldContent(ctx, chapter)
-
-			messages, llmModel, err := s.buildSeriesChapterMessages(
-				ctx,
-				userID,
-				chapter,
-				outline,
-				i,
-				chapterSourceContent,
-				sourceType,
-				gitURL,
-				scenarioMode,
-				style,
-				oldContent,
-				profile,
-			)
-			if err != nil {
-				errChan <- fmt.Errorf("build series chapter messages: %w", err)
-				return
-			}
-
-			content, streamErr := s.streamSeriesChapterContent(ctx, parentID, chapter, messages, progressChan)
+			qualityResult, streamErr := s.runSeriesChapterQualityPipeline(ctx, seriesQualityPipelineInput{
+				SeriesTitle:          parentTitle,
+				ReaderProfile:        buildSeriesReaderProfile(scenarioMode),
+				Outline:              outline,
+				ChapterIndex:         i,
+				Chapter:              chapter,
+				ChapterSourceContent: chapterSourceContent,
+				GitURL:               gitURL,
+				OldContent:           oldContent,
+				ProgressChan:         progressChan,
+			})
 			if streamErr != nil {
 				if chapter.ID != "" {
 					if blogID, err := uuid.Parse(chapter.ID); err == nil {
@@ -247,8 +237,10 @@ func (s *DecompositionService) GenerateSeriesWithProfile(
 				return
 			}
 
+			content := qualityResult.FinalMarkdown
 			wordCount := len([]rune(content))
 
+			llmModel := "deepseek-v4-flash"
 			techStacks := s.extractSeriesChapterTechStacks(ctx, llmModel, content)
 
 			var updated bool
