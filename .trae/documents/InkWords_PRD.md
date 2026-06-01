@@ -1,6 +1,8 @@
 # 墨言知识训练平台 (InkWords Trainer) - 产品需求文档 (PRD)
 
 ## 0. 变更记录
+- 2026-06-01：知识漫游复习前端构建收尾；产品需求不变。本次仅修复前端 `review` 工作台对当前会话模型的工程对齐问题，要求前端构建与测试继续接受 `session_outline` 为必填会话快照，并清理重复状态声明，避免交付时因 TypeScript 构建失败阻塞 Docker 重建与登录回归验证。
+- 2026-06-01：仓库 Git 治理收尾；本次仅将 `CONTRIBUTING.md` 从版本控制中移除并继续按 `.gitignore` 作为本地协作辅助文件处理，不新增、删除或调整任何产品需求、用户流程或交互验收标准。
 - 2026-06-01：最小可回滚修复：产品需求保持不变；交付与验收口径进一步收敛为使用 `docker compose --env-file backend/.env ...` 启动/重建环境，确保文档中的验证步骤与实际部署基线一致，同时要求后端服务测试保持全绿。
 - 2026-06-01：系列章节质量流水线完成 Task 6 文档同步与验证收尾。产品层保持既有需求不变，但交付口径进一步明确：系列章节 SSE 需要稳定暴露 `understanding / drafting / reviewing / revising / streaming / usage / completed / error`；前端必须把这些状态展示成中文“质量阶段”，并在 `usage` 到达后展示“缓存命中 / 未命中”摘要。Docker 交付验收入口仍以 `http://localhost` 为准。
 - 2026-06-01：系列博客单章节质量流水线继续落地 Task 5。前端必须把系列章节 `understanding / drafting / reviewing / revising / streaming / completed / error` 阶段显示为中文“质量阶段”，并在收到 `usage` 事件后展示“缓存命中 / 未命中”摘要，让用户直接感知当前章节处于哪一步、稳定前缀是否带来缓存收益。

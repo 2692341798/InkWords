@@ -1,6 +1,8 @@
 # 墨言知识训练平台 (InkWords Trainer) - API 接口文档
 
 ## 0. 变更记录
+- 2026-06-01：知识漫游复习前端构建收尾；本次仅清理 `reviewStore` 的重复声明，并让相关测试 mock 对齐当前 `ReviewSessionResponse.session_outline` 数据模型，不新增、不删除、不修改任何后端 API 路由、请求参数、响应结构或 SSE 事件。
+- 2026-06-01：仓库 Git 治理收尾；本次仅通过 `git rm --cached CONTRIBUTING.md` 取消本地协作辅助文件的版本跟踪，并继续由 `.gitignore` 忽略。无新增、删除或修改任何后端 API 路由、请求参数、响应结构或 SSE 事件。
 - 2026-06-01：最小可回滚修复：本轮未新增或修改任何 API 路由、请求字段或 SSE 事件；仅通过 TDD 修复 `backend/internal/service` 的 SQLite 测试隔离问题，并把本轮交付文档中的 Compose 启动命令统一为 `docker compose --env-file backend/.env ...`，保证验证步骤与实际运行约定一致。
 - 2026-06-01：系列章节质量流水线完成 Task 6 文档同步与验证收尾。`/api/v1/stream/generate` 的系列章节 SSE 契约已与当前前端消费实现对齐：前端直接消费 `understanding / drafting / reviewing / revising / streaming / usage / completed / error`，其中 `content` 仅在 `streaming` 阶段出现，`usage` 阶段返回缓存命中统计；本轮已完成前端全量测试与 Docker `http://localhost` 冒烟验证。注意：本轮 Compose 验证命令统一为 `docker compose --env-file backend/.env ...`；不要再省略 `--env-file backend/.env`，否则 `OBSIDIAN_VAULT_PATH` 等变量可能不会被 Compose 正确加载。
 - 2026-06-01：系列章节质量流水线继续落地 Task 5。前端现已消费 `/api/v1/stream/generate` 既有系列章节 SSE 状态：`understanding`、`drafting`、`reviewing`、`revising`、`streaming`、`usage`、`completed`、`error`；接口路由与请求体不变，但这些状态现在会被前端进度卡直接显示为中文“质量阶段”和“缓存命中 / 未命中”摘要。

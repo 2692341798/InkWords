@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { KnowledgeReview } from './KnowledgeReview'
+import type { ReviewSessionResponse } from '@/services/review'
 
 const {
   buttonClickHandlers,
@@ -24,7 +25,26 @@ const {
     available_modes: ['light_recall', 'detailed_qa'] as const,
   }
 
-  const state = {
+  const state: {
+    recommendationCard: typeof recommendationCard
+    isLoadingRecommendation: boolean
+    currentSession: ReviewSessionResponse | null
+    shouldResumeSessionOnOpen: boolean
+    latestStageFeedback: string | null
+    latestHint: string | null
+    finalFeedback: null
+    historyItems: never[]
+    isLoadingHistory: boolean
+    noteOptions: never[]
+    isLoadingNotes: boolean
+    selectedMode: 'light_recall' | 'detailed_qa'
+    loadRecommendation: ReturnType<typeof vi.fn>
+    refreshRecommendation: ReturnType<typeof vi.fn>
+    loadNotes: ReturnType<typeof vi.fn>
+    loadHistory: ReturnType<typeof vi.fn>
+    setShouldResumeSessionOnOpen: ReturnType<typeof vi.fn>
+    setSelectedMode: ReturnType<typeof vi.fn>
+  } = {
     recommendationCard,
     isLoadingRecommendation: false,
     currentSession: null,
@@ -158,6 +178,14 @@ describe('KnowledgeReview', () => {
       title: '恢复中的会话',
       opening_prompt: '继续作答',
       initial_hints: [],
+      session_outline: {
+        summary: '恢复中的会话摘要',
+        main_question: '继续回答这篇文章的主问题',
+        core_concepts: ['当前主线'],
+        process_steps: [],
+        application_cases: [],
+        checkpoints: ['继续补充主线'],
+      },
       turn_index: 2,
     }
     storeState.shouldResumeSessionOnOpen = false
@@ -177,6 +205,14 @@ describe('KnowledgeReview', () => {
       title: '恢复中的会话',
       opening_prompt: '继续作答',
       initial_hints: [],
+      session_outline: {
+        summary: '恢复中的会话摘要',
+        main_question: '继续回答这篇文章的主问题',
+        core_concepts: ['当前主线'],
+        process_steps: [],
+        application_cases: [],
+        checkpoints: ['继续补充主线'],
+      },
       turn_index: 2,
     }
     storeState.shouldResumeSessionOnOpen = false
