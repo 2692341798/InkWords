@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - 架构设计与工程规范
 
 ## 0. 变更记录
+- 2026-06-01：系列章节质量流水线完成 Task 6 文档同步与验证收尾。本轮未再改实现代码，但补齐了文档契约与验证记录：前端全量 Vitest 已通过；后端全量 `go test ./...` 暴露 `internal/service` 中 `TestGenerateSeries_PersistsFinalChapterFromQualityPipeline` 的既有隔离问题（SQLite 测试库里 `users.email` 唯一键冲突）；Docker 经导出 `backend/.env` 后成功执行 `docker compose down && docker compose up -d --build`，`inkwords-backend/frontend/db/redis/obsidian-bridge` 全部 `Up`，`http://localhost` 返回 `200 OK`。
 - 2026-06-01：系列章节质量流水线继续落地 Task 5。前端 `streamStore` 新增 `chapterPhases` 与 `chapterUsage` 两块系列章节运行时状态，`useSeriesGenerator` 统一解析章节质量阶段 / usage 事件并写入 store，`GeneratorStatus` 进度卡开始直接展示中文“质量阶段”与“缓存命中 / 未命中”摘要；本次仅扩展前端消费层，不改后端 SSE 协议与数据库结构。
 - 2026-06-01：系列章节质量流水线继续落地 Task 4。DeepSeek 客户端新增 `CompletionUsage` 与 `GenerateWithUsage / GenerateJSONWithUsage / GenerateStreamWithUsage`，用于从非流式响应体和流式尾块里统一回收 `prompt_tokens / completion_tokens / prompt_cache_hit_tokens / prompt_cache_miss_tokens`；系列章节终稿补强结束后会通过现有 SSE `progressChan` 追加 `usage` 事件，把单章节缓存命中情况透传给前端，为后续系列级成本观测与前缀复用优化打底。
 - 2026-06-01：系列章节质量流水线继续落地 Task 3。`GenerateSeriesWithProfile` 的章节主链路已切换到 `runSeriesChapterQualityPipeline()`：先执行章节理解、草稿写作、结构化审稿，再由 `finalizeSeriesChapterDraft()` 负责终稿补强并向前端流式输出；章节草稿与审稿中间态不再直接透给前端，避免用户看到未过门禁的半成品正文。
@@ -52,6 +53,7 @@
 - **提示词类型锁定策略**：当文件 Analyze 返回 `resolved_prompt_profile` 后，前端 `streamStore` 会持久化 `resolvedPromptProfile/classificationStatus/classificationReason`，并在大纲区展示“当前提示词类型”只读标签；后续单篇/系列生成请求统一透传 `prompt_profile_key` 与 `document_kind`。
 - **流程型工作台编排**：默认入口为 `HomeEntry`；`Generator`、`KnowledgeReview`、`HomeEntry` 三处共享 `StepStrip` 展示流程预览/进度，但业务状态仍保留在页面层，通过 `generatorViewState`、`knowledgeReviewViewState`、`homeEntryViewState` 做纯前端编排，避免把共享 UI 组件耦合成全局状态机。
 - **生成器三步模型**：`Generator` 当前固定为 `选择来源 -> 配置解析 -> 确认大纲` 三步；解析/分析时仍停留在 `configure` 并内嵌展示 `GeneratorStatus`，正文生成时仍停留在 `outline` 并内嵌展示章节进度，`progress` 不再是顶层页面阶段。
+- **系列章节质量阶段状态**：`streamStore` 额外维护 `chapterPhases` 与 `chapterUsage`，`useSeriesGenerator.handleSeriesChunkMessage()` 负责把后端 `understanding / drafting / reviewing / revising / streaming / usage / completed / error / retrying` 事件统一映射为前端运行时状态，`GeneratorStatus` 只消费 store 而不直接理解 SSE 协议细节。
 - **知识漫游复习工作台**：新增 `KnowledgeReview` 主视图，入口位于侧边栏；同一页面内收敛“随机抽一篇 / 选择文章复习 / 当前会话 / 最近记录”四类状态，避免在多个页面间来回跳转。
 
 ### 2.2 后端 (Backend)
@@ -146,6 +148,7 @@
 - **数据库 / Redis**: PostgreSQL 与 Redis Stack 默认仅在容器网络内暴露，避免开发态无意开放宿主机调试端口。
 - **容器互联**: 全部服务显式加入 `inkwords-network` 内部网络，后端通过服务名 `db:5432`、`redis:6379`、`obsidian-bridge:27125` 与依赖互通。
 - **环境装载约定**: Docker Compose 运行时统一建议通过 `docker compose --env-file backend/.env ...` 启动；`OBSIDIAN_VAULT_PATH` 必须显式提供，不再回退到某台开发机的绝对路径。
+- **Task 6 冒烟验证补充**: 若需要严格按 `docker compose down && docker compose up -d --build` 直跑，必须先把 `backend/.env` 中的 `OBSIDIAN_VAULT_PATH` 导出到当前 shell；否则 Compose 在解析 bind mount 时会直接失败。这也是当前“推荐使用 `--env-file backend/.env`”的工程原因。
 
 ## 4.1 仓库产物与敏感信息策略
 - 禁止提交构建产物与大文件（例如后端二进制、PDF、批量截图等），统一通过 `.gitignore` 管理本地产物目录。

@@ -127,6 +127,29 @@ docker compose --env-file backend/.env down && docker compose --env-file backend
 - 首页底部保留继续上次任务与最近记录，方便从流程入口回到真实工作内容。
 - 进入 `Generator` 或 `KnowledgeReview` 后，主区一次只展示当前步骤；其余步骤通过共享 `StepStrip` 以预览或进度态呈现。
 
+### 5.1.5 系列章节质量流水线验证
+- 章节生成链路当前已升级为 `understanding -> drafting -> reviewing -> revising -> streaming -> usage -> completed/error`。
+- 前端进度卡会把这些状态展示为中文“质量阶段”，并在收到 `usage` 后展示“缓存命中 / 未命中”摘要。
+- 推荐验证命令：
+
+```bash
+cd backend
+go test ./...
+```
+
+```bash
+cd frontend
+npm run test -- --run
+```
+
+```bash
+docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build
+docker compose --env-file backend/.env ps
+curl -I http://localhost
+```
+
+- 如果你坚持直接运行 `docker compose down && docker compose up -d --build`，请先把 `backend/.env` 中的 `OBSIDIAN_VAULT_PATH` 导出到当前 shell；否则 Compose 在解析 bind mount 时会直接报错。
+
 由于后端仅提供 API 接口，前端服务由独立的 Nginx 容器代理。项目启动后：
 1. **必须通过前端入口**访问：`http://localhost` (映射于宿主机 80 端口)。
 
