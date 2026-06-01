@@ -115,6 +115,7 @@ func newQualityPipelineTestService(t *testing.T, jsonResponses []string, textRes
 			w.Header().Set("Content-Type", "text/event-stream")
 			fmt.Fprintf(w, "data: {\"choices\":[{\"delta\":{\"content\":%q},\"finish_reason\":null}]}\n\n", harness.streamResponses[0])
 			fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n")
+			fmt.Fprint(w, "data: {\"choices\":[],\"usage\":{\"prompt_tokens\":1200,\"completion_tokens\":500,\"prompt_cache_hit_tokens\":900,\"prompt_cache_miss_tokens\":300}}\n\n")
 			harness.streamResponses = harness.streamResponses[1:]
 			return
 		}
@@ -198,6 +199,7 @@ func TestRunSeriesChapterQualityPipeline_StreamsOnlyFinalStageAndPreservesStageO
 
 	var statuses []string
 	var streamedContent []string
+	var usagePayload map[string]any
 	for raw := range progressChan {
 		var payload map[string]any
 		require.NoError(t, json.Unmarshal([]byte(raw), &payload))
@@ -206,8 +208,16 @@ func TestRunSeriesChapterQualityPipeline_StreamsOnlyFinalStageAndPreservesStageO
 		if status == "streaming" {
 			streamedContent = append(streamedContent, payload["content"].(string))
 		}
+		if status == "usage" {
+			usagePayload = payload
+		}
 	}
 
-	require.True(t, slices.Equal([]string{"understanding", "drafting", "reviewing", "revising", "streaming"}, statuses))
+	require.True(t, slices.Equal([]string{"understanding", "drafting", "reviewing", "revising", "streaming", "usage"}, statuses))
 	require.Equal(t, []string{"终稿第一段终稿第二段"}, streamedContent)
+	require.NotNil(t, usagePayload)
+	require.Equal(t, float64(1200), usagePayload["prompt_tokens"])
+	require.Equal(t, float64(500), usagePayload["completion_tokens"])
+	require.Equal(t, float64(900), usagePayload["prompt_cache_hit_tokens"])
+	require.Equal(t, float64(300), usagePayload["prompt_cache_miss_tokens"])
 }

@@ -1,6 +1,21 @@
 # 墨言知识训练平台 (InkWords Trainer) - 开发计划与日志
 > **目标**：跟踪项目的核心开发模块、里程碑进度以及每日开发记录。
 
+### [2026-06-01] Feat - 系列章节质量流水线 Task 4 usage / cache telemetry
+- **需求背景**：
+  1. Task 3 已把系列章节主链路切到 `理解 -> 草稿 -> 审稿 -> 终稿补强`，但目前还无法观测稳定前缀是否真的提升了 DeepSeek 原生 Prompt Cache 命中率。
+  2. 当前目标是按 TDD 为 DeepSeek 客户端补齐 `usage` 与 `prompt_cache_hit/miss` 采集，并把单章节 usage 事件接入现有系列 SSE 流。
+- **本次完成**：
+  1. 新增 `backend/internal/infra/llm/deepseek_usage_test.go`，先锁定 `parseCompletionUsage()` 和 `GenerateStreamWithUsage()` 的红灯行为。
+  2. 在 `backend/internal/service/series_quality_pipeline_test.go` 扩展章节阶段顺序断言，要求阶段序列从 `understanding -> drafting -> reviewing -> revising -> streaming` 扩展为追加 `usage`，并断言缓存命中字段正确透传。
+  3. 在 `backend/internal/infra/llm/deepseek.go` 新增 `CompletionUsage`、`GenerateWithUsage()`、`GenerateJSONWithUsage()`、`GenerateStreamWithUsage()`，统一从非流式响应体和流式尾块中解析 `prompt_tokens / completion_tokens / prompt_cache_hit_tokens / prompt_cache_miss_tokens`。
+  4. 修正流式收尾边界：即使先收到 `finish_reason`，仍继续读到 `[DONE]` 或 EOF 才返回，避免 usage 尾块被提前吞掉。
+  5. 在 `backend/internal/service/decomposition_generate_runner.go` 的 `finalizeSeriesChapterDraft()` 中追加 `usage` 事件，把单章节终稿阶段 usage 透传到现有 SSE 进度流。
+- **验证记录**：
+  - `cd backend && go test ./internal/infra/llm -run 'ParseCompletionUsage|GenerateStreamWithUsage' -v` 先失败（新类型/方法未定义）、后通过
+  - `cd backend && go test ./internal/service -run 'RunSeriesChapterQualityPipeline_StreamsOnlyFinalStageAndPreservesStageOrder' -v` 先失败（缺少 usage 事件 / usage 为 0）、后通过
+  - `cd backend && go test ./internal/infra/llm ./internal/service -run 'ParseCompletionUsage|GenerateStreamWithUsage|RunSeriesChapterQualityPipeline|ValidateSeriesChapter|BuildSeriesSharedPromptPrefix|ParseSeriesChapterUnderstanding' -v` 通过
+
 ### [2026-06-01] Feat - 系列章节质量流水线 Task 3 接入主链路
 - **需求背景**：
   1. Task 1/2 已完成结构化类型、硬门禁与章节理解阶段，但 `GenerateSeriesWithProfile` 仍停留在“单次直接流式生成”老链路，尚未真正走四段式质量流水线。
