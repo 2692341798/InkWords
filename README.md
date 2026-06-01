@@ -7,6 +7,8 @@
 
 它依然支持将资料进一步生成小白友好、可复现的系列技术博客，但 README 的主叙事将更聚焦在“知识沉淀 → 复习闭环 → 可选的对外输出（博客/导出）”。
 
+最近一次前端构建收尾中，`KnowledgeReview` 相关测试夹具已与当前 `ReviewSessionResponse.session_outline` 模型对齐，同时清理了 `reviewStore` 中重复的状态声明，确保 `npm run build` 与 Docker 重建链路不再被现有 TypeScript 错误阻塞。
+
 仓库治理约定：本地协作辅助文件（例如 `CONTRIBUTING.md`）不作为产品交付物进入版本库，应继续通过 `.gitignore` 保持本地化，避免把个人流程说明误纳入公开仓库历史。
 
 ## 2. 核心特性 (Features)

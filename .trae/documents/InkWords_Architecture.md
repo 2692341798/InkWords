@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - 架构设计与工程规范
 
 ## 0. 变更记录
+- 2026-06-01：知识漫游复习前端构建收尾；`frontend/src/store/reviewStore.ts` 清理了重复的状态 setter/clear 方法定义，相关测试夹具同步补齐 `session_outline`，使当前 `review` 状态模型与前端测试/构建保持一致。本次仅修复前端状态层与测试层，不改变后端架构、容器编排、模块边界或运行时链路。
 - 2026-06-01：仓库 Git 治理收尾；`CONTRIBUTING.md` 被重新定义为本地协作辅助文件，不再进入版本库，`.gitignore` 继续忽略该文件与系列质量流水线计划稿。该变更仅影响仓库追踪边界，不改变前后端架构、容器编排、模块边界或运行时链路。
 - 2026-06-01：最小可回滚修复：`backend/internal/service` 中依赖 SQLite 的持久化测试改为“每次 setup 使用唯一命名内存库”，消除 `users.email` 唯一键冲突；本轮相关文档里的 Docker 重建命令同步收敛为 `docker compose --env-file backend/.env ...`，避免再次依赖当前 shell 预先导出环境。
 - 2026-06-01：系列章节质量流水线完成 Task 6 文档同步与验证收尾。本轮未再改实现代码，但补齐了文档契约与验证记录：前端全量 Vitest 已通过；后端全量 `go test ./...` 暴露 `internal/service` 中 `TestGenerateSeries_PersistsFinalChapterFromQualityPipeline` 的既有隔离问题（SQLite 测试库里 `users.email` 唯一键冲突）；Docker 通过 `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build` 成功完成重建，`inkwords-backend/frontend/db/redis/obsidian-bridge` 全部 `Up`，`http://localhost` 返回 `200 OK`。

@@ -1,6 +1,20 @@
 # 墨言知识训练平台 (InkWords Trainer) - 开发计划与日志
 > **目标**：跟踪项目的核心开发模块、里程碑进度以及每日开发记录。
 
+### [2026-06-01] Fix - 知识漫游复习前端构建收尾
+- **需求背景**：
+  1. 用户要求把当前登录排障后的可提交改动同步到 GitHub，但仓库先处于进行中的 rebase 状态，需要先安全收尾历史提交。
+  2. 在按规范执行 `docker compose --env-file backend/.env up -d --build` 验证登录链路时，前端构建暴露既有 TypeScript 错误：`reviewStore` 存在重复声明，测试 mock 也未对齐当前 `session_outline` 会话模型。
+- **本次完成**：
+  1. 先解决 rebase 中 6 份项目文档冲突并完成 `chore(repo): untrack contributing helper file` 收尾，恢复仓库到可继续提交状态。
+  2. 在 `frontend/src/store/reviewStore.ts` 清理重复的 `setShouldResumeSessionOnOpen` 与 `clearSessionState` 定义，恢复 `reviewStore` 类型声明与对象实现的一致性。
+  3. 在 `frontend/src/store/reviewStore.test.ts` 与 `frontend/src/pages/KnowledgeReview.test.tsx` 中补齐 `session_outline`，并让测试夹具显式满足当前 `ReviewSessionResponse` 类型要求。
+  4. 同步补写 `API / Architecture / Conversation_Log / Database / PRD / README`，记录本次“只修前端构建与测试对齐、不改 API/DB 契约”的最小边界。
+- **验证记录**：
+  - `cd frontend && npm run build` 通过
+  - `docker compose --env-file backend/.env up -d --build` 通过（在补齐前端构建错误后恢复）
+  - `curl -I http://localhost` 返回 `HTTP/1.1 200 OK`
+
 ### [2026-06-01] Chore - 取消跟踪本地协作辅助文件 `CONTRIBUTING.md`
 - **需求背景**：
   1. 用户希望 `CONTRIBUTING.md` 与系列质量流水线计划稿都不再被 Git 跟踪。

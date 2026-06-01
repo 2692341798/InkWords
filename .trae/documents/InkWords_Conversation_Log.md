@@ -1,6 +1,22 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 95：收尾 rebase 并提交知识漫游复习前端构建修复
+- **用户需求**：用户要求选择“方案 A”，先解决当前 Git 冲突再提交到 GitHub；随后明确要求“提交到github”。
+- **AI 动作**：
+  1. 先检查仓库状态，确认当前不是普通工作区修改，而是一次进行中的交互式 rebase：`agent/untrack-contributing` 正在回放 `chore(repo): untrack contributing helper file`，并在 6 份项目文档上产生冲突。
+  2. 逐个回读冲突文档，保留 `CONTRIBUTING.md` 取消跟踪的仓库治理记录，同时保留原分支已有的系列质量流水线 / 测试隔离文档更新，随后把冲突文件重新 `git add` 标记为已解决。
+  3. 由于 `git rebase --continue` 仍受交互状态影响，改用 `git commit --no-edit` 完成该条历史 chore 提交收尾，并 `git rebase --quit` 清理残留 rebase 元数据。
+  4. 再回到当前未提交改动，确认真正可进入 Git 历史的是前端 `reviewStore` 与相关测试修复；本地 `backend/.env` 中的 OAuth 回调调整属于忽略文件，只作为本地运行修复保留，不纳入 GitHub 仓库。
+  5. 针对前端构建错误补最小修复：清理 `reviewStore` 重复 setter/clear 定义，让 `KnowledgeReview` 与 `reviewStore` 测试 mock 对齐当前 `session_outline` 会话模型；随后补齐 6 份项目文档与 README 的最小记录。
+- **决策/变更**：
+  - 先把历史 rebase 的 `chore(repo)` 收尾，再单独提交本次前端构建修复，避免把两个主题混成一个 commit。
+  - 本次提交不把 `.env`、本地凭据或其它忽略文件推进 GitHub，仅提交可复现、可审阅的仓库内代码与文档。
+- **验证**：
+  - `cd frontend && npm run build` 通过
+  - `docker compose --env-file backend/.env up -d --build` 通过
+  - `curl -I http://localhost` 返回 `HTTP/1.1 200 OK`
+
 ### 对话 88：让 `CONTRIBUTING.md` 真正停止被 Git 跟踪
 - **用户需求**：用户确认继续处理“这两个文件不跟踪”的尾差问题；由于 `.gitignore` 只能忽略未跟踪文件，需要把已经被远端 `main` 跟踪的 `CONTRIBUTING.md` 真正从 Git 索引中移除，并保持通过 PR 合并而不是直推 `main`。
 - **AI 动作**：

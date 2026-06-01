@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - 数据库设计文档
 
 ## 0. 变更记录
+- 2026-06-01：知识漫游复习前端构建收尾；本次仅修复前端 `reviewStore` 重复声明与测试 mock 的 `session_outline` 对齐问题，不涉及数据库表结构、字段、索引、迁移、事务边界或写入时机变更。
 - 2026-06-01：仓库 Git 治理收尾；本次仅移除 `CONTRIBUTING.md` 的版本跟踪并保留本地文件，不涉及数据库表结构、字段、索引、迁移、事务边界或写入时机变更。
 - 2026-06-01：最小可回滚修复：本轮不涉及数据库表结构、字段、索引或迁移；仅修复 `backend/internal/service` 中基于 SQLite 的测试库隔离，避免共享内存 DSN 导致 `users.email` 唯一键冲突，并统一文档中的 Compose 启动命令为 `docker compose --env-file backend/.env ...`。
 - 2026-06-01：系列章节质量流水线继续落地 Task 5。本次仅扩展前端 `streamStore`、SSE 事件消费与进度卡展示，让章节质量阶段和 DeepSeek Prompt Cache 命中摘要对用户可见；不新增表、字段、索引、迁移脚本，也不改变任何落库时机。
