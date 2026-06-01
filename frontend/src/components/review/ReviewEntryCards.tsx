@@ -8,6 +8,7 @@ interface ReviewEntryCardsProps {
   isLoadingRecommendation: boolean
   onRefreshRecommendation: () => Promise<void> | void
   onStartRecommendation: () => Promise<void> | void
+  onStartQuestionRecommendation: () => Promise<void> | void
   onOpenPicker: () => Promise<void> | void
 }
 
@@ -23,8 +24,10 @@ function ReviewCard({
   detail,
   loading,
   actionLabel,
+  questionActionLabel,
   refreshLabel,
   onAction,
+  onQuestionAction,
   onRefresh,
 }: {
   title: string
@@ -33,11 +36,14 @@ function ReviewCard({
   detail: ReviewCardResponse | null
   loading: boolean
   actionLabel: string
+  questionActionLabel: string
   refreshLabel: string
   onAction: () => Promise<void> | void
+  onQuestionAction: () => Promise<void> | void
   onRefresh: () => Promise<void> | void
 }) {
   const Icon = icon
+  const supportsDetailedQuestionMode = detail?.available_modes.includes('detailed_qa') ?? false
 
   return (
     <article className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
@@ -58,11 +64,19 @@ function ReviewCard({
           <span>预计 {detail?.estimated_minutes ?? fallbackCard.estimated_minutes} 分钟</span>
         </div>
       </div>
-      <div className="mt-4 flex gap-3">
-        <Button className="flex-1" onClick={onAction} disabled={loading}>
+      <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+        <Button className="sm:flex-1" onClick={onAction} disabled={loading}>
           {actionLabel}
         </Button>
-        <Button variant="outline" className="flex-1" onClick={onRefresh} disabled={loading}>
+        <Button
+          variant="outline"
+          className="sm:flex-1"
+          onClick={onQuestionAction}
+          disabled={loading || !supportsDetailedQuestionMode}
+        >
+          {questionActionLabel}
+        </Button>
+        <Button variant="outline" className="sm:flex-1" onClick={onRefresh} disabled={loading}>
           {refreshLabel}
         </Button>
       </div>
@@ -80,8 +94,10 @@ export function ReviewEntryCards(props: ReviewEntryCardsProps) {
         detail={props.recommendationCard}
         loading={props.isLoadingRecommendation}
         actionLabel="用这篇开始"
+        questionActionLabel="提问开始"
         refreshLabel="再抽一篇"
         onAction={props.onStartRecommendation}
+        onQuestionAction={props.onStartQuestionRecommendation}
         onRefresh={props.onRefreshRecommendation}
       />
       <article className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">

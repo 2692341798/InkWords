@@ -18,6 +18,7 @@ export function KnowledgeReview() {
   const viewState = getKnowledgeReviewViewState({
     hasSession: Boolean(reviewStore.currentSession),
     isPickerOpen: effectiveIsPickerOpen,
+    shouldEnterSession: reviewStore.shouldResumeSessionOnOpen,
   })
 
   useEffect(() => {
@@ -31,7 +32,7 @@ export function KnowledgeReview() {
   ]
 
   const currentStepMeta = steps[viewState.currentStepIndex]
-  const currentEntrySummary = reviewStore.currentSession
+  const currentEntrySummary = viewState.currentStep === 'session' && reviewStore.currentSession
     ? reviewStore.currentSession.title
     : effectiveIsPickerOpen
       ? '手动选择文章'
@@ -86,7 +87,12 @@ export function KnowledgeReview() {
               <ReviewEntryCards
                 recommendationCard={reviewStore.recommendationCard}
                 isLoadingRecommendation={reviewStore.isLoadingRecommendation}
-                onRefreshRecommendation={() => reviewStore.refreshRecommendation()}
+                onRefreshRecommendation={async () => {
+                  // Why: 重新抽题代表用户要放弃上一轮主题，先清掉潜在的旧会话，
+                  // 避免“候选已刷新，但页面还被旧 session 推进到第 3 步”。
+                  clearSession()
+                  await reviewStore.refreshRecommendation()
+                }}
                 onStartRecommendation={async () => {
                   if (!reviewStore.recommendationCard) {
                     await reviewStore.loadRecommendation()
@@ -96,7 +102,20 @@ export function KnowledgeReview() {
                     await startSession(card, 'manual_random')
                   }
                 }}
+                onStartQuestionRecommendation={async () => {
+                  if (!reviewStore.recommendationCard) {
+                    await reviewStore.loadRecommendation()
+                  }
+                  const card = useReviewStore.getState().recommendationCard
+                  if (card) {
+                    // Why: “提问开始”是一个显式模式入口，点击后要先把页面状态切到细致提问，
+                    // 再复用现有推荐卡片开局流程，确保后续会话和右侧摘要都保持一致。
+                    reviewStore.setSelectedMode('detailed_qa')
+                    await startSession(card, 'manual_random', 'detailed_qa')
+                  }
+                }}
                 onOpenPicker={async () => {
+                  clearSession()
                   setIsPickerOpen(true)
                   await reviewStore.loadNotes()
                 }}

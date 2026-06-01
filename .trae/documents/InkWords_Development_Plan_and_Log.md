@@ -43,6 +43,19 @@
 | | 类似 Notion 的二次编辑器与状态同步 | 中 | 2 天 |
 | **Integration** | 第三方发文 OpenAPI 对接与 Token 加密 | 高 (各平台不一) | 3 天 |
 
+### [2026-06-01] Fix - 知识复习提问入口与恢复会话行为修复
+- **开发模块**: [Frontend Review, HomeEntry, Zustand, TDD, Docs-as-Code]
+- **完成事项**:
+  1. 在 `ReviewEntryCards` 的随机推荐卡中新增显式 `提问开始` 按钮，并保持 `用这篇开始 / 提问开始 / 再抽一篇` 三动作结构。
+  2. 为 `useKnowledgeReview.startSession` 增加显式 `modeOverride`，修复“提问开始”实际仍用旧 `selectedMode` 创建会话的问题；`KnowledgeReview` 在点击 `提问开始` 时显式传入 `detailed_qa`。
+  3. 修复恢复本地活动 session 时会被 `initialize()` 打回入口的状态回归；首页 `HomeEntry` 只把 `status !== completed` 的复习会话当作可继续任务。
+  4. 为避免入口暴露无效模式，推荐卡仅在题卡 `available_modes` 包含 `detailed_qa` 时允许点击 `提问开始`；否则按钮保持禁用态。
+- **验证**:
+  - `cd frontend && npm run test -- src/components/review/ReviewEntryCards.test.tsx src/pages/KnowledgeReview.test.tsx src/pages/knowledgeReviewViewState.test.ts src/store/reviewStore.test.ts src/hooks/useKnowledgeReview.test.tsx src/pages/HomeEntry.test.tsx` 通过
+  - `cd frontend && npm run build` 通过
+  - `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build` 完成
+  - `curl -I http://localhost` 返回 `HTTP/1.1 200 OK`
+
 ### [2026-05-29] Fix - Review 随机抽题去除顺序偏置
 - **开发模块**: [Backend Review Domain, Picker, TDD, Docs-as-Code]
 - **完成事项**:
