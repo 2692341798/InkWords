@@ -1,6 +1,19 @@
 # 墨言知识训练平台 (InkWords Trainer) - 开发计划与日志
 > **目标**：跟踪项目的核心开发模块、里程碑进度以及每日开发记录。
 
+### [2026-06-01] Chore - 取消跟踪本地协作辅助文件 `CONTRIBUTING.md`
+- **需求背景**：
+  1. 用户希望 `CONTRIBUTING.md` 与系列质量流水线计划稿都不再被 Git 跟踪。
+  2. 上一轮 `.gitignore` 虽已生效，但由于远端 `main` 先前已纳入 `CONTRIBUTING.md`，仅靠忽略规则无法让它自动退出版本控制。
+- **本次完成**：
+  1. 先用 `git ls-files --stage CONTRIBUTING.md` 复核，确认该文件仍在索引中，而 `docs/superpowers/plans/2026-06-01-series-chapter-quality-pipeline.md` 已仅由 `.gitignore` 忽略。
+  2. 按 Docs-as-Code 要求同步 `API / Architecture / Conversation_Log / Database / Development_Plan_and_Log / PRD / README`，把这次变更明确记录为“仓库治理收尾”，避免 review 时误判为漏更文档。
+  3. 对 `CONTRIBUTING.md` 执行 `git rm --cached`，只移除 Git 跟踪，不删除本地工作文件；随后创建最小分支、提交、发起 PR 并合并回 `main`。
+- **验证记录**：
+  - `git ls-files --stage CONTRIBUTING.md docs/superpowers/plans/2026-06-01-series-chapter-quality-pipeline.md .gitignore` 用于确认提交前基线
+  - `git diff --staged` 用于复核本次最小变更范围
+  - 合并后用 `git ls-files CONTRIBUTING.md`、`git status`、`git pull --ff-only origin main` 复核本地与远端同步状态
+
 ### [2026-06-01] Fix - service 测试隔离与 Compose 命令统一
 - **需求背景**：
   1. 后端 `internal/service` 全量测试因 SQLite 共享内存 DSN 导致 `users.email` 唯一键冲突，阻塞了本轮提交收尾。

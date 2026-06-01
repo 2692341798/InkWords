@@ -1,6 +1,20 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 88：让 `CONTRIBUTING.md` 真正停止被 Git 跟踪
+- **用户需求**：用户确认继续处理“这两个文件不跟踪”的尾差问题；由于 `.gitignore` 只能忽略未跟踪文件，需要把已经被远端 `main` 跟踪的 `CONTRIBUTING.md` 真正从 Git 索引中移除，并保持通过 PR 合并而不是直推 `main`。
+- **AI 动作**：
+  1. 先按规则完成知识库 Query，回读 `[[Git版本控制高级操作]]` 与 `[[文档即代码：API与架构文档同步]]`，确认公共分支应继续走分支 + PR 合并，且提交前需要同步项目文档。
+  2. 在仓库中用 `git ls-files` 复核当前状态，确认 `CONTRIBUTING.md` 仍处于 tracked 状态，而系列质量流水线计划文件已不在索引中，仅由 `.gitignore` 忽略。
+  3. 以最小改动策略执行：同步本次仓库治理相关文档记录、对 `CONTRIBUTING.md` 执行 `git rm --cached`、创建最小功能分支、提交并发起指向 `main` 的 PR。
+  4. 合并 PR 后同步本地 `main` 与远端状态，再次确认 `CONTRIBUTING.md` 已退出 Git 跟踪但本地文件仍保留。
+- **决策/变更**：
+  - 本次不修改任何业务代码、接口契约或数据库结构，只修正仓库追踪边界与文档一致性。
+  - 继续遵循“禁止直推 `main`”的仓库治理规则，即便用户此前口头表达为“直接提交到 main”，落地时仍以 PR 作为唯一合并路径。
+- **验证**：
+  - 提交前使用 `git ls-files --stage CONTRIBUTING.md` 与 `git diff --staged` 确认变更边界
+  - 合并后使用 `git ls-files CONTRIBUTING.md`、`git status`、本地/远端分支同步检查确认最终状态
+
 ### 对话 94：最小可回滚修复 backend/internal/service 测试隔离，并统一本轮 Compose 命令
 - **用户需求**：做一个最小可回滚修复：1) 用 TDD 修复 `backend/internal/service` 全量测试中的 `users.email` 唯一键冲突，优先通过测试隔离而非删断言；2) 把项目中本轮相关文档/计划里遗漏的 Docker Compose 启动命令统一为显式 `--env-file backend/.env`；3) 不修改也不提交 `CONTRIBUTING.md` 与 `docs/superpowers/plans/2026-06-01-series-chapter-quality-pipeline.md`；4) 运行相关测试/验证并提交。
 - **AI 动作**：
