@@ -4,6 +4,18 @@ import { useStreamStore } from '@/store/streamStore'
 
 import { CheckCircle2, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import type { ChapterPhase } from '@/store/streamStore'
+
+const phaseLabelMap: Record<ChapterPhase, string> = {
+  pending: '等待中',
+  understanding: '理解章节',
+  drafting: '生成草稿',
+  reviewing: '技术审稿',
+  revising: '定向补强',
+  streaming: '输出终稿',
+  completed: '已完成',
+  error: '失败',
+}
 
 export function GeneratorStatus() {
   const store = useStreamStore()
@@ -122,6 +134,8 @@ export function GeneratorStatus() {
               <div className="space-y-3 pb-8">
                 {[...store.outline].sort((a,b)=>a.sort-b.sort).map(chapter => {
                   const status = store.chapterStatus[chapter.sort] || 'pending';
+                  const phase = store.chapterPhases?.[chapter.sort] || 'pending';
+                  const usage = store.chapterUsage?.[chapter.sort];
                   const content = store.chapterContents[chapter.sort] || '';
                   const snippet = content.length > 80 ? '...' + content.slice(-80) : content;
                   return (
@@ -147,6 +161,14 @@ export function GeneratorStatus() {
                           {status === 'generating' ? '生成中' : status === 'completed' ? '已完成' : status === 'pending' ? '等待中' : status}
                         </span>
                       </div>
+                      <div className="text-xs text-zinc-500 dark:text-zinc-400">
+                        质量阶段：{phaseLabelMap[phase]}
+                      </div>
+                      {usage ? (
+                        <div className="text-xs text-zinc-500 dark:text-zinc-400">
+                          缓存命中 {usage.prompt_cache_hit_tokens} / 未命中 {usage.prompt_cache_miss_tokens}
+                        </div>
+                      ) : null}
                       {snippet && (
                         <div className="text-sm text-zinc-500 dark:text-zinc-400 font-mono bg-zinc-100/50 dark:bg-zinc-900/50 p-3 rounded-lg border border-zinc-100 dark:border-zinc-800/50 line-clamp-2 leading-relaxed">
                           {snippet}
@@ -180,6 +202,14 @@ export function GeneratorStatus() {
                         {store.chapterStatus[0] === 'generating' ? '生成中' : store.chapterStatus[0] === 'completed' ? '已完成' : store.chapterStatus[0] === 'pending' ? '等待中' : store.chapterStatus[0]}
                       </span>
                     </div>
+                    <div className="text-xs text-zinc-500 dark:text-zinc-400">
+                      质量阶段：{phaseLabelMap[store.chapterPhases?.[0] || 'pending']}
+                    </div>
+                    {store.chapterUsage?.[0] ? (
+                      <div className="text-xs text-zinc-500 dark:text-zinc-400">
+                        缓存命中 {store.chapterUsage[0].prompt_cache_hit_tokens} / 未命中 {store.chapterUsage[0].prompt_cache_miss_tokens}
+                      </div>
+                    ) : null}
                     {store.chapterContents[0] && (
                       <div className="text-sm text-zinc-500 dark:text-zinc-400 font-mono bg-zinc-100/50 dark:bg-zinc-900/50 p-3 rounded-lg border border-zinc-100 dark:border-zinc-800/50 line-clamp-2 leading-relaxed">
                         {store.chapterContents[0].length > 80 ? '...' + store.chapterContents[0].slice(-80) : store.chapterContents[0]}

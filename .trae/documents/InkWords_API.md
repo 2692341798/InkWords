@@ -1,6 +1,13 @@
 # 墨言知识训练平台 (InkWords Trainer) - API 接口文档
 
 ## 0. 变更记录
+- 2026-06-01：最小可回滚修复：本轮未新增或修改任何 API 路由、请求字段或 SSE 事件；仅通过 TDD 修复 `backend/internal/service` 的 SQLite 测试隔离问题，并把本轮交付文档中的 Compose 启动命令统一为 `docker compose --env-file backend/.env ...`，保证验证步骤与实际运行约定一致。
+- 2026-06-01：系列章节质量流水线完成 Task 6 文档同步与验证收尾。`/api/v1/stream/generate` 的系列章节 SSE 契约已与当前前端消费实现对齐：前端直接消费 `understanding / drafting / reviewing / revising / streaming / usage / completed / error`，其中 `content` 仅在 `streaming` 阶段出现，`usage` 阶段返回缓存命中统计；本轮已完成前端全量测试与 Docker `http://localhost` 冒烟验证。注意：本轮 Compose 验证命令统一为 `docker compose --env-file backend/.env ...`；不要再省略 `--env-file backend/.env`，否则 `OBSIDIAN_VAULT_PATH` 等变量可能不会被 Compose 正确加载。
+- 2026-06-01：系列章节质量流水线继续落地 Task 5。前端现已消费 `/api/v1/stream/generate` 既有系列章节 SSE 状态：`understanding`、`drafting`、`reviewing`、`revising`、`streaming`、`usage`、`completed`、`error`；接口路由与请求体不变，但这些状态现在会被前端进度卡直接显示为中文“质量阶段”和“缓存命中 / 未命中”摘要。
+- 2026-06-01：系列章节质量流水线继续落地 Task 4。`/api/v1/stream/generate` 的系列章节链路在终稿补强流式结束后会额外发送 `usage` 状态事件，携带 `prompt_tokens`、`completion_tokens`、`prompt_cache_hit_tokens`、`prompt_cache_miss_tokens`，用于观测同一系列稳定前缀带来的 DeepSeek Prompt Cache 命中情况；路由与请求体保持不变。
+- 2026-06-01：系列章节质量流水线继续落地 Task 3。`/api/v1/stream/generate` 的系列章节主链路已从“单次直接流式生成”切换为“章节理解 -> 草稿写作 -> 技术审稿 -> 定向补强终稿流式输出”；接口路由与请求字段保持不变，但系列章节 SSE 现在会额外发送 `understanding`、`drafting`、`reviewing`、`revising` 四类进度状态，且只有终稿补强阶段才会持续输出 `streaming` 内容块。
+- 2026-06-01：系列章节质量流水线继续落地 Task 2。后端新增稳定系列级提示词前缀 builder 与章节理解阶段 JSON 解析器，用于在后续“理解 -> 草稿 -> 审稿 -> 补强”多阶段之间复用固定前缀、提升提示词前缀稳定性；本次仍不新增、不删除、不修改任何对外 API 路由、请求字段或 SSE 事件。
+- 2026-06-01：系列章节质量流水线开始落地 Task 1。后端新增章节理解/草稿/审稿/终稿的结构化类型与硬门禁校验，用于后续 `/api/v1/stream/generate` 系列章节四段式流水线；本次不新增、不删除、不修改任何对外 API 路由、请求字段或 SSE 事件。
 - 2026-06-01：文件来源 Analyze 链路新增“动态提示词 profile”锁定机制。`POST /api/v1/stream/analyze` 在完成大纲分析后会额外返回 `resolved_prompt_profile`（含 `key`、`display_name`、`document_kind`、`reason`）；`POST /api/v1/stream/generate` 请求新增 `prompt_profile_key`、`document_kind`，用于让单篇/系列生成沿用同一次 Analyze 已锁定的内容类型提示词。
 - 2026-06-01：知识漫游复习会话升级为“文章驱动提问 + 结构化反馈”；`POST /api/v1/review/sessions` 与 `GET /api/v1/review/sessions/:id` 新增 `session_outline`、`current_round_goal`，`POST /api/v1/review/sessions/:id/respond` 新增 `review_feedback` 与 `current_round_goal`，用于明确返回本轮目标、命中点、遗漏点与下一步建议。
 - 2026-05-29：工程化结构拆分 Phase 1：review 领域与 Sidebar/export 逻辑完成模块化拆分，生成链路辅助逻辑拆分为更小文件；本次不新增、不删除、不修改任何对外 API 路由或请求结构。
@@ -143,6 +150,54 @@
   - 去除开头的对话式前言/角色自述，例如“好的，收到你的需求”“作为高级全栈架构师……”“你是一位文本解读专家……”
 - 设计目标：
   - 用户最终看到和落库的正文应只包含 Markdown 正文内容，不应混入模型思考过程或对话式套话
+
+### 4.5 `/api/v1/stream/generate` 系列章节阶段事件
+- 适用范围：
+  - 仅系列章节生成链路；单篇生成与系列导读仍沿用既有事件语义。
+- 新增状态：
+  - `understanding`：章节理解阶段开始
+  - `drafting`：章节草稿生成阶段开始
+  - `reviewing`：章节技术审稿阶段开始
+  - `revising`：终稿补强准备阶段开始
+  - `streaming`：仅终稿补强阶段持续输出正文 chunk
+  - `usage`：终稿补强完成后返回本章节的 DeepSeek usage 与 Prompt Cache 命中统计
+- `usage` 事件载荷：
+  - `prompt_tokens`
+  - `completion_tokens`
+  - `prompt_cache_hit_tokens`
+  - `prompt_cache_miss_tokens`
+- 典型 `event: chunk` 载荷示例：
+
+```json
+{
+  "status": "understanding",
+  "chapter_sort": 1,
+  "title": "Gin 路由"
+}
+```
+
+```json
+{
+  "status": "streaming",
+  "chapter_sort": 1,
+  "title": "Gin 路由",
+  "content": "### 1. 请求先进入 Engine\\n"
+}
+```
+
+```json
+{
+  "status": "usage",
+  "chapter_sort": 1,
+  "prompt_tokens": 1200,
+  "completion_tokens": 500,
+  "prompt_cache_hit_tokens": 900,
+  "prompt_cache_miss_tokens": 300
+}
+```
+- 兼容说明：
+  - 路由、请求体、`completed/error` 终态事件不变。
+  - 旧前端即使暂未消费新增阶段，也仍可通过 `streaming/completed/error` 维持基本链路。
 
 ## 5. 知识漫游复习模块 (ReviewAPI)
 | 接口地址 | 请求方法 | 功能描述 | 参数 |
