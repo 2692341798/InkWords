@@ -1,6 +1,22 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 92：执行系列章节质量流水线 Task 5，补前端阶段显示与缓存命中摘要
+- **用户需求**：按 `docs/superpowers/plans/2026-06-01-series-chapter-quality-pipeline.md` 执行 Task 5，用 TDD 扩展前端 store、`useSeriesGenerator` 与 `GeneratorStatus`，展示章节质量阶段和缓存命中摘要；严格不修改也不提交 `CONTRIBUTING.md` 与计划文档，运行相关前端测试并提交。
+- **AI 动作**：
+  1. 先完成知识库 Query、计划回读与当前前端实现巡检，确认 `streamStore` 仍只有 `chapterStatus/chapterContents`，`useSeriesGenerator` 只能处理旧的 `generating/progress/streaming/completed/error/retrying` 事件，`GeneratorStatus` 也还不能显示章节质量阶段与 usage 摘要。
+  2. 按 TDD 先补红灯测试：在 `streamStore.test.ts` 锁定 `chapterPhases/chapterUsage` 的写入与 reset 行为；新增 `useSeriesGenerator.test.ts`，锁定 `understanding/reviewing/streaming/usage/completed` 等系列章节 chunk 事件必须映射到 store。
+  3. 红灯确认后，在 `streamStore.ts` 最小新增 `ChapterPhase`、`ChapterUsage`、`updateChapterPhase()`、`setChapterUsage()`，并在 `setOutline/reset/stopAllStreams/removeChapter` 中同步维护新状态。
+  4. 在 `useSeriesGenerator.ts` 抽出 `handleSeriesChunkMessage()` 纯函数，把章节质量阶段、正文 streaming、usage 统计和完成/失败事件统一映射到 store；保持现有 SSE 主链路和 raw text fallback 不变。
+  5. 在 `GeneratorStatus.tsx` 继续复用现有卡片结构，只额外增加中文“质量阶段”标签和“缓存命中 / 未命中”摘要；随后同步更新 API / Architecture / Conversation Log / Database / Development Log / PRD / README 的最小文档记录。
+- **决策/变更**：
+  - 本轮采用最小补丁方案，不重构生成器状态机，不新增独立事件适配层，只在现有 Zustand store、Hook 解析入口和进度卡 UI 上追加必要能力。
+  - `CONTRIBUTING.md` 与计划文档保持未修改、未纳入提交；数据库层无任何结构变更，仅在文档中显式标注“本次为前端展示层同步”。
+- **验证**：
+  - `cd frontend && npm run test -- --run src/store/streamStore.test.ts src/hooks/generator/useSeriesGenerator.test.ts` 先失败（缺少 `updateChapterPhase` / `setChapterUsage` / `handleSeriesChunkMessage`）、后通过
+  - `cd frontend && npm run test -- --run src/store/streamStore.test.ts src/hooks/generator/useSeriesGenerator.test.ts src/hooks/generator/streamRequestBuilders.test.ts src/components/generator/GeneratorStageViews.test.tsx` 通过（4 个测试文件、19 个测试）
+  - `cd frontend && npm run build` 通过（保留既有大 chunk warning）
+
 ### 对话 91：执行系列章节质量流水线 Task 4，补 DeepSeek usage 与缓存命中采集
 - **用户需求**：按 `docs/superpowers/plans/2026-06-01-series-chapter-quality-pipeline.md` 执行 Task 4，用 TDD 为 DeepSeek 客户端补 `usage / prompt cache hit` 采集，并把系列章节终稿阶段的 usage 事件透传到 SSE；不要修改 `CONTRIBUTING.md`，运行相关测试并提交。
 - **AI 动作**：

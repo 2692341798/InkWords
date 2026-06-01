@@ -1,6 +1,21 @@
 # 墨言知识训练平台 (InkWords Trainer) - 开发计划与日志
 > **目标**：跟踪项目的核心开发模块、里程碑进度以及每日开发记录。
 
+### [2026-06-01] Feat - 系列章节质量流水线 Task 5 前端阶段显示与缓存摘要
+- **需求背景**：
+  1. Task 4 已把系列章节 `usage` 与缓存命中统计透传进 SSE，但当前前端仍看不到章节处于“理解 / 草稿 / 审稿 / 补强”的哪一步，也无法直接查看缓存命中摘要。
+  2. 当前目标是按 TDD 在前端最小补齐 store、事件映射和进度卡展示，而不改后端协议与大体 UI 结构。
+- **本次完成**：
+  1. 在 `frontend/src/store/streamStore.test.ts` 先补红灯测试，锁定 `chapterPhases/chapterUsage` 的写入与 reset 行为；新增 `frontend/src/hooks/generator/useSeriesGenerator.test.ts`，锁定章节阶段与 usage 事件的 store 映射。
+  2. 在 `frontend/src/store/streamStore.ts` 新增 `ChapterPhase`、`ChapterUsage`、`updateChapterPhase()`、`setChapterUsage()`，并在 `setOutline/reset/stopAllStreams/removeChapter` 中同步维护新状态。
+  3. 在 `frontend/src/hooks/generator/useSeriesGenerator.ts` 抽出 `handleSeriesChunkMessage()`，统一处理 `understanding / drafting / reviewing / revising / streaming / usage / completed / error / retrying` 事件，保持现有 SSE 主链路和 raw text fallback 不变。
+  4. 在 `frontend/src/components/generator/GeneratorStatus.tsx` 进度卡中新增中文“质量阶段”文案和“缓存命中 / 未命中”摘要，继续沿用既有卡片布局。
+  5. 同步更新 API / Architecture / Conversation Log / Database / PRD / README，记录这次前端可见性落地与“无数据库变更”的事实。
+- **验证记录**：
+  - `cd frontend && npm run test -- --run src/store/streamStore.test.ts src/hooks/generator/useSeriesGenerator.test.ts` 先失败（缺少前端阶段状态与事件解析能力）、后通过
+  - `cd frontend && npm run test -- --run src/store/streamStore.test.ts src/hooks/generator/useSeriesGenerator.test.ts src/hooks/generator/streamRequestBuilders.test.ts src/components/generator/GeneratorStageViews.test.tsx` 通过
+  - `cd frontend && npm run build` 通过（存在既有 bundle chunk size warning，但不影响构建产物生成）
+
 ### [2026-06-01] Feat - 系列章节质量流水线 Task 4 usage / cache telemetry
 - **需求背景**：
   1. Task 3 已把系列章节主链路切到 `理解 -> 草稿 -> 审稿 -> 终稿补强`，但目前还无法观测稳定前缀是否真的提升了 DeepSeek 原生 Prompt Cache 命中率。

@@ -35,6 +35,23 @@ export interface ResolvedPromptProfile {
   reason: string
 }
 
+export type ChapterPhase =
+  | 'pending'
+  | 'understanding'
+  | 'drafting'
+  | 'reviewing'
+  | 'revising'
+  | 'streaming'
+  | 'completed'
+  | 'error'
+
+export interface ChapterUsage {
+  prompt_tokens: number
+  completion_tokens: number
+  prompt_cache_hit_tokens: number
+  prompt_cache_miss_tokens: number
+}
+
 interface StreamState {
   sourceType: 'git' | 'file' | null
   sourceContent: string
@@ -45,6 +62,8 @@ interface StreamState {
   seriesTitle: string
   outline: Chapter[] | null
   chapterStatus: Record<number, 'pending' | 'generating' | 'completed' | 'error'>
+  chapterPhases: Record<number, ChapterPhase>
+  chapterUsage: Record<number, ChapterUsage>
   generatedContent: string
   chapterContents: Record<number, string>
   isScanning: boolean
@@ -72,6 +91,8 @@ interface StreamState {
   removeChapter: (sort: number) => void
   moveChapter: (sort: number, direction: 'up' | 'down') => void
   updateChapterStatus: (sort: number, status: 'pending' | 'generating' | 'completed' | 'error') => void
+  updateChapterPhase: (sort: number, phase: ChapterPhase) => void
+  setChapterUsage: (sort: number, usage: ChapterUsage) => void
   appendGeneratedContent: (chunk: string) => void
   appendChapterContent: (sort: number, content: string) => void
   appendChapterContents: (updates: Record<number, string>) => void
@@ -113,6 +134,8 @@ export const useStreamStore = create<StreamState>((set, get) => ({
   seriesTitle: '',
   outline: null,
   chapterStatus: {},
+  chapterPhases: {},
+  chapterUsage: {},
   generatedContent: '',
   chapterContents: {},
   isScanning: false,
@@ -142,11 +165,20 @@ export const useStreamStore = create<StreamState>((set, get) => ({
   setSourceContent: (content) => set({ sourceContent: content }),
   setSeriesTitle: (title) => set({ seriesTitle: title }),
   setScenarioMode: (mode) => set({ scenarioMode: mode }),
-  setOutline: (outline) => set({ 
-    outline,
-    chapterStatus: outline ? outline.reduce((acc, ch) => ({ ...acc, [ch.sort]: 'pending' }), {}) : {},
-    chapterContents: outline ? outline.reduce((acc, ch) => ({ ...acc, [ch.sort]: '' }), {}) : {}
-  }),
+  setOutline: (outline) =>
+    set({
+      outline,
+      chapterStatus: outline
+        ? outline.reduce((acc, ch) => ({ ...acc, [ch.sort]: 'pending' }), {})
+        : {},
+      chapterPhases: outline
+        ? outline.reduce((acc, ch) => ({ ...acc, [ch.sort]: 'pending' }), {})
+        : {},
+      chapterUsage: {},
+      chapterContents: outline
+        ? outline.reduce((acc, ch) => ({ ...acc, [ch.sort]: '' }), {})
+        : {},
+    }),
   updateChapter: (sort, field, value) => set((state) => ({
     outline: state.outline?.map(ch => 
       ch.sort === sort ? { ...ch, [field]: value } : ch
@@ -170,10 +202,20 @@ export const useStreamStore = create<StreamState>((set, get) => ({
       .filter(ch => ch.sort !== sort)
       .map((ch, index) => ({ ...ch, sort: index + 1 }));
     const newStatus = { ...state.chapterStatus };
+    const newPhases = { ...state.chapterPhases };
+    const newUsage = { ...state.chapterUsage };
     const newContents = { ...state.chapterContents };
     delete newStatus[sort];
+    delete newPhases[sort];
+    delete newUsage[sort];
     delete newContents[sort];
-    return { outline: newOutline, chapterStatus: newStatus, chapterContents: newContents };
+    return {
+      outline: newOutline,
+      chapterStatus: newStatus,
+      chapterPhases: newPhases,
+      chapterUsage: newUsage,
+      chapterContents: newContents,
+    };
   }),
   moveChapter: (sort, direction) => set((state) => {
     if (!state.outline) return state;
@@ -197,6 +239,20 @@ export const useStreamStore = create<StreamState>((set, get) => ({
         ...state.chapterStatus,
         [sort]: status
       }
+    })),
+  updateChapterPhase: (sort, phase) =>
+    set((state) => ({
+      chapterPhases: {
+        ...state.chapterPhases,
+        [sort]: phase,
+      },
+    })),
+  setChapterUsage: (sort, usage) =>
+    set((state) => ({
+      chapterUsage: {
+        ...state.chapterUsage,
+        [sort]: usage,
+      },
     })),
   appendGeneratedContent: (chunk) => set((state) => ({ generatedContent: state.generatedContent + chunk })),
   appendChapterContent: (sort, chunk) =>
@@ -288,9 +344,16 @@ export const useStreamStore = create<StreamState>((set, get) => ({
     }
     set((state) => {
       const newStatus = { ...state.chapterStatus };
+      const newPhases = { ...state.chapterPhases };
       Object.keys(newStatus).forEach((key) => {
         if (newStatus[Number(key)] === 'generating') {
           newStatus[Number(key)] = 'pending';
+        }
+        if (
+          newPhases[Number(key)] &&
+          !['pending', 'completed', 'error'].includes(newPhases[Number(key)])
+        ) {
+          newPhases[Number(key)] = 'pending';
         }
       });
       return { 
@@ -299,7 +362,8 @@ export const useStreamStore = create<StreamState>((set, get) => ({
         isGenerating: false, 
         analysisStep: -1, 
         abortController: null,
-        chapterStatus: newStatus
+        chapterStatus: newStatus,
+        chapterPhases: newPhases,
       };
     });
   },
@@ -318,6 +382,8 @@ export const useStreamStore = create<StreamState>((set, get) => ({
       seriesTitle: '',
       outline: null,
       chapterStatus: {},
+      chapterPhases: {},
+      chapterUsage: {},
       generatedContent: '',
       chapterContents: {},
       isScanning: false,

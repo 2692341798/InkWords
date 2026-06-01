@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - API 接口文档
 
 ## 0. 变更记录
+- 2026-06-01：系列章节质量流水线继续落地 Task 5。前端现已消费 `/api/v1/stream/generate` 既有系列章节 SSE 状态：`understanding`、`drafting`、`reviewing`、`revising`、`streaming`、`usage`、`completed`、`error`；接口路由与请求体不变，但这些状态现在会被前端进度卡直接显示为中文“质量阶段”和“缓存命中 / 未命中”摘要。
 - 2026-06-01：系列章节质量流水线继续落地 Task 4。`/api/v1/stream/generate` 的系列章节链路在终稿补强流式结束后会额外发送 `usage` 状态事件，携带 `prompt_tokens`、`completion_tokens`、`prompt_cache_hit_tokens`、`prompt_cache_miss_tokens`，用于观测同一系列稳定前缀带来的 DeepSeek Prompt Cache 命中情况；路由与请求体保持不变。
 - 2026-06-01：系列章节质量流水线继续落地 Task 3。`/api/v1/stream/generate` 的系列章节主链路已从“单次直接流式生成”切换为“章节理解 -> 草稿写作 -> 技术审稿 -> 定向补强终稿流式输出”；接口路由与请求字段保持不变，但系列章节 SSE 现在会额外发送 `understanding`、`drafting`、`reviewing`、`revising` 四类进度状态，且只有终稿补强阶段才会持续输出 `streaming` 内容块。
 - 2026-06-01：系列章节质量流水线继续落地 Task 2。后端新增稳定系列级提示词前缀 builder 与章节理解阶段 JSON 解析器，用于在后续“理解 -> 草稿 -> 审稿 -> 补强”多阶段之间复用固定前缀、提升提示词前缀稳定性；本次仍不新增、不删除、不修改任何对外 API 路由、请求字段或 SSE 事件。
