@@ -24,9 +24,9 @@ func (s *Service) CreateSession(ctx context.Context, userID uuid.UUID, req Creat
 		return ReviewSessionResponse{}, err
 	}
 
-	summarySnapshot, keyPoints := buildSessionSnapshot(note)
-	opening := openingPrompt(req.Mode)
-	hints := initialHints(req.Mode, keyPoints)
+	summarySnapshot, outline := buildSessionSnapshot(note)
+	opening := openingPrompt(req.Mode, outline)
+	hints := initialHints(req.Mode, outline)
 	now := s.now()
 
 	session := model.ReviewSession{
@@ -40,11 +40,14 @@ func (s *Service) CreateSession(ctx context.Context, userID uuid.UUID, req Creat
 		Status:            model.ReviewStatusCreated,
 		EstimatedMinutes:  defaultReviewCardEstimatedMinutes,
 		SummarySnapshot:   summarySnapshot,
-		KeyPointsSnapshot: mustMarshalJSON(keyPoints),
-		MetadataSnapshot:  mustMarshalJSON(map[string]any{"preferred_mode": note.PreferredMode}),
-		MaxHintCount:      2,
-		TurnCount:         1,
-		StartedAt:         now,
+		KeyPointsSnapshot: mustMarshalJSON(outline.Checkpoints),
+		MetadataSnapshot: mustMarshalJSON(sessionMetadata{
+			PreferredMode:  note.PreferredMode,
+			SessionOutline: outline,
+		}),
+		MaxHintCount: 2,
+		TurnCount:    1,
+		StartedAt:    now,
 	}
 
 	if err := s.repo.CreateSession(ctx, &session); err != nil {
@@ -63,15 +66,17 @@ func (s *Service) CreateSession(ctx context.Context, userID uuid.UUID, req Creat
 	}
 
 	return ReviewSessionResponse{
-		SessionID:     session.ID,
-		Status:        session.Status,
-		Mode:          session.Mode,
-		Title:         session.NoteTitle,
-		OpeningPrompt: opening,
-		InitialHints:  hints,
-		NextQuestion:  nextQuestionForSession(session, []model.ReviewTurn{openingTurn}),
-		TurnIndex:     openingTurn.TurnIndex,
-		Turns:         []ReviewTurnResponse{toTurnResponse(openingTurn)},
+		SessionID:        session.ID,
+		Status:           session.Status,
+		Mode:             session.Mode,
+		Title:            session.NoteTitle,
+		OpeningPrompt:    opening,
+		InitialHints:     hints,
+		SessionOutline:   outline,
+		CurrentRoundGoal: currentRoundGoal(session.Mode, 0, outline),
+		NextQuestion:     nextQuestionForSession(session, []model.ReviewTurn{openingTurn}, outline),
+		TurnIndex:        openingTurn.TurnIndex,
+		Turns:            []ReviewTurnResponse{toTurnResponse(openingTurn)},
 	}, nil
 }
 
@@ -114,25 +119,30 @@ func (s *Service) Respond(ctx context.Context, userID uuid.UUID, sessionID uuid.
 	updatedTurns := append(append([]model.ReviewTurn(nil), turns...), answerTurn)
 	session.Status = model.ReviewStatusInProgress
 	session.TurnCount = answerTurn.TurnIndex
+	outline := decodeSessionMetadata(session.MetadataSnapshot).SessionOutline
+	answerCount := countUserAnswers(updatedTurns)
+	reviewFeedback := buildReviewFeedback(outline, answer)
+	roundGoal := currentRoundGoal(session.Mode, answerCount, outline)
 
 	if session.Mode == model.ReviewModeDetailedQA {
-		answerCount := countUserAnswers(updatedTurns)
 		if answerCount >= maxDetailedQARounds {
 			feedback := buildFinalFeedback(session.Mode, updatedTurns)
 			if err := s.completeSession(ctx, &session, updatedTurns, feedback); err != nil {
 				return RespondResponse{}, err
 			}
 			return RespondResponse{
-				SessionID:     session.ID,
-				SessionStatus: session.Status,
-				TurnIndex:     session.TurnCount,
-				Completed:     true,
-				FinalFeedback: feedback,
+				SessionID:        session.ID,
+				SessionStatus:    session.Status,
+				TurnIndex:        session.TurnCount,
+				CurrentRoundGoal: roundGoal,
+				ReviewFeedback:   reviewFeedback,
+				Completed:        true,
+				FinalFeedback:    feedback,
 			}, nil
 		}
 
-		nextQuestion := nextDetailedQuestion(answerCount)
-		stageFeedback := buildStageFeedback(session.Mode, answer)
+		nextQuestion := nextDetailedQuestion(answerCount, outline)
+		stageFeedback := buildStageFeedback(session.Mode, reviewFeedback)
 		questionTurn := model.ReviewTurn{
 			SessionID: session.ID,
 			TurnIndex: answerTurn.TurnIndex + 1,
@@ -150,16 +160,18 @@ func (s *Service) Respond(ctx context.Context, userID uuid.UUID, sessionID uuid.
 		}
 
 		return RespondResponse{
-			SessionID:     session.ID,
-			SessionStatus: session.Status,
-			TurnIndex:     session.TurnCount,
-			StageFeedback: stageFeedback,
-			NextQuestion:  nextQuestion,
-			Completed:     false,
+			SessionID:        session.ID,
+			SessionStatus:    session.Status,
+			TurnIndex:        session.TurnCount,
+			StageFeedback:    stageFeedback,
+			CurrentRoundGoal: currentRoundGoal(session.Mode, answerCount, outline),
+			ReviewFeedback:   reviewFeedback,
+			NextQuestion:     nextQuestion,
+			Completed:        false,
 		}, nil
 	}
 
-	stageFeedback := buildStageFeedback(session.Mode, answer)
+	stageFeedback := buildStageFeedback(session.Mode, reviewFeedback)
 	feedbackTurn := model.ReviewTurn{
 		SessionID: session.ID,
 		TurnIndex: answerTurn.TurnIndex + 1,
@@ -177,11 +189,13 @@ func (s *Service) Respond(ctx context.Context, userID uuid.UUID, sessionID uuid.
 	}
 
 	return RespondResponse{
-		SessionID:     session.ID,
-		SessionStatus: session.Status,
-		TurnIndex:     session.TurnCount,
-		StageFeedback: stageFeedback,
-		Completed:     false,
+		SessionID:        session.ID,
+		SessionStatus:    session.Status,
+		TurnIndex:        session.TurnCount,
+		StageFeedback:    stageFeedback,
+		CurrentRoundGoal: roundGoal,
+		ReviewFeedback:   reviewFeedback,
+		Completed:        false,
 	}, nil
 }
 
@@ -198,8 +212,8 @@ func (s *Service) RequestHint(ctx context.Context, userID uuid.UUID, sessionID u
 		return HintResponse{}, errReviewHintExhausted
 	}
 
-	keyPoints := decodeStringSlice(session.KeyPointsSnapshot)
-	hintText := buildHintText(session, turns, keyPoints)
+	outline := decodeSessionMetadata(session.MetadataSnapshot).SessionOutline
+	hintText := buildHintText(session, turns, outline)
 	hintTurn := model.ReviewTurn{
 		SessionID: session.ID,
 		TurnIndex: nextTurnIndex(turns),
@@ -321,21 +335,25 @@ func buildSessionResponse(session model.ReviewSession, turns []model.ReviewTurn)
 			break
 		}
 	}
+	metadata := decodeSessionMetadata(session.MetadataSnapshot)
 
 	return ReviewSessionResponse{
-		SessionID:     session.ID,
-		Status:        session.Status,
-		Mode:          session.Mode,
-		Title:         session.NoteTitle,
-		OpeningPrompt: opening,
-		InitialHints:  initialHints(session.Mode, decodeStringSlice(session.KeyPointsSnapshot)),
-		NextQuestion:  nextQuestionForSession(session, turns),
-		TurnIndex:     len(turns),
-		Turns:         toTurnResponses(turns),
+		SessionID:            session.ID,
+		Status:               session.Status,
+		Mode:                 session.Mode,
+		Title:                session.NoteTitle,
+		OpeningPrompt:        opening,
+		InitialHints:         initialHints(session.Mode, metadata.SessionOutline),
+		SessionOutline:       metadata.SessionOutline,
+		CurrentRoundGoal:     currentRoundGoal(session.Mode, countUserAnswers(turns), metadata.SessionOutline),
+		LatestReviewFeedback: latestReviewFeedback(metadata.SessionOutline, turns),
+		NextQuestion:         nextQuestionForSession(session, turns, metadata.SessionOutline),
+		TurnIndex:            len(turns),
+		Turns:                toTurnResponses(turns),
 	}
 }
 
-func nextQuestionForSession(session model.ReviewSession, turns []model.ReviewTurn) string {
+func nextQuestionForSession(session model.ReviewSession, turns []model.ReviewTurn, outline SessionOutline) string {
 	if session.Mode != model.ReviewModeDetailedQA || isClosedStatus(session.Status) {
 		return ""
 	}
@@ -344,5 +362,14 @@ func nextQuestionForSession(session model.ReviewSession, turns []model.ReviewTur
 	if answerCount >= maxDetailedQARounds {
 		return ""
 	}
-	return nextDetailedQuestion(answerCount)
+	return nextDetailedQuestion(answerCount, outline)
+}
+
+func latestReviewFeedback(outline SessionOutline, turns []model.ReviewTurn) *ReviewFeedback {
+	answer := lastUserAnswer(turns)
+	if strings.TrimSpace(answer) == "" {
+		return nil
+	}
+	feedback := buildReviewFeedback(outline, answer)
+	return &feedback
 }

@@ -37,6 +37,11 @@ type Service struct {
 	now        func() time.Time
 }
 
+type sessionMetadata struct {
+	PreferredMode  string         `json:"preferred_mode"`
+	SessionOutline SessionOutline `json:"session_outline"`
+}
+
 // NewService 创建 review 领域服务。
 func NewService(repo Repository, noteSource NoteSource) *Service {
 	return &Service{
@@ -133,6 +138,17 @@ func decodeStringSlice(raw []byte) []string {
 		return []string{}
 	}
 	return values
+}
+
+func decodeSessionMetadata(raw []byte) sessionMetadata {
+	var metadata sessionMetadata
+	if len(raw) == 0 {
+		return sessionMetadata{}
+	}
+	if err := json.Unmarshal(raw, &metadata); err != nil {
+		return sessionMetadata{}
+	}
+	return metadata
 }
 
 func mustMarshalJSON(value any) datatypes.JSON {

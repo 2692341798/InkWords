@@ -1,6 +1,18 @@
 # 墨言知识训练平台 (InkWords Trainer) - 开发计划与日志
 > **目标**：跟踪项目的核心开发模块、里程碑进度以及每日开发记录。
 
+### [2026-06-01] Feature - 复习会话升级为文章驱动提问与结构化反馈
+- **需求背景**：
+  1. 用户指出当前知识漫游复习“提问太呆板、反馈太泛”，回答后无法判断自己到底说对了还是说错了。
+  2. 目标不是增加考试式打分，而是把复习体验升级为“按文章内容追问，并清楚指出命中点和遗漏点”。
+- **本次完成**：
+  1. 后端 `review` 会话创建阶段新增 `session_outline` 提炼，返回文章主问题、核心概念、步骤/场景与 checkpoints，并据此生成 `current_round_goal` 与针对性追问。
+  2. `Respond` 返回新增结构化 `review_feedback`（`judgement / hit_points / missed_points / suggestion`），前端 `ReviewSessionCard` 新增“本轮目标 / 你答到的点 / 你还漏掉的点 / 下一步建议”展示。
+  3. 补齐 review 域后端测试与前端服务/Hook/组件测试，确保结构化问答与反馈链路可回归验证。
+- **验证记录**：
+  - `cd backend && go test ./internal/domain/review/...` 通过
+  - `cd frontend && npm run test -- review.test.ts useKnowledgeReview.test.tsx ReviewSessionCard.test.tsx reviewStore.test.ts HomeEntry.test.tsx` 通过
+
 ## 1. 里程碑划分 (Milestones)
 
 ### 阶段 1: MVP (核心单篇生成)

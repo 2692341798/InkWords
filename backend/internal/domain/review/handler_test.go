@@ -85,13 +85,15 @@ func TestHandler_CreateSession_Returns200(t *testing.T) {
 
 	h := NewHandler(&stubHandlerService{
 		sessionResp: ReviewSessionResponse{
-			SessionID:     sessionID,
-			Status:        model.ReviewStatusCreated,
-			Mode:          model.ReviewModeLightRecall,
-			Title:         "Gin 路由",
-			OpeningPrompt: "先别看原文，试着用自己的话讲讲这篇内容。",
-			InitialHints:  []string{"这篇内容主要在解决什么问题？"},
-			TurnIndex:     1,
+			SessionID:        sessionID,
+			Status:           model.ReviewStatusCreated,
+			Mode:             model.ReviewModeLightRecall,
+			Title:            "Gin 路由",
+			OpeningPrompt:    "先别看原文，试着用自己的话讲讲这篇内容。",
+			InitialHints:     []string{"这篇内容主要在解决什么问题？"},
+			SessionOutline:   SessionOutline{Summary: "Gin 路由摘要", MainQuestion: "Gin 路由主要在解决什么问题？", Checkpoints: []string{"先讲清楚路由主线"}},
+			CurrentRoundGoal: "先讲清楚路由主线",
+			TurnIndex:        1,
 		},
 	})
 	r.POST("/api/v1/review/sessions", h.CreateSession)
@@ -123,12 +125,12 @@ func TestHandler_GetHistory_Returns200(t *testing.T) {
 		historyResp: ReviewHistoryResponse{
 			Items: []ReviewHistoryItem{
 				{
-					SessionID:  uuid.New(),
-					Title:      "Gin 路由",
-					SourceTitle:"后端系列",
-					Status:     model.ReviewStatusCompleted,
-					Mode:       model.ReviewModeLightRecall,
-					Summary:    "已经抓住了主线",
+					SessionID:   uuid.New(),
+					Title:       "Gin 路由",
+					SourceTitle: "后端系列",
+					Status:      model.ReviewStatusCompleted,
+					Mode:        model.ReviewModeLightRecall,
+					Summary:     "已经抓住了主线",
 				},
 			},
 			Limit: 5,

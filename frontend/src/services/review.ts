@@ -48,6 +48,22 @@ export interface ReviewTurnResponse {
   content: string
 }
 
+export interface SessionOutline {
+  summary: string
+  main_question: string
+  core_concepts: string[]
+  process_steps: string[]
+  application_cases: string[]
+  checkpoints: string[]
+}
+
+export interface ReviewFeedback {
+  judgement: string
+  hit_points: string[]
+  missed_points: string[]
+  suggestion: string
+}
+
 export interface ReviewSessionResponse {
   session_id: string
   status: string
@@ -55,6 +71,9 @@ export interface ReviewSessionResponse {
   title: string
   opening_prompt: string
   initial_hints: string[]
+  session_outline: SessionOutline
+  current_round_goal?: string
+  latest_review_feedback?: ReviewFeedback | null
   next_question?: string
   turn_index: number
   turns?: ReviewTurnResponse[]
@@ -82,6 +101,8 @@ export interface RespondResponse {
   session_status: string
   turn_index: number
   stage_feedback?: string
+  current_round_goal?: string
+  review_feedback: ReviewFeedback
   next_question?: string
   completed: boolean
   final_feedback: FinalFeedback

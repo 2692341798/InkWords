@@ -82,17 +82,38 @@ type ReviewTurnResponse struct {
 	Content   string `json:"content"`
 }
 
+// SessionOutline 表示基于文章正文提炼出的复习快照。
+type SessionOutline struct {
+	Summary          string   `json:"summary"`
+	MainQuestion     string   `json:"main_question"`
+	CoreConcepts     []string `json:"core_concepts"`
+	ProcessSteps     []string `json:"process_steps"`
+	ApplicationCases []string `json:"application_cases"`
+	Checkpoints      []string `json:"checkpoints"`
+}
+
+// ReviewFeedback 表示一轮回答与文章关键点的对照结果。
+type ReviewFeedback struct {
+	Judgement    string   `json:"judgement"`
+	HitPoints    []string `json:"hit_points"`
+	MissedPoints []string `json:"missed_points"`
+	Suggestion   string   `json:"suggestion"`
+}
+
 // ReviewSessionResponse 表示复习会话详情。
 type ReviewSessionResponse struct {
-	SessionID     uuid.UUID            `json:"session_id"`
-	Status        string               `json:"status"`
-	Mode          string               `json:"mode"`
-	Title         string               `json:"title"`
-	OpeningPrompt string               `json:"opening_prompt"`
-	InitialHints  []string             `json:"initial_hints"`
-	NextQuestion  string               `json:"next_question,omitempty"`
-	TurnIndex     int                  `json:"turn_index"`
-	Turns         []ReviewTurnResponse `json:"turns,omitempty"`
+	SessionID            uuid.UUID            `json:"session_id"`
+	Status               string               `json:"status"`
+	Mode                 string               `json:"mode"`
+	Title                string               `json:"title"`
+	OpeningPrompt        string               `json:"opening_prompt"`
+	InitialHints         []string             `json:"initial_hints"`
+	SessionOutline       SessionOutline       `json:"session_outline"`
+	CurrentRoundGoal     string               `json:"current_round_goal,omitempty"`
+	LatestReviewFeedback *ReviewFeedback      `json:"latest_review_feedback,omitempty"`
+	NextQuestion         string               `json:"next_question,omitempty"`
+	TurnIndex            int                  `json:"turn_index"`
+	Turns                []ReviewTurnResponse `json:"turns,omitempty"`
 }
 
 // RespondRequest 描述用户提交的一轮回答。
@@ -110,13 +131,15 @@ type FinalFeedback struct {
 
 // RespondResponse 表示回答后的状态推进结果。
 type RespondResponse struct {
-	SessionID     uuid.UUID     `json:"session_id"`
-	SessionStatus string        `json:"session_status"`
-	TurnIndex     int           `json:"turn_index"`
-	StageFeedback string        `json:"stage_feedback,omitempty"`
-	NextQuestion  string        `json:"next_question,omitempty"`
-	Completed     bool          `json:"completed"`
-	FinalFeedback FinalFeedback `json:"final_feedback"`
+	SessionID        uuid.UUID      `json:"session_id"`
+	SessionStatus    string         `json:"session_status"`
+	TurnIndex        int            `json:"turn_index"`
+	StageFeedback    string         `json:"stage_feedback,omitempty"`
+	CurrentRoundGoal string         `json:"current_round_goal,omitempty"`
+	ReviewFeedback   ReviewFeedback `json:"review_feedback"`
+	NextQuestion     string         `json:"next_question,omitempty"`
+	Completed        bool           `json:"completed"`
+	FinalFeedback    FinalFeedback  `json:"final_feedback"`
 }
 
 // HintResponse 表示请求提示后的结果。

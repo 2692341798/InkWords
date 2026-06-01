@@ -6,19 +6,26 @@ import (
 	"inkwords-backend/internal/model"
 )
 
-func buildStageFeedback(mode string, answer string) string {
+func buildStageFeedback(mode string, feedback ReviewFeedback) string {
 	if mode == model.ReviewModeDetailedQA {
-		if strings.TrimSpace(answer) == "" {
+		switch feedback.Judgement {
+		case "偏题":
 			return "这一轮先不用展开整篇，只要先回答当前追问即可，下一轮我们再继续往下拆。"
+		case "部分答对":
+			return "这一轮已经抓到一部分主线了，接下来我会沿着还没讲到的关键概念和关系继续追问。"
+		default:
+			return "这一轮已经抓住当前追问的重点了，下一轮我会继续往关键细节和迁移场景推进。"
 		}
-		return "这一轮已经回答了当前追问，接下来我会继续沿着关键概念、步骤关系或因果细节往下追问。"
 	}
 
-	if strings.TrimSpace(answer) == "" {
+	switch feedback.Judgement {
+	case "偏题":
 		return "你已经开始回忆了，接下来可以先补主线，再补一个关键例子。"
+	case "部分答对":
+		return "你已经抓到部分主线了，接下来优先把还没提到的关键概念补完整。"
+	default:
+		return "你已经抓住主线了，接下来可以再补一个关键概念、步骤关系或具体例子。"
 	}
-
-	return "你已经开始抓主线了，接下来可以再补一个关键概念或具体例子。"
 }
 
 func buildFinalFeedback(mode string, turns []model.ReviewTurn) FinalFeedback {
@@ -50,5 +57,85 @@ func buildFinalFeedback(mode string, turns []model.ReviewTurn) FinalFeedback {
 		Strengths: []string{"已经尝试主动回忆并输出主线"},
 		Gaps:      []string{"还可以补一个更具体的例子或迁移场景"},
 		NextFocus: []string{"下次优先讲清楚为什么这样设计"},
+	}
+}
+
+func buildReviewFeedback(outline SessionOutline, answer string) ReviewFeedback {
+	hitPoints := make([]string, 0, len(outline.Checkpoints))
+	missedPoints := make([]string, 0, len(outline.Checkpoints))
+	for _, checkpoint := range outline.Checkpoints {
+		if matchesCheckpoint(checkpoint, answer) {
+			hitPoints = append(hitPoints, checkpoint)
+			continue
+		}
+		missedPoints = append(missedPoints, checkpoint)
+	}
+
+	if len(hitPoints) == 0 && len(missedPoints) == 0 {
+		missedPoints = []string{"还没有覆盖这篇文章的核心主线"}
+	}
+
+	judgement := classifyReviewAnswer(len(hitPoints), len(outline.Checkpoints))
+	return ReviewFeedback{
+		Judgement:    judgement,
+		HitPoints:    ensureFeedbackItems(hitPoints, "已经开始围绕主题作答，但还需要更贴近文章主线"),
+		MissedPoints: ensureFeedbackItems(missedPoints, "可以再补一个更具体的关键点"),
+		Suggestion:   buildReviewSuggestion(judgement, missedPoints),
+	}
+}
+
+func matchesCheckpoint(checkpoint string, answer string) bool {
+	normalizedCheckpoint := normalizeForMatch(checkpoint)
+	normalizedAnswer := normalizeForMatch(answer)
+	if normalizedCheckpoint == "" || normalizedAnswer == "" {
+		return false
+	}
+	if strings.Contains(normalizedAnswer, normalizedCheckpoint) || strings.Contains(normalizedCheckpoint, normalizedAnswer) {
+		return true
+	}
+
+	topic := normalizeForMatch(buildCheckpointTopic(checkpoint))
+	if topic != "" && strings.Contains(normalizedAnswer, topic) {
+		return true
+	}
+
+	return false
+}
+
+func classifyReviewAnswer(hitCount int, total int) string {
+	if total <= 0 {
+		total = 1
+	}
+	switch {
+	case hitCount >= total-1:
+		return "答对较多"
+	case hitCount > 0:
+		return "部分答对"
+	default:
+		return "偏题"
+	}
+}
+
+func ensureFeedbackItems(items []string, fallback string) []string {
+	if len(items) > 0 {
+		return items
+	}
+	return []string{fallback}
+}
+
+func buildReviewSuggestion(judgement string, missedPoints []string) string {
+	switch judgement {
+	case "答对较多":
+		if len(missedPoints) > 0 {
+			return "下一轮重点把这几点补齐：" + strings.Join(missedPoints, "；") + "。"
+		}
+		return "下一轮试着补一个适用场景或迁移例子，让解释更完整。"
+	case "部分答对":
+		if len(missedPoints) > 0 {
+			return "你已经抓到一部分主线，下一轮优先补这几点：" + strings.Join(missedPoints, "；") + "。"
+		}
+		return "你已经抓到一部分主线，下一轮再把关键概念和因果说得更清楚。"
+	default:
+		return "先回到文章主线，优先回答“它主要在解决什么问题，以及核心做法是什么”。"
 	}
 }
