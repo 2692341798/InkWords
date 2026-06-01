@@ -1,6 +1,22 @@
 # 墨言知识训练平台 (InkWords Trainer) - 开发计划与日志
 > **目标**：跟踪项目的核心开发模块、里程碑进度以及每日开发记录。
 
+### [2026-06-01] Docs - 系列章节质量流水线 Task 6 文档同步与最终验证
+- **需求背景**：
+  1. Task 1-5 已完成系列章节质量流水线、缓存命中 telemetry 与前端阶段展示，但还缺少面向交付的最终文档同步、全量测试记录和 Docker 冒烟留痕。
+  2. 当前目标是只补齐计划要求的 6 份文档，并给出真实验证结果与残留风险；不改功能代码，不触碰 `CONTRIBUTING.md`。
+- **本次完成**：
+  1. 回读实现与文档后，补充 `InkWords_API.md` 的系列章节 SSE 载荷示例，明确 `content` 只出现在 `streaming`，`usage` 只返回缓存命中统计。
+  2. 在 `InkWords_Architecture.md`、`InkWords_PRD.md` 与 `README.md` 中补齐当前前端状态消费方式、Docker 环境装载注意事项，以及系列章节质量流水线的验证命令与验收入口 `http://localhost`。
+  3. 在 `InkWords_Conversation_Log.md` 与本日志中记录本轮真实验证，包括后端全量测试失败点、前端全量测试通过，以及 Docker 首次因 `OBSIDIAN_VAULT_PATH` 未导出而失败、随后重试成功的过程。
+- **验证记录**：
+  - `cd backend && go test ./...` 未通过：`internal/service` 中 `TestGenerateSeries_PersistsFinalChapterFromQualityPipeline` 报 `UNIQUE constraint failed: users.email`
+  - `cd frontend && npm run test -- --run` 通过（37 个测试文件、115 个测试）
+  - 直接执行 `docker compose down && docker compose up -d --build` 首次失败：当前 shell 未导出 `OBSIDIAN_VAULT_PATH`
+  - 导出 `backend/.env` 后再次执行 Compose 重建成功
+  - `docker compose ps` 显示 `inkwords-backend/frontend/db/redis/obsidian-bridge` 全部 `Up`
+  - `curl -I http://localhost` 返回 `HTTP/1.1 200 OK`
+
 ### [2026-06-01] Feat - 系列章节质量流水线 Task 5 前端阶段显示与缓存摘要
 - **需求背景**：
   1. Task 4 已把系列章节 `usage` 与缓存命中统计透传进 SSE，但当前前端仍看不到章节处于“理解 / 草稿 / 审稿 / 补强”的哪一步，也无法直接查看缓存命中摘要。
