@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"unicode"
 
 	"github.com/ledongthuc/pdf"
 	"github.com/nguyenthenguyen/docx"
@@ -139,7 +141,63 @@ func (p *DocParser) parsePDF(file *os.File, size int64) (string, error) {
 	}
 	buf.ReadFrom(b)
 
-	return strings.TrimSpace(buf.String()), nil
+	return resolveReadablePDFText(strings.TrimSpace(buf.String()), file.Name())
+}
+
+func isLowQualityPDFExtraction(text string) bool {
+	runes := []rune(strings.TrimSpace(text))
+	if len(runes) < 500 {
+		return false
+	}
+
+	meaningfulRunes := 0
+	replacementRunes := 0
+	controlRunes := 0
+	for _, r := range runes {
+		if unicode.IsSpace(r) {
+			continue
+		}
+		meaningfulRunes++
+		if r == '\uFFFD' {
+			replacementRunes++
+			continue
+		}
+		if unicode.IsControl(r) && r != '\n' && r != '\r' && r != '\t' {
+			controlRunes++
+		}
+	}
+
+	if meaningfulRunes == 0 {
+		return true
+	}
+
+	replacementRatio := float64(replacementRunes) / float64(meaningfulRunes)
+	controlRatio := float64(controlRunes) / float64(meaningfulRunes)
+
+	return replacementRunes >= 50 || replacementRatio >= 0.005 || controlRatio >= 0.01
+}
+
+func resolveReadablePDFText(primaryText, filePath string) (string, error) {
+	if !isLowQualityPDFExtraction(primaryText) {
+		return primaryText, nil
+	}
+
+	fallbackText, fallbackErr := extractPDFTextWithPdftotext(filePath)
+	if fallbackErr == nil && !isLowQualityPDFExtraction(fallbackText) {
+		return fallbackText, nil
+	}
+
+	return "", fmt.Errorf("无法可靠解析该 PDF 文本：检测到严重乱码，可能是扫描版、嵌入字体或当前解析库不兼容。请尝试导出为可复制文本的 PDF，或改用 DOCX/Markdown")
+}
+
+func extractPDFTextWithPdftotext(filePath string) (string, error) {
+	cmd := exec.Command("pdftotext", "-enc", "UTF-8", "-layout", filePath, "-")
+	output, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+
+	return strings.TrimSpace(string(output)), nil
 }
 
 // parsePlainText extracts text from plain text files like Markdown or TXT

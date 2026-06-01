@@ -275,82 +275,12 @@ func (s *DecompositionService) AnalyzeFileStream(
 
 	runes := []rune(sourceContent)
 	var finalContent strings.Builder
+	chunkSize := resolveFileAnalyzeChunkSize(len(runes))
 
-	if len(runes) > 1000000 {
-		chunks := chunkFileContent(sourceContent, 1000000)
+	if chunkSize > 0 {
+		chunks := chunkFileContent(sourceContent, chunkSize)
 		sendProgress(2, fmt.Sprintf("文件较大，开启 Map-Reduce 分析，共 %d 个分块", len(chunks)), nil)
 		summaries := s.mapReduceAnalyzeFile(ctx, chunks, sendProgress)
-
-		if len(summaries) > 20 {
-			sendProgress(2, fmt.Sprintf("局部摘要数量较多 (%d)，正在进行中间层 Tree Reduce 汇总...", len(summaries)), nil)
-			batchSize := 10
-			numBatches := (len(summaries) + batchSize - 1) / batchSize
-			intermediateSummaries := make([]string, numBatches)
-
-			modelStr := "deepseek-v4-flash"
-			if envModel := os.Getenv("DEEPSEEK_MODEL"); envModel != "" {
-				modelStr = envModel
-			}
-
-			maxWorkers := maxWorkersFromEnv(numBatches)
-			treeSem := semaphore.NewWeighted(int64(maxWorkers))
-
-			var treeWg sync.WaitGroup
-			for start := 0; start < len(summaries); start += batchSize {
-				end := start + batchSize
-				if end > len(summaries) {
-					end = len(summaries)
-				}
-				batchIdx := start / batchSize
-				batchSummaries := summaries[start:end]
-				batchContent := strings.Join(batchSummaries, "\n\n")
-
-				treeWg.Add(1)
-				go func(batchIndex int, originalBatchSummaries []string, originalBatchContent string) {
-					defer treeWg.Done()
-					if err := treeSem.Acquire(ctx, 1); err != nil {
-						return
-					}
-					defer treeSem.Release(1)
-
-					prompt := fmt.Sprintf(`你是一个高级内容架构师。以下是一个大型文档的部分局部摘要集合。
-请将这些局部摘要融合成一个中级摘要，提炼出这些章节共同负责的核心主题、业务流程和主要论点。
-重点关注章节间的逻辑连贯性和核心价值，**尽可能保留所有具有独立价值的功能点或模块细节，不要过度压缩导致重要信息丢失**。字数可以放宽至 1500 字左右。
-
-局部摘要如下：
-%s`, originalBatchContent)
-
-					req := []llm.Message{
-						{Role: "system", Content: "你是一个专业的架构师和编辑，擅长将零散的文档摘要归纳为系统化的高层描述。"},
-						{Role: "user", Content: prompt},
-					}
-
-					ctxTimeout, cancel := context.WithTimeout(ctx, 10*time.Minute)
-					defer cancel()
-
-					if err := s.limiter.Wait(ctxTimeout); err != nil {
-						intermediateSummaries[batchIndex] = originalBatchContent
-						return
-					}
-
-					interSummary, err := s.llmClient.Generate(ctxTimeout, modelStr, req)
-					if err != nil {
-						intermediateSummaries[batchIndex] = originalBatchContent
-						return
-					}
-					intermediateSummaries[batchIndex] = interSummary
-				}(batchIdx, batchSummaries, batchContent)
-			}
-
-			treeWg.Wait()
-
-			summaries = nil
-			for _, sum := range intermediateSummaries {
-				if sum != "" {
-					summaries = append(summaries, sum)
-				}
-			}
-		}
 
 		finalContent.WriteString("=== 文档局部精简摘要 ===\n")
 		for _, summary := range summaries {
