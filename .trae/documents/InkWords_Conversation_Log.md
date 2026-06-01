@@ -1,6 +1,21 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 89：执行系列章节质量流水线 Task 2，抽稳定前缀与章节理解阶段
+- **用户需求**：按 `docs/superpowers/plans/2026-06-01-series-chapter-quality-pipeline.md` 执行 Task 2，用 TDD 实现稳定前缀 builder 与章节理解阶段，调整 `prompt_helpers`，运行测试并提交，最后返回改动文件、测试结果与提交哈希。
+- **AI 动作**：
+  1. 先完成知识库 Query 与计划回读，确认当前知识库没有直接约束本次“series quality pipeline Task 2”的历史决策，因此以计划文档和现有 `internal/service` 实现为主，严格控制在后端最小改动范围内。
+  2. 按 TDD 先在 `series_quality_pipeline_test.go` 新增两个失败测试，分别锁定“相同输入必须生成完全一致的系列共享前缀”和“章节理解 JSON 解析后仍需经过结构化门禁校验”；随后执行 `go test`，确认红灯原因为 `buildSeriesSharedPromptPrefix` 与 `parseSeriesChapterUnderstanding` 未定义。
+  3. 新增 `series_quality_pipeline.go`，实现 `buildSeriesSharedPromptPrefix()`、`parseSeriesChapterUnderstanding()` 与 `generateSeriesChapterUnderstanding()`，其中前缀 builder 固定输出系列标题、目标读者、总大纲与统一质量门禁，避免后续多阶段 prompt 每次散乱拼接。
+  4. 在 `decomposition_generate_prompt_helpers.go` 补充 `buildSeriesReaderProfile()`，把“场景模式 -> 读者画像”的映射抽到 helper 层，供后续质量流水线复用；随后修正一个测试输入，使其命中 `must_explain` 门禁而不是更早的 `chapter_goal` 门禁。
+  5. 代码转绿后，同步更新 API / Architecture / Database / Development Log / PRD / README，明确本次只是把稳定前缀与章节理解阶段打底，并未切换现有系列生成主链路或 SSE 协议。
+- **决策/变更**：
+  - Task 2 继续遵循最小改动原则，只实现稳定前缀、理解阶段解析与读者画像 helper，不提前混入 Task 3 的流水线调度、前端进度事件或 DeepSeek usage telemetry。
+  - 稳定前缀选择把“系列级不变信息”放在统一 builder 中，而章节标题、摘要、原始材料等易变内容留在 user message 末尾，符合后续提升 DeepSeek 原生前缀缓存命中率的目标。
+- **验证**：
+  - `cd backend && go test ./internal/service -run 'BuildSeriesSharedPromptPrefix|ParseSeriesChapterUnderstanding' -v` 先失败、后通过
+  - `cd backend && go test ./internal/service -run 'ValidateSeriesChapter|BuildSeriesSharedPromptPrefix|ParseSeriesChapterUnderstanding' -v` 通过
+
 ### 对话 88：执行系列章节质量流水线 Task 1，先落类型与门禁
 - **用户需求**：按 `docs/superpowers/plans/2026-06-01-series-chapter-quality-pipeline.md` 执行 Task 1，用 TDD 实现章节质量结构体与硬门禁校验，运行测试并完成提交，最后返回改动文件、测试结果与提交哈希。
 - **AI 动作**：

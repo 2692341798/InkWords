@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - API 接口文档
 
 ## 0. 变更记录
+- 2026-06-01：系列章节质量流水线继续落地 Task 2。后端新增稳定系列级提示词前缀 builder 与章节理解阶段 JSON 解析器，用于在后续“理解 -> 草稿 -> 审稿 -> 补强”多阶段之间复用固定前缀、提升提示词前缀稳定性；本次仍不新增、不删除、不修改任何对外 API 路由、请求字段或 SSE 事件。
 - 2026-06-01：系列章节质量流水线开始落地 Task 1。后端新增章节理解/草稿/审稿/终稿的结构化类型与硬门禁校验，用于后续 `/api/v1/stream/generate` 系列章节四段式流水线；本次不新增、不删除、不修改任何对外 API 路由、请求字段或 SSE 事件。
 - 2026-06-01：文件来源 Analyze 链路新增“动态提示词 profile”锁定机制。`POST /api/v1/stream/analyze` 在完成大纲分析后会额外返回 `resolved_prompt_profile`（含 `key`、`display_name`、`document_kind`、`reason`）；`POST /api/v1/stream/generate` 请求新增 `prompt_profile_key`、`document_kind`，用于让单篇/系列生成沿用同一次 Analyze 已锁定的内容类型提示词。
 - 2026-06-01：知识漫游复习会话升级为“文章驱动提问 + 结构化反馈”；`POST /api/v1/review/sessions` 与 `GET /api/v1/review/sessions/:id` 新增 `session_outline`、`current_round_goal`，`POST /api/v1/review/sessions/:id/respond` 新增 `review_feedback` 与 `current_round_goal`，用于明确返回本轮目标、命中点、遗漏点与下一步建议。
