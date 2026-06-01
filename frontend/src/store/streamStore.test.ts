@@ -33,4 +33,32 @@ describe('useStreamStore scenario mode', () => {
 
     expect(useStreamStore.getState().scenarioMode).toBe('open_book_exam_review')
   })
+
+  it('stores the resolved prompt profile and clears it on reset', () => {
+    useStreamStore.getState().setResolvedPromptProfile(
+      {
+        key: 'psychology_communication_book',
+        displayName: '心理学经典解读',
+        documentKind: 'psychology_communication',
+        reason: '命中沟通与情绪表达主题',
+      },
+      'resolved',
+    )
+
+    expect(useStreamStore.getState()).toMatchObject({
+      classificationStatus: 'resolved',
+      classificationReason: '命中沟通与情绪表达主题',
+      resolvedPromptProfile: {
+        displayName: '心理学经典解读',
+      },
+    })
+
+    useStreamStore.getState().reset()
+
+    expect(useStreamStore.getState()).toMatchObject({
+      classificationStatus: 'idle',
+      classificationReason: '',
+      resolvedPromptProfile: null,
+    })
+  })
 })

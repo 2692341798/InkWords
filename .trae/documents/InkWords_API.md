@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - API 接口文档
 
 ## 0. 变更记录
+- 2026-06-01：文件来源 Analyze 链路新增“动态提示词 profile”锁定机制。`POST /api/v1/stream/analyze` 在完成大纲分析后会额外返回 `resolved_prompt_profile`（含 `key`、`display_name`、`document_kind`、`reason`）；`POST /api/v1/stream/generate` 请求新增 `prompt_profile_key`、`document_kind`，用于让单篇/系列生成沿用同一次 Analyze 已锁定的内容类型提示词。
 - 2026-06-01：知识漫游复习会话升级为“文章驱动提问 + 结构化反馈”；`POST /api/v1/review/sessions` 与 `GET /api/v1/review/sessions/:id` 新增 `session_outline`、`current_round_goal`，`POST /api/v1/review/sessions/:id/respond` 新增 `review_feedback` 与 `current_round_goal`，用于明确返回本轮目标、命中点、遗漏点与下一步建议。
 - 2026-05-29：工程化结构拆分 Phase 1：review 领域与 Sidebar/export 逻辑完成模块化拆分，生成链路辅助逻辑拆分为更小文件；本次不新增、不删除、不修改任何对外 API 路由或请求结构。
 - 2026-05-29：知识漫游复习入口调整为“随机抽题 + 手动选文”双入口；`POST /api/v1/review/pick` 的后端实现改为从候选集中真正随机选题，不再固定返回首个符合条件的笔记。`GET /api/v1/review/today` 路由保留以兼容既有客户端，但当前前端主入口不再展示“今日推荐”卡片。
@@ -69,8 +70,8 @@
 | 接口地址 | 请求方法 | 功能描述 | 参数 |
 | -------- | -------- | -------- | ---- |
 | `/api/v1/stream/scan` | POST | 快速扫描 Git 仓库一级目录并通过 README 智能提取描述 | `{ git_url }` -> SSE Stream |
-| `/api/v1/stream/analyze` | POST | 实时流式拉取 Git 或解析长文本文件生成大纲 | `{ git_url, selected_modules, source_type, source_content, scenario_mode }` -> SSE Stream；当请求仅包含 `source_content` 且未传 `git_url` 时，后端会兼容判定为 `file` 来源 |
-| `/api/v1/stream/generate` | POST | 根据大纲或内容流式生成博客章节 | `{ source_content, source_type, git_url, outline, series_title, parent_id, article_style, scenario_mode }` -> SSE Stream |
+| `/api/v1/stream/analyze` | POST | 实时流式拉取 Git 或解析长文本文件生成大纲 | `{ git_url, selected_modules, source_type, source_content, scenario_mode }` -> SSE Stream；当请求仅包含 `source_content` 且未传 `git_url` 时，后端会兼容判定为 `file` 来源；文件来源完成时会在结果中返回 `resolved_prompt_profile` |
+| `/api/v1/stream/generate` | POST | 根据大纲或内容流式生成博客章节 | `{ source_content, source_type, git_url, outline, series_title, parent_id, article_style, scenario_mode, prompt_profile_key, document_kind }` -> SSE Stream |
 | `/api/v1/blogs/:id/continue` | POST | 继续生成被截断的单篇博客 (Legacy) | 无 -> SSE Stream |
 | `/api/v1/blogs/:id/polish` | POST | 对当前草稿全文润色并返回“润色草稿” | `{ title, content }` -> SSE Stream |
 
@@ -90,20 +91,46 @@
   - `file` 及其它来源 -> `ebook_interpretation`
 - 作用：
   - 控制大纲拆解偏向“章节解读 / 考点速查 / 学习路径”中的哪一种结构。
+- 文件来源补充能力：
+  - 当 `source_type=file` 时，后端会在大纲生成前先做一次轻量内容分类，为当前文件锁定最匹配的动态提示词 profile。
+  - Analyze 完成事件中的 `content` 会额外包含 `resolved_prompt_profile`，结构如下：
+
+```json
+{
+  "series_title": "《非暴力沟通》解读",
+  "chapters": [],
+  "resolved_prompt_profile": {
+    "key": "psychology_communication_book",
+    "display_name": "心理学经典解读",
+    "document_kind": "psychology_communication",
+    "reason": "已根据文件内容自动匹配提示词。"
+  }
+}
+```
+
+- 回退策略：
+  - 若分类器不可用、内容为空、返回非法 key 或 JSON 解析失败，后端会按 `scenario_mode` 回退到默认 profile，并在 `reason` 中明确标记“已回退到默认提示词”。
 - 前端交互约束：
   - 用户可在发起 Analyze 前手动切换 `scenario_mode`。
   - 大纲返回后，前端会锁定本次 Analyze 使用的 `scenario_mode`，隐藏选择器并以只读标签展示当前场景，避免“大纲按 A 分析、正文按 B 生成”的歧义。
+  - 当返回 `resolved_prompt_profile` 时，前端会在大纲区额外显示“当前提示词类型”只读标签，并将该 profile 锁定到后续 Generate 请求。
 
 ### 4.3 `/api/v1/stream/generate` 请求补充说明
 - 新增字段：`scenario_mode`
+- 新增字段：`prompt_profile_key`、`document_kind`
 - 作用范围：
   - 单篇生成
   - 系列章节生成
   - 系列导读生成
+- 字段作用：
+  - `prompt_profile_key`：指定当前生成链路沿用的动态提示词 profile key。
+  - `document_kind`：记录当前文件被识别出的文档类别，便于前后端保持一致语义。
 - 兼容策略：
   - 旧前端不传 `scenario_mode` 仍可调用，后端按 `source_type` 自动回填默认值。
+  - 旧前端不传 `prompt_profile_key` 或传非法值时，后端会按 `scenario_mode` 自动回退到默认 profile，保证旧链路可继续工作。
 - 前端约束：
   - 当本次任务已经生成大纲时，Generate 会沿用该次 Analyze 已锁定的 `scenario_mode`，不再允许用户在大纲生成后修改。
+  - 当本次任务来自文件 Analyze，Generate 会同时沿用 Analyze 返回的 `resolved_prompt_profile.key` 与 `resolved_prompt_profile.document_kind`，避免“大纲像心理学解读、正文又回退成通用技术博客”的漂移。
 
 ### 4.4 流式正文清洗约束
 - 适用范围：
@@ -113,7 +140,7 @@
 - 清洗目标：
   - 剥离 `<think>...</think>` 思考标签块
   - 跳过 `reasoning_content`
-  - 去除开头的对话式前言/角色自述，例如“好的，收到你的需求”“作为高级全栈架构师……”
+  - 去除开头的对话式前言/角色自述，例如“好的，收到你的需求”“作为高级全栈架构师……”“你是一位文本解读专家……”
 - 设计目标：
   - 用户最终看到和落库的正文应只包含 Markdown 正文内容，不应混入模型思考过程或对话式套话
 

@@ -29,6 +29,7 @@ export function Generator() {
     modules: store.modules,
     outline: store.outline,
     scenarioMode: store.scenarioMode,
+    resolvedPromptProfile: store.resolvedPromptProfile,
     isScanning: store.isScanning,
     isAnalyzing: store.isAnalyzing,
     isGenerating: store.isGenerating,
@@ -292,6 +293,7 @@ export function Generator() {
           {viewState.currentStage === 'outline' ? (
             <GeneratorOutlineStage
               lockedScenarioLabel={viewState.lockedScenarioLabel}
+              lockedPromptProfileLabel={viewState.lockedPromptProfileLabel}
               onBack={backFromOutline}
               outlineEditor={
                 <GeneratorOutline

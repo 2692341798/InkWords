@@ -10,6 +10,7 @@ describe('getGeneratorViewState', () => {
         modules: null,
         outline: null,
         scenarioMode: 'open_book_exam_review',
+        resolvedPromptProfile: null,
         isScanning: false,
         isAnalyzing: false,
         isGenerating: false,
@@ -31,6 +32,7 @@ describe('getGeneratorViewState', () => {
         modules: null,
         outline: null,
         scenarioMode: 'ebook_interpretation',
+        resolvedPromptProfile: null,
         isScanning: false,
         isAnalyzing: true,
         isGenerating: false,
@@ -51,6 +53,7 @@ describe('getGeneratorViewState', () => {
         modules: [{ path: 'cmd', name: 'cmd', description: '入口目录' }],
         outline: [{ sort: 1, title: '第一篇', summary: '摘要' }],
         scenarioMode: 'ebook_interpretation',
+        resolvedPromptProfile: null,
         isScanning: false,
         isAnalyzing: false,
         isGenerating: true,
@@ -60,6 +63,29 @@ describe('getGeneratorViewState', () => {
       currentStepIndex: 2,
       shouldShowInlineProgress: true,
       progressHostStage: 'outline',
+    })
+  })
+
+  it('exposes the locked prompt profile label once outline exists', () => {
+    expect(
+      getGeneratorViewState({
+        sourceType: 'file',
+        sourceContent: 'parsed',
+        modules: null,
+        outline: [{ sort: 1, title: '第二章', summary: '逐章解读' }],
+        scenarioMode: 'ebook_interpretation',
+        resolvedPromptProfile: {
+          key: 'psychology_communication_book',
+          displayName: '心理学经典解读',
+          documentKind: 'psychology_communication',
+          reason: '命中沟通与情绪表达主题',
+        },
+        isScanning: false,
+        isAnalyzing: false,
+        isGenerating: false,
+      }),
+    ).toMatchObject({
+      lockedPromptProfileLabel: '心理学经典解读',
     })
   })
 })

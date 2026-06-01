@@ -14,6 +14,7 @@ import (
 	"inkwords-backend/internal/infra/db"
 	"inkwords-backend/internal/infra/llm"
 	"inkwords-backend/internal/model"
+	"inkwords-backend/internal/prompt"
 )
 
 func TestGeneratorService_saveToDB_RollsBackWhenUserTokenUpdateFails(t *testing.T) {
@@ -88,6 +89,22 @@ func TestGeneratorService_saveToDB_PersistsBlogAndUpdatesTokens(t *testing.T) {
 	var user model.User
 	require.NoError(t, testDB.First(&user, "id = ?", userID).Error)
 	require.Equal(t, 10, user.TokensUsed)
+}
+
+func TestBuildSingleGenerateMessages_UsesResolvedPromptProfileRole(t *testing.T) {
+	profile := prompt.ResolvePromptProfileKey(
+		"psychology_communication_book",
+		prompt.ScenarioModeEbookInterpretation,
+	)
+
+	messages := buildSingleGenerateMessages("源内容", "写作要求", profile)
+
+	require.Len(t, messages, 2)
+	require.Contains(t, messages[0].Content, "心理学")
+	require.Contains(t, messages[0].Content, "项目源内容如下：\n源内容")
+	require.NotContains(t, messages[0].Content, "高级全栈架构师")
+	require.NotContains(t, messages[1].Content, "高级全栈架构师")
+	require.Contains(t, messages[1].Content, "写作要求")
 }
 
 func newGeneratorPersistTestLLMServer(t *testing.T) *httptest.Server {

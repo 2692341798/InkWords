@@ -69,3 +69,24 @@ func (s *PromptRequirementsService) Resolve(
 		userStyleOverride,
 	}, "\n\n")), nil
 }
+
+// ResolveWithProfile 在基础 requirements 前追加 profile 级写作要求，确保分类结果优先生效。
+func (s *PromptRequirementsService) ResolveWithProfile(
+	ctx context.Context,
+	userID uuid.UUID,
+	scenario prompt.ScenarioMode,
+	style prompt.ArticleStyle,
+	profile prompt.PromptProfile,
+) (string, error) {
+	baseRequirements, err := s.Resolve(ctx, userID, scenario, style)
+	if err != nil {
+		return "", err
+	}
+
+	// Why: profile 表达“当前内容类型应该怎么写”，它必须压在场景/风格默认值前面，
+	// 否则旧的通用技术博客要求会重新主导生成结果。
+	return strings.TrimSpace(strings.Join([]string{
+		profile.GenerateRequirements,
+		baseRequirements,
+	}, "\n\n")), nil
+}

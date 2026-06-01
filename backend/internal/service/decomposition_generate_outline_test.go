@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"inkwords-backend/internal/prompt"
 )
 
@@ -51,6 +53,20 @@ func TestOutlineBaseInstruction(t *testing.T) {
 			t.Fatalf("expected beginner walkthrough base instruction, got %q", got)
 		}
 	})
+}
+
+func TestOutlinePromptForProfile_UsesProfileRoleForEbook(t *testing.T) {
+	profile := prompt.ResolvePromptProfileKey(
+		"psychology_communication_book",
+		prompt.ScenarioModeEbookInterpretation,
+	)
+
+	systemRole, instruction := outlinePromptForProfile(prompt.ScenarioModeEbookInterpretation, profile)
+
+	require.Contains(t, systemRole, "心理学")
+	require.NotContains(t, systemRole, "高级架构师")
+	require.Contains(t, instruction, profile.AnalyzeRequirements)
+	require.NotContains(t, instruction, "高级架构师")
 }
 
 func containsAll(text string, parts ...string) bool {

@@ -15,6 +15,8 @@ interface SeriesGenerateRequestInput {
   outline: Chapter[] | null
   parentBlogId: string | null
   scenarioMode: ScenarioMode
+  promptProfileKey?: string
+  documentKind?: string
 }
 
 export function buildSeriesGenerateRequest(input: SeriesGenerateRequestInput) {
@@ -26,18 +28,24 @@ export function buildSeriesGenerateRequest(input: SeriesGenerateRequestInput) {
     outline: input.outline,
     parent_id: input.parentBlogId,
     scenario_mode: input.scenarioMode,
+    prompt_profile_key: input.promptProfileKey,
+    document_kind: input.documentKind,
   }
 }
 
 export function buildSingleGenerateRequest(
   content: string,
   scenarioMode: ScenarioMode,
+  promptProfileKey?: string,
+  documentKind?: string,
 ) {
   return {
     source_type: 'file' as const,
     source_content: content,
     outline: [],
     scenario_mode: scenarioMode,
+    prompt_profile_key: promptProfileKey,
+    document_kind: documentKind,
   }
 }
 
@@ -71,6 +79,8 @@ export const useSeriesGenerator = () => {
             outline: store.outline,
             parentBlogId: store.parentBlogId,
             scenarioMode: store.scenarioMode,
+            promptProfileKey: store.resolvedPromptProfile?.key,
+            documentKind: store.resolvedPromptProfile?.documentKind,
           }),
         ),
         async onopen(response) {
@@ -180,7 +190,12 @@ export const useSeriesGenerator = () => {
         signal: ctrl.signal,
         openWhenHidden: true,
         body: JSON.stringify(
-          buildSingleGenerateRequest(content, store.scenarioMode),
+          buildSingleGenerateRequest(
+            content,
+            store.scenarioMode,
+            store.resolvedPromptProfile?.key,
+            store.resolvedPromptProfile?.documentKind,
+          ),
         ),
         async onopen(response) {
           if (response.ok && response.headers.get('content-type')?.startsWith('text/event-stream')) {

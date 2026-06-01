@@ -1,4 +1,4 @@
-import type { Chapter, ModuleCard } from '@/store/streamStore'
+import type { Chapter, ModuleCard, ResolvedPromptProfile } from '@/store/streamStore'
 import { scenarioModeLabelMap, type ScenarioMode } from '@/lib/scenarioMode'
 
 interface GeneratorViewStateInput {
@@ -7,6 +7,7 @@ interface GeneratorViewStateInput {
   modules: ModuleCard[] | null
   outline: Chapter[] | null
   scenarioMode: ScenarioMode
+  resolvedPromptProfile: ResolvedPromptProfile | null
   isScanning: boolean
   isAnalyzing: boolean
   isGenerating: boolean
@@ -24,6 +25,7 @@ export function getGeneratorViewState({
   modules,
   outline,
   scenarioMode,
+  resolvedPromptProfile,
   isScanning,
   isAnalyzing,
   isGenerating,
@@ -68,6 +70,7 @@ export function getGeneratorViewState({
     shouldShowInlineProgress: isWorkingInConfigure || isWorkingInOutline,
     progressHostStage: isWorkingInConfigure ? 'configure' : isWorkingInOutline ? 'outline' : null,
     lockedScenarioLabel: hasOutline ? scenarioModeLabelMap[scenarioMode] : null,
+    lockedPromptProfileLabel: hasOutline ? resolvedPromptProfile?.displayName ?? null : null,
     isProcessing,
   }
 }

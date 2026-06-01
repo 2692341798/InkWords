@@ -176,6 +176,22 @@
 ## 4. 每日开发日志 (Dev Log)
 > 该区域将由 Vibe Coding 工程师（AI 助手）在每天/每次开发周期结束时，如实记录当天的完成事项、遇到的技术坑点及架构小规模调整。
 
+### [2026-06-01] Docs - 动态提示词 profile 文档同步、测试与 Docker 回归
+- **开发模块**: [Docs-as-Code, Stream Analyze/Generate, Frontend Generator, Validation]
+- **完成事项**:
+  1. 按 Task 4 同步更新 `.trae/documents/InkWords_API.md`、`InkWords_Architecture.md`、`InkWords_Conversation_Log.md`、`InkWords_PRD.md` 与 `README.md`，补齐 `resolved_prompt_profile`、`prompt_profile_key`、`document_kind`、Analyze 分类锁定、前端只读提示词类型标签等口径。
+  2. 将“动态提示词 profile”明确为文件来源专属增强链路：Analyze 先做轻量分类并锁定 profile，Generate（单篇/系列章节/导读）统一沿用同一 profile；分类失败时按 `scenario_mode` 回退。
+  3. 执行后端 Go 测试，确认 `PromptProfileResolver`、`ResolveWithProfile`、`resolved_prompt_profile` 透传与 `stream/generate` 新字段契约均通过回归。
+  4. 首轮前端测试命令发现计划中的 `useSeriesGenerator.test.ts` 与仓库实际文件名不一致，随即改为补跑真实受影响测试集（`useFileParser`、`streamRequestBuilders`、`generatorViewState`、`GeneratorStageViews`、`streamStore`），避免误判为“已覆盖”。
+  5. 执行 `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build`，确认前后端镜像成功构建、核心容器启动正常，并通过 `curl -I http://localhost` 验证前端入口返回 `200 OK`。
+- **验证**:
+  - `cd backend && go test ./internal/service ./internal/domain/stream ./internal/transport/http/v1/api -v` 通过
+  - `cd frontend && npm run test -- fileAnalyzeRequest.test.ts useSeriesGenerator.test.ts generatorViewState.test.ts` 仅命中现有 2 个测试文件，命令本身通过，但未完整覆盖本次改动
+  - `cd frontend && npm run test -- src/hooks/generator/useFileParser.test.ts src/hooks/generator/streamRequestBuilders.test.ts src/pages/generatorViewState.test.ts src/components/generator/GeneratorStageViews.test.tsx src/store/streamStore.test.ts` 通过（5 个测试文件、22 个测试）
+  - `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build` 完成
+  - `docker compose --env-file backend/.env ps` 显示 `backend/db/frontend/obsidian-bridge/redis` 均为 `Up`
+  - `curl -I http://localhost` 返回 `HTTP/1.1 200 OK`
+
 ### [2026-05-29] Refactor - 结构拆分 Phase 1（review service / Sidebar / decomposition helpers）
 - **开发模块**: [Backend Review Domain, Frontend Sidebar, Generator Decomposition, Docs-as-Code]
 - **完成事项**:

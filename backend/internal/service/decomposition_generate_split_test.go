@@ -91,6 +91,10 @@ func TestStreamSeriesChapterContent_RetriesAndConcatenatesChunks(t *testing.T) {
 
 func TestBuildSeriesChapterMessages_UsesResolvedRequirementsAndOldContentReference(t *testing.T) {
 	svc := NewDecompositionService(nil)
+	profile := prompt.ResolvePromptProfileKey(
+		"psychology_communication_book",
+		prompt.ScenarioModeEbookInterpretation,
+	)
 
 	userID := uuid.New()
 	chapter := Chapter{Title: "始计第一", Summary: "逐章精读", Sort: 1}
@@ -111,13 +115,17 @@ func TestBuildSeriesChapterMessages_UsesResolvedRequirementsAndOldContentReferen
 		prompt.ScenarioModeEbookInterpretation,
 		string(prompt.ArticleStyleGeneral),
 		"旧内容",
+		profile,
 	)
 
 	require.NoError(t, err)
 	require.Equal(t, "deepseek-v4-flash", modelName)
 	require.Len(t, messages, 2)
+	require.Contains(t, messages[0].Content, "心理学")
 	require.Contains(t, messages[0].Content, "项目源内容如下：\n源内容")
+	require.NotContains(t, messages[0].Content, "高级全栈架构师")
 	require.Contains(t, messages[1].Content, "下期预告：作战第二")
 	require.Contains(t, messages[1].Content, "https://github.com/acme/demo")
 	require.Contains(t, messages[1].Content, "旧版本内容")
+	require.Contains(t, messages[1].Content, profile.GenerateRequirements)
 }

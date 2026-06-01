@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - 架构设计与工程规范
 
 ## 0. 变更记录
+- 2026-06-01：文件来源 Analyze 新增“动态提示词 profile 锁定”链路。后端在 `stream/analyze(file)` 阶段先做轻量内容分类并返回 `resolved_prompt_profile`，前端在大纲阶段展示“当前提示词类型”只读标签；后续 `stream/generate`（单篇/系列/导读）统一透传并沿用同一个 profile，避免 Analyze 与 Generate 语义漂移。
 - 2026-06-01：知识漫游复习从“固定模板问答”升级为“文章驱动的结构化追问”；后端 `review` 会在建 session 时提炼 `session_outline`，并在回答阶段返回结构化 `review_feedback`，前端 `ReviewSessionCard` 新增“本轮目标 / 你答到的点 / 你还漏掉的点 / 下一步建议”展示区。
 - 2026-05-29：工程化结构拆分 Phase 1 落地：review 领域 service 按题卡/历史/会话职责拆成同包多文件，`Sidebar` 拆成 shell、批量操作条、选择 hook 与导出 service，生成链路的 decomposition 辅助逻辑拆为更小文件；本次不新增 API 路由或数据库结构。
 - 2026-05-29：知识漫游复习入口最终收敛为“随机抽一篇 + 手动选文”两张卡片；前端主入口不再展示“今日推荐”卡片，并通过随机候选重试避免“再抽一篇”频繁返回同一文章。
@@ -43,6 +44,7 @@
 - **流式通信**: `@microsoft/fetch-event-source` 维持 SSE 连接
 - **Markdown 渲染**: `react-markdown` 配合 `rehype-highlight`、`remark-gfm` 和 `mermaid`。
 - **场景锁定策略**：生成器在大纲生成前展示“创作场景”卡片；一旦 `outline` 存在，页面立即隐藏场景选择区，并在大纲头部展示只读场景标签，保证 Analyze 与后续 Generate 使用同一场景语义。
+- **提示词类型锁定策略**：当文件 Analyze 返回 `resolved_prompt_profile` 后，前端 `streamStore` 会持久化 `resolvedPromptProfile/classificationStatus/classificationReason`，并在大纲区展示“当前提示词类型”只读标签；后续单篇/系列生成请求统一透传 `prompt_profile_key` 与 `document_kind`。
 - **流程型工作台编排**：默认入口为 `HomeEntry`；`Generator`、`KnowledgeReview`、`HomeEntry` 三处共享 `StepStrip` 展示流程预览/进度，但业务状态仍保留在页面层，通过 `generatorViewState`、`knowledgeReviewViewState`、`homeEntryViewState` 做纯前端编排，避免把共享 UI 组件耦合成全局状态机。
 - **生成器三步模型**：`Generator` 当前固定为 `选择来源 -> 配置解析 -> 确认大纲` 三步；解析/分析时仍停留在 `configure` 并内嵌展示 `GeneratorStatus`，正文生成时仍停留在 `outline` 并内嵌展示章节进度，`progress` 不再是顶层页面阶段。
 - **知识漫游复习工作台**：新增 `KnowledgeReview` 主视图，入口位于侧边栏；同一页面内收敛“随机抽一篇 / 选择文章复习 / 当前会话 / 最近记录”四类状态，避免在多个页面间来回跳转。
@@ -59,6 +61,11 @@
   - 密码强度与连续登录失败防爆破锁定 (`LockedUntil`)
 - **并发架构**: 引入了 Go 原生的 Goroutine 池与 `x/sync/semaphore` 信号量控制（动态范围 3~8），保障并发生成稳定且不超限。
 - **提示词模板化**：新增 `internal/prompt` 作为提示词约束的单一来源；当前将 `scenario_mode`（任务场景）与 `article_style`（写作风格）解耦，生成链路通过 `PromptRequirementsService` 统一合并场景默认约束、风格默认约束与用户覆盖值，并注入到单篇/系列章节 prompt 中（system 注入与安全约束仍由系统固定）。
+- **动态 Prompt Profile 解析与锁定**：
+  - 新增 `internal/prompt/prompt_profile.go` 作为 profile 单一来源，定义 `PromptProfile`、`ResolvedPromptProfile`、可选 profile 常量及按 `scenario_mode` 的回退策略。
+  - 新增 `PromptProfileResolver`（`internal/service/prompt_profile_resolver.go`），在文件 Analyze 阶段调用轻量分类模型识别内容类型；当分类失败、返回非法 key 或 JSON 解析失败时，统一按场景回退。
+  - `OutlineResult` 新增 `resolved_prompt_profile`，由 Analyze 返回给前端并在后续 Generate 全链路复用。
+  - `PromptRequirementsService.ResolveWithProfile` 在场景/风格要求前追加 profile 级要求，确保“内容类型语义优先”。
 - **场景默认兜底**：后端在 `internal/domain/stream/handler.go` 统一规范化 `scenario_mode`；当请求缺失或非法时，按来源类型回填默认值（`git -> beginner_walkthrough`，其它来源 -> `ebook_interpretation`），保证旧前端兼容。
 - **特大型项目保护 (Map-Reduce)**:
   - **Map 阶段**: 按目录分块(针对 Git 仓库)或按字数智能段落分块(针对大于 1,000,000 字符的长文本文件)并发提炼局部摘要，当遇到 LLM 限流时启用带随机抖动的**指数退避 (Exponential Backoff)**。
@@ -96,7 +103,7 @@
    - 接收到前端下发的大纲后，启动多个 `goroutine` 为每个章节并行生成内容。
    - 使用 `semaphore.NewWeighted(3)` 将全局并发数严格限制为 3。
    - 每个 `goroutine` 均拥有独立的错误隔离环境，通过同一个 `progressChan` 向前端推送包含自身 `chapter_sort` ID 的 Chunk（数据切片）。
-   - 单篇生成、系列章节生成和系列导读生成都会复用同一份 `scenario_mode + article_style` 组合后的 Prompt 约束，避免“大纲像复习资料、正文像通用博客”的割裂。
+  - 单篇生成、系列章节生成和系列导读生成都会复用同一份 `scenario_mode + article_style + resolved prompt profile` 组合后的 Prompt 约束，避免“大纲像心理学解读、正文回到通用技术博客”的割裂。
 4. **系列导读生成**：
    - 所有单篇博客生成完毕后（`wg.Wait()` 返回），主流程自动触发一次 AI 调用，生成“系列导读”文章，将其作为整个系列的父节点，将各个单篇博客串联成专栏。
 5. **前端批量更新防卡顿**：
@@ -114,6 +121,10 @@
   - 前端展示状态：`frontend/src/pages/generatorViewState.ts` 统一控制“何时显示场景选择区”和“何时显示只读场景标签”。
   - HTTP：`stream/analyze` 与 `stream/generate` 请求体新增 `scenario_mode`。
   - 后端：`internal/prompt/scenario_mode.go` 与 `default_scenario_requirements.go` 提供场景枚举和默认约束，`PromptRequirementsService` 统一做 Prompt 组装。
+- **与动态 profile 的协同关系**：
+  - `scenario_mode` 定义“任务目标层”（电子书解读 / 开卷复习 / 小白教程）。
+  - `prompt_profile_key/document_kind` 定义“内容类型层”（如心理学经典解读、技术资料讲解）。
+  - Analyze 负责锁定 profile，Generate 负责严格沿用 profile；二者都缺失时按 `scenario_mode` 兜底，保证兼容性与一致性。
 - **兼容性策略**：
   - `scenario_mode` 非必填，旧请求继续有效。
   - 后端统一做默认值与非法值兜底，避免前端静态资源版本漂移时出现链路回归。

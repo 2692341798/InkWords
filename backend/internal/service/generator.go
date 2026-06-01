@@ -45,33 +45,49 @@ func (s *GeneratorService) GenerateBlogStream(
 	chunkChan chan<- string,
 	errChan chan<- error,
 ) {
+	s.GenerateBlogStreamWithProfile(
+		ctx,
+		userID,
+		sourceContent,
+		sourceType,
+		scenarioMode,
+		style,
+		prompt.PromptProfile{},
+		chunkChan,
+		errChan,
+	)
+}
+
+func (s *GeneratorService) GenerateBlogStreamWithProfile(
+	ctx context.Context,
+	userID uuid.UUID,
+	sourceContent string,
+	sourceType string,
+	scenarioMode prompt.ScenarioMode,
+	style string,
+	profile prompt.PromptProfile,
+	chunkChan chan<- string,
+	errChan chan<- error,
+) {
 	if !scenarioMode.IsValid() {
 		scenarioMode = prompt.DefaultScenarioModeForSource(sourceType)
 	}
+	profile = normalizePromptProfile(profile, scenarioMode)
 
 	requirements := strings.TrimSpace(strings.Join([]string{
 		prompt.DefaultScenarioRequirements(scenarioMode),
 		prompt.DefaultStyleRequirements(scenarioMode, prompt.ArticleStyleGeneral),
 	}, "\n\n"))
+	requirements = strings.TrimSpace(strings.Join([]string{
+		profile.GenerateRequirements,
+		requirements,
+	}, "\n\n"))
 	if s.promptReq != nil {
-		if resolved, err := s.promptReq.Resolve(ctx, userID, scenarioMode, prompt.ArticleStyle(style)); err == nil && resolved != "" {
+		if resolved, err := s.promptReq.ResolveWithProfile(ctx, userID, scenarioMode, prompt.ArticleStyle(style), profile); err == nil && resolved != "" {
 			requirements = resolved
 		}
 	}
-
-	instruction := fmt.Sprintf(`你是一个高级全栈架构师和技术博主。请根据前面提供的源内容，生成一篇可独立复现的高质量技术博客。
-
-写作要求：
-%s
-
-硬性约束：
-1. 所有生成的 Mermaid 图表代码块绝对禁止包含自定义样式关键字（如 style, classDef, linkStyle 等），必须使用基础语法。
-2. 在 Mermaid 图表中，如果节点文本包含特殊字符（如括号、幂符号等，例如 O(1), O(n^2)），必须使用双引号将节点文本包裹起来，例如 A["O(1)"] 而不是 A[O(1)]。`, requirements)
-
-	messages := []llm.Message{
-		{Role: "system", Content: "项目源内容如下：\n" + sourceContent},
-		{Role: "user", Content: instruction},
-	}
+	messages := buildSingleGenerateMessages(sourceContent, requirements, profile)
 
 	modelType := "deepseek-v4-flash" // or deepseek-v4-pro depending on env/config
 	if envModel := os.Getenv("DEEPSEEK_MODEL"); envModel != "" {
@@ -181,6 +197,23 @@ func (s *GeneratorService) GenerateBlogStream(
 			messages = append(messages, continueMsg)
 		}
 	}()
+}
+
+func buildSingleGenerateMessages(sourceContent string, requirements string, profile prompt.PromptProfile) []llm.Message {
+	instruction := fmt.Sprintf(`请根据前面提供的源内容，生成一篇中文正文。
+
+写作要求：
+%s
+
+硬性约束：
+1. 禁止输出“好的，收到你的需求”“作为高级架构师”等对话式前言。
+2. 所有生成的 Mermaid 图表代码块绝对禁止包含自定义样式关键字（如 style, classDef, linkStyle 等），必须使用基础语法。
+3. 在 Mermaid 图表中，如果节点文本包含特殊字符（如括号、幂符号等，例如 O(1), O(n^2)），必须使用双引号将节点文本包裹起来，例如 A["O(1)"] 而不是 A[O(1)]。`, requirements)
+
+	return []llm.Message{
+		{Role: "system", Content: profile.SystemRole + "\n\n项目源内容如下：\n" + sourceContent},
+		{Role: "user", Content: instruction},
+	}
 }
 
 // GeneratePolishDraftStream generates a polished blog draft via LLM streaming, without persisting it.
