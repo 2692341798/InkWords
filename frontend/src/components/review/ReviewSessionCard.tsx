@@ -145,21 +145,27 @@ export function ReviewSessionCard({
 
       <div className="mt-5 space-y-3">
         <p className="text-sm font-medium text-zinc-900">会话记录</p>
-        {sessionTurns.length === 0 ? (
-          <p className="text-sm text-zinc-500">当前还没有轮次记录。</p>
-        ) : (
-          sessionTurns.map((turn) => (
-            <article key={`${turn.turn_index}-${turn.turn_type}`} className="rounded-2xl border border-zinc-200 px-4 py-3">
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-                  {turn.role === 'user' ? '你的回答' : '系统引导'}
-                </span>
-                <span className="text-xs text-zinc-400">第 {turn.turn_index} 轮 · {turn.turn_type}</span>
-              </div>
-              <p className="mt-2 text-sm leading-6 text-zinc-700">{turn.content}</p>
-            </article>
-          ))
-        )}
+        {/* Why: 会话轮次会持续增长，这里固定可视高度并始终保留纵向滚动能力，避免页面继续被向下撑长。 */}
+        <div
+          data-slot="session-history-scroll"
+          className="h-96 space-y-3 overflow-y-scroll rounded-2xl border border-zinc-200 bg-zinc-50 p-3 pr-2 custom-scrollbar"
+        >
+          {sessionTurns.length === 0 ? (
+            <p className="text-sm text-zinc-500">当前还没有轮次记录。</p>
+          ) : (
+            sessionTurns.map((turn) => (
+              <article key={`${turn.turn_index}-${turn.turn_type}`} className="rounded-2xl border border-zinc-200 bg-white px-4 py-3">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                    {turn.role === 'user' ? '你的回答' : '系统引导'}
+                  </span>
+                  <span className="text-xs text-zinc-400">第 {turn.turn_index} 轮 · {turn.turn_type}</span>
+                </div>
+                <p className="mt-2 text-sm leading-6 text-zinc-700">{turn.content}</p>
+              </article>
+            ))
+          )}
+        </div>
       </div>
 
       {finalFeedback ? (

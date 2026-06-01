@@ -7,6 +7,7 @@ describe('getKnowledgeReviewViewState', () => {
       getKnowledgeReviewViewState({
         hasSession: false,
         isPickerOpen: false,
+        shouldEnterSession: false,
       }),
     ).toEqual({
       currentStep: 'entry',
@@ -23,6 +24,7 @@ describe('getKnowledgeReviewViewState', () => {
       getKnowledgeReviewViewState({
         hasSession: false,
         isPickerOpen: true,
+        shouldEnterSession: false,
       }),
     ).toEqual({
       currentStep: 'picker',
@@ -39,6 +41,24 @@ describe('getKnowledgeReviewViewState', () => {
       getKnowledgeReviewViewState({
         hasSession: true,
         isPickerOpen: true,
+        shouldEnterSession: false,
+      }),
+    ).toEqual({
+      currentStep: 'session',
+      currentStepIndex: 2,
+      shouldShowEntryStep: false,
+      shouldShowPickerStep: false,
+      shouldShowSessionStep: true,
+      shouldShowHistory: false,
+    })
+  })
+
+  it('keeps the page in the session step when the user explicitly resumes the last review task', () => {
+    expect(
+      getKnowledgeReviewViewState({
+        hasSession: false,
+        isPickerOpen: false,
+        shouldEnterSession: true,
       }),
     ).toEqual({
       currentStep: 'session',

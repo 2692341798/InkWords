@@ -1,6 +1,7 @@
 interface KnowledgeReviewViewStateInput {
   hasSession: boolean
   isPickerOpen: boolean
+  shouldEnterSession: boolean
 }
 
 /**
@@ -10,8 +11,9 @@ interface KnowledgeReviewViewStateInput {
 export function getKnowledgeReviewViewState({
   hasSession,
   isPickerOpen,
+  shouldEnterSession,
 }: KnowledgeReviewViewStateInput) {
-  const currentStep = hasSession ? 'session' : isPickerOpen ? 'picker' : 'entry'
+  const currentStep = hasSession || shouldEnterSession ? 'session' : isPickerOpen ? 'picker' : 'entry'
 
   return {
     currentStep,

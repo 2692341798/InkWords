@@ -121,6 +121,62 @@ describe('useReviewStore', () => {
     expect(useReviewStore.getState().noteOptions).toEqual([])
   })
 
+  it('tracks whether the review page should jump directly into the session step', () => {
+    useReviewStore.getState().setShouldResumeSessionOnOpen(true)
+
+    expect(useReviewStore.getState().shouldResumeSessionOnOpen).toBe(true)
+
+    useReviewStore.getState().setShouldResumeSessionOnOpen(false)
+
+    expect(useReviewStore.getState().shouldResumeSessionOnOpen).toBe(false)
+  })
+
+  it('clears only the transient session state without dropping recommendation and history data', () => {
+    useReviewStore.setState({
+      recommendationCard: randomCard,
+      historyItems: [
+        {
+          session_id: 'session-1',
+          note_path: 'wiki/concepts/history.md',
+          title: '并发控制',
+          source_title: '后端系列',
+          mode: 'light_recall',
+          status: 'completed',
+          summary: '已经讲清楚主线',
+          reviewed_at: '2026-05-27T09:00:00Z',
+        },
+      ],
+      currentSession: {
+        session_id: 'session-2',
+        status: 'in_progress',
+        mode: 'light_recall',
+        title: '正在进行的复习',
+        opening_prompt: '请继续',
+        initial_hints: [],
+        turn_index: 2,
+      },
+      latestStageFeedback: '阶段反馈',
+      latestHint: '提示',
+      finalFeedback: {
+        summary: '总结',
+        strengths: ['主线'],
+        gaps: ['细节'],
+        next_focus: ['例子'],
+      },
+      shouldResumeSessionOnOpen: true,
+    })
+
+    useReviewStore.getState().clearSessionState()
+
+    expect(useReviewStore.getState().recommendationCard).toEqual(randomCard)
+    expect(useReviewStore.getState().historyItems).toHaveLength(1)
+    expect(useReviewStore.getState().currentSession).toBeNull()
+    expect(useReviewStore.getState().latestStageFeedback).toBeNull()
+    expect(useReviewStore.getState().latestHint).toBeNull()
+    expect(useReviewStore.getState().finalFeedback).toBeNull()
+    expect(useReviewStore.getState().shouldResumeSessionOnOpen).toBe(false)
+  })
+
   it('loads recent review history into store', async () => {
     mockedReviewService.getHistory.mockResolvedValue({
       items: [

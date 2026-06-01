@@ -15,6 +15,7 @@ interface ReviewState {
   noteOptions: ReviewNoteOption[]
   notesPagination: Omit<ListNotesResponse, 'items'>
   currentSession: ReviewSessionResponse | null
+  shouldResumeSessionOnOpen: boolean
   historyItems: ReviewHistoryItem[]
   selectedMode: ReviewMode
   latestStageFeedback: string | null
@@ -28,10 +29,12 @@ interface ReviewState {
   loadNotes: (query?: string) => Promise<void>
   loadHistory: (limit?: number) => Promise<void>
   setSelectedMode: (mode: ReviewMode) => void
+  setShouldResumeSessionOnOpen: (shouldResume: boolean) => void
   setCurrentSession: (session: ReviewSessionResponse | null) => void
   setLatestStageFeedback: (feedback: string | null) => void
   setLatestHint: (hint: string | null) => void
   setFinalFeedback: (feedback: FinalFeedback | null) => void
+  clearSessionState: () => void
   reset: () => void
 }
 
@@ -47,6 +50,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
   noteOptions: [],
   notesPagination: initialPagination,
   currentSession: null,
+  shouldResumeSessionOnOpen: false,
   historyItems: [],
   selectedMode: 'light_recall',
   latestStageFeedback: null,
@@ -117,6 +121,8 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
 
   setSelectedMode: (mode) => set({ selectedMode: mode }),
 
+  setShouldResumeSessionOnOpen: (shouldResume) => set({ shouldResumeSessionOnOpen: shouldResume }),
+
   setCurrentSession: (session) => set({ currentSession: session }),
 
   setLatestStageFeedback: (feedback) => set({ latestStageFeedback: feedback }),
@@ -125,12 +131,22 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
 
   setFinalFeedback: (feedback) => set({ finalFeedback: feedback }),
 
+  clearSessionState: () =>
+    set({
+      currentSession: null,
+      shouldResumeSessionOnOpen: false,
+      latestStageFeedback: null,
+      latestHint: null,
+      finalFeedback: null,
+    }),
+
   reset: () =>
     set({
       recommendationCard: null,
       noteOptions: [],
       notesPagination: initialPagination,
       currentSession: null,
+      shouldResumeSessionOnOpen: false,
       historyItems: [],
       selectedMode: 'light_recall',
       latestStageFeedback: null,
