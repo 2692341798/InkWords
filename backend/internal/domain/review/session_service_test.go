@@ -97,6 +97,19 @@ func TestService_RequestHint_StopsAtMaxCount(t *testing.T) {
 	require.ErrorContains(t, err, "提示次数已用尽")
 }
 
+func TestService_RequestHint_DetailedQAFollowsCurrentQuestion(t *testing.T) {
+	t.Parallel()
+
+	session := seedDetailedQASession(t)
+
+	_, err := session.Service.Respond(context.Background(), session.UserID, session.ID, RespondRequest{Answer: "这是主旨"})
+	require.NoError(t, err)
+
+	hint, err := session.Service.RequestHint(context.Background(), session.UserID, session.ID)
+	require.NoError(t, err)
+	require.Contains(t, hint.HintText, "当前追问是：它的关键概念、步骤或关系是什么？")
+}
+
 func TestService_Finish_ProducesFinalFeedback(t *testing.T) {
 	t.Parallel()
 
@@ -120,3 +133,17 @@ func TestService_Finish_ProducesFinalFeedback(t *testing.T) {
 	require.NotNil(t, stored.CompletedAt)
 }
 
+func TestService_Finish_DetailedQADoesNotOverstatePartialProgress(t *testing.T) {
+	t.Parallel()
+
+	session := seedDetailedQASession(t)
+
+	_, err := session.Service.Respond(context.Background(), session.UserID, session.ID, RespondRequest{Answer: "我先回答第一问"})
+	require.NoError(t, err)
+
+	resp, err := session.Service.Finish(context.Background(), session.UserID, session.ID)
+	require.NoError(t, err)
+	require.Equal(t, model.ReviewStatusCompleted, resp.SessionStatus)
+	require.NotContains(t, resp.FinalFeedback.Summary, "完成一轮逐步追问式复习")
+	require.Contains(t, resp.FinalFeedback.Summary, "一部分逐步追问")
+}
