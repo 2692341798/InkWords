@@ -31,6 +31,8 @@ interface ReviewState {
   setSelectedMode: (mode: ReviewMode) => void
   setShouldResumeSessionOnOpen: (shouldResume: boolean) => void
   setCurrentSession: (session: ReviewSessionResponse | null) => void
+  setShouldResumeSessionOnOpen: (shouldResume: boolean) => void
+  clearSessionState: () => void
   setLatestStageFeedback: (feedback: string | null) => void
   setLatestHint: (hint: string | null) => void
   setFinalFeedback: (feedback: FinalFeedback | null) => void
@@ -124,6 +126,17 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
   setShouldResumeSessionOnOpen: (shouldResume) => set({ shouldResumeSessionOnOpen: shouldResume }),
 
   setCurrentSession: (session) => set({ currentSession: session }),
+
+  setShouldResumeSessionOnOpen: (shouldResume) => set({ shouldResumeSessionOnOpen: shouldResume }),
+
+  clearSessionState: () =>
+    set({
+      currentSession: null,
+      shouldResumeSessionOnOpen: false,
+      latestStageFeedback: null,
+      latestHint: null,
+      finalFeedback: null,
+    }),
 
   setLatestStageFeedback: (feedback) => set({ latestStageFeedback: feedback }),
 
