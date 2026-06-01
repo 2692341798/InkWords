@@ -1,7 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - API 接口文档
 
 ## 0. 变更记录
-- 2026-06-01：知识漫游复习前端新增推荐卡显式入口 `提问开始`，并修复“继续知识复习”恢复流程；本次不新增、不删除、不修改任何对外 API 路由、请求字段或响应结构。
+- 2026-06-01：知识漫游复习会话升级为“文章驱动提问 + 结构化反馈”；`POST /api/v1/review/sessions` 与 `GET /api/v1/review/sessions/:id` 新增 `session_outline`、`current_round_goal`，`POST /api/v1/review/sessions/:id/respond` 新增 `review_feedback` 与 `current_round_goal`，用于明确返回本轮目标、命中点、遗漏点与下一步建议。
 - 2026-05-29：工程化结构拆分 Phase 1：review 领域与 Sidebar/export 逻辑完成模块化拆分，生成链路辅助逻辑拆分为更小文件；本次不新增、不删除、不修改任何对外 API 路由或请求结构。
 - 2026-05-29：知识漫游复习入口调整为“随机抽题 + 手动选文”双入口；`POST /api/v1/review/pick` 的后端实现改为从候选集中真正随机选题，不再固定返回首个符合条件的笔记。`GET /api/v1/review/today` 路由保留以兼容既有客户端，但当前前端主入口不再展示“今日推荐”卡片。
 - 2026-05-29：生成器前端工作流改为 `选择来源 -> 配置解析 -> 确认大纲` 三步模型；解析/分析进度内嵌在“配置解析”，写作进度内嵌在“确认大纲”。本次不新增、不修改任何后端 API 路由或请求结构，但文件上传前端交互调整为“先完成 `/api/v1/project/parse`，再由用户在配置页显式触发 `/api/v1/stream/analyze` 生成大纲”，避免上传 ZIP/课件后跳过场景选择。
@@ -151,12 +151,22 @@
   - `session_id`, `status`, `mode`, `title`
   - `opening_prompt`: 开场提问
   - `initial_hints`: 初始提示列表
+  - `session_outline.summary`: 当前文章的复习摘要
+  - `session_outline.main_question`: 当前文章主问题
+  - `session_outline.core_concepts / process_steps / application_cases / checkpoints`: 会话提炼出的文章关键点
+  - `current_round_goal`: 当前这一轮最应该完成的回答目标
+  - `latest_review_feedback`: 最近一轮回答的结构化判定（仅会话详情接口在有回答后返回）
   - `next_question`: 下一轮问题（可选）
   - `turn_index`: 当前轮次
   - `turns[]`: 已落库的轮次记录（仅会话详情接口返回）
 - `POST /api/v1/review/sessions/:id/respond` 返回：
   - `session_id`, `session_status`, `turn_index`
   - `stage_feedback`: 当前阶段反馈（可选）
+  - `current_round_goal`: 下一轮或当前轮的目标提示
+  - `review_feedback.judgement`: 当前回答的判定（如 `答对较多 / 部分答对 / 偏题`）
+  - `review_feedback.hit_points`: 当前回答已命中的文章关键点
+  - `review_feedback.missed_points`: 当前回答尚未覆盖的关键点
+  - `review_feedback.suggestion`: 下一步补充建议
   - `next_question`: 下一轮问题（可选）
   - `completed`: 是否已结束
   - `final_feedback.summary / strengths / gaps / next_focus`

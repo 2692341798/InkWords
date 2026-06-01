@@ -87,4 +87,39 @@ describe('reviewService', () => {
     expect(url).toBe('/api/v1/review/history?limit=5')
     expect(new Headers(init.headers).get('Authorization')).toBe('Bearer review-token')
   })
+
+  it('preserves structured review feedback fields returned by respond', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        code: 200,
+        data: {
+          session_id: 'session-1',
+          session_status: 'in_progress',
+          turn_index: 3,
+          stage_feedback: '你已经答到主线。',
+          current_round_goal: '补充关键概念',
+          review_feedback: {
+            judgement: '部分答对',
+            hit_points: ['答到主线'],
+            missed_points: ['没提速率限制'],
+            suggestion: '补充速率限制和适用场景',
+          },
+          completed: false,
+          final_feedback: {
+            summary: '',
+            strengths: [],
+            gaps: [],
+            next_focus: [],
+          },
+        },
+      }),
+    } as Response)
+
+    const response = await reviewService.respond('session-1', { answer: '并发控制是控制任务数' })
+
+    expect(response.review_feedback.judgement).toBe('部分答对')
+    expect(response.current_round_goal).toBe('补充关键概念')
+  })
 })

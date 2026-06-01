@@ -1,6 +1,20 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 83：把知识复习升级为文章驱动追问与结构化反馈
+- **用户需求**：用户明确指出当前复习功能“太过呆板，而且反馈很差，并不知道自己是说对了还是说错了”，要求根据复习文章的具体内容进行针对性提问。
+- **AI 动作**：
+  1. 先完成知识库 Query，回读 `[[复习系统领域：笔记源与会话构建]]`、`[[复习系统领域：智能反馈生成]]`、`[[前端复习组件与Hooks]]` 与项目 PRD，确认当前问题核心不在入口，而在于 `session_builder`、`feedback_builder` 仍以固定模板驱动。
+  2. 通过 brainstorming 收敛方案，给出“模板升级 / 文章快照驱动 / 文章快照 + LLM 裁判”三种路径，并建议先落地“文章快照驱动提问”；用户选择“结构化追问”并确认按该设计执行。
+  3. 按 writing-plans 落计划后直接实现：后端创建 session 时提炼 `session_outline`，把主问题、核心概念、步骤/场景和 checkpoints 固化到会话快照；`Respond` 增加 `review_feedback` 与 `current_round_goal`，不再只返回泛化鼓励语。
+  4. 前端 `ReviewSessionCard` 新增“本轮目标 / 你答到的点 / 你还漏掉的点 / 下一步建议”，并同步更新 `reviewService`、`useKnowledgeReview`、相关测试与项目文档。
+- **决策/变更**：
+  - 选择“文章快照驱动提问”作为当前最小可行方案，不额外引入每轮 LLM 裁判，优先保证稳定性、成本和可控性。
+  - 保留温和陪练语气，但阶段反馈必须明确指出命中点与遗漏点，让用户知道“哪里答对了、哪里没答到”。
+- **验证**：
+  - `cd backend && go test ./internal/domain/review/...` 通过
+  - `cd frontend && npm run test -- review.test.ts useKnowledgeReview.test.tsx ReviewSessionCard.test.tsx reviewStore.test.ts HomeEntry.test.tsx` 通过
+
 ### 对话 82：将知识复习会话记录区改为内部滚动
 - **用户需求**：用户指出知识漫游复习页里的“会话记录”会随着轮次增加不断向下延伸，希望改成带滑动条的固定区域。
 - **AI 动作**：

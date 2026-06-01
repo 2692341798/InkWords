@@ -144,6 +144,8 @@ export function useKnowledgeReview() {
       setCurrentSession({
         ...currentSession,
         status: response.session_status,
+        current_round_goal: response.current_round_goal,
+        latest_review_feedback: response.review_feedback ?? null,
         next_question: response.next_question,
         turn_index: response.turn_index,
         turns: nextTurns,
@@ -161,6 +163,8 @@ export function useKnowledgeReview() {
     setLatestHint(response.hint_text)
     setCurrentSession({
       ...currentSession,
+      current_round_goal: currentSession.current_round_goal,
+      latest_review_feedback: currentSession.latest_review_feedback ?? null,
       turn_index: Math.max(currentSession.turn_index + 1, currentSession.turn_index),
       turns: appendTurn(currentSession.turns, 'system', 'hint', response.hint_text),
     })
@@ -176,6 +180,8 @@ export function useKnowledgeReview() {
     setCurrentSession({
       ...currentSession,
       status: response.session_status,
+      current_round_goal: currentSession.current_round_goal,
+      latest_review_feedback: currentSession.latest_review_feedback ?? null,
       turns: appendTurn(currentSession.turns, 'system', 'completion', response.final_feedback.summary),
     })
     persistSessionID(null)

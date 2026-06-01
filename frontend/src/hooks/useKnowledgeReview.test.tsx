@@ -80,6 +80,14 @@ describe('useKnowledgeReview', () => {
       title: '随机文章',
       opening_prompt: '先说主线',
       initial_hints: [],
+      session_outline: {
+        summary: '随机文章摘要',
+        main_question: '随机文章主要在解决什么问题？',
+        core_concepts: ['主线'],
+        process_steps: [],
+        application_cases: [],
+        checkpoints: ['先说主线'],
+      },
       turn_index: 1,
     })
 
@@ -125,6 +133,14 @@ describe('useKnowledgeReview', () => {
       title: '恢复的会话',
       opening_prompt: '继续回答',
       initial_hints: [],
+      session_outline: {
+        summary: '恢复会话摘要',
+        main_question: '恢复的会话主要在讲什么？',
+        core_concepts: ['主线'],
+        process_steps: [],
+        application_cases: [],
+        checkpoints: ['继续回答主线'],
+      },
       turn_index: 2,
     })
 

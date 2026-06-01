@@ -1,7 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - 架构设计与工程规范
 
 ## 0. 变更记录
-- 2026-06-01：知识漫游复习推荐卡新增显式 `提问开始` 动作，并将“模式覆盖启动”“恢复会话进入意图”“已完成会话不再作为可继续任务”收敛为前端 `reviewStore + useKnowledgeReview + HomeEntry` 协同约束；不涉及后端 API 或数据库结构调整。
+- 2026-06-01：知识漫游复习从“固定模板问答”升级为“文章驱动的结构化追问”；后端 `review` 会在建 session 时提炼 `session_outline`，并在回答阶段返回结构化 `review_feedback`，前端 `ReviewSessionCard` 新增“本轮目标 / 你答到的点 / 你还漏掉的点 / 下一步建议”展示区。
 - 2026-05-29：工程化结构拆分 Phase 1 落地：review 领域 service 按题卡/历史/会话职责拆成同包多文件，`Sidebar` 拆成 shell、批量操作条、选择 hook 与导出 service，生成链路的 decomposition 辅助逻辑拆为更小文件；本次不新增 API 路由或数据库结构。
 - 2026-05-29：知识漫游复习入口最终收敛为“随机抽一篇 + 手动选文”两张卡片；前端主入口不再展示“今日推荐”卡片，并通过随机候选重试避免“再抽一篇”频繁返回同一文章。
 - 2026-05-29：生成器工作流从“四步 + 独立处理页”收敛为“三步 + 步内进度”模型；`generatorViewState` 顶层阶段只保留 `source / configure / outline`，`GeneratorStatus` 退化为可复用的内嵌进度面板，分别挂载到 `GeneratorConfigureStage` 与 `GeneratorOutlineStage`。文件上传链路拆分为“先 parse、再在配置页显式触发 analyze”，避免 ZIP/课件上传后直接跳入独立进度页并倒序回到大纲。
@@ -72,7 +72,8 @@
   - ZIP 成功响应会附带 `archive_summary`，供前端展示保留、去重、忽略与失败统计；解析完成后临时 ZIP 与解压目录均立即清理，保持“阅后即焚”。
 - **知识漫游复习链路**：
   - `review` 领域通过 `NoteSource` 读取 Obsidian `wiki` 中可复习的 `concept` 页面，保持“正文来自知识库、业务状态来自 PostgreSQL”的边界。
-  - 创建 session 时固化笔记标题、摘要、关键点与提示预算快照，后续追问、提示与结束反馈都围绕同一份快照推进，避免知识源在训练过程中漂移。
+  - 创建 session 时固化笔记标题、摘要、关键点与提示预算快照，并进一步提炼 `session_outline`（主问题、核心概念、步骤/场景、checkpoints），避免后续追问退化成固定模板。
+  - `Respond` 不再只返回一段泛化鼓励文案，而是同时返回 `current_round_goal + review_feedback`，让前端可以显式展示“命中点 / 遗漏点 / 下一步建议”。
   - `cmd/server/main.go` 启动时统一组装 `review` 的 repository、service、handler，并注册 `/api/v1/review/*` 路由。
 - **数据推送**: 基于标准 HTTP `text/event-stream` 实现 SSE 推送机制。
 - **正文净化层**：`internal/infra/llm` 在流式输出进入业务层前统一做开头段落清洗，剥离 `<think>` 标签、跳过 `reasoning_content`，并删除“收到你的需求 / 作为高级全栈架构师”等非正文前言；前端润色应用正文前再做一次兜底提取，避免污染 `blogs.content`。

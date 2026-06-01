@@ -96,6 +96,13 @@ export function ReviewSessionCard({
         {session.next_question ? <p className="mt-3 text-sm font-medium text-indigo-700">当前追问：{session.next_question}</p> : null}
       </div>
 
+      {session.current_round_goal ? (
+        <div className="mt-4 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm leading-6 text-sky-900">
+          <p className="font-medium">本轮目标</p>
+          <p className="mt-1">{session.current_round_goal}</p>
+        </div>
+      ) : null}
+
       <div className="mt-5">
         <label htmlFor="review-answer" className="mb-2 block text-sm font-medium text-zinc-900">
           用自己的话讲一遍
@@ -140,6 +147,26 @@ export function ReviewSessionCard({
         <div className="mt-4 rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm leading-6 text-indigo-900">
           <p className="font-medium">最新提示</p>
           <p className="mt-1">{latestHint}</p>
+        </div>
+      ) : null}
+
+      {session.latest_review_feedback ? (
+        <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm leading-6 text-emerald-900">
+          <p className="font-medium">{session.latest_review_feedback.judgement}</p>
+          <p className="mt-3 text-xs font-medium uppercase tracking-wide text-emerald-700">你答到的点</p>
+          <p className="mt-1">
+            {session.latest_review_feedback.hit_points.length > 0
+              ? session.latest_review_feedback.hit_points.join('；')
+              : '这一轮还没有明显命中的关键点。'}
+          </p>
+          <p className="mt-3 text-xs font-medium uppercase tracking-wide text-emerald-700">你还漏掉的点</p>
+          <p className="mt-1">
+            {session.latest_review_feedback.missed_points.length > 0
+              ? session.latest_review_feedback.missed_points.join('；')
+              : '当前关键点已经覆盖得比较完整。'}
+          </p>
+          <p className="mt-3 text-xs font-medium uppercase tracking-wide text-emerald-700">下一步建议</p>
+          <p className="mt-1">{session.latest_review_feedback.suggestion}</p>
         </div>
       ) : null}
 
