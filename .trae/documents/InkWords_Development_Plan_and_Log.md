@@ -1,6 +1,125 @@
 # 墨言知识训练平台 (InkWords Trainer) - 开发计划与日志
 > **目标**：跟踪项目的核心开发模块、里程碑进度以及每日开发记录。
 
+### [2026-06-03] Chore - Task 9 微服务冒烟检查前置到 CI 与 Runbook
+- **需求背景**：
+  1. 长期微服务计划的 Task 9 要求把“多服务能否正常工作”从人工经验变成可重复验证的工程流程。
+  2. 当前仓库虽然已有 `docker compose config` 校验和 README 中的人工命令，但 `.github/workflows/ci.yml` 还没有真正执行 Compose 启动、健康检查与网关连通性验证，也缺少统一的微服务冒烟 Runbook。
+- **本次完成**：
+  1. 更新 `.github/workflows/ci.yml`，新增 `microservices-smoke` job：在 GitHub Actions 中准备临时 Obsidian vault，执行 `docker compose --env-file backend/.env.example up -d --build`，轮询 `core-api / llm-stream / parser-service / export-service / review-service / frontend` 健康状态，并验证 `http://localhost` 与 `/api/v1/ping`。
+  2. 新增 Runbook：[microservices-smoke-check.md](file:///Users/huangqijun/Documents/墨言博客助手/InkWords/docs/runbooks/microservices-smoke-check.md)，覆盖服务启动、网关访问、任务创建、任务 SSE、review 可用、parser/export 基础通路与排障顺序。
+  3. 更新 `README.md`，补充微服务冒烟 Runbook 入口与使用说明。
+- **验证记录**：
+  - `python3 -c 'import yaml, pathlib; yaml.safe_load(pathlib.Path(".github/workflows/ci.yml").read_text())'` 通过
+  - `test -f docs/runbooks/microservices-smoke-check.md` 通过
+  - `docker compose --env-file backend/.env.example config` 通过
+  - `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build` 通过
+  - `docker compose --env-file backend/.env ps` 显示前端与五个后端服务均为 `healthy`
+  - `curl -I http://localhost` 与 `curl http://localhost/api/v1/ping` 通过
+
+### [2026-06-03] Docs - Task 4 服务写入归属矩阵与边界治理基线
+- **需求背景**：
+  1. 长期微服务计划的 Task 4 要求先把“共享数据库随意写”收敛成“共享数据库但写入有归属”，否则后续 Task 8 拆库只会变成全局搜索替换。
+  2. 当前生成、解析、导出、review 的任务化与多服务入口已经基本成形，但表级归属、跨服务允许写入例外和待收口技术债仍主要停留在隐含约定。
+- **本次完成**：
+  1. 对 `backend/internal/service` 与 `backend/internal/domain` 做只读扫描，确认跨服务写入例外当前只应保留在 `job_tasks / job_task_events`，并识别出 `GeneratorService / DecompositionService` 仍直接使用全局 `db.DB` 写 `blogs / users` 的过渡性写点。
+  2. 更新 `InkWords_Architecture.md` 与 `InkWords_Database.md`，固化服务写入归属矩阵、当前允许的跨服务例外和“进入 Task 8 前的门槛”。
+  3. 更新 `README.md`，把归属矩阵与 runbook 入口同步到面向开发者的说明。
+  4. 新增 Runbook：[core-blog-task-boundary.md](file:///Users/huangqijun/Documents/墨言博客助手/InkWords/docs/runbooks/core-blog-task-boundary.md)，沉淀边界规则、已知技术债与收口优先级。
+- **验证记录**：
+  - `rg` / 代码阅读扫描确认 `backend/internal/domain` 写入基本经由 repository，`backend/internal/service` 里全局 `db.DB` 直写集中在生成链路
+  - 文档交叉校对完成：`README.md`、`InkWords_Architecture.md`、`InkWords_Database.md`、`docs/runbooks/core-blog-task-boundary.md`
+
+### [2026-06-03] Feat - Task 7 export-service 异步导出（export_pdf 任务化）
+- **需求背景**：
+  1. 用户要求根据 `docs/superpowers/plans/2026-06-03-export-pdf-async-task-implementation.md` 继续完善微服务化，把侧边栏 PDF 导出纳入统一任务中心。
+  2. 当前仓库已经具备 `job_tasks + RabbitMQ + task stream` 基础设施，但 `export-service` 仍停留在同步 HTTP 导出模式，缺少 `export_pdf` 的任务创建、消费、下载闭环。
+- **本次完成**：
+  1. 按 TDD 先补 `backend/internal/domain/task/service_test.go`、`handler_test.go`、`download_handler_test.go`、`export_consumer_test.go` 和前端 `exportTasks.test.ts`、`sidebarExport.test.ts` 红灯测试，锁定 export task 创建、worker 回写、下载接口和前端任务编排契约。
+  2. 后端任务域新增 `taskTypeExport / ExportTaskSubtypePDF / CreateExportTaskInput / ExportTaskResult`，`core-api` 新增 `POST /api/v1/tasks/export` 与 `GET /api/v1/tasks/:id/download`，并将下载入口改为读取 `EXPORT_ARTIFACTS_DIR` 共享目录、成功后删除产物。
+  3. `export-service` 新增 export worker consumer，订阅 `export.requested`，复用既有 Chromium PDF 导出逻辑生成 PDF，并把下载元数据写回任务表。
+  4. 前端新增 `frontend/src/services/exportTasks.ts`，把 Sidebar PDF 导出切到“创建任务 -> 等待 task stream 完成 -> 下载 artifact”的任务式流程；同步更新 Compose、`.env.example`、README 与基准文档。
+- **验证记录**：
+  - `cd backend && go test ./internal/domain/task ./internal/transport/http/v1 -count=1` 先失败、补实现后通过
+  - `cd backend && go test ./cmd/core-api -count=1` 通过
+  - `cd backend && go test ./internal/domain/task ./cmd/export-service -count=1` 先失败、补实现后通过
+  - `cd backend && go test ./internal/domain/task ./internal/transport/http/v1 ./cmd/core-api -count=1` 通过
+  - `cd frontend && npm test -- --run src/services/exportTasks.test.ts src/services/sidebarExport.test.ts` 先失败、补实现后通过
+  - `cd frontend && npm run build` 通过
+
+### [2026-06-03] Feat - Task 6 parser-service 异步化（起步态）
+- **需求背景**：
+  1. `docs/superpowers/plans/2026-06-03-microservices-long-term-implementation.md` 的 Task 6 要求把大文件/ZIP 解析从同步链路逐步迁入统一任务中心，验证“非生成类任务”也能复用 `job_tasks + RabbitMQ + SSE` 的基础设施。
+  2. 当前生成链路已经完成任务化，因此本轮只允许最小改动扩展到 `parser-service`，不把 `export-service` 异步化、写库边界治理或拆库工作混进同一次变更。
+- **本次完成**：
+  1. 按 TDD 先为 `backend/internal/domain/task/service_test.go`、`handler_test.go`、`backend/internal/domain/fileparse/task_consumer_test.go`、`frontend/src/services/project.test.ts`、`frontend/src/hooks/generator/useFileParser.test.ts` 增加失败测试，锁定 `parse` 任务创建、RabbitMQ 消费回写与 ZIP 前端任务接入的最小契约。
+  2. `core-api` 新增 `POST /api/v1/tasks/parse`，任务领域补齐 `CreateParseTaskInput`、`ParseRequestedMessage` 与 `PublishParseRequested`，复用现有 `job_tasks` 做幂等创建与状态承载。
+  3. `parser-service` 新增 parse worker consumer，订阅 `parse.requested`，复用既有 `fileparse.Service` 执行真实解析，并把 `source_content / archive_summary` 写回任务 `result_json`。
+  4. 前端 `projectService` 新增 `createParseTask / getTaskSnapshot`，`useFileParser` 先让 `.zip` 课件包默认走任务式解析，普通文件继续保留同步 `/api/v1/project/parse` 作为兼容路径。
+- **验证记录**：
+  - `cd backend && go test ./internal/domain/task ./internal/domain/fileparse ./internal/transport/http/v1 -count=1` 先失败、补实现后通过
+  - `cd backend && go test ./cmd/core-api ./cmd/parser-service -count=1` 通过
+  - `cd backend && go test ./...` 通过
+  - `cd frontend && npm test -- --run src/services/project.test.ts src/hooks/generator/useFileParser.test.ts` 通过
+  - `cd frontend && npm run build` 通过
+  - `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build` 通过
+  - `docker compose --env-file backend/.env ps` 显示 `core-api / llm-stream / parser-service / export-service / review-service / frontend` 均为 `Up`
+  - `curl -I http://localhost` 返回 `HTTP/1.1 200 OK`
+
+### [2026-06-03] Feat - Task 6 parser-service 异步化（补完 50MB 单文件阈值）
+- **需求背景**：
+  1. 在 Task 6 起步态中，前端只让 `.zip` 课件包走 `/api/v1/tasks/parse`，普通单文件仍全部走同步 `/api/v1/project/parse`，与“把大文件解析从同步 HTTP 中拆出来”的长期目标还差一步。
+  2. 这次用户明确选择“仅大文件走任务化”，并确认把“普通单文件的大文件阈值”定为 `50MB`，以避免把所有单文件一刀切成 Base64 任务载荷。
+- **本次完成**：
+  1. 按 TDD 在 `frontend/src/hooks/generator/useFileParser.test.ts` 新增红灯测试，锁定 `50MB` 以上普通单文件必须走 `parse` 任务、小文件继续保持同步解析。
+  2. 在 `frontend/src/hooks/generator/useFileParser.ts` 增加 `ASYNC_PARSE_FILE_SIZE_THRESHOLD_BYTES = 50 * 1024 * 1024`，并让 `.zip` 或 `>50MB` 的普通文件统一走 `createParseTask -> task stream -> snapshot` 路径。
+  3. 同步更新 README、API、Architecture 文档，把“`.zip` + `50MB` 以上普通单文件走任务化”的口径写回仓库。
+- **验证记录**：
+  - `cd frontend && npm test -- --run src/hooks/generator/useFileParser.test.ts src/services/project.test.ts` 先失败、补实现后通过
+  - `cd frontend && npm run build` 通过
+  - `docker compose --env-file backend/.env.example config >/dev/null` 通过
+
+### [2026-06-03] Feat - Task 3 运行契约基线（健康检查 / Request ID / 结构化日志）
+- **需求背景**：
+  1. `docs/superpowers/plans/2026-06-03-microservices-long-term-implementation.md` 的 Task 3 要求在多服务形态下补齐最小运行契约，否则容器虽然“启动成功”，但仍缺少统一健康检查、请求关联 ID 与结构化访问日志，排障成本会迅速上升。
+  2. 本次明确不混入 `debug auth fix`，因此只允许修改服务入口、中间件、健康检查与 Compose healthcheck，不触碰现有鉴权逻辑。
+- **本次完成**：
+  1. 按 TDD 先新增 `backend/internal/transport/http/middleware/request_id_test.go`、`request_logger_test.go` 与 `backend/internal/transport/http/v1/api/health_test.go`，锁定 `X-Request-ID` 透传/生成、结构化访问日志字段，以及 `/api/v1/ping + /health + /ready` 的契约。
+  2. 新增 `backend/internal/transport/http/middleware/request_id.go`、`request_logger.go` 与 `backend/internal/transport/http/v1/api/health.go`，在不修改 `auth.go` 的前提下补齐统一请求 ID、结构化日志和可注入的 readiness check。
+  3. 修改 `core-api / llm-stream / parser-service / export-service / review-service` 五个入口：改用 `gin.New() + gin.Recovery()`，统一挂载 request id、请求日志与健康检查；其中 `llm-stream` 的 `/ready` 额外校验 `RABBITMQ_URL` 已配置。
+  4. 更新 `docker-compose.yml`，为五个后端服务和 `frontend` 增加 `healthcheck`，并让前端等待五个后端 `service_healthy` 后再启动。
+- **验证记录**：
+  - `cd backend && go test ./internal/transport/http/middleware ./internal/transport/http/v1/api ./cmd/core-api ./cmd/llm-stream ./cmd/parser-service ./cmd/export-service ./cmd/review-service` 先因缺失实现失败，补实现后通过
+  - `cd backend && go test ./...` 通过
+  - `docker compose --env-file backend/.env down` 通过
+  - `docker compose --env-file backend/.env up -d --build` 通过
+  - `docker compose --env-file backend/.env ps` 显示 `core-api / llm-stream / parser-service / export-service / review-service / frontend` 均为 `Up (healthy)`
+
+### [2026-06-03] Fix - core-api 显式注入 RabbitMQ publisher
+- **需求背景**：
+  1. `docs/superpowers/plans/2026-06-03-microservices-long-term-implementation.md` 的 Task 1 要求补齐 `core-api -> RabbitMQ -> llm-stream` 的生成任务发布闭环，不能继续使用 `taskdomain.NewService(taskRepo, nil)` 的占位注入。
+  2. 如果 `core-api` 仍然静默注入 `nil publisher`，就会出现任务创建接口表面成功、但后台永远没有消息可消费的隐性断链风险。
+- **本次完成**：
+  1. 按 TDD 先新增 `backend/cmd/core-api/main_test.go`，锁定 `RABBITMQ_URL` 缺失时必须报错，以及 `RABBITMQ_EXCHANGE` 需要正确透传或回退到默认值 `inkwords.events`。
+  2. 在 `backend/cmd/core-api/main.go` 新增 `initTaskPublisherFromEnv` 与 `newRabbitMQTaskPublisher`，启动时显式建立 RabbitMQ connection/channel、声明 exchange，并把 `mq.NewPublisher(...)` 注入 `taskdomain.NewService(...)`。
+  3. 复用同一个 `signalContext` 管理 HTTP 服务和 RabbitMQ publisher 生命周期，停机时通过幂等 cleanup 回收 channel 与 connection。
+- **验证记录**：
+  - `cd backend && go test ./cmd/core-api -count=1` 先失败（`undefined: initTaskPublisherFromEnv`），补实现后通过
+  - `cd backend && go test ./internal/domain/task ./internal/infra/mq -count=1` 通过
+
+### [2026-06-03] Feat - Task 2 收口默认任务式 SSE 入口
+- **需求背景**：
+  1. `docs/superpowers/plans/2026-06-03-microservices-long-term-implementation.md` 的 Task 2 要求把生成默认入口统一到 generation task + task stream，旧 `/api/v1/stream/*` 只保留回滚兼容。
+  2. 现状中单篇/系列生成已切到任务接口，但编辑器里的“继续生成 / 润色”仍直连旧 SSE，且前端对 task chunk 还存在“纯文本 / JSON 包裹 content”双协议分支。
+- **本次完成**：
+  1. 按 TDD 先在 `frontend/src/services/generationTasks.test.ts`、`backend/internal/domain/stream/task_consumer_test.go`、`backend/internal/transport/http/v1/routes_test.go` 增加失败测试，锁定统一任务载荷、task chunk 解码，以及 `continue / polish` 的 task consumer 支持和旧路由兼容性。
+  2. 在 `frontend/src/services/generationTasks.ts` 收口系列/单篇/继续/润色的任务载荷 builder、task 取消接口与 task chunk 文本提取逻辑。
+  3. 前端默认入口进一步统一：生成器停止时优先调用 `/api/v1/tasks/:id/cancel`；编辑器“继续生成”和润色 Hook 统一改为“创建任务 + 订阅 task stream”。
+  4. `backend/internal/domain/stream/task_consumer.go` 扩展支持 `continue / polish` 两类任务封装，继续复用旧 stream service 作为执行体，实现“默认入口收口，旧服务逻辑保留”。
+- **验证记录**：
+  - `cd frontend && npm test -- --run src/services/generationTasks.test.ts` 先失败、补实现后通过
+  - `cd backend && go test ./internal/domain/stream ./internal/transport/http/v1` 先失败、补实现后通过
+
 ### [2026-06-03] Docs/Infra - RabbitMQ 任务式生成 Phase B 的 Compose 与文档同步
 - **需求背景**：
   1. RabbitMQ 任务式生成链路的代码与计划已进入落地阶段，但 Compose、环境变量样例和项目基准文档尚未完整同步，容易造成本地启动口径与真实架构脱节。

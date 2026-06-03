@@ -65,3 +65,91 @@ jobs:
         run: |
           mkdir -p /tmp/obsidian-vault
           OBSIDIAN_VAULT_PATH=/tmp/obsidian-vault docker compose config
+
+  microservices-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ensure docker compose
+        run: |
+          docker --version
+          if docker compose version; then
+            exit 0
+          fi
+          sudo apt-get update
+          sudo apt-get install -y docker-compose-plugin
+          docker compose version
+
+      - name: prepare smoke env
+        run: |
+          mkdir -p /tmp/obsidian-vault/wiki
+
+      - name: docker compose up
+        env:
+          OBSIDIAN_VAULT_PATH: /tmp/obsidian-vault
+          DEEPSEEK_API_KEY: ci-placeholder-key
+          JWT_SECRET: ci-placeholder-jwt-secret
+          OBSIDIAN_REST_API_KEY: ci-placeholder-obsidian-key
+        run: |
+          docker compose --env-file backend/.env.example down || true
+          docker compose --env-file backend/.env.example up -d --build
+
+      - name: wait for healthy services
+        env:
+          OBSIDIAN_VAULT_PATH: /tmp/obsidian-vault
+          DEEPSEEK_API_KEY: ci-placeholder-key
+          JWT_SECRET: ci-placeholder-jwt-secret
+          OBSIDIAN_REST_API_KEY: ci-placeholder-obsidian-key
+        run: |
+          for attempt in $(seq 1 30); do
+            unhealthy=0
+            for container in \
+              inkwords-core-api \
+              inkwords-llm-stream \
+              inkwords-parser-service \
+              inkwords-export-service \
+              inkwords-review-service \
+              inkwords-frontend
+            do
+              status=$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' "$container")
+              echo "$container => $status"
+              if [ "$status" != "healthy" ]; then
+                unhealthy=1
+              fi
+            done
+
+            if [ "$unhealthy" -eq 0 ]; then
+              exit 0
+            fi
+
+            sleep 5
+          done
+
+          echo "Services did not become healthy in time"
+          docker compose --env-file backend/.env.example ps
+          exit 1
+
+      - name: gateway smoke checks
+        run: |
+          docker compose --env-file backend/.env.example ps
+          curl -I --fail http://localhost
+          curl --fail --silent http://localhost/api/v1/ping
+
+      - name: dump compose logs on failure
+        if: failure()
+        env:
+          OBSIDIAN_VAULT_PATH: /tmp/obsidian-vault
+          DEEPSEEK_API_KEY: ci-placeholder-key
+          JWT_SECRET: ci-placeholder-jwt-secret
+          OBSIDIAN_REST_API_KEY: ci-placeholder-obsidian-key
+        run: docker compose --env-file backend/.env.example logs --no-color
+
+      - name: docker compose down
+        if: always()
+        env:
+          OBSIDIAN_VAULT_PATH: /tmp/obsidian-vault
+          DEEPSEEK_API_KEY: ci-placeholder-key
+          JWT_SECRET: ci-placeholder-jwt-secret
+          OBSIDIAN_REST_API_KEY: ci-placeholder-obsidian-key
+        run: docker compose --env-file backend/.env.example down -v

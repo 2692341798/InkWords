@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - 数据库设计文档
 
 ## 0. 变更记录
+- 2026-06-03：Task 4 补齐数据库层面的“服务写入归属矩阵”。明确 `core-api` 事实拥有 `users / oauth_tokens / user_prompt_settings / blogs / job_tasks / job_task_events`，`review-service` 事实拥有 `review_sessions / review_turns`；同时记录当前允许的跨服务例外仅限 worker 通过 `task` 领域接口写 `job_tasks / job_task_events`，并把 `GeneratorService / DecompositionService` 仍直接使用全局 `db.DB` 写 `blogs / users` 记为待收口技术债。
 - 2026-06-03：生成链路进入 RabbitMQ 任务式 SSE Phase B。核心库新增 `job_tasks` 与 `job_task_events` 两张表，分别存储任务主状态与可回放事件流；RabbitMQ 仅负责跨服务投递，不承载最终状态，任务真实状态仍以 PostgreSQL 为准。
 - 2026-06-03：Docker 微服务化 Phase 2（已落地到代码与编排）。同一 Postgres 实例新增 review 独立 database：`inkwords_review_db`；`review-service` 使用 `REVIEW_DATABASE_URL` 连接；review 数据迁移与回滚按 Runbook 执行：[review-db-migration.md](file:///Users/huangqijun/Documents/%E5%A2%A8%E8%A8%80%E5%8D%9A%E5%AE%A2%E5%8A%A9%E6%89%8B/InkWords/docs/runbooks/review-db-migration.md)。本次不新增/不修改任何表字段表格（仅补充说明与引用）。
 - 2026-06-03：稳定性与工程化优化（Task 1-5）。本次不新增数据库表、字段或索引；主要变更为：系列生成链路补齐“前置草稿创建/清理 + 章节完成落库 + `users.tokens_used` 累加”的事务边界与可观测错误，避免章节正文写入成功但 Token 记账静默失败的状态不一致。
@@ -39,7 +40,24 @@
 - **连接字符串**: `postgres://inkwords:inkwords_password@db:5432/inkwords_db?sslmode=disable`
 - **挂载卷**: Docker volume `pgdata` 持久化至 `/var/lib/postgresql/data`。
 
-### 1.1 Phase 2：review 拆库（同实例不同 database）
+### 1.2 服务写入归属矩阵（Task 4）
+| 表 / 资源 | 事实归属服务 | 当前允许写入方 | 当前状态 |
+| --- | --- | --- | --- |
+| `users` | `core-api` | `core-api` | 已归属；登录、注册、Token 记账都在 core 侧 |
+| `oauth_tokens` | `core-api` | `core-api` | 已归属；模型存在，业务写入链路待后续恢复时继续沿用 core 归属 |
+| `user_prompt_settings` | `core-api` | `core-api` | 已归属；用户模板覆盖值不应被其它服务写入 |
+| `blogs` | `core-api` | `core-api` | 已归属；但仍有 `internal/service` 直写全局 `db.DB` 的技术债 |
+| `job_tasks` | `core-api` | `core-api`、`llm-stream`、`parser-service`、`export-service` | 允许受控跨服务写；仅限任务状态/结果 |
+| `job_task_events` | `core-api` | `core-api`、`llm-stream`、`parser-service`、`export-service` | 允许受控跨服务写；仅限可回放事件追加 |
+| `review_sessions` | `review-service` | `review-service` | 已拆到 `inkwords_review_db` |
+| `review_turns` | `review-service` | `review-service` | 已拆到 `inkwords_review_db` |
+
+### 1.3 当前允许的跨服务写入例外
+- `llm-stream`、`parser-service`、`export-service` 允许写 `job_tasks / job_task_events`，原因是统一任务中心目前承担跨服务控制面职责。
+- 上述例外的前提是：只能通过 `internal/domain/task` 的显式仓储接口写入，禁止在其它 service 中直接拿全局 `db.DB` 写任务表。
+- 除任务控制面外，当前不存在“非归属服务直接写业务表”的允许清单；`blogs`、`users`、`review_*` 仍按服务归属严格约束。
+
+### 1.4 Phase 2：review 拆库（同实例不同 database）
 - **core db**：`inkwords_db`（博客、用户、导出相关结构化数据等）
 - **review db**：`inkwords_review_db`（仅 review 相关数据）
 - **迁移与回滚**：按 Runbook 执行：[review-db-migration.md](file:///Users/huangqijun/Documents/%E5%A2%A8%E8%A8%80%E5%8D%9A%E5%AE%A2%E5%8A%A9%E6%89%8B/InkWords/docs/runbooks/review-db-migration.md)
@@ -192,6 +210,11 @@
 - `job_tasks` 与 `job_task_events` 已纳入 core db 的统一迁移列表；当前阶段不依赖单独迁移脚本，随 `core-api` / `llm-stream` 启动自动对齐。
 - `review_sessions` 与 `review_turns` 已纳入 `backend/internal/infra/db/db.go` 的统一迁移列表，避免主程序启动与测试路径使用不同的迁移集合。
 - 敏感数据如密码，在存入数据库之前必须经过 `golang.org/x/crypto/bcrypt` 进行哈希加密。
+
+### 4.1 当前待收口写点（Task 4 扫描结论）
+- `backend/internal/service/generator.go`：仍直接通过全局 `db.DB` 事务写 `blogs` 与 `users.tokens_used`。
+- `backend/internal/service/decomposition_generate.go`、`decomposition_generate_intro.go`、`decomposition_generate_continue.go`、`decomposition_generate_persistence.go`：仍直接通过全局 `db.DB` 写系列父博客、章节草稿、续写正文和失败状态。
+- 这些写点虽然没有跨服务越权，但它们绕过了 `domain/blog` 的仓储边界；在推进独立实例拆分前，需要先收口到显式 repository / service 接口。
 
 ## 5. 外部数据持久化 (External Persistence)
 - **Obsidian 本地知识库导出**: 除关系型数据库外，系统支持将 `blogs` 表中的结构化数据导出为纯文本的 Markdown 文件，并在文件头部自动生成兼容 Karpathy LLM Wiki Pattern 的 YAML Frontmatter。导出支持两种形态：

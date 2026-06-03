@@ -76,11 +76,30 @@ docker compose --env-file backend/.env down && docker compose --env-file backend
 启动前请先在 `backend/.env` 中配置必要环境变量：
 - **必须配置**：`DEEPSEEK_API_KEY`、`JWT_SECRET`、`OBSIDIAN_REST_API_KEY`、`OBSIDIAN_VAULT_PATH`
 - **Docker 运行时建议显式维护**：`POSTGRES_USER`、`POSTGRES_PASSWORD`、`POSTGRES_DB`
-- **按需覆盖**：`FRONTEND_URL`、`REDIS_URL`、`RABBITMQ_URL`、`RABBITMQ_EXCHANGE`、`RABBITMQ_GENERATION_QUEUE`、`OBSIDIAN_REST_API_BASE_URL`、`OBSIDIAN_WIKI_DIR`
+- **按需覆盖**：`FRONTEND_URL`、`REDIS_URL`、`RABBITMQ_URL`、`RABBITMQ_EXCHANGE`、`RABBITMQ_GENERATION_QUEUE`、`RABBITMQ_PARSE_QUEUE`、`RABBITMQ_EXPORT_QUEUE`、`EXPORT_ARTIFACTS_DIR`、`OBSIDIAN_REST_API_BASE_URL`、`OBSIDIAN_WIKI_DIR`
 
 当前 Docker 默认仅暴露前端入口 `http://localhost`；`core-api`、`llm-stream`、`parser-service`、`export-service`、`review-service`、`db`、`redis`、`rabbitmq` 仅在 Docker 内部网络 `inkwords-network` 中互通，不再默认暴露宿主机端口。当前 Docker 本地开发仍默认通过 `backend/.env` 中的 `OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY=true` 访问 Obsidian Local REST API，避免把宿主机错误文件挂载成证书；如需启用严格证书校验，请显式配置 `OBSIDIAN_REST_API_CERT_PATH` 指向真实插件证书，并将 `OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY=false`。
 
-生成链路当前已进入“任务式 SSE”第一阶段：前端先向 `core-api` 创建生成任务，任务消息经 RabbitMQ 投递给 `llm-stream` worker，再由 `core-api` 基于数据库中的任务事件表对外继续输出 SSE。这样可以在保持前端入口与 `/api/*` 路径不变的前提下，把长耗时生成从同步长请求收敛为可排队、可查询、可取消的后台任务。
+Task 3 已为 `core-api / llm-stream / parser-service / export-service / review-service / frontend` 增加 Compose healthcheck。标准重启后可用以下命令确认运行契约已经生效：
+
+```bash
+docker compose --env-file backend/.env ps
+```
+
+预期结果：前端与五个后端服务均显示 `Up (healthy)`。其中后端容器内部统一暴露：
+- `GET /api/v1/ping`：兼容历史探针
+- `GET /health`：进程存活探针
+- `GET /ready`：依赖就绪探针
+
+所有后端请求现已统一透传或生成 `X-Request-ID`，并输出带 `service / request_id / path / method / status / latency_ms` 字段的结构化访问日志，便于跨服务排障。
+
+Task 9 已新增微服务冒烟 Runbook：[microservices-smoke-check.md](file:///Users/huangqijun/Documents/墨言博客助手/InkWords/docs/runbooks/microservices-smoke-check.md)。当你修改了 Compose、Nginx 代理、任务中心、健康检查或服务入口后，请优先按这份清单执行“服务启动 -> 网关访问 -> 任务创建 -> 任务 SSE -> review / parser / export 基础通路”验证，而不是只看单个容器是否启动。
+
+生成链路当前默认走“任务式 SSE”：前端统一先向 `core-api` 创建生成任务，再订阅 `/api/v1/tasks/:id/stream`；任务消息经 RabbitMQ 投递给 `llm-stream` worker，再由 `core-api` 基于数据库中的任务事件表对外继续输出 SSE。这样可以在保持前端入口与 `/api/*` 路径不变的前提下，把长耗时生成从同步长请求收敛为可排队、可查询、可取消的后台任务。旧 `/api/v1/stream/*`、`/api/v1/blogs/:id/continue`、`/api/v1/blogs/:id/polish` 仍保留，作为紧急回滚兼容路径。
+
+`parser-service` 也已开始接入同一套任务中心：`core-api` 新增 `POST /api/v1/tasks/parse`，把 `parse_file / parse_archive` 任务投递到 RabbitMQ `parse.requested`，再由 `parser-service` worker 异步消费并把结果写回任务表。当前前端默认让 `.zip` 课件包和 `50MB` 以上的普通单文件走这条任务式解析链路；`50MB` 及以下的普通单文件仍保留 `/api/v1/project/parse` 作为同步兼容路径。
+
+`export-service` 现已接入同一套任务中心：前端侧边栏导出 PDF 时，会先向 `core-api` 创建 `POST /api/v1/tasks/export`，随后订阅统一任务流，等待 `export-service` worker 消费 RabbitMQ `export.requested` 后生成 PDF，并通过 `GET /api/v1/tasks/:id/download` 走受控下载。当前导出产物落在共享卷 `EXPORT_ARTIFACTS_DIR`，下载成功后会立即删除文件；同步 `/api/v1/blogs/:id/export/pdf` 仍保留，作为紧急回滚路径。
 
 如果你需要在 Docker 模式下使用 GitHub OAuth，Compose 现在会默认把回调地址固定为 `http://localhost/api/v1/auth/callback/github`，避免错误跳回 Vite 本地开发端口 `5173`。如果你需要在 Docker 下覆盖这个地址（例如远程域名调试），请显式设置 `DOCKER_GITHUB_REDIRECT_URL`。如果你运行的是 Vite 本地开发服务器，再继续使用 `backend/.env` 中的 `GITHUB_REDIRECT_URL=http://localhost:5173/api/v1/auth/callback/github`。
 
@@ -95,6 +114,7 @@ docker compose --env-file backend/.env down && docker compose --env-file backend
 - 当前支持的代码/文本类包括：`.go`、`.js`、`.ts`、`.tsx`、`.jsx`、`.py`、`.java`、`.cpp`、`.c`、`.h`、`.hpp`、`.rs`、`.sql`、`.sh`、`.json`、`.yaml`、`.yml`。
 - 当前不支持 `.doc`、`rar/7z/tar.gz`、图片 OCR 与音视频转写。
 - 上传成功后，前端会显示 ZIP 解析摘要，例如保留、去重、忽略与失败数量。
+- 当前 `.zip` 课件包与 `50MB` 以上的普通单文件会先创建解析任务，再订阅 `/api/v1/tasks/:id/stream` 等待后台完成；`50MB` 及以下的普通文件仍保留同步解析接口作为兼容与回滚路径。
 
 ### 5.1.2 创作场景说明
 - **电子书解读**：适合经典著作、长文档、概念材料，输出更偏向篇章结构、观点提炼和白话解读。
@@ -185,6 +205,13 @@ go run ./cmd/server/main.go
 - Docker Compose 的生产形态为多服务（`core-api/llm-stream/parser-service/export-service/review-service`），通过前端 Nginx 统一对外提供服务（入口 `http://localhost`）。
 - `cmd/server` 是聚合入口，用于本地开发/集成调试；Docker 镜像默认不再隐式启动该入口。
 
+### 5.2.1 服务写入归属矩阵（Task 4）
+- `core-api` 事实拥有并负责写入：`users`、`oauth_tokens`、`user_prompt_settings`、`blogs`、`job_tasks`、`job_task_events`
+- `review-service` 事实拥有并负责写入：`review_sessions`、`review_turns`
+- 当前唯一允许的跨服务写入例外：`llm-stream`、`parser-service`、`export-service` 可通过 `internal/domain/task` 的显式仓储接口写 `job_tasks / job_task_events`
+- 当前明确待收口的技术债：`backend/internal/service/generator.go` 与 `backend/internal/service/decomposition_generate*.go` 仍直接使用全局 `db.DB` 写 `blogs / users`；这些写入仍属于 `core-api` 自有边界，但已经绕过 `domain/blog` 的仓储封装
+- 详细边界规则与后续收口步骤见 [core-blog-task-boundary.md](file:///Users/huangqijun/Documents/墨言博客助手/InkWords/docs/runbooks/core-blog-task-boundary.md)
+
 **启动前端：**
 ```bash
 cd frontend
@@ -209,6 +236,7 @@ npm run dev
 - 🔌 [4. API 接口设计文档 (API)](.trae/documents/InkWords_API.md)
 - 📅 [5. 开发计划与日志 (Plan & Log)](.trae/documents/InkWords_Development_Plan_and_Log.md)
 - 💬 [6. AI 对话与决策摘要 (Conversation Log)](.trae/documents/InkWords_Conversation_Log.md)
+- 🧪 [7. 微服务冒烟检查 Runbook](docs/runbooks/microservices-smoke-check.md)
 
 **Documentation as Code (代码与文档强同步)**：
 当业务逻辑、表结构或接口路由发生变更时，AI 助手**必须在修改代码的同一个执行上下文中**同步更新上述基准文档，并在日志中记录变动。
