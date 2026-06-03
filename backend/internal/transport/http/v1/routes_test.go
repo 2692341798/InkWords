@@ -116,9 +116,12 @@ func TestRegisterCore_TaskRoutesAreReachable(t *testing.T) {
 		},
 		Task: TaskHandlers{
 			CreateGeneration: ok,
+			CreateParse:      ok,
+			CreateExport:     ok,
 			GetTask:          ok,
 			CancelTask:       ok,
 			StreamTask:       ok,
+			DownloadTask:     ok,
 		},
 	})
 
@@ -127,9 +130,48 @@ func TestRegisterCore_TaskRoutesAreReachable(t *testing.T) {
 		path   string
 	}{
 		{method: http.MethodPost, path: "/api/v1/tasks/generation"},
+		{method: http.MethodPost, path: "/api/v1/tasks/parse"},
+		{method: http.MethodPost, path: "/api/v1/tasks/export"},
 		{method: http.MethodGet, path: "/api/v1/tasks/123e4567-e89b-12d3-a456-426614174000"},
 		{method: http.MethodPost, path: "/api/v1/tasks/123e4567-e89b-12d3-a456-426614174000/cancel"},
 		{method: http.MethodGet, path: "/api/v1/tasks/123e4567-e89b-12d3-a456-426614174000/stream"},
+		{method: http.MethodGet, path: "/api/v1/tasks/123e4567-e89b-12d3-a456-426614174000/download"},
+	} {
+		req := httptest.NewRequest(tc.method, tc.path, nil)
+		resp := httptest.NewRecorder()
+		r.ServeHTTP(resp, req)
+		require.Equal(t, http.StatusOK, resp.Code)
+	}
+}
+
+func TestRegisterStream_LegacyRoutesRemainReachableForRollback(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+
+	authMiddleware := func(c *gin.Context) { c.Next() }
+	ok := func(c *gin.Context) { c.Status(http.StatusOK) }
+
+	RegisterStream(r, authMiddleware, StreamOnlyHandlers{
+		Blog: StreamBlogHandlers{
+			ContinueBlog: ok,
+			PolishBlog:   ok,
+		},
+		Stream: StreamHandlers{
+			ScanStreamHandler:     ok,
+			AnalyzeStreamHandler:  ok,
+			GenerateStreamHandler: ok,
+		},
+	})
+
+	for _, tc := range []struct {
+		method string
+		path   string
+	}{
+		{method: http.MethodPost, path: "/api/v1/stream/scan"},
+		{method: http.MethodPost, path: "/api/v1/stream/analyze"},
+		{method: http.MethodPost, path: "/api/v1/stream/generate"},
+		{method: http.MethodPost, path: "/api/v1/blogs/123e4567-e89b-12d3-a456-426614174000/continue"},
+		{method: http.MethodPost, path: "/api/v1/blogs/123e4567-e89b-12d3-a456-426614174000/polish"},
 	} {
 		req := httptest.NewRequest(tc.method, tc.path, nil)
 		resp := httptest.NewRecorder()

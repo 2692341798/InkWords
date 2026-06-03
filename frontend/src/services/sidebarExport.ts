@@ -1,9 +1,19 @@
 import type { BlogNode } from '@/store/blogStore'
+import {
+  createExportTask as createExportTaskRequest,
+  downloadTaskArtifact as downloadTaskArtifactRequest,
+  waitForTaskCompletion as waitForTaskCompletionRequest,
+} from './exportTasks'
 
 interface SidebarExportDependencies {
   fetchImpl?: typeof fetch
   getToken?: () => string | null
   downloadBlob?: (blob: Blob, filename: string) => void
+  createExportTask?: (blogID: string) => Promise<{ task_id: string; stream_url: string }>
+  waitForTaskCompletion?: (
+    streamURL: string,
+  ) => Promise<void | { status?: string; error_message?: string }>
+  downloadTaskArtifact?: (taskID: string, filename: string) => Promise<void>
 }
 
 interface SidebarPdfExportFailure {
@@ -21,28 +31,8 @@ function getAuthHeaders(token: string | null): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
-async function readErrorMessage(response: Response | { json?: () => Promise<unknown> }, fallback: string) {
-  const data = await response.json?.().catch(() => null)
-  if (typeof data === 'object' && data !== null && 'message' in data && typeof data.message === 'string') {
-    return data.message
-  }
-
-  return fallback
-}
-
 function sanitizeDownloadFilename(name: string) {
   return (name || 'series').replaceAll('/', '-').replaceAll('\\', '-').replaceAll(':', '：').trim()
-}
-
-function downloadBlobWithBrowser(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob)
-  const anchor = document.createElement('a')
-  anchor.href = url
-  anchor.download = filename
-  document.body.appendChild(anchor)
-  anchor.click()
-  URL.revokeObjectURL(url)
-  document.body.removeChild(anchor)
 }
 
 /**
@@ -77,25 +67,21 @@ export async function exportSeriesPdfs(
   seriesRoots: BlogNode[],
   dependencies: SidebarExportDependencies = {},
 ): Promise<SidebarPdfExportResult> {
-  const fetchImpl = dependencies.fetchImpl ?? fetch
-  const getToken = dependencies.getToken ?? (() => localStorage.getItem('token'))
-  const downloadBlob = dependencies.downloadBlob ?? downloadBlobWithBrowser
-  const token = getToken()
+  const createExportTask = dependencies.createExportTask ?? ((blogID: string) => createExportTaskRequest(blogID, dependencies))
+  const waitForTaskCompletion = dependencies.waitForTaskCompletion ?? waitForTaskCompletionRequest
+  const downloadTaskArtifact = dependencies.downloadTaskArtifact ?? ((taskID: string, filename: string) =>
+    downloadTaskArtifactRequest(taskID, filename, dependencies))
   const failed: SidebarPdfExportFailure[] = []
   let succeededCount = 0
 
   for (const series of seriesRoots) {
     try {
-      const response = await fetchImpl(`/api/v1/blogs/${series.id}/export/pdf`, {
-        headers: getAuthHeaders(token),
-      })
-
-      if (!response.ok) {
-        throw new Error(await readErrorMessage(response, '导出失败'))
+      const task = await createExportTask(series.id)
+      const snapshot = await waitForTaskCompletion(task.stream_url)
+      if (snapshot && snapshot.status && snapshot.status !== 'succeeded') {
+        throw new Error(snapshot.error_message || '导出失败')
       }
-
-      const blob = await response.blob()
-      downloadBlob(blob, `${sanitizeDownloadFilename(series.title)}.pdf`)
+      await downloadTaskArtifact(task.task_id, `${sanitizeDownloadFilename(series.title)}.pdf`)
       succeededCount += 1
     } catch (error: unknown) {
       failed.push({

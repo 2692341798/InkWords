@@ -42,9 +42,12 @@ type CoreBlogHandlers struct {
 
 type TaskHandlers struct {
 	CreateGeneration gin.HandlerFunc
+	CreateParse      gin.HandlerFunc
+	CreateExport     gin.HandlerFunc
 	GetTask          gin.HandlerFunc
 	CancelTask       gin.HandlerFunc
 	StreamTask       gin.HandlerFunc
+	DownloadTask     gin.HandlerFunc
 }
 
 type CoreHandlers struct {
@@ -119,6 +122,7 @@ type Handlers struct {
 	Review  ReviewHandlers
 }
 
+// RegisterCore wires the default core-api surface, including task-based generation routes.
 func RegisterCore(r *gin.Engine, authMiddleware gin.HandlerFunc, handlers CoreHandlers) {
 	if authMiddleware == nil {
 		panic("missing middleware: authMiddleware")
@@ -168,9 +172,12 @@ func RegisterCore(r *gin.Engine, authMiddleware gin.HandlerFunc, handlers CoreHa
 		taskGroup.Use(authMiddleware)
 		{
 			taskGroup.POST("/generation", handlers.Task.CreateGeneration)
+			taskGroup.POST("/parse", handlers.Task.CreateParse)
+			taskGroup.POST("/export", handlers.Task.CreateExport)
 			taskGroup.GET("/:id", handlers.Task.GetTask)
 			taskGroup.POST("/:id/cancel", handlers.Task.CancelTask)
 			taskGroup.GET("/:id/stream", handlers.Task.StreamTask)
+			taskGroup.GET("/:id/download", handlers.Task.DownloadTask)
 		}
 	}
 }
@@ -237,6 +244,7 @@ func RegisterReview(r *gin.Engine, authMiddleware gin.HandlerFunc, handlers Revi
 	}
 }
 
+// RegisterStream wires legacy direct SSE routes so operators still have a rollback path.
 func RegisterStream(r *gin.Engine, authMiddleware gin.HandlerFunc, handlers StreamOnlyHandlers) {
 	if authMiddleware == nil {
 		panic("missing middleware: authMiddleware")
@@ -407,9 +415,12 @@ func validateCoreHandlers(h CoreHandlers) {
 	must(h.Project.Analyze, "Project.Analyze")
 
 	must(h.Task.CreateGeneration, "Task.CreateGeneration")
+	must(h.Task.CreateParse, "Task.CreateParse")
+	must(h.Task.CreateExport, "Task.CreateExport")
 	must(h.Task.GetTask, "Task.GetTask")
 	must(h.Task.CancelTask, "Task.CancelTask")
 	must(h.Task.StreamTask, "Task.StreamTask")
+	must(h.Task.DownloadTask, "Task.DownloadTask")
 }
 
 func validateReviewHandlers(h ReviewHandlers) {

@@ -217,9 +217,13 @@ func (r *fakeRepository) ListEventsAfter(_ context.Context, taskID uuid.UUID, af
 }
 
 type fakePublisher struct {
-	mu       sync.Mutex
-	messages []GenerationRequestedMessage
-	err      error
+	mu            sync.Mutex
+	messages      []GenerationRequestedMessage
+	parseMessages []ParseRequestedMessage
+	exportMessages []ExportRequestedMessage
+	err           error
+	parseErr      error
+	exportErr     error
 }
 
 func (p *fakePublisher) PublishGenerationRequested(_ context.Context, message GenerationRequestedMessage) error {
@@ -230,6 +234,28 @@ func (p *fakePublisher) PublishGenerationRequested(_ context.Context, message Ge
 		return p.err
 	}
 	p.messages = append(p.messages, message)
+	return nil
+}
+
+func (p *fakePublisher) PublishParseRequested(_ context.Context, message ParseRequestedMessage) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.parseErr != nil {
+		return p.parseErr
+	}
+	p.parseMessages = append(p.parseMessages, message)
+	return nil
+}
+
+func (p *fakePublisher) PublishExportRequested(_ context.Context, message ExportRequestedMessage) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.exportErr != nil {
+		return p.exportErr
+	}
+	p.exportMessages = append(p.exportMessages, message)
 	return nil
 }
 
@@ -253,6 +279,43 @@ func TestService_CreateGenerationTask_PublishesMessage(t *testing.T) {
 	require.Equal(t, task.ID, publisher.messages[0].TaskID)
 }
 
+func TestService_CreateParseTask_PublishesMessage(t *testing.T) {
+	repo := newFakeRepository()
+	publisher := &fakePublisher{}
+	service := NewService(repo, publisher)
+
+	task, err := service.CreateParseTask(context.Background(), CreateParseTaskInput{
+		RequestedBy:    uuid.MustParse("77777777-7777-7777-7777-777777777777"),
+		TaskSubtype:    "parse_archive",
+		IdempotencyKey: "parse:archive:1",
+		Payload:        []byte(`{"filename":"courseware.zip","size_bytes":123}`),
+	})
+	require.NoError(t, err)
+	require.NotEqual(t, uuid.Nil, task.ID)
+	require.Equal(t, "parse", task.TaskType)
+	require.Len(t, publisher.parseMessages, 1)
+	require.Equal(t, task.ID, publisher.parseMessages[0].TaskID)
+	require.Equal(t, "parse_archive", publisher.parseMessages[0].Kind)
+}
+
+func TestService_CreateExportTask_PublishesMessage(t *testing.T) {
+	repo := newFakeRepository()
+	publisher := &fakePublisher{}
+	service := NewService(repo, publisher)
+
+	task, err := service.CreateExportTask(context.Background(), CreateExportTaskInput{
+		RequestedBy:    uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+		TaskSubtype:    ExportTaskSubtypePDF,
+		IdempotencyKey: "export-pdf:series-1",
+		Payload:        []byte(`{"blog_id":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"}`),
+	})
+	require.NoError(t, err)
+	require.Equal(t, taskTypeExport, task.TaskType)
+	require.Len(t, publisher.exportMessages, 1)
+	require.Equal(t, task.ID, publisher.exportMessages[0].TaskID)
+	require.Equal(t, ExportTaskSubtypePDF, publisher.exportMessages[0].Kind)
+}
+
 func TestService_CreateGenerationTask_PropagatesPublishError(t *testing.T) {
 	repo := newFakeRepository()
 	publisher := &fakePublisher{err: errors.New("publish failed")}
@@ -266,6 +329,21 @@ func TestService_CreateGenerationTask_PropagatesPublishError(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.ErrorContains(t, err, "publish failed")
+}
+
+func TestService_CreateParseTask_PropagatesPublishError(t *testing.T) {
+	repo := newFakeRepository()
+	publisher := &fakePublisher{parseErr: errors.New("publish parse failed")}
+	service := NewService(repo, publisher)
+
+	_, err := service.CreateParseTask(context.Background(), CreateParseTaskInput{
+		RequestedBy:    uuid.MustParse("88888888-8888-8888-8888-888888888888"),
+		TaskSubtype:    "parse_file",
+		IdempotencyKey: "parse:file:2",
+		Payload:        []byte(`{"filename":"lesson.md"}`),
+	})
+	require.Error(t, err)
+	require.ErrorContains(t, err, "publish parse failed")
 }
 
 func TestService_ListStreamEvents_ReturnsDoneWhenTaskFinished(t *testing.T) {

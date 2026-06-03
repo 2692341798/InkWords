@@ -70,6 +70,8 @@ services:
       RABBITMQ_URL: ${RABBITMQ_URL:-amqp://guest:guest@rabbitmq:5672/}
       RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-inkwords.events}
       RABBITMQ_GENERATION_QUEUE: ${RABBITMQ_GENERATION_QUEUE:-inkwords.generation}
+      RABBITMQ_EXPORT_QUEUE: ${RABBITMQ_EXPORT_QUEUE:-inkwords.export}
+      EXPORT_ARTIFACTS_DIR: ${EXPORT_ARTIFACTS_DIR:-/app/export-artifacts}
       JWT_SECRET: ${JWT_SECRET:-}
       GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
@@ -77,6 +79,7 @@ services:
       - "8080"
     volumes:
       - uploads:/app/uploads
+      - export-artifacts:/app/export-artifacts
       # Why: require an explicit host wiki path instead of silently binding a
       # machine-specific absolute path that only works on one workstation.
       - type: bind
@@ -94,6 +97,12 @@ services:
     networks:
       - inkwords-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/ready >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   llm-stream:
     build:
@@ -123,6 +132,12 @@ services:
     networks:
       - inkwords-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/ready >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   parser-service:
     build:
@@ -144,6 +159,12 @@ services:
     networks:
       - inkwords-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/ready >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   export-service:
     build:
@@ -161,21 +182,34 @@ services:
       OBSIDIAN_WIKI_DIR: ${OBSIDIAN_WIKI_DIR:-wiki}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-}
+      RABBITMQ_URL: ${RABBITMQ_URL:-amqp://guest:guest@rabbitmq:5672/}
+      RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-inkwords.events}
+      RABBITMQ_EXPORT_QUEUE: ${RABBITMQ_EXPORT_QUEUE:-inkwords.export}
+      EXPORT_ARTIFACTS_DIR: ${EXPORT_ARTIFACTS_DIR:-/app/export-artifacts}
       JWT_SECRET: ${JWT_SECRET:-}
     expose:
       - "8080"
     volumes:
+      - export-artifacts:/app/export-artifacts
       - type: bind
         source: ${OBSIDIAN_VAULT_PATH:?Set OBSIDIAN_VAULT_PATH in backend/.env (used with --env-file) or your shell environment}
         target: /app/obsidian
     depends_on:
       db:
         condition: service_healthy
+      rabbitmq:
+        condition: service_started
       obsidian-bridge:
         condition: service_started
     networks:
       - inkwords-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/ready >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   review-service:
     build:
@@ -205,6 +239,12 @@ services:
     networks:
       - inkwords-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/ready >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   redis:
     image: redis/redis-stack-server:7.2.0-v9
@@ -227,11 +267,25 @@ services:
     ports:
       - "80:80"
     depends_on:
-      - core-api
-      - llm-stream
+      core-api:
+        condition: service_healthy
+      llm-stream:
+        condition: service_healthy
+      parser-service:
+        condition: service_healthy
+      export-service:
+        condition: service_healthy
+      review-service:
+        condition: service_healthy
     networks:
       - inkwords-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
 networks:
   inkwords-network:
@@ -241,3 +295,4 @@ volumes:
   pgdata:
   uploads:
   redisdata:
+  export-artifacts:

@@ -10,6 +10,12 @@ import { extractPolishedBody } from '@/lib/polishDraft'
 import { normalizeMarkdown } from '@/lib/markdownNormalize'
 import { fetchEventSourceWithAuth } from '@/services/sse'
 import { blogService } from '@/services/blog'
+import {
+  buildContinueTaskPayload,
+  buildGenerationTaskRequest,
+  createGenerationTask,
+  extractTaskChunkContent,
+} from '@/services/generationTasks'
 import { EditorHeader } from '@/components/editor/EditorHeader'
 import { EditorBody } from '@/components/editor/EditorBody'
 
@@ -312,26 +318,26 @@ export function Editor() {
     try {
       let currentContent = content
 
-      await fetchEventSourceWithAuth(`/api/v1/blogs/${selectedBlog.id}/continue`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({}),
+      const task = await createGenerationTask(
+        buildGenerationTaskRequest('continue', buildContinueTaskPayload(selectedBlog.id)),
+      )
+
+      await fetchEventSourceWithAuth(task.stream_url, {
+        method: 'GET',
         async onopen(response) {
           if (response.ok && response.headers.get('content-type')?.startsWith('text/event-stream')) {
-            return;
+            return
           }
           if (response.headers.get('content-type')?.includes('application/json')) {
-            const data = await response.json();
-            throw new StopStreamError(data.error || '请求失败');
+            const data = await response.json()
+            throw new StopStreamError(data.error || '请求失败')
           }
-          const text = await response.text();
-          throw new StopStreamError(text || `请求失败: ${response.status} ${response.statusText}`);
+          const text = await response.text()
+          throw new StopStreamError(text || `请求失败: ${response.status} ${response.statusText}`)
         },
         onmessage(msg) {
           if (msg.event === 'chunk') {
-            currentContent += msg.data
+            currentContent += extractTaskChunkContent(msg.data)
             setContent(currentContent)
           } else if (msg.event === 'done') {
             updateBlog(selectedBlog.id, { content: currentContent })

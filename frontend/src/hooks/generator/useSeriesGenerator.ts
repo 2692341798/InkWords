@@ -1,57 +1,30 @@
 import { useCallback } from 'react'
-import type { ScenarioMode } from '@/lib/scenarioMode'
 import { useStreamStore } from '@/store/streamStore'
 import { useBlogStore } from '@/store/blogStore'
 import { fetchEventSourceWithAuth } from '@/services/sse'
 import {
-  buildGenerationTaskRequest,
+  buildSeriesGenerationPayload,
+  buildSingleGenerationPayload,
   createGenerationTask,
+  extractTaskChunkContent,
+  buildGenerationTaskRequest,
+  type BuildSeriesGenerationPayloadInput,
 } from '@/services/generationTasks'
-import type { Chapter } from '@/store/streamStore'
 import { toast } from 'sonner'
 
 class StopStreamError extends Error {}
 
-interface SeriesGenerateRequestInput {
-  sourceType: 'git' | 'file' | null
-  gitUrl: string
-  sourceContent: string
-  seriesTitle: string
-  outline: Chapter[] | null
-  parentBlogId: string | null
-  scenarioMode: ScenarioMode
-  promptProfileKey?: string
-  documentKind?: string
-}
-
-export function buildSeriesGenerateRequest(input: SeriesGenerateRequestInput) {
-  return {
-    source_type: input.sourceType,
-    git_url: input.gitUrl,
-    source_content: input.sourceContent,
-    series_title: input.seriesTitle,
-    outline: input.outline,
-    parent_id: input.parentBlogId,
-    scenario_mode: input.scenarioMode,
-    prompt_profile_key: input.promptProfileKey,
-    document_kind: input.documentKind,
-  }
+export function buildSeriesGenerateRequest(input: BuildSeriesGenerationPayloadInput) {
+  return buildSeriesGenerationPayload(input)
 }
 
 export function buildSingleGenerateRequest(
   content: string,
-  scenarioMode: ScenarioMode,
+  scenarioMode: BuildSeriesGenerationPayloadInput['scenarioMode'],
   promptProfileKey?: string,
   documentKind?: string,
 ) {
-  return {
-    source_type: 'file' as const,
-    source_content: content,
-    outline: [],
-    scenario_mode: scenarioMode,
-    prompt_profile_key: promptProfileKey,
-    document_kind: documentKind,
-  }
+  return buildSingleGenerationPayload(content, scenarioMode, promptProfileKey, documentKind)
 }
 
 type SeriesChunkStore = Pick<
@@ -186,7 +159,7 @@ export const useSeriesGenerator = () => {
       const task = await createGenerationTask(
         buildGenerationTaskRequest(
           'generate_series',
-          buildSeriesGenerateRequest({
+          buildSeriesGenerationPayload({
             sourceType: store.sourceType,
             gitUrl: store.gitUrl,
             sourceContent: store.sourceContent,
@@ -253,7 +226,7 @@ export const useSeriesGenerator = () => {
                 msg.data,
               )
             } catch {
-              currentStore.bufferContent(msg.data)
+              currentStore.bufferContent(extractTaskChunkContent(msg.data))
             }
           }
         },
@@ -312,7 +285,7 @@ export const useSeriesGenerator = () => {
       const task = await createGenerationTask(
         buildGenerationTaskRequest(
           'generate_single',
-          buildSingleGenerateRequest(
+          buildSingleGenerationPayload(
             content,
             store.scenarioMode,
             store.resolvedPromptProfile?.key,
@@ -358,7 +331,7 @@ export const useSeriesGenerator = () => {
             if (useStreamStore.getState().progress === '准备生成环境...') {
               currentStore.setProgress('')
             }
-            currentStore.bufferContent(msg.data)
+            currentStore.bufferContent(extractTaskChunkContent(msg.data))
           }
         },
         onclose() {

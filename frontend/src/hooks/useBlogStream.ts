@@ -4,6 +4,7 @@ import { useProjectScanner } from './generator/useProjectScanner'
 import { useProjectAnalyzer } from './generator/useProjectAnalyzer'
 import { useFileParser } from './generator/useFileParser'
 import { useSeriesGenerator } from './generator/useSeriesGenerator'
+import { cancelGenerationTask } from '@/services/generationTasks'
 
 /**
  * Provides a single orchestration surface for the generator workflow so pages
@@ -29,6 +30,13 @@ export const useBlogStream = () => {
 
   const stopGenerating = useCallback(() => {
     const store = useStreamStore.getState()
+    const currentTaskId = store.currentTaskId
+    if (currentTaskId) {
+      void cancelGenerationTask(currentTaskId).catch(() => {
+        // Why: 取消任务是“尽力而为”的后台动作，前端本地中止仍然应该立刻响应用户点击。
+      })
+      store.setCurrentTaskId(null)
+    }
     if (store.abortController) {
       store.abortController.abort()
       store.setAbortController(null)

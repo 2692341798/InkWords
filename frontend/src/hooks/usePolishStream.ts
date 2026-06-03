@@ -3,6 +3,13 @@ import { toast } from 'sonner'
 import { shouldResetPolishState } from '@/lib/polishStreamStop'
 import { createTextChunkBuffer } from '@/lib/streamFlushBuffer'
 import { fetchEventSourceWithAuth } from '@/services/sse'
+import {
+  buildGenerationTaskRequest,
+  buildPolishTaskPayload,
+  cancelGenerationTask,
+  createGenerationTask,
+  extractTaskChunkContent,
+} from '@/services/generationTasks'
 
 class StopStreamError extends Error {}
 
@@ -14,6 +21,7 @@ class StopStreamError extends Error {}
 export const usePolishStream = () => {
   const abortControllerRef = useRef<AbortController | null>(null)
   const draftBufferRef = useRef<ReturnType<typeof createTextChunkBuffer> | null>(null)
+  const taskIdRef = useRef<string | null>(null)
   const [isPolishing, setIsPolishing] = useState(false)
   const [draft, setDraft] = useState('')
 
@@ -30,6 +38,12 @@ export const usePolishStream = () => {
   }, [])
 
   const cancelAndClear = useCallback(() => {
+    if (taskIdRef.current) {
+      void cancelGenerationTask(taskIdRef.current).catch(() => {
+        // Why: 用户点击取消时优先保证本地 UI 立即收敛，后台取消失败不应阻塞交互。
+      })
+      taskIdRef.current = null
+    }
     draftBufferRef.current?.cancel()
     abortControllerRef.current?.abort()
     abortControllerRef.current = null
@@ -44,16 +58,18 @@ export const usePolishStream = () => {
     abortControllerRef.current?.abort()
     const ctrl = new AbortController()
     abortControllerRef.current = ctrl
+    taskIdRef.current = null
 
     try {
-      await fetchEventSourceWithAuth(`/api/v1/blogs/${blogId}/polish`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+      const task = await createGenerationTask(
+        buildGenerationTaskRequest('polish', buildPolishTaskPayload(blogId, title, content)),
+      )
+      taskIdRef.current = task.task_id
+
+      await fetchEventSourceWithAuth(task.stream_url, {
+        method: 'GET',
         signal: ctrl.signal,
         openWhenHidden: true,
-        body: JSON.stringify({ title, content }),
         async onopen(response) {
           if (response.ok && response.headers.get('content-type')?.startsWith('text/event-stream')) {
             return
@@ -67,11 +83,12 @@ export const usePolishStream = () => {
         },
         onmessage(msg) {
           if (msg.event === 'chunk') {
-            draftBufferRef.current?.push(msg.data)
+            draftBufferRef.current?.push(extractTaskChunkContent(msg.data))
             return
           }
           if (msg.event === 'done') {
             draftBufferRef.current?.flush()
+            taskIdRef.current = null
             setIsPolishing(false)
             throw new StopStreamError('done')
           }
@@ -81,6 +98,7 @@ export const usePolishStream = () => {
             } else {
               draftBufferRef.current?.flush()
             }
+            taskIdRef.current = null
             setIsPolishing(false)
             throw new StopStreamError(msg.data)
           }
@@ -91,6 +109,7 @@ export const usePolishStream = () => {
           } else {
             draftBufferRef.current?.flush()
           }
+          taskIdRef.current = null
           setIsPolishing(false)
           throw new StopStreamError('closed by server')
         },
@@ -101,6 +120,7 @@ export const usePolishStream = () => {
             draftBufferRef.current?.flush()
           }
           if (err instanceof StopStreamError) {
+            taskIdRef.current = null
             setIsPolishing(false)
             throw err
           }
@@ -118,6 +138,7 @@ export const usePolishStream = () => {
           ) {
             throw new StopStreamError('aborted')
           }
+          taskIdRef.current = null
           setIsPolishing(false)
           throw err
         }

@@ -49,15 +49,12 @@ func main() {
 		log.Printf("Redis initialization failed (cache will be disabled): %v", err)
 	}
 
-	r := gin.Default()
-
-	r.GET("/api/v1/ping", func(c *gin.Context) {
-		c.JSON(200, gin.H{
-			"code":    200,
-			"message": "pong",
-			"data":    nil,
-		})
-	})
+	r := gin.New()
+	r.Use(gin.Recovery(), middleware.RequestID(), middleware.RequestLogger("llm-stream"))
+	api.RegisterHealthRoutes(r, api.NewHealthAPI("llm-stream", map[string]api.ReadinessCheck{
+		"db":              api.NewGormReadinessCheck(db.DB),
+		"rabbitmq_config": api.NewRequiredValueCheck(os.Getenv("RABBITMQ_URL"), "RABBITMQ_URL is not configured"),
+	}))
 
 	userService := service.NewUserService(db.DB)
 	promptReqService := service.NewPromptRequirementsService(db.DB)

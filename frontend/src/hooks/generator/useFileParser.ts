@@ -5,6 +5,7 @@ import { fetchEventSourceWithAuth } from '@/services/sse'
 import { projectService } from '@/services/project'
 import { toast } from 'sonner'
 import {
+  type ArchiveSummary,
   buildLargeFileAnalysisHint,
   extractArchiveSummary,
   extractParsedFileContent,
@@ -14,6 +15,8 @@ import {
 import { buildCurrentFileAnalyzeRequest } from './fileAnalyzeRequest'
 
 class StopStreamError extends Error {}
+
+const ASYNC_PARSE_FILE_SIZE_THRESHOLD_BYTES = 50 * 1024 * 1024
 
 interface ParseUploadedFileStore {
   abortController: AbortController | null
@@ -36,6 +39,15 @@ interface ParseUploadedFileInput {
   file: File
   store: ParseUploadedFileStore
   parseProjectFile: (formData: FormData, signal?: AbortSignal) => Promise<ParseFileResponse>
+  createParseTask?: (file: File) => Promise<{ task_id: string; stream_url: string }>
+  getTaskSnapshot?: (taskID: string) => Promise<{
+    status: string
+    result?: {
+      source_content?: string
+      archive_summary?: ArchiveSummary
+    }
+    error_message?: string
+  }>
 }
 
 /**
@@ -46,6 +58,8 @@ export async function parseUploadedFile({
   file,
   store,
   parseProjectFile,
+  createParseTask,
+  getTaskSnapshot,
 }: ParseUploadedFileInput) {
   store.setAnalyzing(true)
   store.setAnalysisStep(0)
@@ -63,10 +77,19 @@ export async function parseUploadedFile({
   store.setAbortController(ctrl)
 
   try {
-    const formData = new FormData()
-    formData.append('file', file)
-
-    const data = await parseProjectFile(formData, ctrl.signal)
+    const data =
+      shouldUseParseTask(file) && createParseTask && getTaskSnapshot
+        ? await parseFileViaTask({
+            file,
+            signal: ctrl.signal,
+            createParseTask,
+            getTaskSnapshot,
+          })
+        : await parseFileSynchronously({
+            file,
+            signal: ctrl.signal,
+            parseProjectFile,
+          })
     const content = extractParsedFileContent(data)
     const archiveSummary = extractArchiveSummary(data)
     if (!content) {
@@ -102,6 +125,74 @@ export async function parseUploadedFile({
       toast.error(errMsg)
     }
     throw err
+  }
+}
+
+const shouldUseParseTask = (file: File) =>
+  file.name.toLowerCase().endsWith('.zip') || file.size > ASYNC_PARSE_FILE_SIZE_THRESHOLD_BYTES
+
+async function parseFileSynchronously({
+  file,
+  signal,
+  parseProjectFile,
+}: {
+  file: File
+  signal: AbortSignal
+  parseProjectFile: (formData: FormData, signal?: AbortSignal) => Promise<ParseFileResponse>
+}) {
+  const formData = new FormData()
+  formData.append('file', file)
+  return parseProjectFile(formData, signal)
+}
+
+async function parseFileViaTask({
+  file,
+  signal,
+  createParseTask,
+  getTaskSnapshot,
+}: {
+  file: File
+  signal: AbortSignal
+  createParseTask: (file: File) => Promise<{ task_id: string; stream_url: string }>
+  getTaskSnapshot: (taskID: string) => Promise<{
+    status: string
+    result?: {
+      source_content?: string
+      archive_summary?: ArchiveSummary
+    }
+    error_message?: string
+  }>
+}) {
+  const task = await createParseTask(file)
+  await fetchEventSourceWithAuth(task.stream_url, {
+    method: 'GET',
+    signal,
+    openWhenHidden: true,
+    async onopen(response) {
+      if (response.ok && response.headers.get('content-type')?.startsWith('text/event-stream')) {
+        return
+      }
+      if (response.headers.get('content-type')?.includes('application/json')) {
+        const data = await response.json()
+        throw new StopStreamError(data.message || data.error || '解析任务请求失败')
+      }
+      const text = await response.text()
+      throw new StopStreamError(text || `解析任务请求失败: ${response.status} ${response.statusText}`)
+    },
+    onmessage(msg) {
+      if (msg.event === 'error') {
+        throw new StopStreamError(msg.data || '解析任务执行失败')
+      }
+    },
+  })
+
+  const snapshot = await getTaskSnapshot(task.task_id)
+  if (snapshot.status !== 'succeeded' || !snapshot.result) {
+    throw new Error(snapshot.error_message || '解析任务未成功完成')
+  }
+
+  return {
+    data: snapshot.result,
   }
 }
 
@@ -205,6 +296,8 @@ export const useFileParser = () => {
       file,
       store: useStreamStore.getState(),
       parseProjectFile: projectService.parseProjectFile,
+      createParseTask: projectService.createParseTask,
+      getTaskSnapshot: projectService.getTaskSnapshot,
     })
   }, [])
 

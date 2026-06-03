@@ -27,6 +27,8 @@ type Repository interface {
 // Publisher 定义任务创建后向外部消息系统发布事件的能力边界。
 type Publisher interface {
 	PublishGenerationRequested(ctx context.Context, payload GenerationRequestedMessage) error
+	PublishParseRequested(ctx context.Context, payload ParseRequestedMessage) error
+	PublishExportRequested(ctx context.Context, payload ExportRequestedMessage) error
 }
 
 // GormRepository 使用 GORM 实现任务领域的数据访问。

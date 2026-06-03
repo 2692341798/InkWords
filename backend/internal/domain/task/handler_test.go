@@ -25,7 +25,7 @@ func TestHandler_CreateGenerationTask_ReturnsAccepted(t *testing.T) {
 			Status: model.JobTaskStatusQueued,
 		},
 	}
-	handler := NewHandler(service)
+	handler := NewHandler(service, "")
 
 	router := gin.New()
 	router.POST("/api/v1/tasks/generation", func(c *gin.Context) {
@@ -46,6 +46,39 @@ func TestHandler_CreateGenerationTask_ReturnsAccepted(t *testing.T) {
 	require.Equal(t, "generate_single", service.lastCreateInput.TaskSubtype)
 }
 
+func TestHandler_CreateExportTask_ReturnsAccepted(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	service := &fakeTaskHandlerService{
+		createTaskResult: model.JobTask{
+			ID:       uuid.MustParse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"),
+			TaskType: taskTypeExport,
+			Status:   model.JobTaskStatusQueued,
+		},
+	}
+	handler := NewHandler(service, "")
+
+	router := gin.New()
+	router.POST("/api/v1/tasks/export", func(c *gin.Context) {
+		c.Set("user_id", uuid.MustParse("11111111-1111-1111-1111-111111111111"))
+		handler.CreateExportTask(c)
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/export", strings.NewReader(`{
+		"kind":"export_pdf",
+		"payload":{"blog_id":"22222222-2222-2222-2222-222222222222"},
+		"idempotency_key":"export-pdf:series-1"
+	}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	require.Equal(t, http.StatusAccepted, resp.Code)
+	require.Contains(t, resp.Body.String(), `"stream_url":"/api/v1/tasks/eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee/stream"`)
+	require.Equal(t, ExportTaskSubtypePDF, service.lastExportCreateInput.TaskSubtype)
+}
+
 func TestHandler_GetTask_ReturnsTaskSnapshot(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -58,7 +91,7 @@ func TestHandler_GetTask_ReturnsTaskSnapshot(t *testing.T) {
 			ResultJSON:  datatypes.JSON([]byte(`{"done":false}`)),
 		},
 	}
-	handler := NewHandler(service)
+	handler := NewHandler(service, "")
 
 	router := gin.New()
 	router.GET("/api/v1/tasks/:id", func(c *gin.Context) {
@@ -79,7 +112,7 @@ func TestHandler_CancelTask_ReturnsAccepted(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	service := &fakeTaskHandlerService{}
-	handler := NewHandler(service)
+	handler := NewHandler(service, "")
 
 	router := gin.New()
 	router.POST("/api/v1/tasks/:id/cancel", func(c *gin.Context) {
@@ -117,7 +150,7 @@ func TestHandler_StreamTask_StreamsEventsUntilDone(t *testing.T) {
 		},
 		streamDoneAfterCall: 2,
 	}
-	handler := NewHandler(service)
+	handler := NewHandler(service, "")
 	handler.pollInterval = time.Millisecond
 
 	router := gin.New()
@@ -143,7 +176,9 @@ type fakeTaskHandlerService struct {
 	streamEvents        [][]model.JobTaskEvent
 	streamDoneAfterCall int
 
-	lastCreateInput     CreateGenerationTaskInput
+	lastCreateInput      CreateGenerationTaskInput
+	lastParseCreateInput CreateParseTaskInput
+	lastExportCreateInput CreateExportTaskInput
 	lastGetTaskID       uuid.UUID
 	lastCancelledTaskID uuid.UUID
 	lastAfterID         uint64
@@ -152,6 +187,16 @@ type fakeTaskHandlerService struct {
 
 func (f *fakeTaskHandlerService) CreateGenerationTask(_ context.Context, input CreateGenerationTaskInput) (model.JobTask, error) {
 	f.lastCreateInput = input
+	return f.createTaskResult, nil
+}
+
+func (f *fakeTaskHandlerService) CreateParseTask(_ context.Context, input CreateParseTaskInput) (model.JobTask, error) {
+	f.lastParseCreateInput = input
+	return f.createTaskResult, nil
+}
+
+func (f *fakeTaskHandlerService) CreateExportTask(_ context.Context, input CreateExportTaskInput) (model.JobTask, error) {
+	f.lastExportCreateInput = input
 	return f.createTaskResult, nil
 }
 
@@ -173,4 +218,35 @@ func (f *fakeTaskHandlerService) ListStreamEvents(_ context.Context, _ uuid.UUID
 		return f.streamEvents[index], f.streamDoneAfterCall == f.streamCalls, nil
 	}
 	return nil, f.streamDoneAfterCall > 0 && f.streamCalls >= f.streamDoneAfterCall, nil
+}
+
+func TestHandler_CreateParseTask_ReturnsAccepted(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	service := &fakeTaskHandlerService{
+		createTaskResult: model.JobTask{
+			ID:       uuid.MustParse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"),
+			TaskType: "parse",
+			Status:   model.JobTaskStatusQueued,
+		},
+	}
+	handler := NewHandler(service, "")
+
+	router := gin.New()
+	router.POST("/api/v1/tasks/parse", func(c *gin.Context) {
+		c.Set("user_id", uuid.MustParse("11111111-1111-1111-1111-111111111111"))
+		handler.CreateParseTask(c)
+	})
+
+	body := `{"kind":"parse_archive","payload":{"filename":"courseware.zip","size_bytes":123},"idempotency_key":"parse:1"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tasks/parse", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+
+	router.ServeHTTP(resp, req)
+
+	require.Equal(t, http.StatusAccepted, resp.Code)
+	require.Contains(t, resp.Body.String(), `"task_id":"eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"`)
+	require.Contains(t, resp.Body.String(), `"/api/v1/tasks/eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee/stream"`)
+	require.Equal(t, "parse_archive", service.lastParseCreateInput.TaskSubtype)
 }
