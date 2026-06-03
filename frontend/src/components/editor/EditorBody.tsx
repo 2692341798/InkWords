@@ -1,4 +1,4 @@
-import type { RefObject } from 'react'
+import { useDeferredValue, type RefObject } from 'react'
 import { Button } from '../ui/button'
 import { Loader2 } from 'lucide-react'
 import { MarkdownEngine } from '../MarkdownEngine'
@@ -37,6 +37,9 @@ export function EditorBody(props: EditorBodyProps) {
     onCancelPolish,
     onRetryPolish,
   } = props
+
+  const deferredContent = useDeferredValue(content)
+  const deferredPolishedDraft = useDeferredValue(normalizedPolishedDraft)
 
   return (
     <div className="flex-1 flex overflow-hidden print:overflow-visible print:block">
@@ -107,10 +110,9 @@ export function EditorBody(props: EditorBodyProps) {
         </div>
 
         <div className="max-w-3xl mx-auto p-8 print:p-0">
-          <MarkdownEngine content={activePreviewTab === 'polish' ? normalizedPolishedDraft : content} />
+          <MarkdownEngine content={activePreviewTab === 'polish' ? deferredPolishedDraft : deferredContent} />
         </div>
       </div>
     </div>
   )
 }
-

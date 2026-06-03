@@ -1,10 +1,11 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { CheckCircle2, CircleDashed, Loader2, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '../ui/button'
 import { useBlogStore } from '@/store/blogStore'
 import type { BlogNode } from '@/store/blogStore'
 import type { Chapter } from '@/store/streamStore'
+import { ConfirmDialog } from '../ui/confirm-dialog'
 
 type BlogMapValue = { node: BlogNode; parentId: string | null }
 
@@ -46,6 +47,7 @@ export function StreamOutlineSection(props: StreamOutlineSectionProps) {
   const hasOutline = outline && outline.length > 0
 
   const canReset = useMemo(() => isGenerating || isAnalyzing, [isAnalyzing, isGenerating])
+  const [showResetConfirm, setShowResetConfirm] = useState(false)
 
   if (!hasOutline) return null
 
@@ -59,10 +61,7 @@ export function StreamOutlineSection(props: StreamOutlineSectionProps) {
           className="h-6 w-6"
           onClick={() => {
             if (canReset) {
-              if (window.confirm('当前有任务正在执行，确定要终止并开启新工作区吗？')) {
-                resetStream()
-                setCurrentView('generator')
-              }
+              setShowResetConfirm(true)
             } else {
               resetStream()
               setCurrentView('generator')
@@ -73,6 +72,21 @@ export function StreamOutlineSection(props: StreamOutlineSectionProps) {
           <Plus className="h-4 w-4" />
         </Button>
       </div>
+
+      <ConfirmDialog
+        isOpen={showResetConfirm}
+        title="开启新工作区"
+        message="当前有任务正在执行，确定要终止并开启新工作区吗？"
+        confirmText="终止并新建"
+        cancelText="取消"
+        onConfirm={() => {
+          resetStream()
+          setCurrentView('generator')
+          setShowResetConfirm(false)
+        }}
+        onCancel={() => setShowResetConfirm(false)}
+        isDestructive={true}
+      />
 
       <div className="space-y-3 max-h-[30vh] overflow-y-auto custom-scrollbar">
         {chapterStatus[0] && (

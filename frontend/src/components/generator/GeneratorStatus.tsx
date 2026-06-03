@@ -1,6 +1,7 @@
 import { useRef, useEffect } from 'react'
 import { MarkdownEngine } from '@/components/MarkdownEngine'
 import { useStreamStore } from '@/store/streamStore'
+import { useShallow } from 'zustand/react/shallow'
 
 import { CheckCircle2, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -18,7 +19,24 @@ const phaseLabelMap: Record<ChapterPhase, string> = {
 }
 
 export function GeneratorStatus() {
-  const store = useStreamStore()
+  const store = useStreamStore(
+    useShallow((state) => ({
+      isScanning: state.isScanning,
+      isAnalyzing: state.isAnalyzing,
+      isGenerating: state.isGenerating,
+      progress: state.progress,
+      currentChapterTitle: state.currentChapterTitle,
+      analysisMessage: state.analysisMessage,
+      analysisHistory: state.analysisHistory,
+      analysisStep: state.analysisStep,
+      sourceType: state.sourceType,
+      outline: state.outline,
+      content: state.content,
+      chapterStatus: state.chapterStatus,
+      chapterContents: state.chapterContents,
+      chapterErrors: state.chapterErrors,
+    })),
+  )
   const contentEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {

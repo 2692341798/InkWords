@@ -2,6 +2,7 @@ import type { ChangeEvent, DragEvent, RefObject } from 'react'
 import { Button } from '@/components/ui/button'
 import { GitBranch, UploadCloud, Loader2 } from 'lucide-react'
 import { useStreamStore } from '@/store/streamStore'
+import { useShallow } from 'zustand/react/shallow'
 
 interface GeneratorInputProps {
   gitUrl: string
@@ -28,7 +29,13 @@ export function GeneratorInput({
   fileInputRef,
   stopAnalyzing
 }: GeneratorInputProps) {
-  const store = useStreamStore()
+  const store = useStreamStore(
+    useShallow((state) => ({
+      isScanning: state.isScanning,
+      isAnalyzing: state.isAnalyzing,
+      isGenerating: state.isGenerating,
+    })),
+  )
 
   return (
     <div className="grid grid-cols-1 gap-8 md:grid-cols-2">

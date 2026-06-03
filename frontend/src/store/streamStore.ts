@@ -3,6 +3,10 @@ import {
   defaultScenarioModeForSource,
   type ScenarioMode,
 } from '@/lib/scenarioMode'
+import {
+  createChapterChunkBuffer,
+  createTextChunkBuffer,
+} from '@/lib/streamFlushBuffer'
 
 export interface Chapter {
   id?: string
@@ -95,6 +99,9 @@ interface StreamState {
   appendGeneratedContent: (chunk: string) => void
   appendChapterContent: (sort: number, content: string) => void
   appendChapterContents: (updates: Record<number, string>) => void
+  bufferChapterContent: (sort: number, content: string) => void
+  flushBufferedChapterContents: () => void
+  clearBufferedChapterContents: () => void
   clearGeneratedContent: () => void
   clearChapterContent: (sort: number) => void
   setScanning: (status: boolean) => void
@@ -112,6 +119,9 @@ interface StreamState {
   setProgress: (msg: string) => void
   setContent: (content: string) => void
   appendContent: (chunk: string) => void
+  bufferContent: (chunk: string) => void
+  flushBufferedContent: () => void
+  clearBufferedContent: () => void
   setCurrentChapterTitle: (title: string) => void
   setAbortController: (ctrl: AbortController | null) => void
   setParentBlogId: (id: string | null) => void
@@ -123,52 +133,68 @@ interface StreamState {
   reset: () => void
 }
 
-export const useStreamStore = create<StreamState>((set, get) => ({
-  sourceType: null,
-  sourceContent: '',
-  gitUrl: '',
-  scenarioMode: defaultScenarioModeForSource(null),
-  modules: null,
-  selectedModules: [],
-  seriesTitle: '',
-  outline: null,
-  chapterStatus: {},
-  chapterErrors: {},
-  generatedContent: '',
-  chapterContents: {},
-  isScanning: false,
-  isAnalyzing: false,
-  isGenerating: false,
-  mapReduceProgress: null,
-  workers: {},
-  analysisStep: -1,
-  analysisMessage: '',
-  analysisHistory: [],
-  resolvedPromptProfile: null,
-  classificationStatus: 'idle',
-  classificationReason: '',
-  progress: '',
-  content: '',
-  currentChapterTitle: '',
-  abortController: null,
-  parentBlogId: null,
-  setSource: (type, content, gitUrl) =>
-    set((state) => ({
-      sourceType: type,
-      sourceContent: content,
-      gitUrl: gitUrl || '',
-      // Why: 用户手动选择的创作场景优先级高于来源推荐，上传文件或切换来源时不应把它重置掉。
-      scenarioMode: state.scenarioMode,
-    })),
-  setSourceContent: (content) => set({ sourceContent: content }),
-  setSeriesTitle: (title) => set({ seriesTitle: title }),
-  setScenarioMode: (mode) => set({ scenarioMode: mode }),
-  setOutline: (outline) => set({ 
-    outline,
-    chapterStatus: outline ? outline.reduce((acc, ch) => ({ ...acc, [ch.sort]: 'pending' }), {}) : {},
+export const useStreamStore = create<StreamState>((set, get) => {
+  // Why: 高频 SSE chunk 不应该每次都触发 Zustand 写入，否则会把生成期间的主线程时间浪费在无效重渲染上。
+  const chapterContentBuffer = createChapterChunkBuffer((updates) => {
+    set((state) => {
+      const nextContents = { ...state.chapterContents }
+      for (const [sort, chunk] of Object.entries(updates)) {
+        const key = Number(sort)
+        nextContents[key] = (nextContents[key] ?? '') + chunk
+      }
+      return { chapterContents: nextContents }
+    })
+  })
+  const contentBuffer = createTextChunkBuffer((chunk) =>
+    set((state) => ({ content: state.content + chunk })),
+  )
+
+  return {
+    sourceType: null,
+    sourceContent: '',
+    gitUrl: '',
+    scenarioMode: defaultScenarioModeForSource(null),
+    modules: null,
+    selectedModules: [],
+    seriesTitle: '',
+    outline: null,
+    chapterStatus: {},
     chapterErrors: {},
-    chapterContents: outline ? outline.reduce((acc, ch) => ({ ...acc, [ch.sort]: '' }), {}) : {}
-  }),
+    generatedContent: '',
+    chapterContents: {},
+    isScanning: false,
+    isAnalyzing: false,
+    isGenerating: false,
+    mapReduceProgress: null,
+    workers: {},
+    analysisStep: -1,
+    analysisMessage: '',
+    analysisHistory: [],
+    resolvedPromptProfile: null,
+    classificationStatus: 'idle',
+    classificationReason: '',
+    progress: '',
+    content: '',
+    currentChapterTitle: '',
+    abortController: null,
+    parentBlogId: null,
+    setSource: (type, content, gitUrl) =>
+      set((state) => ({
+        sourceType: type,
+        sourceContent: content,
+        gitUrl: gitUrl || '',
+        // Why: 用户手动选择的创作场景优先级高于来源推荐，上传文件或切换来源时不应把它重置掉。
+        scenarioMode: state.scenarioMode,
+      })),
+    setSourceContent: (content) => set({ sourceContent: content }),
+    setSeriesTitle: (title) => set({ seriesTitle: title }),
+    setScenarioMode: (mode) => set({ scenarioMode: mode }),
+    setOutline: (outline) => set({
+      outline,
+      chapterStatus: outline ? outline.reduce((acc, ch) => ({ ...acc, [ch.sort]: 'pending' }), {}) : {},
+      chapterErrors: {},
+      chapterContents: outline ? outline.reduce((acc, ch) => ({ ...acc, [ch.sort]: '' }), {}) : {}
+    }),
   updateChapter: (sort, field, value) => set((state) => ({
     outline: state.outline?.map(ch => 
       ch.sort === sort ? { ...ch, [field]: value } : ch
@@ -255,6 +281,15 @@ export const useStreamStore = create<StreamState>((set, get) => ({
       }
       return { chapterContents: newContents };
     }),
+  bufferChapterContent: (sort, chunk) => {
+    chapterContentBuffer.push(sort, chunk)
+  },
+  flushBufferedChapterContents: () => {
+    chapterContentBuffer.flush()
+  },
+  clearBufferedChapterContents: () => {
+    chapterContentBuffer.cancel()
+  },
   clearGeneratedContent: () => set({ generatedContent: '' }),
   clearChapterContent: (sort) =>
     set((state) => ({
@@ -303,6 +338,15 @@ export const useStreamStore = create<StreamState>((set, get) => ({
   setProgress: (msg) => set({ progress: msg }),
   setContent: (content) => set({ content }),
   appendContent: (chunk) => set((state) => ({ content: state.content + chunk })),
+  bufferContent: (chunk) => {
+    contentBuffer.push(chunk)
+  },
+  flushBufferedContent: () => {
+    contentBuffer.flush()
+  },
+  clearBufferedContent: () => {
+    contentBuffer.cancel()
+  },
   setCurrentChapterTitle: (title) => set({ currentChapterTitle: title }),
   setAbortController: (ctrl) => set({ abortController: ctrl }),
   setParentBlogId: (id) => set({ parentBlogId: id }),
@@ -326,6 +370,8 @@ export const useStreamStore = create<StreamState>((set, get) => ({
     if (ctrl) {
       ctrl.abort();
     }
+    chapterContentBuffer.cancel()
+    contentBuffer.cancel()
     set((state) => {
       const newStatus = { ...state.chapterStatus };
       const newPhases = { ...state.chapterPhases };
@@ -356,6 +402,8 @@ export const useStreamStore = create<StreamState>((set, get) => ({
     if (ctrl) {
       ctrl.abort();
     }
+    chapterContentBuffer.cancel()
+    contentBuffer.cancel()
     set({
       sourceType: null,
       sourceContent: '',
@@ -387,4 +435,5 @@ export const useStreamStore = create<StreamState>((set, get) => ({
       parentBlogId: null
     })
   }
-}))
+}
+})

@@ -2,9 +2,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
+	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -23,6 +28,10 @@ import (
 	transportv1 "inkwords-backend/internal/transport/http/v1"
 	"inkwords-backend/internal/transport/http/v1/api"
 )
+
+type shutdownableServer interface {
+	Shutdown(context.Context) error
+}
 
 // init 初始化环境变量
 func init() {
@@ -155,10 +164,38 @@ func main() {
 		},
 	})
 
-	// 启动服务，默认监听 8080 端口
-	log.Println("Server is running on port 8080")
-	if err := r.Run(":8080"); err != nil {
+	server := newHTTPServer(r)
+	signalContext, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	// Why: 流式接口需要保留长连接写出能力，同时把启动/停机边界显式化，避免进程退出时粗暴中断请求。
+	go shutdownServerOnContextDone(signalContext, server, 15*time.Second)
+
+	log.Printf("Server is running on %s", server.Addr)
+	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatalf("Server startup failed: %v", err)
+	}
+}
+
+func newHTTPServer(handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              ":8080",
+		Handler:           handler,
+		ReadTimeout:       15 * time.Second,
+		ReadHeaderTimeout: 10 * time.Second,
+		WriteTimeout:      0,
+		IdleTimeout:       60 * time.Second,
+	}
+}
+
+func shutdownServerOnContextDone(signalContext context.Context, server shutdownableServer, timeout time.Duration) {
+	<-signalContext.Done()
+
+	shutdownContext, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	if err := server.Shutdown(shutdownContext); err != nil {
+		log.Printf("Server shutdown failed: %v", err)
 	}
 }
 

@@ -2,6 +2,7 @@ import { useCallback } from 'react'
 import type { ScenarioMode } from '@/lib/scenarioMode'
 import { useStreamStore } from '@/store/streamStore'
 import { fetchEventSourceWithAuth } from '@/services/sse'
+import { toast } from 'sonner'
 
 class StopStreamError extends Error {}
 
@@ -18,11 +19,10 @@ export function buildAnalyzeGitRequest(
 }
 
 export const useProjectAnalyzer = () => {
-  const store = useStreamStore()
-
   const analyzeGit = useCallback(async (gitUrl: string, selectedModules: string[]) => {
+    const store = useStreamStore.getState()
     if (!gitUrl.startsWith('http://') && !gitUrl.startsWith('https://') && !gitUrl.startsWith('git@') && !gitUrl.startsWith('file://')) {
-      alert('请输入有效的 Git 仓库链接 (以 http://, https://, git@ 或 file:// 开头)')
+      toast.error('请输入有效的 Git 仓库链接 (以 http://, https://, git@ 或 file:// 开头)')
       throw new Error('invalid url')
     }
 
@@ -113,7 +113,7 @@ export const useProjectAnalyzer = () => {
         onerror(err) {
           store.setAnalyzing(false)
           if (err instanceof StopStreamError) {
-            alert(err.message)
+            toast.error(err.message)
             throw err
           }
           throw err
@@ -123,7 +123,7 @@ export const useProjectAnalyzer = () => {
       store.setAnalyzing(false)
       throw err
     }
-  }, [store])
+  }, [])
 
   return { analyzeGit }
 }

@@ -6,8 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"slices"
-	"sync"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -21,13 +20,8 @@ import (
 	"inkwords-backend/internal/prompt"
 )
 
-func openDecompositionPersistTestDB(t *testing.T) *gorm.DB {
-	t.Helper()
-
-	// Use a unique named in-memory database per test setup so parallel/adjacent
-	// cases do not accidentally share the same SQLite schema and user fixtures.
-	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", uuid.NewString())
-	testDB, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+func TestDecompositionService_GenerateSeries_PersistsChildDraftBeforeStreaming(t *testing.T) {
+	testDB, err := gorm.Open(sqlite.Open(seriesPersistTestDSN()), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, testDB.AutoMigrate(&model.User{}, &model.Blog{}))
 
@@ -114,8 +108,10 @@ func TestDecompositionService_GenerateSeries_PersistsChildDraftBeforeStreaming(t
 	require.Equal(t, "始计第一", children[0].Title)
 }
 
-func TestGenerateSeries_PersistsFinalChapterFromQualityPipeline(t *testing.T) {
-	testDB := openDecompositionPersistTestDB(t)
+func TestDecompositionService_GenerateSeries_RollsBackPreflightWhenDraftCreationFails(t *testing.T) {
+	testDB, err := gorm.Open(sqlite.Open(seriesPersistTestDSN()), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, testDB.AutoMigrate(&model.User{}, &model.Blog{}))
 
 	previousDB := db.DB
 	db.DB = testDB
@@ -124,56 +120,109 @@ func TestGenerateSeries_PersistsFinalChapterFromQualityPipeline(t *testing.T) {
 	}()
 
 	userID := uuid.New()
+	parentID := uuid.New()
+	obsoleteChildID := uuid.New()
 	require.NoError(t, testDB.Create(&model.User{
 		ID:       userID,
 		Username: "tester",
 		Email:    "tester@example.com",
 	}).Error)
+	require.NoError(t, testDB.Create(&model.Blog{
+		ID:         parentID,
+		UserID:     userID,
+		Title:      "旧系列",
+		Content:    "旧导读",
+		SourceType: "file",
+		IsSeries:   true,
+		Status:     1,
+	}).Error)
+	require.NoError(t, testDB.Create(&model.Blog{
+		ID:          obsoleteChildID,
+		UserID:      userID,
+		ParentID:    &parentID,
+		ChapterSort: 99,
+		Title:       "旧章节",
+		Content:     "旧内容",
+		SourceType:  "file",
+		Status:      1,
+	}).Error)
 
-	var callCount atomic.Int32
-	var requestKinds []string
-	var requestKindsMu sync.Mutex
-	jsonResponses := []string{
-		`{"chapter_goal":"解释请求流转","reader_questions":["请求如何进入 handler"],"must_explain":["路由树匹配"],"must_include_examples":["curl 请求"],"avoid_overlap":[],"bridge_context":{"from_previous":"上一章介绍启动","to_next":"下一章介绍中间件"}}`,
-		`{"depth_issues":["需要补充中间件短路"],"example_issues":["需要 curl 示例"],"structure_issues":[],"revision_actions":["补充中间件短路说明","补充 curl 复现"],"scorecard":{"depth":4,"examples":4,"reproducibility":4,"clarity":4}}`,
-		`["Gin"]`,
+	// Why: 这里故意让“创建新章节草稿”失败，验证前置阶段必须整体回滚，
+	// 不能出现旧子节点被删掉、但新草稿又没建出来的半成品状态。
+	callbackName := "test:fail_series_draft_create"
+	require.NoError(t, testDB.Callback().Create().Before("gorm:create").Register(callbackName, func(tx *gorm.DB) {
+		blog, ok := tx.Statement.Dest.(*model.Blog)
+		if !ok || blog.ParentID == nil {
+			return
+		}
+		if blog.Content == "正在生成章节内容..." {
+			tx.AddError(fmt.Errorf("forced draft create failure"))
+		}
+	}))
+	defer func() {
+		testDB.Callback().Create().Remove(callbackName)
+	}()
+
+	svc := NewDecompositionService(nil)
+	progressChan := make(chan string, 8)
+	errChan := make(chan error, 8)
+
+	svc.GenerateSeries(
+		context.Background(),
+		userID,
+		parentID,
+		"新系列",
+		[]Chapter{
+			{Title: "新章节", Summary: "新摘要", Sort: 1},
+		},
+		"新内容",
+		"file",
+		"",
+		prompt.ScenarioModeEbookInterpretation,
+		string(prompt.ArticleStyleGeneral),
+		progressChan,
+		errChan,
+	)
+
+	var reportedErrs []error
+	for err := range errChan {
+		if err != nil {
+			reportedErrs = append(reportedErrs, err)
+		}
 	}
-	textResponses := []string{
-		`{"draft_markdown":"## Gin 路由\n\n终稿前草稿","coverage_check":{"goal_covered":true,"mechanism_explained":true,"examples_present":true,"repro_present":true,"edge_cases_present":true},"example_inventory":[{"example_type":"code","supports_claim":"说明路由注册"}]}`,
-	}
-	streamResponses := []string{"终稿正文", "系列导读正文"}
+	require.NotEmpty(t, reportedErrs)
+	require.ErrorContains(t, reportedErrs[0], "forced draft create failure")
+
+	var children []model.Blog
+	require.NoError(t, testDB.Where("parent_id = ?", parentID).Order("chapter_sort ASC").Find(&children).Error)
+	require.Len(t, children, 1)
+	require.Equal(t, obsoleteChildID, children[0].ID)
+	require.Equal(t, "旧章节", children[0].Title)
+}
+
+func TestDecompositionService_GenerateSeries_ReportsTokenUpdateFailureAndKeepsDraft(t *testing.T) {
+	testDB, err := gorm.Open(sqlite.Open(seriesPersistTestDSN()), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, testDB.AutoMigrate(&model.User{}, &model.Blog{}))
+
+	previousDB := db.DB
+	db.DB = testDB
+	defer func() {
+		db.DB = previousDB
+	}()
+
+	var streamCallCount atomic.Int32
 	llmServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		defer r.Body.Close()
-
-		var request struct {
-			Stream         bool              `json:"stream"`
-			ResponseFormat map[string]string `json:"response_format"`
-		}
-		require.NoError(t, json.NewDecoder(r.Body).Decode(&request))
-
-		callCount.Add(1)
-		requestKindsMu.Lock()
-		defer requestKindsMu.Unlock()
-
-		switch {
-		case request.Stream:
-			require.NotEmpty(t, streamResponses)
-			requestKinds = append(requestKinds, "stream")
-			w.Header().Set("Content-Type", "text/event-stream")
-			_, _ = fmt.Fprintf(w, "data: {\"choices\":[{\"delta\":{\"content\":%q},\"finish_reason\":null}]}\n\n", streamResponses[0])
+		callNumber := streamCallCount.Add(1)
+		w.Header().Set("Content-Type", "text/event-stream")
+		if callNumber == 1 {
+			_, _ = fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"章节正文\"},\"finish_reason\":null}]}\n\n")
 			_, _ = fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n")
-			streamResponses = streamResponses[1:]
-		case request.ResponseFormat["type"] == "json_object":
-			require.NotEmpty(t, jsonResponses)
-			requestKinds = append(requestKinds, "json")
-			fmt.Fprintf(w, `{"choices":[{"message":{"content":%q}}]}`, jsonResponses[0])
-			jsonResponses = jsonResponses[1:]
-		default:
-			require.NotEmpty(t, textResponses)
-			requestKinds = append(requestKinds, "text")
-			fmt.Fprintf(w, `{"choices":[{"message":{"content":%q}}]}`, textResponses[0])
-			textResponses = textResponses[1:]
+			return
 		}
+
+		_, _ = fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"系列导读正文\"},\"finish_reason\":null}]}\n\n")
+		_, _ = fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n")
 	}))
 	defer llmServer.Close()
 
@@ -181,13 +230,14 @@ func TestGenerateSeries_PersistsFinalChapterFromQualityPipeline(t *testing.T) {
 	svc.llmClient.APIURL = llmServer.URL
 	svc.llmClient.Client = llmServer.Client()
 
+	nonexistentUserID := uuid.New()
 	parentID := uuid.New()
 	progressChan := make(chan string, 64)
 	errChan := make(chan error, 8)
 
 	svc.GenerateSeries(
 		context.Background(),
-		userID,
+		nonexistentUserID,
 		parentID,
 		"《孙子兵法》- 原典逐章精读系列",
 		[]Chapter{
@@ -202,11 +252,57 @@ func TestGenerateSeries_PersistsFinalChapterFromQualityPipeline(t *testing.T) {
 		errChan,
 	)
 
-	var children []model.Blog
-	require.NoError(t, testDB.Where("parent_id = ?", parentID).Order("chapter_sort ASC").Find(&children).Error)
-	require.Len(t, children, 1)
-	require.Equal(t, "终稿正文", children[0].Content)
-	require.EqualValues(t, 1, children[0].Status)
-	require.GreaterOrEqual(t, callCount.Load(), int32(6))
-	require.True(t, slices.Equal([]string{"json", "text", "json", "stream"}, requestKinds[:4]))
+	progressPayloads := collectSeriesProgressPayloads(t, progressChan)
+	require.Empty(t, drainSeriesErrors(errChan))
+
+	var chapterPayloads []map[string]interface{}
+	for _, payload := range progressPayloads {
+		if payload["chapter_sort"] == float64(1) {
+			chapterPayloads = append(chapterPayloads, payload)
+		}
+	}
+	require.NotEmpty(t, chapterPayloads)
+
+	foundChapterError := false
+	for _, payload := range chapterPayloads {
+		if payload["status"] == "error" && strings.Contains(fmt.Sprint(payload["message"]), "update user tokens") {
+			foundChapterError = true
+			break
+		}
+	}
+	require.True(t, foundChapterError, "expected chapter error progress payload when token update fails")
+
+	var child model.Blog
+	require.NoError(t, testDB.Where("parent_id = ?", parentID).First(&child).Error)
+	require.Equal(t, "始计第一", child.Title)
+	require.NotEqualValues(t, 1, child.Status)
+	require.Equal(t, "正在生成章节内容...", child.Content)
+}
+
+func collectSeriesProgressPayloads(t *testing.T, progressChan <-chan string) []map[string]interface{} {
+	t.Helper()
+
+	var payloads []map[string]interface{}
+	for raw := range progressChan {
+		var payload map[string]interface{}
+		require.NoError(t, json.Unmarshal([]byte(raw), &payload))
+		payloads = append(payloads, payload)
+	}
+
+	return payloads
+}
+
+func drainSeriesErrors(errChan <-chan error) []error {
+	var errs []error
+	for err := range errChan {
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	return errs
+}
+
+func seriesPersistTestDSN() string {
+	return fmt.Sprintf("file:%s?mode=memory&cache=shared", uuid.NewString())
 }

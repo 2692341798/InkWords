@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button'
 import { Loader2 } from 'lucide-react'
 import { useStreamStore } from '@/store/streamStore'
+import { useShallow } from 'zustand/react/shallow'
 
 interface GeneratorModulesProps {
   toggleModuleSelection: (path: string) => void
@@ -11,7 +12,14 @@ export function GeneratorModules({
   toggleModuleSelection,
   handleAnalyze
 }: GeneratorModulesProps) {
-  const store = useStreamStore()
+  const store = useStreamStore(
+    useShallow((state) => ({
+      modules: state.modules,
+      selectedModules: state.selectedModules,
+      isAnalyzing: state.isAnalyzing,
+      isGenerating: state.isGenerating,
+    })),
+  )
 
   if (!store.modules || store.modules.length === 0) return null
 

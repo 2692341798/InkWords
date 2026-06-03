@@ -2,7 +2,7 @@ name: inkwords
 
 services:
   obsidian-bridge:
-    image: alpine/socat:latest
+    image: alpine/socat:1.8.0.0-r0
     container_name: inkwords-obsidian-bridge
     command: ["-d", "-d", "TCP-LISTEN:27125,fork,reuseaddr", "TCP:host.docker.internal:27124"]
     extra_hosts:
@@ -38,11 +38,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: inkwords-backend
-    env_file:
-      - ./backend/.env
     environment:
-      # Why: keep service-to-service connectivity on the internal Docker network and
-      # let operators override runtime values from backend/.env without editing compose.
       DATABASE_URL: postgres://${POSTGRES_USER:-inkwords}:${POSTGRES_PASSWORD:-inkwords_password}@db:5432/${POSTGRES_DB:-inkwords_db}?sslmode=disable
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
@@ -50,7 +46,16 @@ services:
       # return through that public entrypoint instead of a Vite-only dev server.
       GITHUB_REDIRECT_URL: ${DOCKER_GITHUB_REDIRECT_URL:-http://localhost/api/v1/auth/callback/github}
       OBSIDIAN_REST_API_BASE_URL: ${OBSIDIAN_REST_API_BASE_URL:-https://obsidian-bridge:27125}
+      OBSIDIAN_REST_API_KEY: ${OBSIDIAN_REST_API_KEY:-}
+      OBSIDIAN_REST_API_CERT_PATH: ${OBSIDIAN_REST_API_CERT_PATH:-}
+      OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY: ${OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY:-}
       OBSIDIAN_WIKI_DIR: ${OBSIDIAN_WIKI_DIR:-wiki}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-}
+      JWT_SECRET: ${JWT_SECRET:-}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      GITHUB_REDIRECT_URL: ${GITHUB_REDIRECT_URL:-}
     expose:
       - "8080"
     volumes:
@@ -58,7 +63,7 @@ services:
       # Why: require an explicit host wiki path instead of silently binding a
       # machine-specific absolute path that only works on one workstation.
       - type: bind
-        source: ${OBSIDIAN_VAULT_PATH:?Set OBSIDIAN_VAULT_PATH in backend/.env or your shell environment}
+        source: ${OBSIDIAN_VAULT_PATH:?Set OBSIDIAN_VAULT_PATH in backend/.env (used with --env-file) or your shell environment}
         target: /app/obsidian
     depends_on:
       db:
@@ -72,7 +77,7 @@ services:
     restart: unless-stopped
 
   redis:
-    image: redis/redis-stack-server:latest
+    image: redis/redis-stack-server:7.2.0-v9
     container_name: inkwords-redis
     expose:
       - "6379"

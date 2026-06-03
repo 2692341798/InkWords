@@ -1,6 +1,23 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 90：执行优化计划 Task 1，收紧后端生命周期与请求取消边界
+- **用户需求**：在 InkWords 仓库执行优化计划 `Task 1`；先为后端生命周期与请求取消边界写失败测试，再最小实现优雅停机、显式 `http.Server`、收回 `stream` 主链路不必要的 `context.WithoutCancel`，最后运行相关 Go 测试并汇报修改文件、测试结果和遗留风险；明确要求忽略根目录 `.tmp_kb_*` 未跟踪文件，不改无关文件。
+- **AI 动作**：
+  1. 先完成知识库 Query，回读 `[[前后端流式通信实现：SSE 与事件源]]` 与 `[[后端错误处理与并发流式通信]]`，结合优化计划 `docs/superpowers/plans/2026-06-03-project-optimization-roadmap.md` 和仓库现状，确认这轮只聚焦后端生命周期与 stream 请求取消边界，不改 API/DB/前端。
+  2. 先跑 `cd backend && go test ./cmd/server/... ./internal/domain/stream/... ./internal/transport/http/v1/...` 建立基线，确认改造前相关 Go 包均通过。
+  3. 按 TDD 在 `backend/internal/domain/stream/handler_test.go` 新增红灯测试，锁定 `Continue/Analyze/Scan` 三条流式主链路必须继承请求上下文取消；在 `backend/cmd/server/main_test.go` 新增红灯测试，锁定显式 `http.Server` 的超时配置和优雅停机辅助逻辑。
+  4. 让 `stream.Handler` 依赖可替换的服务接口，收回 `Continue/Analyze/Scan` 中默认的 `context.WithoutCancel`，统一改为直接透传 `c.Request.Context()`；同时在 `cmd/server/main.go` 抽出 `newHTTPServer` 与 `shutdownServerOnContextDone`，将启动链路切到显式 `http.Server + signal.NotifyContext + Shutdown(timeout)`。
+  5. 执行 `gofmt`，再跑 `cd backend && go test ./cmd/server/... ./internal/domain/stream/... ./internal/transport/http/v1/...`，确认相关包全部通过，并复查 `backend/cmd` 与 `backend/internal/domain/stream` 已无残留 `WithoutCancel`。
+- **决策/变更**：
+  - 保持最小改动，只收紧 `cmd/server` 与 `internal/domain/stream`；不新增路由、不改 SSE 事件协议、不改数据库。
+  - `WriteTimeout` 明确保留为 `0`，避免把 SSE 长连接粗暴纳入普通 HTTP 写超时模型；优雅停机只接管进程生命周期，不改变流式 handler 的事件写出行为。
+  - 请求取消语义重新对齐：除非未来存在“断连后仍要继续跑”的明确业务需求并附注释说明，否则 `Continue/Analyze/Scan` 默认遵从请求上下文取消。
+- **验证**：
+  - `cd backend && go test ./cmd/server/... ./internal/domain/stream/...` 先失败、后通过
+  - `cd backend && go test ./cmd/server/... ./internal/domain/stream/... ./internal/transport/http/v1/...` 通过
+  - `grep -R "WithoutCancel" backend/cmd backend/internal/domain/stream` 无匹配
+
 ### 对话 89：排查后端 Docker 镜像构建过慢并回退 Alpine 镜像源
 - **用户需求**：用户在接受“系列生成错误可视化修复”后，继续要求排查“为什么后端 Docker 镜像构建这么慢/像是卡住”，随后同意做最小修复。
 - **AI 动作**：

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useSyncExternalStore } from 'react'
 import { useBlogStore } from '@/store/blogStore'
 import { Sidebar } from '@/components/Sidebar'
 import { HomeEntry } from '@/pages/HomeEntry'
@@ -8,27 +8,22 @@ import { Login } from '@/pages/Login'
 import { Dashboard } from '@/pages/Dashboard'
 import { KnowledgeReview } from '@/pages/KnowledgeReview'
 import { Toaster } from '@/components/ui/sonner'
+import { authTokenStore } from '@/lib/authTokenStore'
 
 function App() {
   const { selectedBlog, currentView } = useBlogStore()
-  const [isAuthenticated] = useState<boolean>(() => {
-    const urlParams = new URLSearchParams(window.location.search)
-    const token = urlParams.get('token')
-    if (token) {
-      localStorage.setItem('token', token)
-      return true
-    }
-    return !!localStorage.getItem('token')
-  })
+  const token = useSyncExternalStore(authTokenStore.subscribe, authTokenStore.getSnapshot, authTokenStore.getServerSnapshot)
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search)
-    if (urlParams.has('token')) {
+    const tokenFromUrl = urlParams.get('token')
+    if (tokenFromUrl) {
+      authTokenStore.setToken(tokenFromUrl)
       window.history.replaceState({}, document.title, window.location.pathname)
     }
   }, [])
 
-  if (!isAuthenticated) {
+  if (!token) {
     return <Login />
   }
 

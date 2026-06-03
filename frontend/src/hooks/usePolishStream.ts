@@ -1,6 +1,7 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { shouldResetPolishState } from '@/lib/polishStreamStop'
+import { createTextChunkBuffer } from '@/lib/streamFlushBuffer'
 import { fetchEventSourceWithAuth } from '@/services/sse'
 
 class StopStreamError extends Error {}
@@ -12,10 +13,24 @@ class StopStreamError extends Error {}
  */
 export const usePolishStream = () => {
   const abortControllerRef = useRef<AbortController | null>(null)
+  const draftBufferRef = useRef<ReturnType<typeof createTextChunkBuffer> | null>(null)
   const [isPolishing, setIsPolishing] = useState(false)
   const [draft, setDraft] = useState('')
 
+  if (!draftBufferRef.current) {
+    draftBufferRef.current = createTextChunkBuffer((chunk) => {
+      setDraft((previous) => previous + chunk)
+    })
+  }
+
+  useEffect(() => {
+    return () => {
+      draftBufferRef.current?.cancel()
+    }
+  }, [])
+
   const cancelAndClear = useCallback(() => {
+    draftBufferRef.current?.cancel()
     abortControllerRef.current?.abort()
     abortControllerRef.current = null
     setDraft('')
@@ -52,23 +67,39 @@ export const usePolishStream = () => {
         },
         onmessage(msg) {
           if (msg.event === 'chunk') {
-            setDraft((prev) => prev + msg.data)
+            draftBufferRef.current?.push(msg.data)
             return
           }
           if (msg.event === 'done') {
+            draftBufferRef.current?.flush()
             setIsPolishing(false)
             throw new StopStreamError('done')
           }
           if (msg.event === 'error') {
+            if (ctrl.signal.aborted) {
+              draftBufferRef.current?.cancel()
+            } else {
+              draftBufferRef.current?.flush()
+            }
             setIsPolishing(false)
             throw new StopStreamError(msg.data)
           }
         },
         onclose() {
+          if (ctrl.signal.aborted) {
+            draftBufferRef.current?.cancel()
+          } else {
+            draftBufferRef.current?.flush()
+          }
           setIsPolishing(false)
           throw new StopStreamError('closed by server')
         },
         onerror(err: unknown) {
+          if (ctrl.signal.aborted) {
+            draftBufferRef.current?.cancel()
+          } else {
+            draftBufferRef.current?.flush()
+          }
           if (err instanceof StopStreamError) {
             setIsPolishing(false)
             throw err
