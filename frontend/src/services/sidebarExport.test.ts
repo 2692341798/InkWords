@@ -50,29 +50,26 @@ describe('sidebarExport service', () => {
   })
 
   it('downloads each exported pdf with a sanitized filename and records failures', async () => {
-    const pdfBlob = new Blob(['pdf'])
-    const fetchImpl = vi
+    const createExportTask = vi
       .fn()
-      .mockResolvedValueOnce({
-        ok: true,
-        blob: vi.fn().mockResolvedValue(pdfBlob),
-      })
-      .mockResolvedValueOnce({
-        ok: false,
-        json: vi.fn().mockResolvedValue({ message: '导出失败' }),
-      })
-    const downloadBlob = vi.fn()
+      .mockResolvedValueOnce({ task_id: 'task-a', stream_url: '/api/v1/tasks/task-a/stream' })
+      .mockResolvedValueOnce({ task_id: 'task-b', stream_url: '/api/v1/tasks/task-b/stream' })
+    const waitForTaskCompletion = vi
+      .fn()
+      .mockResolvedValueOnce({ id: 'task-a', status: 'succeeded' })
+      .mockResolvedValueOnce({ id: 'task-b', status: 'failed', error_message: '导出失败' })
+    const downloadTaskArtifact = vi.fn().mockResolvedValue(undefined)
 
     const result = await exportSeriesPdfs(
       [createSeries({ id: 'series-a', title: '系列/导读' }), createSeries({ id: 'series-b', title: '系列B' })],
       {
-        fetchImpl,
-        getToken: () => 'token-123',
-        downloadBlob,
+        createExportTask,
+        waitForTaskCompletion,
+        downloadTaskArtifact,
       },
     )
 
-    expect(downloadBlob).toHaveBeenCalledWith(pdfBlob, '系列-导读.pdf')
+    expect(downloadTaskArtifact).toHaveBeenCalledWith('task-a', '系列-导读.pdf')
     expect(result).toEqual({
       succeededCount: 1,
       failed: [{ id: 'series-b', title: '系列B', message: '导出失败' }],

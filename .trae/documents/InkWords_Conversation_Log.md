@@ -1,6 +1,109 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 96：继续长期微服务计划，执行 Task 9 的 CI 冒烟与 Runbook 固化
+- **补充回归：修复 `microservices-smoke` 中 `inkwords-db is unhealthy`**
+- **用户需求**：用户在 PR 创建后反馈 GitHub Actions 的 `microservices-smoke` 失败截图，要求继续处理当前 PR 分支上的 CI 问题。
+- **AI 动作**：
+  1. 先完成知识库 Query，并回读 `[[微服务冒烟检查与 CI 前置]]` 等页面，确认这是“已有冒烟流程的初始化缺陷回归”，而不是新的微服务范围扩展。
+  2. 审计 `.github/workflows/ci.yml`、`docker-compose.yml` 与 `backend/db/init/00-create-review-db.sql`，识别出根因是：`CREATE DATABASE inkwords_review_db` 被放进 `DO $$ ... $$` 事务块，导致空 `pgdata` 首次初始化时报错。
+  3. 按 TDD 先新增 `backend/internal/infra/db/init_sql_test.go` 红灯测试，锁定“初始化脚本必须使用顶层 `CREATE DATABASE`，不能包事务块”。
+  4. 将初始化 SQL 改为单行顶层 `CREATE DATABASE inkwords_review_db;`，随后在空卷条件下重新执行 `docker compose --env-file backend/.env.example up -d --build`，确认 `db` 与整套服务恢复 `healthy`。
+- **决策/变更**：
+  - 这次不改 CI 健康检查逻辑本身，因为失败根因不在 workflow 轮询，而在 Postgres 初始化脚本写法违反数据库约束。
+  - 回归测试放在 `backend/internal/infra/db/`，避免把 Go 测试文件挂进 `docker-entrypoint-initdb.d` 污染容器初始化日志。
+- **验证**：
+  - `cd backend && go test ./internal/infra/db -count=1` 通过
+  - `docker compose --env-file backend/.env.example down -v && ... up -d --build` 后，`docker compose --env-file backend/.env.example ps` 显示 `inkwords-db` 与其它服务均为 `healthy`
+  - `curl -I http://localhost` 与 `curl http://localhost/api/v1/ping` 通过
+
+### 对话 96：继续长期微服务计划，执行 Task 9 的 CI 冒烟与 Runbook 固化
+- **用户需求**：用户明确要求继续执行长期微服务计划中的 `Task 9`。
+- **AI 动作**：
+  1. 先完成知识库 Query，确认当前项目已进入“边界治理 + 交付固化”阶段，而不是继续扩展新业务链路。
+  2. 审计 `.github/workflows/ci.yml`、`docs/runbooks/` 与 `README.md`，确认当前缺口是：没有 `microservices-smoke-check.md`，CI 也只做了 `docker compose config`，没有实际启动容器与健康检查。
+  3. 新增 `microservices-smoke` CI job，自动完成 Compose 启动、健康轮询、`http://localhost` 与 `/api/v1/ping` 验证，并在失败时输出 Compose 日志。
+  4. 新增 `docs/runbooks/microservices-smoke-check.md`，把服务启动、网关访问、任务创建、任务 SSE、review 可用、parser/export 基础通路和排障步骤沉淀成统一检查清单。
+  5. 本地执行了 Task 9 对应的关键命令，确认前端与五个后端服务均恢复为 `healthy`，网关与 `ping` 可达。
+- **决策/变更**：
+  - CI 只做“无业务数据也能稳定跑”的最小微服务冒烟，不在 GitHub Actions 中强行执行依赖真实登录态与真实资料的完整业务任务。
+  - 生成/解析/导出/review 的更深链路检查保留在 runbook 中，以本地或预发布环境的人工检查为主。
+- **验证**：
+  - `python3 -c 'import yaml, pathlib; yaml.safe_load(pathlib.Path(".github/workflows/ci.yml").read_text())'` 通过
+  - `docker compose --env-file backend/.env.example config` 通过
+  - `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build` 通过
+  - `docker compose --env-file backend/.env ps` 显示 `frontend / core-api / llm-stream / parser-service / export-service / review-service` 为 `healthy`
+  - `curl -I http://localhost` 与 `curl http://localhost/api/v1/ping` 通过
+
+### 对话 95：继续长期微服务计划，补齐 Task 4 服务写入归属矩阵
+- **用户需求**：用户要求继续按照 `2026-06-03-microservices-long-term-implementation.md` 往后推进，而不是停留在前面已经基本落地的 Task 1-7。
+- **AI 动作**：
+  1. 先完成知识库 Query，回读 `[[InkWords 生产形态：多服务与聚合入口]]` 与最近新增的 `[[export-service 异步导出与受控下载]]`，确认当前已进入“边界治理与交付固化”阶段。
+  2. 对照长期计划与仓库现状，判断 Task 1/2/3 已完成、Task 5/6/7/8 部分完成、Task 4/9 明显未完成，因此优先执行 Task 4。
+  3. 对 `backend/internal/service` 与 `backend/internal/domain` 做数据库写点扫描，确认 `domain` 层写入大多已经由 repository 收口，而 `GeneratorService / DecompositionService` 仍直接使用全局 `db.DB` 写 `blogs / users`。
+  4. 新增 `docs/runbooks/core-blog-task-boundary.md`，并同步更新 `README.md`、`InkWords_Architecture.md`、`InkWords_Database.md`、`InkWords_Development_Plan_and_Log.md`，固化“表级归属矩阵 + 跨服务允许写入例外 + 当前技术债”。
+- **决策/变更**：
+  - 当前事实归属矩阵确定为：`core-api` 拥有 `users / oauth_tokens / user_prompt_settings / blogs / job_tasks / job_task_events`，`review-service` 拥有 `review_sessions / review_turns`。
+  - 当前唯一允许的跨服务写入例外是 `llm-stream / parser-service / export-service` 通过 `internal/domain/task` 的显式接口写 `job_tasks / job_task_events`。
+  - 在 `GeneratorService / DecompositionService` 的全局 `db.DB` 直写没有先收口前，不推进真正的 `blogs` 或任务表独立实例拆分。
+- **验证**：
+  - 通过代码扫描与文档交叉校对完成验证，本轮未新增业务代码，因此未运行额外后端/前端测试命令。
+
+### 对话 94：根据 export_pdf 计划继续微服务化，落地 export-service 异步导出
+- **用户需求**：用户指定 `docs/superpowers/plans/2026-06-03-export-pdf-async-task-implementation.md`，要求在现有未提交改动基础上继续完善项目微服务化，并明确同意“直接叠加修改”。
+- **AI 动作**：
+  1. 先完成知识库 Query，回读 `[[InkWords 生产形态：多服务与聚合入口]]`、`[[前后端流式通信实现：SSE 与事件源]]` 等页面，并结合计划与仓库现状确认 `export_pdf` 仍未任务化。
+  2. 按 TDD 逐步执行 `Task 1-5`：先补 export task 创建与路由测试，再落地 `export.requested` 发布、`export-service` worker、共享产物目录与受控下载接口。
+  3. 新增前端 `exportTasks` 服务，把 Sidebar PDF 导出改为“创建任务 -> 等待完成 -> 下载 artifact”，并同步 Compose、环境变量样例与 README/API/Architecture/Log 文档。
+  4. 分阶段运行后端 Go 测试、前端 Vitest 与 `npm run build`，确保每个任务块都在本地验证通过。
+- **决策/变更**：
+  - 保持“前端 Nginx 单入口 + 多后端服务 + RabbitMQ 任务中心”的既定生产形态，不把对象存储或更多导出类型混入同一批改动。
+  - `export-service` 与 `core-api` 通过 `EXPORT_ARTIFACTS_DIR` 共享卷交换 PDF 文件；下载成功后立即删除产物，优先满足最小可行闭环与磁盘卫生。
+  - 原同步 `/api/v1/blogs/:id/export/pdf` 继续保留为兼容/回滚路径，避免一次性切断旧链路。
+- **验证**：
+  - `cd backend && go test ./internal/domain/task ./internal/transport/http/v1 -count=1` 通过
+  - `cd backend && go test ./cmd/core-api -count=1` 通过
+  - `cd backend && go test ./internal/domain/task ./cmd/export-service -count=1` 通过
+  - `cd frontend && npm test -- --run src/services/exportTasks.test.ts src/services/sidebarExport.test.ts` 通过
+  - `cd frontend && npm run build` 通过
+
+### 对话 93：补完 Task 6，把 50MB 以上普通单文件也纳入解析任务化
+- **用户需求**：在 Task 6 起步态已经落地后，用户确认继续补完 `parser-service` 异步化，但不进入 Task 7；并选择“仅大文件走任务化”，再进一步把普通单文件的大文件阈值定为 `50MB`。
+- **AI 动作**：
+  1. 再次完成知识库 Query 与长期计划回读，确认这轮只需补“普通单文件何时走 `/api/v1/tasks/parse`”，不改现有多服务生产形态。
+  2. 按 TDD 先在 `frontend/src/hooks/generator/useFileParser.test.ts` 增加红灯测试，锁定 `50MB` 以上普通单文件走任务化、`50MB` 及以下继续同步；并在 `frontend/src/services/project.test.ts` 保持 `parse_file` 任务契约校验。
+  3. 在 `frontend/src/hooks/generator/useFileParser.ts` 新增 `50MB` 阈值判断，让 `.zip` 或 `>50MB` 文件统一走任务式解析，小文件保持同步解析。
+  4. 同步更新 README、API、Architecture、Development Log，明确当前解析任务化策略是“ZIP + 50MB 以上普通单文件”。
+- **决策/变更**：
+  - 不把所有普通单文件都一刀切为 Base64 任务载荷，以避免 `core-api` / RabbitMQ / PostgreSQL 的无谓放大。
+  - 当前阈值固定为 `50MB`，属于产品/架构折中值；如未来观察到同步解析仍占压明显，再考虑下调阈值或引入服务端中转文件对象策略。
+- **验证**：
+  - `cd frontend && npm test -- --run src/hooks/generator/useFileParser.test.ts src/services/project.test.ts` 先失败、补实现后通过
+  - `cd frontend && npm run build` 通过
+  - `docker compose --env-file backend/.env.example config >/dev/null` 通过
+
+### 对话 92：继续微服务化，落地 Task 6 parser-service 异步化起步态
+- **用户需求**：用户要求“根据 `/docs/superpowers/plans/2026-06-03-microservices-long-term-implementation.md` 继续开始将项目微服务化”，并在确认现有工作区已有未提交改动后，授权 AI 基于这些改动继续推进。
+- **AI 动作**：
+  1. 先完成知识库 Query，回读 `[[InkWords 生产形态：多服务与聚合入口]]`、`[[domains/tech/InkWords-系统架构]]`、`[[domains/tech/InkWords-LLM与流式生成]]`，确认当前仍应坚持“前端 Nginx 单入口 + 多后端服务 + Docker Compose”的生产形态。
+  2. 对照长期计划与仓库现状，审计 Task 1-9 的落地程度，确认 Task 1-3 已基本完成，当前最适合继续的是 Task 6：把 `parser-service` 接入已有任务中心。
+  3. 与用户共创后，选择“轻量双入口方案”：保留同步 `/api/v1/project/parse` 兼容路径，同时新增 `/api/v1/tasks/parse` 任务入口，优先让 `.zip` 课件包走任务式解析。
+  4. 按 TDD 先补后端 task/service/consumer 测试与前端 ZIP 解析任务化测试，再实现 `core-api` parse task、RabbitMQ `parse.requested` 发布/消费、`parser-service` worker、前端 `createParseTask/getTaskSnapshot` 与 `useFileParser` 最小接入。
+  5. 运行 `go test ./...`、前端定向 Vitest、`npm run build`、`docker compose --env-file backend/.env down && ... up -d --build`、`docker compose --env-file backend/.env ps` 与 `curl -I http://localhost` 做验证，并同步更新 API/Architecture/README/Development Log。
+- **决策/变更**：
+  - 本轮只推进 Task 6，不把 Task 4（写库边界治理）、Task 7（export 异步化）和 Task 9（CI 冒烟）混入同一批变更。
+  - 前端当前仅让 `.zip` 默认走任务式解析；普通文件继续保留同步 `/api/v1/project/parse`，作为内存占用和兼容性之间的折中。
+  - 解析任务复用现有 `job_tasks / job_task_events / RabbitMQ` 任务中心，不新增新的任务表或跨服务事件总线。
+- **验证**：
+  - `cd backend && go test ./internal/domain/task ./internal/domain/fileparse ./internal/transport/http/v1 -count=1` 通过
+  - `cd backend && go test ./cmd/core-api ./cmd/parser-service -count=1` 通过
+  - `cd backend && go test ./...` 通过
+  - `cd frontend && npm test -- --run src/services/project.test.ts src/hooks/generator/useFileParser.test.ts` 通过
+  - `cd frontend && npm run build` 通过
+  - `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build` 通过
+  - `docker compose --env-file backend/.env ps` 显示核心服务 `Up`
+  - `curl -I http://localhost` 返回 `HTTP/1.1 200 OK`
+
 ### 对话 91：落地 RabbitMQ 任务式生成链路第一阶段并同步交付文档
 - **用户需求**：用户要求“将项目服务进行拆分，变成微服务架构”，在完成方案共创后确认采用“多服务 + Nginx 单入口 + 共享 Postgres + RabbitMQ 事件驱动”的渐进式路线，并继续要求按 `Subagent-Driven` 方式逐个执行生成链路的 `Task 1` 到 `Task 6`，最终再把项目提交到 GitHub。
 - **AI 动作**：

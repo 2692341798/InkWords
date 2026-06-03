@@ -3,15 +3,19 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	amqp "github.com/rabbitmq/amqp091-go"
 
 	authdomain "inkwords-backend/internal/domain/auth"
 	blogdomain "inkwords-backend/internal/domain/blog"
@@ -20,6 +24,7 @@ import (
 	userdomain "inkwords-backend/internal/domain/user"
 	"inkwords-backend/internal/infra/cache"
 	"inkwords-backend/internal/infra/db"
+	"inkwords-backend/internal/infra/mq"
 	"inkwords-backend/internal/infra/parser"
 	"inkwords-backend/internal/service"
 	"inkwords-backend/internal/transport/http/middleware"
@@ -30,6 +35,8 @@ import (
 type shutdownableServer interface {
 	Shutdown(context.Context) error
 }
+
+type taskPublisherFactory func(rabbitURL string, exchange string) (taskdomain.Publisher, func(), error)
 
 func init() {
 	if err := godotenv.Load(); err != nil {
@@ -50,17 +57,16 @@ func main() {
 		log.Printf("Redis initialization failed (cache will be disabled): %v", err)
 	}
 
-	r := gin.Default()
+	r := gin.New()
+	r.Use(gin.Recovery(), middleware.RequestID(), middleware.RequestLogger("core-api"))
 	r.MaxMultipartMemory = 888 << 20
 	r.Static("/uploads", "./uploads")
+	api.RegisterHealthRoutes(r, api.NewHealthAPI("core-api", map[string]api.ReadinessCheck{
+		"db": api.NewGormReadinessCheck(db.DB),
+	}))
 
-	r.GET("/api/v1/ping", func(c *gin.Context) {
-		c.JSON(200, gin.H{
-			"code":    200,
-			"message": "pong",
-			"data":    nil,
-		})
-	})
+	signalContext, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
 	userService := service.NewUserService(db.DB)
 	blogService := service.NewBlogService()
@@ -85,9 +91,21 @@ func main() {
 	projectDomainHandler := projectdomain.NewHandler(projectDomainService)
 
 	taskRepo := taskdomain.NewGormRepository(db.DB)
-	// Task 3 先只完成 core-api 接口层闭环，消息发布器在后续 RabbitMQ 接线任务中注入。
-	taskDomainService := taskdomain.NewService(taskRepo, nil)
-	taskDomainHandler := taskdomain.NewHandler(taskDomainService)
+	// Why: core-api 不能再静默接受“创建成功但未投递”的假成功，因此启动时必须显式接入 RabbitMQ publisher。
+	taskPublisher, closeTaskPublisher, err := initTaskPublisherFromEnv(newRabbitMQTaskPublisher)
+	if err != nil {
+		log.Fatalf("RabbitMQ publisher initialization failed: %v", err)
+	}
+	defer closeTaskPublisher()
+	go func() {
+		<-signalContext.Done()
+		closeTaskPublisher()
+	}()
+	taskDomainService := taskdomain.NewService(taskRepo, taskPublisher)
+	taskDomainHandler := taskdomain.NewHandler(
+		taskDomainService,
+		envOrDefault("EXPORT_ARTIFACTS_DIR", "/app/export-artifacts"),
+	)
 
 	authAPI := api.NewAuthAPIWithDeps(authDomainHandler)
 	userAPI := api.NewUserAPIWithDeps(userService, userDomainHandler)
@@ -126,16 +144,16 @@ func main() {
 		},
 		Task: transportv1.TaskHandlers{
 			CreateGeneration: taskAPI.CreateGenerationTask,
+			CreateParse:      taskAPI.CreateParseTask,
+			CreateExport:     taskAPI.CreateExportTask,
 			GetTask:          taskAPI.GetTask,
 			CancelTask:       taskAPI.CancelTask,
 			StreamTask:       taskAPI.StreamTask,
+			DownloadTask:     taskAPI.DownloadTask,
 		},
 	})
 
 	server := newHTTPServer(r)
-	signalContext, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-
 	go shutdownServerOnContextDone(signalContext, server, 15*time.Second)
 
 	log.Printf("Server is running on %s", server.Addr)
@@ -164,4 +182,51 @@ func shutdownServerOnContextDone(signalContext context.Context, server shutdowna
 	if err := server.Shutdown(shutdownContext); err != nil {
 		log.Printf("Server shutdown failed: %v", err)
 	}
+}
+
+func initTaskPublisherFromEnv(factory taskPublisherFactory) (taskdomain.Publisher, func(), error) {
+	rabbitURL := strings.TrimSpace(os.Getenv("RABBITMQ_URL"))
+	if rabbitURL == "" {
+		return nil, nil, errors.New("RABBITMQ_URL environment variable is not set")
+	}
+
+	exchangeName := envOrDefault("RABBITMQ_EXCHANGE", "inkwords.events")
+	return factory(rabbitURL, exchangeName)
+}
+
+func newRabbitMQTaskPublisher(rabbitURL string, exchange string) (taskdomain.Publisher, func(), error) {
+	connection, err := amqp.Dial(rabbitURL)
+	if err != nil {
+		return nil, nil, fmt.Errorf("dial RabbitMQ failed: %w", err)
+	}
+
+	channel, err := connection.Channel()
+	if err != nil {
+		_ = connection.Close()
+		return nil, nil, fmt.Errorf("open RabbitMQ channel failed: %w", err)
+	}
+
+	if err := channel.ExchangeDeclare(exchange, "topic", true, false, false, false, nil); err != nil {
+		_ = channel.Close()
+		_ = connection.Close()
+		return nil, nil, fmt.Errorf("declare RabbitMQ exchange failed: %w", err)
+	}
+
+	publisher := mq.NewPublisher(channel, exchange)
+	var closeOnce sync.Once
+	cleanup := func() {
+		closeOnce.Do(func() {
+			_ = channel.Close()
+			_ = connection.Close()
+		})
+	}
+
+	return publisher, cleanup, nil
+}
+
+func envOrDefault(key string, fallback string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return fallback
 }

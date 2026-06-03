@@ -1,6 +1,10 @@
 # 墨言知识训练平台 (InkWords Trainer) - 架构设计与工程规范
 
 ## 0. 变更记录
+- 2026-06-03：Task 4 补齐“服务写入归属矩阵”。明确 `core-api` 事实拥有 `users / oauth_tokens / user_prompt_settings / blogs / job_tasks / job_task_events`，`review-service` 事实拥有 `review_sessions / review_turns`；同时把当前允许的跨服务写入例外文档化为“仅通过显式 repository / task service 写 `job_tasks / job_task_events`”，并记录 `GeneratorService / DecompositionService` 仍直接使用全局 `db.DB` 写 `blogs / users` 的过渡性技术债。
+- 2026-06-03：Task 6 继续推进 `parser-service` 异步化。`core-api` 新增 `POST /api/v1/tasks/parse`，用于创建 `parse_file / parse_archive` 任务并发布到 RabbitMQ `parse.requested`；`parser-service` 新增 parse worker consumer，消费后把解析结果写回 `job_tasks.result_json`。前端当前让 `.zip` 课件包与 `50MB` 以上普通单文件默认走任务式解析，`50MB` 及以下普通单文件仍保留同步 `/api/v1/project/parse` 作为兼容路径。
+- 2026-06-03：Task 3 为 `core-api / llm-stream / parser-service / export-service / review-service` 补齐统一运行契约：各服务统一接入 `X-Request-ID` 中间件、结构化请求日志（`service / request_id / path / method / status / latency_ms`），并新增 `/health` 与 `/ready` 端点；Docker Compose 为 5 个后端服务与前端增加 healthcheck，前端启动依赖改为等待各后端 `healthy`，降低“容器已启动但接口未就绪”的误判。
+- 2026-06-03：Task 2 将“任务式 SSE”收口为默认生成主链路。前端的单篇生成、系列生成、继续生成、润色统一改为“先创建 generation task，再订阅 `/api/v1/tasks/:id/stream`”；`llm-stream` 的 task consumer 也扩展支持 `continue / polish` 两类任务。旧 `/api/v1/stream/*` 与 `/api/v1/blogs/:id/(continue|polish)` 仍保留为兼容回滚路径。
 - 2026-06-03：生成链路进入 RabbitMQ 事件驱动 Phase B。Compose 新增 `rabbitmq` 服务，`core-api` 与 `llm-stream` 通过 `RABBITMQ_URL / RABBITMQ_EXCHANGE / RABBITMQ_GENERATION_QUEUE` 接入任务队列；对外入口仍保持 `http://localhost` 与 `/api/*` 不变，`core-api` 负责创建任务、查询任务与基于 `job_task_events` 输出 SSE，`llm-stream` 负责消费生成任务并写回任务事件。
 - 2026-06-03：澄清生产形态为 Docker Compose 多服务 + 前端 Nginx 单入口；`backend/Dockerfile` 不再构建/复制 `server` 二进制，镜像默认 CMD 调整为运行 `core-api`；`cmd/server` 明确为本地/集成调试聚合入口。
 - 2026-06-03：Docker 微服务化 Phase 2（已落地到代码与编排）。后端在 Compose 中进一步拆分为 `core-api` / `llm-stream` / `parser-service` / `export-service` / `review-service`，对外入口仍为 `http://localhost`，由前端 Nginx 按路径分流；review 数据迁移与拆库（同 Postgres 实例、不同 database：`inkwords_review_db`）需按 Runbook 执行：[review-db-migration.md](file:///Users/huangqijun/Documents/%E5%A2%A8%E8%A8%80%E5%8D%9A%E5%AE%A2%E5%8A%A9%E6%89%8B/InkWords/docs/runbooks/review-db-migration.md)。
@@ -97,16 +101,61 @@
   - `core-api` 负责把生成请求转换为任务记录，并把消息投递到 `generation.requested`。
   - `llm-stream` 通过 RabbitMQ consumer 异步消费任务，复用既有生成服务执行业务逻辑。
   - 任务进度与正文 chunk 先落 PostgreSQL 事件表，再由 `core-api` 统一向前端输出 SSE，避免第一阶段引入跨服务内存总线。
+- **parser-service 异步解析（Task 6 起步态）**：
+  - `core-api` 新增 `/api/v1/tasks/parse`，负责创建解析任务并把消息投递到 `parse.requested`。
+  - `parser-service` 新增 parse worker consumer，复用既有 `fileparse.Service` 执行文件/ZIP 解析，不再要求前端直连同步长请求才能完成重解析。
+  - 当前阶段让 `.zip` 课件包与 `50MB` 以上普通单文件默认走任务化，以最小改动验证“非生成类任务”模型；`50MB` 及以下普通文件解析继续保留同步接口，避免一次性把所有上传链路都改成 Base64 任务载荷。
+- **export-service 异步导出（Task 7 起步态）**：
+  - `core-api` 新增 `/api/v1/tasks/export` 与 `/api/v1/tasks/:id/download`，负责创建导出任务并在完成后提供受控下载入口。
+  - `export-service` 新增 export worker consumer，订阅 `export.requested`，复用现有 Chromium PDF 导出逻辑生成文件，再把 `file_token / filename / content_type / expires_at` 写回任务 `result_json`。
+  - `core-api` 与 `export-service` 通过共享卷 `EXPORT_ARTIFACTS_DIR` 交换导出产物；下载成功后由 `core-api` 删除文件，避免共享目录无限增长。
 - **正文净化层**：`internal/infra/llm` 在流式输出进入业务层前统一做开头段落清洗，剥离 `<think>` 标签、跳过 `reasoning_content`，并删除“收到你的需求 / 作为高级全栈架构师”等非正文前言；前端润色应用正文前再做一次兜底提取，避免污染 `blogs.content`。
+
+## 2.2.1 服务写入归属矩阵（Task 4）
+
+### 核心原则
+- 生产形态虽然仍共享同一 Postgres 实例，但“共享实例”不再等于“任意服务都能随意写任意表”。
+- 表的事实归属先以服务边界为准，再决定是否推进“同实例不同库”或独立实例拆分。
+- 非归属服务若必须写入共享表，只允许通过显式 repository / task service 收口，禁止在业务 service 中直接操作全局 `db.DB`。
+
+### 当前归属矩阵
+| 表 / 资源 | 事实归属服务 | 当前允许写入方 | 说明 |
+| --- | --- | --- | --- |
+| `users` | `core-api` | `core-api` | 用户注册、登录失败计数、GitHub 绑定、Token 记账均由核心应用链路维护 |
+| `oauth_tokens` | `core-api` | `core-api` | 第三方平台授权信息；当前仓库已有模型与迁移，但业务写入链路尚未重新启用 |
+| `user_prompt_settings` | `core-api` | `core-api` | 用户写作模板覆盖值，由核心应用持久化 |
+| `blogs` | `core-api` | `core-api` | 博客正文、系列父子关系、润色/续写落库都属于核心内容域 |
+| `job_tasks` | `core-api` | `core-api`、`llm-stream`、`parser-service`、`export-service` | 事实归属仍是 `core-api`，但 worker 允许通过任务仓储更新状态和结果 |
+| `job_task_events` | `core-api` | `core-api`、`llm-stream`、`parser-service`、`export-service` | 统一任务控制面；跨服务写入仅限事件回放所需的追加写 |
+| `review_sessions` | `review-service` | `review-service` | 已拆到 `inkwords_review_db`，非 review 服务不应再直接写入 |
+| `review_turns` | `review-service` | `review-service` | 与 `review_sessions` 同归属，保持会话和轮次同域管理 |
+
+### 当前允许的跨服务写入例外
+- `llm-stream`、`parser-service`、`export-service` 可以写 `job_tasks / job_task_events`，但前提是：
+  - 只能通过 `internal/domain/task` 提供的显式 repository / service 接口。
+  - 写入目标仅限任务状态、任务结果、可回放事件，不得借机扩展为任意业务表写入。
+- `review-service` 使用独立 `REVIEW_DATABASE_URL` 后，不再允许其它服务绕过 review repository 写 `review_sessions / review_turns`。
+
+### 当前已知技术债
+- `backend/internal/service/generator.go` 仍直接使用全局 `db.DB` 在事务中写 `blogs` 与 `users.tokens_used`。
+- `backend/internal/service/decomposition_generate*.go` 仍直接使用全局 `db.DB` 写系列父博客、章节草稿、续写正文和失败状态。
+- 这些写入虽然仍属于 `core-api` 自有边界，没有跨服务越权，但它们绕过了 `domain/blog` 的显式仓储边界，属于 Task 4 识别出的下一步收口对象。
+
+### 退化与拆分判断
+- 在 `blogs / job_tasks / job_task_events` 仍存在大量全局 `db.DB` 直接写之前，不推进真正的独立实例拆分。
+- 只有当“表归属明确 + 跨服务写入接口化 + 回滚 Runbook 可执行”三项同时满足，才进入 Task 8 的下一阶段。
 
 ### 2.3 基础设施 (Infrastructure)
 - **数据库**: PostgreSQL 14 (Docker volume 挂载持久化)
-- **消息队列**: RabbitMQ 3 Management（当前仅用于生成链路任务投递；管理界面端口保留在容器内网，不对宿主机暴露）
+- **消息队列**: RabbitMQ 3 Management（当前用于 `generation.requested / parse.requested / export.requested` 三类任务投递；管理界面端口保留在容器内网，不对宿主机暴露）
 - **本地知识库导出**: 后端通过 Obsidian Local REST API（HTTPS + API Key）写入用户本地 Vault，并遵循 Karpathy LLM Wiki Pattern 将系列批量 Ingest 为 `sources/`、`concepts/`、`entities/` 并自动编织双向链接网络，同时自动生成 `sources/_index.md`、`concepts/_index.md`、`entities/_index.md`、`domains/_index.md` 等“地图索引页”以避免知识孤岛与空页面；容器通过 sidecar `obsidian-bridge`（27125）转发访问宿主机插件端口（27124）
 - **本地知识库复习输入**: Review 模块默认从 `OBSIDIAN_WIKI_DIR` 指向的 `wiki/` 根目录读取候选笔记；若 Obsidian Store 初始化失败，服务仍可启动，但 review 入口会返回稳定错误而不是让整个服务崩溃。
-- **系列 PDF 导出**: 后端将系列 Markdown 渲染为 HTML（封面 + 目录 + 正文），并使用容器内 Chromium Headless 打印为 PDF（前端在侧边栏批量模式中逐个触发下载）。为保证中文正常显示，后端运行时镜像需安装 `chromium` 与 `font-noto-cjk` 等字体依赖。
+- **系列 PDF 导出**: 后端将系列 Markdown 渲染为 HTML（封面 + 目录 + 正文），并使用容器内 Chromium Headless 打印为 PDF。当前默认链路已切到“创建 export task -> export-service worker 生成 PDF -> `/api/v1/tasks/:id/download` 受控下载”，原同步 `/api/v1/blogs/:id/export/pdf` 继续保留为回滚路径。为保证中文正常显示，后端运行时镜像需安装 `chromium` 与 `font-noto-cjk` 等字体依赖。
 - **代理与网关**: Nginx (构建前端静态页面并反向代理后端 `/api/` 路径，配置 `client_max_body_size 888M` 以支持大文件解析)
 - **大语言模型**: DeepSeek-V4-Flash API (支持 128k 输出及 1M Token 上下文)
+- **基础运行契约**:
+  - 所有后端服务统一暴露 `/api/v1/ping`、`/health`、`/ready` 三个探针端点；`/ready` 默认至少检查数据库，`llm-stream` 额外检查 RabbitMQ 配置是否已注入。
+  - 所有 HTTP 请求统一透传或生成 `X-Request-ID`，并在结构化请求日志中输出 `service / request_id / path / method / status / latency_ms`，作为多服务形态下的最小排障上下文。
 
 ## 3. 并发生成架构
 在处理项目到系列博客的生成时，后端采取如下架构：
@@ -159,6 +208,9 @@
   - 第一阶段优先使用 PostgreSQL 事件表作为跨服务事实来源，不额外引入 Redis pubsub。
   - 旧 `/api/v1/stream/*` 路由仍保留，作为兼容回滚路径。
   - 取消任务由 `core-api` 标记任务状态，worker 通过轮询取消状态尽快停止。
+- **Task 6 扩展**：
+  - 同一套 `job_tasks / job_task_events / RabbitMQ` 基础设施已开始复用于解析链路：`generation.requested` 之外，再增加 `parse.requested`。
+  - `parser-service` 和 `llm-stream` 一样消费 MQ 任务，但执行体复用 `fileparse.Service`，结果直接回写任务 `result_json`，不要求解析链路也像生成链路一样产生大量 chunk 事件。
 
 ## 4. 部署架构 (Docker-First)
 - **前端镜像**: 采用多阶段构建（Node.js 安装依赖并构建，Nginx 轻量级运行并作为反向代理网关）。默认仅映射宿主机 `80` 端口，统一以 `http://localhost` 作为前端入口。
@@ -166,8 +218,9 @@
 - **PDF 运行时依赖**: 后端 Alpine 运行时镜像除 `chromium`、`font-noto-cjk` 外，还需安装 `poppler-utils`，以便 `DocParser` 在中文 PDF 提取失真时回退到 `pdftotext`。
 - **数据库 / Redis**: PostgreSQL 与 Redis Stack 默认仅在容器网络内暴露，避免开发态无意开放宿主机调试端口。Phase 2 引入 review 拆库：同一 Postgres 实例新增 `inkwords_review_db`，`review-service` 使用 `REVIEW_DATABASE_URL` 连接；数据迁移与回滚步骤见 Runbook：[review-db-migration.md](file:///Users/huangqijun/Documents/%E5%A2%A8%E8%A8%80%E5%8D%9A%E5%AE%A2%E5%8A%A9%E6%89%8B/InkWords/docs/runbooks/review-db-migration.md)。
 - **容器互联**: 全部服务显式加入 `inkwords-network` 内部网络，后端通过服务名 `db:5432`、`redis:6379`、`rabbitmq:5672`、`obsidian-bridge:27125` 与依赖互通。
+- **健康探针**: `core-api / llm-stream / parser-service / export-service / review-service / frontend` 均在 Compose 中声明 `healthcheck`；前端依赖五个后端服务的 `service_healthy` 状态，避免 Nginx 先起来但后端还未 ready 的短暂空窗。
 - **环境装载约定**: Docker Compose 运行时统一建议通过 `docker compose --env-file backend/.env ...` 启动；`OBSIDIAN_VAULT_PATH` 必须显式提供，不再回退到某台开发机的绝对路径。
-- **任务队列环境变量**: `core-api` 与 `llm-stream` 统一读取 `RABBITMQ_URL`、`RABBITMQ_EXCHANGE`、`RABBITMQ_GENERATION_QUEUE`；默认值分别指向 `amqp://guest:guest@rabbitmq:5672/`、`inkwords.events`、`inkwords.generation`。
+- **任务队列环境变量**: `core-api`、`llm-stream` 与 `parser-service` 统一读取 `RABBITMQ_URL`、`RABBITMQ_EXCHANGE`；其中生成链路使用 `RABBITMQ_GENERATION_QUEUE`，解析链路新增 `RABBITMQ_PARSE_QUEUE`。默认值分别指向 `amqp://guest:guest@rabbitmq:5672/`、`inkwords.events`、`inkwords.generation`、`inkwords.parse`。
 - **Task 6 冒烟验证补充**: 请直接使用 `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build`；这样 Compose 会显式加载 `backend/.env`，避免因 `OBSIDIAN_VAULT_PATH` 等变量缺失而在解析 bind mount 时直接失败。
 
 ## 4.1 仓库产物与敏感信息策略

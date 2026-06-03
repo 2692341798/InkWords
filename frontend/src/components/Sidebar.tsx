@@ -124,14 +124,20 @@ export function Sidebar() {
     setIsExportingPDF(true)
 
     try {
-      toast.loading(`正在导出 PDF：0/${selectedSeriesRoots.length}`, { id: 'export-series-pdf' })
+      toast.loading('正在创建 PDF 导出任务...', { id: 'export-series-pdf' })
       const result = await exportSeriesPdfs(selectedSeriesRoots)
 
       result.failed.forEach((failure) => {
         toast.error(`《${failure.title || '未命名系列'}》导出失败：${failure.message}`)
       })
 
-      toast.success(`已开始下载 ${result.succeededCount} 份 PDF`, { id: 'export-series-pdf' })
+      if (result.succeededCount > 0) {
+        toast.success(`PDF 已生成，开始下载（成功 ${result.succeededCount} 个）`, {
+          id: 'export-series-pdf',
+        })
+      } else {
+        toast.error('PDF 导出失败', { id: 'export-series-pdf' })
+      }
     } finally {
       setIsExportingPDF(false)
     }

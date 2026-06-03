@@ -18,6 +18,8 @@ const defaultTaskStreamPollInterval = 500 * time.Millisecond
 
 type taskService interface {
 	CreateGenerationTask(ctx context.Context, input CreateGenerationTaskInput) (model.JobTask, error)
+	CreateParseTask(ctx context.Context, input CreateParseTaskInput) (model.JobTask, error)
+	CreateExportTask(ctx context.Context, input CreateExportTaskInput) (model.JobTask, error)
 	GetTask(ctx context.Context, taskID uuid.UUID, requestedBy uuid.UUID) (model.JobTask, error)
 	CancelTask(ctx context.Context, taskID uuid.UUID, requestedBy uuid.UUID) error
 	ListStreamEvents(ctx context.Context, taskID uuid.UUID, afterID uint64) ([]model.JobTaskEvent, bool, error)
@@ -25,20 +27,60 @@ type taskService interface {
 
 // Handler 提供 generation task 的 HTTP 适配层。
 type Handler struct {
-	service      taskService
-	pollInterval time.Duration
+	service            taskService
+	exportArtifactsDir string
+	pollInterval       time.Duration
 }
 
 // NewHandler 通过依赖注入组装任务 HTTP Handler。
-func NewHandler(service taskService) *Handler {
+func NewHandler(service taskService, exportArtifactsDir string) *Handler {
 	return &Handler{
-		service:      service,
-		pollInterval: defaultTaskStreamPollInterval,
+		service:            service,
+		exportArtifactsDir: exportArtifactsDir,
+		pollInterval:       defaultTaskStreamPollInterval,
 	}
 }
 
 // CreateGenerationTask 接收前端任务创建请求，并返回可订阅的任务地址。
 func (h *Handler) CreateGenerationTask(c *gin.Context) {
+	h.createTask(c, func(userID uuid.UUID, req CreateGenerationTaskRequest) (model.JobTask, error) {
+		return h.service.CreateGenerationTask(c.Request.Context(), CreateGenerationTaskInput{
+			RequestedBy:    userID,
+			TaskSubtype:    req.Kind,
+			IdempotencyKey: req.IdempotencyKey,
+			Payload:        []byte(req.Payload),
+		})
+	})
+}
+
+// CreateParseTask 接收前端解析任务创建请求，并返回可订阅的任务地址。
+func (h *Handler) CreateParseTask(c *gin.Context) {
+	h.createTask(c, func(userID uuid.UUID, req CreateGenerationTaskRequest) (model.JobTask, error) {
+		return h.service.CreateParseTask(c.Request.Context(), CreateParseTaskInput{
+			RequestedBy:    userID,
+			TaskSubtype:    req.Kind,
+			IdempotencyKey: req.IdempotencyKey,
+			Payload:        []byte(req.Payload),
+		})
+	})
+}
+
+// CreateExportTask 接收前端导出任务创建请求，并返回可订阅的任务地址。
+func (h *Handler) CreateExportTask(c *gin.Context) {
+	h.createTask(c, func(userID uuid.UUID, req CreateGenerationTaskRequest) (model.JobTask, error) {
+		return h.service.CreateExportTask(c.Request.Context(), CreateExportTaskInput{
+			RequestedBy:    userID,
+			TaskSubtype:    req.Kind,
+			IdempotencyKey: req.IdempotencyKey,
+			Payload:        []byte(req.Payload),
+		})
+	})
+}
+
+func (h *Handler) createTask(
+	c *gin.Context,
+	create func(userID uuid.UUID, req CreateGenerationTaskRequest) (model.JobTask, error),
+) {
 	var req CreateGenerationTaskRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
@@ -51,12 +93,7 @@ func (h *Handler) CreateGenerationTask(c *gin.Context) {
 		return
 	}
 
-	task, err := h.service.CreateGenerationTask(c.Request.Context(), CreateGenerationTaskInput{
-		RequestedBy:    userID,
-		TaskSubtype:    req.Kind,
-		IdempotencyKey: req.IdempotencyKey,
-		Payload:        []byte(req.Payload),
-	})
+	task, err := create(userID, req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create task"})
 		return

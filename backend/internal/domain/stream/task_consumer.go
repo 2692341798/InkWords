@@ -27,6 +27,8 @@ type taskService interface {
 
 type generationStreamService interface {
 	Generate(ctx context.Context, userID uuid.UUID, req GenerateRequest, chunkChan chan<- string, errChan chan<- error)
+	Continue(ctx context.Context, userID uuid.UUID, blogID uuid.UUID, chunkChan chan<- string, errChan chan<- error)
+	Polish(ctx context.Context, req PolishRequest, chunkChan chan<- string, errChan chan<- error)
 }
 
 // TaskConsumer 把 RabbitMQ 中的 generation task 转换成现有 stream.Service 的执行调用。
@@ -63,11 +65,6 @@ func (c *TaskConsumer) HandleGenerationRequested(ctx context.Context, message mq
 		return nil
 	}
 
-	var req GenerateRequest
-	if err := json.Unmarshal(message.Payload, &req); err != nil {
-		return c.tasks.MarkFailed(ctx, message.TaskID, "invalid generation payload")
-	}
-
 	if err := c.tasks.MarkRunning(ctx, message.TaskID); err != nil {
 		return err
 	}
@@ -77,7 +74,9 @@ func (c *TaskConsumer) HandleGenerationRequested(ctx context.Context, message mq
 	go c.watchCancellation(taskCtx, cancel, message.TaskID)
 
 	chunkChan, errChan := newGenerateStreamChannels()
-	go c.streams.Generate(taskCtx, message.UserID, req, chunkChan, errChan)
+	if err := c.startTaskStream(taskCtx, message, chunkChan, errChan); err != nil {
+		return c.tasks.MarkFailed(ctx, message.TaskID, err.Error())
+	}
 
 	chunkOpen, errOpen := true, true
 	for chunkOpen || errOpen {
@@ -153,10 +152,58 @@ func (c *TaskConsumer) watchCancellation(taskCtx context.Context, cancel context
 
 func supportsGenerationKind(kind string) bool {
 	switch strings.TrimSpace(kind) {
-	case "generate_single", "generate_series":
+	case "generate_single", "generate_series", "continue", "polish":
 		return true
 	default:
 		return false
+	}
+}
+
+func (c *TaskConsumer) startTaskStream(
+	taskCtx context.Context,
+	message mq.GenerationRequestedMessage,
+	chunkChan chan<- string,
+	errChan chan<- error,
+) error {
+	switch strings.TrimSpace(message.Kind) {
+	case "generate_single", "generate_series":
+		var req GenerateRequest
+		if err := json.Unmarshal(message.Payload, &req); err != nil {
+			return errors.New("invalid generation payload")
+		}
+		go c.streams.Generate(taskCtx, message.UserID, req, chunkChan, errChan)
+		return nil
+	case "continue":
+		var payload struct {
+			BlogID string `json:"blog_id"`
+		}
+		if err := json.Unmarshal(message.Payload, &payload); err != nil {
+			return errors.New("invalid generation payload")
+		}
+		blogID, err := uuid.Parse(strings.TrimSpace(payload.BlogID))
+		if err != nil {
+			return errors.New("invalid generation payload")
+		}
+		go c.streams.Continue(taskCtx, message.UserID, blogID, chunkChan, errChan)
+		return nil
+	case "polish":
+		var payload struct {
+			Title   string `json:"title"`
+			Content string `json:"content"`
+		}
+		if err := json.Unmarshal(message.Payload, &payload); err != nil {
+			return errors.New("invalid generation payload")
+		}
+		if strings.TrimSpace(payload.Content) == "" {
+			return errors.New("invalid generation payload")
+		}
+		go c.streams.Polish(taskCtx, PolishRequest{
+			Title:   payload.Title,
+			Content: payload.Content,
+		}, chunkChan, errChan)
+		return nil
+	default:
+		return fmt.Errorf("unsupported generation kind: %s", strings.TrimSpace(message.Kind))
 	}
 }
 

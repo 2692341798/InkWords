@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
@@ -12,9 +13,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	amqp "github.com/rabbitmq/amqp091-go"
 
 	blogdomain "inkwords-backend/internal/domain/blog"
+	taskdomain "inkwords-backend/internal/domain/task"
 	"inkwords-backend/internal/infra/db"
+	"inkwords-backend/internal/infra/mq"
 	"inkwords-backend/internal/service"
 	"inkwords-backend/internal/transport/http/middleware"
 	transportv1 "inkwords-backend/internal/transport/http/v1"
@@ -40,20 +44,18 @@ func main() {
 		log.Fatalf("Database initialization failed: %v", err)
 	}
 
-	r := gin.Default()
-
-	r.GET("/api/v1/ping", func(c *gin.Context) {
-		c.JSON(200, gin.H{
-			"code":    200,
-			"message": "pong",
-			"data":    nil,
-		})
-	})
+	r := gin.New()
+	r.Use(gin.Recovery(), middleware.RequestID(), middleware.RequestLogger("export-service"))
+	api.RegisterHealthRoutes(r, api.NewHealthAPI("export-service", map[string]api.ReadinessCheck{
+		"db": api.NewGormReadinessCheck(db.DB),
+	}))
 
 	blogService := service.NewBlogService()
 	blogRepo := blogdomain.NewGormRepository(db.DB)
 	blogDomainService := blogdomain.NewService(blogRepo)
 	blogDomainHandler := blogdomain.NewHandlerWithLegacy(blogDomainService, blogService)
+	taskRepo := taskdomain.NewGormRepository(db.DB)
+	taskDomainService := taskdomain.NewService(taskRepo, nil)
 	blogAPI := api.NewBlogAPIWithDeps(blogService, blogDomainHandler)
 
 	authMiddleware := middleware.AuthMiddleware()
@@ -67,6 +69,22 @@ func main() {
 	server := newHTTPServer(r)
 	signalContext, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	artifactStore := taskdomain.NewExportArtifactStore(
+		envOrDefault("EXPORT_ARTIFACTS_DIR", "/app/export-artifacts"),
+		15*time.Minute,
+		time.Now,
+	)
+	exportConsumer := taskdomain.NewExportConsumer(taskDomainService, blogService, artifactStore)
+	stopConsumer, err := startExportTaskConsumer(
+		signalContext,
+		exportConsumer,
+		envOrDefault("RABBITMQ_EXPORT_QUEUE", "inkwords.export"),
+	)
+	if err != nil {
+		log.Printf("RabbitMQ export consumer initialization skipped: %v", err)
+	}
+	defer stopConsumer()
 
 	go shutdownServerOnContextDone(signalContext, server, 15*time.Second)
 
@@ -96,4 +114,94 @@ func shutdownServerOnContextDone(signalContext context.Context, server shutdowna
 	if err := server.Shutdown(shutdownContext); err != nil {
 		log.Printf("Server shutdown failed: %v", err)
 	}
+}
+
+func startExportTaskConsumer(
+	signalContext context.Context,
+	consumer *taskdomain.ExportConsumer,
+	queueName string,
+) (func(), error) {
+	rabbitURL := os.Getenv("RABBITMQ_URL")
+	if rabbitURL == "" {
+		log.Println("RabbitMQ is not configured, export consumer disabled")
+		return func() {}, nil
+	}
+
+	conn, err := amqp.Dial(rabbitURL)
+	if err != nil {
+		return func() {}, err
+	}
+
+	channel, err := conn.Channel()
+	if err != nil {
+		_ = conn.Close()
+		return func() {}, err
+	}
+
+	exchangeName := envOrDefault("RABBITMQ_EXCHANGE", "inkwords.events")
+	routingKey := mq.ExportRequestedMessage{}.RoutingKey()
+
+	if err := channel.ExchangeDeclare(exchangeName, "topic", true, false, false, false, nil); err != nil {
+		_ = channel.Close()
+		_ = conn.Close()
+		return func() {}, err
+	}
+	queue, err := channel.QueueDeclare(queueName, true, false, false, false, nil)
+	if err != nil {
+		_ = channel.Close()
+		_ = conn.Close()
+		return func() {}, err
+	}
+	if err := channel.QueueBind(queue.Name, routingKey, exchangeName, false, nil); err != nil {
+		_ = channel.Close()
+		_ = conn.Close()
+		return func() {}, err
+	}
+
+	deliveries, err := channel.Consume(queue.Name, "export-service-pdf-worker", false, false, false, false, nil)
+	if err != nil {
+		_ = channel.Close()
+		_ = conn.Close()
+		return func() {}, err
+	}
+
+	go func() {
+		for {
+			select {
+			case <-signalContext.Done():
+				return
+			case delivery, ok := <-deliveries:
+				if !ok {
+					return
+				}
+
+				var message taskdomain.ExportRequestedMessage
+				if err := json.Unmarshal(delivery.Body, &message); err != nil {
+					log.Printf("invalid export message payload: %v", err)
+					_ = delivery.Ack(false)
+					continue
+				}
+
+				if err := consumer.HandleExportRequested(signalContext, message); err != nil {
+					log.Printf("export task handling failed for %s: %v", message.TaskID, err)
+					_ = delivery.Nack(false, true)
+					continue
+				}
+
+				_ = delivery.Ack(false)
+			}
+		}
+	}()
+
+	return func() {
+		_ = channel.Close()
+		_ = conn.Close()
+	}, nil
+}
+
+func envOrDefault(key string, fallback string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return fallback
 }

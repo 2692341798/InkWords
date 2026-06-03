@@ -78,6 +78,109 @@ describe('parseUploadedFile', () => {
     )
   })
 
+  it('uses task-based parsing for zip archives and stores the async result', async () => {
+    const store = createMockStore()
+    const parseProjectFile = vi.fn()
+    const createParseTask = vi.fn().mockResolvedValue({
+      task_id: 'task-zip-1',
+      status: 'queued',
+      stream_url: '/api/v1/tasks/task-zip-1/stream',
+    })
+    const getTaskSnapshot = vi.fn().mockResolvedValue({
+      id: 'task-zip-1',
+      status: 'succeeded',
+      result: {
+        source_content: 'async parsed zip content',
+        archive_summary: {
+          total_files: 3,
+          kept_files: 2,
+          duplicate_files: 0,
+          ignored_files: 1,
+          failed_files: 0,
+        },
+      },
+    })
+    fetchEventSourceWithAuth.mockResolvedValue(undefined)
+
+    await expect(
+      parseUploadedFile({
+        file: new File(['zip'], 'course.zip'),
+        store,
+        parseProjectFile,
+        createParseTask,
+        getTaskSnapshot,
+      }),
+    ).resolves.toBe('async parsed zip content')
+
+    expect(parseProjectFile).not.toHaveBeenCalled()
+    expect(createParseTask).toHaveBeenCalled()
+    expect(getTaskSnapshot).toHaveBeenCalledWith('task-zip-1')
+    expect(store.setSourceContent).toHaveBeenCalledWith('async parsed zip content')
+  })
+
+  it('uses task-based parsing for non-zip files larger than 50MB', async () => {
+    const store = createMockStore()
+    const parseProjectFile = vi.fn()
+    const createParseTask = vi.fn().mockResolvedValue({
+      task_id: 'task-file-1',
+      status: 'queued',
+      stream_url: '/api/v1/tasks/task-file-1/stream',
+    })
+    const getTaskSnapshot = vi.fn().mockResolvedValue({
+      id: 'task-file-1',
+      status: 'succeeded',
+      result: {
+        source_content: 'async parsed pdf content',
+      },
+    })
+    fetchEventSourceWithAuth.mockResolvedValue(undefined)
+
+    const file = new File(['pdf'], 'course.pdf', { type: 'application/pdf' })
+    Object.defineProperty(file, 'size', { configurable: true, value: 50 * 1024 * 1024 + 1 })
+
+    await expect(
+      parseUploadedFile({
+        file,
+        store,
+        parseProjectFile,
+        createParseTask,
+        getTaskSnapshot,
+      }),
+    ).resolves.toBe('async parsed pdf content')
+
+    expect(parseProjectFile).not.toHaveBeenCalled()
+    expect(createParseTask).toHaveBeenCalledWith(file)
+    expect(getTaskSnapshot).toHaveBeenCalledWith('task-file-1')
+  })
+
+  it('keeps small non-zip files on the synchronous parse path', async () => {
+    const store = createMockStore()
+    const parseProjectFile = vi.fn().mockResolvedValue({
+      data: {
+        source_content: 'sync parsed markdown content',
+      },
+    })
+    const createParseTask = vi.fn()
+    const getTaskSnapshot = vi.fn()
+
+    const file = new File(['markdown'], 'guide.md', { type: 'text/markdown' })
+    Object.defineProperty(file, 'size', { configurable: true, value: 5 * 1024 * 1024 })
+
+    await expect(
+      parseUploadedFile({
+        file,
+        store,
+        parseProjectFile,
+        createParseTask,
+        getTaskSnapshot,
+      }),
+    ).resolves.toBe('sync parsed markdown content')
+
+    expect(parseProjectFile).toHaveBeenCalledOnce()
+    expect(createParseTask).not.toHaveBeenCalled()
+    expect(getTaskSnapshot).not.toHaveBeenCalled()
+  })
+
   it('writes the resolved prompt profile into the store when analyze completes', async () => {
     fetchEventSourceWithAuth.mockImplementation(async (_url, options) => {
       options.onmessage?.({

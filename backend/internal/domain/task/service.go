@@ -28,12 +28,86 @@ func NewService(repo Repository, publisher Publisher) *Service {
 
 // CreateGenerationTask 负责创建一条可幂等复用的生成任务，并在可用时发布创建事件。
 func (s *Service) CreateGenerationTask(ctx context.Context, input CreateGenerationTaskInput) (model.JobTask, error) {
-	if err := validateCreateGenerationTaskInput(input); err != nil {
+	return s.createTask(ctx, createTaskParams{
+		taskType:       taskTypeGeneration,
+		taskSubtype:    input.TaskSubtype,
+		requestedBy:    input.RequestedBy,
+		idempotencyKey: input.IdempotencyKey,
+		payload:        input.Payload,
+		publish: func(task model.JobTask) error {
+			if s.publisher == nil {
+				return nil
+			}
+			return s.publisher.PublishGenerationRequested(ctx, GenerationRequestedMessage{
+				TaskID:  task.ID,
+				Kind:    task.TaskSubtype,
+				UserID:  task.RequestedBy,
+				Payload: append([]byte(nil), input.Payload...),
+			})
+		},
+	})
+}
+
+// CreateParseTask 负责创建一条解析任务，并在可用时发布给 parser-service worker。
+func (s *Service) CreateParseTask(ctx context.Context, input CreateParseTaskInput) (model.JobTask, error) {
+	return s.createTask(ctx, createTaskParams{
+		taskType:       taskTypeParse,
+		taskSubtype:    input.TaskSubtype,
+		requestedBy:    input.RequestedBy,
+		idempotencyKey: input.IdempotencyKey,
+		payload:        input.Payload,
+		publish: func(task model.JobTask) error {
+			if s.publisher == nil {
+				return nil
+			}
+			return s.publisher.PublishParseRequested(ctx, ParseRequestedMessage{
+				TaskID:  task.ID,
+				Kind:    task.TaskSubtype,
+				UserID:  task.RequestedBy,
+				Payload: append([]byte(nil), input.Payload...),
+			})
+		},
+	})
+}
+
+// CreateExportTask 负责创建一条导出任务，并在可用时发布给 export-service worker。
+func (s *Service) CreateExportTask(ctx context.Context, input CreateExportTaskInput) (model.JobTask, error) {
+	return s.createTask(ctx, createTaskParams{
+		taskType:       taskTypeExport,
+		taskSubtype:    input.TaskSubtype,
+		requestedBy:    input.RequestedBy,
+		idempotencyKey: input.IdempotencyKey,
+		payload:        input.Payload,
+		publish: func(task model.JobTask) error {
+			if s.publisher == nil {
+				return nil
+			}
+			return s.publisher.PublishExportRequested(ctx, ExportRequestedMessage{
+				TaskID:  task.ID,
+				Kind:    task.TaskSubtype,
+				UserID:  task.RequestedBy,
+				Payload: append([]byte(nil), input.Payload...),
+			})
+		},
+	})
+}
+
+type createTaskParams struct {
+	taskType       string
+	taskSubtype    string
+	requestedBy    uuid.UUID
+	idempotencyKey string
+	payload        []byte
+	publish        func(task model.JobTask) error
+}
+
+func (s *Service) createTask(ctx context.Context, params createTaskParams) (model.JobTask, error) {
+	if err := validateCreateTaskInput(params.requestedBy, params.taskSubtype); err != nil {
 		return model.JobTask{}, err
 	}
 
-	if input.IdempotencyKey != "" {
-		existing, err := s.repo.FindByIdempotencyKey(ctx, input.RequestedBy, taskTypeGeneration, input.IdempotencyKey)
+	if params.idempotencyKey != "" {
+		existing, err := s.repo.FindByIdempotencyKey(ctx, params.requestedBy, params.taskType, params.idempotencyKey)
 		if err != nil {
 			return model.JobTask{}, fmt.Errorf("查找幂等任务失败: %w", err)
 		}
@@ -43,12 +117,12 @@ func (s *Service) CreateGenerationTask(ctx context.Context, input CreateGenerati
 	}
 
 	task := model.JobTask{
-		TaskType:       taskTypeGeneration,
-		TaskSubtype:    strings.TrimSpace(input.TaskSubtype),
+		TaskType:       params.taskType,
+		TaskSubtype:    strings.TrimSpace(params.taskSubtype),
 		Status:         model.JobTaskStatusQueued,
-		RequestedBy:    input.RequestedBy,
-		IdempotencyKey: strings.TrimSpace(input.IdempotencyKey),
-		PayloadJSON:    normalizeJSON(input.Payload),
+		RequestedBy:    params.requestedBy,
+		IdempotencyKey: strings.TrimSpace(params.idempotencyKey),
+		PayloadJSON:    normalizeJSON(params.payload),
 		ResultJSON:     datatypes.JSON([]byte(`{}`)),
 	}
 
@@ -56,13 +130,8 @@ func (s *Service) CreateGenerationTask(ctx context.Context, input CreateGenerati
 		return model.JobTask{}, fmt.Errorf("创建任务失败: %w", err)
 	}
 
-	if s.publisher != nil {
-		if err := s.publisher.PublishGenerationRequested(ctx, GenerationRequestedMessage{
-			TaskID:  task.ID,
-			Kind:    task.TaskSubtype,
-			UserID:  task.RequestedBy,
-			Payload: append([]byte(nil), input.Payload...),
-		}); err != nil {
+	if params.publish != nil {
+		if err := params.publish(task); err != nil {
 			return model.JobTask{}, fmt.Errorf("发布任务消息失败: %w", err)
 		}
 	}
@@ -224,11 +293,11 @@ func (s *Service) IsCancelled(ctx context.Context, taskID uuid.UUID) (bool, erro
 	return task.Status == model.JobTaskStatusCancelled, nil
 }
 
-func validateCreateGenerationTaskInput(input CreateGenerationTaskInput) error {
-	if input.RequestedBy == uuid.Nil {
+func validateCreateTaskInput(requestedBy uuid.UUID, taskSubtype string) error {
+	if requestedBy == uuid.Nil {
 		return ErrEmptyRequestedBy
 	}
-	if strings.TrimSpace(input.TaskSubtype) == "" {
+	if strings.TrimSpace(taskSubtype) == "" {
 		return ErrEmptyTaskSubtype
 	}
 	return nil

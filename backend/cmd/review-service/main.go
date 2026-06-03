@@ -19,6 +19,7 @@ import (
 	"inkwords-backend/internal/service"
 	"inkwords-backend/internal/transport/http/middleware"
 	transportv1 "inkwords-backend/internal/transport/http/v1"
+	transportv1api "inkwords-backend/internal/transport/http/v1/api"
 )
 
 type shutdownableServer interface {
@@ -40,15 +41,11 @@ func main() {
 		log.Fatalf("Database initialization failed: %v", err)
 	}
 
-	r := gin.Default()
-
-	r.GET("/api/v1/ping", func(c *gin.Context) {
-		c.JSON(200, gin.H{
-			"code":    200,
-			"message": "pong",
-			"data":    nil,
-		})
-	})
+	r := gin.New()
+	r.Use(gin.Recovery(), middleware.RequestID(), middleware.RequestLogger("review-service"))
+	transportv1api.RegisterHealthRoutes(r, transportv1api.NewHealthAPI("review-service", map[string]transportv1api.ReadinessCheck{
+		"db": transportv1api.NewGormReadinessCheck(db.DB),
+	}))
 
 	authMiddleware := middleware.AuthMiddleware()
 

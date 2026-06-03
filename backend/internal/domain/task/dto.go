@@ -12,6 +12,7 @@ import (
 
 const (
 	taskTypeGeneration      = "generation"
+	taskTypeParse           = "parse"
 	defaultStreamEventLimit = 200
 )
 
@@ -31,6 +32,14 @@ type CreateGenerationTaskInput struct {
 	Payload        []byte
 }
 
+// CreateParseTaskInput 描述创建解析任务时服务层需要的输入。
+type CreateParseTaskInput struct {
+	RequestedBy    uuid.UUID
+	TaskSubtype    string
+	IdempotencyKey string
+	Payload        []byte
+}
+
 // AppendEventInput 描述写入一条任务事件时的输入。
 type AppendEventInput struct {
 	EventType string
@@ -40,6 +49,22 @@ type AppendEventInput struct {
 
 // GenerationRequestedMessage 是任务创建成功后发往消息队列的标准载荷。
 type GenerationRequestedMessage struct {
+	TaskID  uuid.UUID       `json:"task_id"`
+	Kind    string          `json:"kind"`
+	UserID  uuid.UUID       `json:"user_id"`
+	Payload json.RawMessage `json:"payload"`
+}
+
+// ParseRequestedMessage 是解析任务创建成功后发往消息队列的标准载荷。
+type ParseRequestedMessage struct {
+	TaskID  uuid.UUID       `json:"task_id"`
+	Kind    string          `json:"kind"`
+	UserID  uuid.UUID       `json:"user_id"`
+	Payload json.RawMessage `json:"payload"`
+}
+
+// ExportRequestedMessage 是导出任务创建成功后发往消息队列的标准载荷。
+type ExportRequestedMessage struct {
 	TaskID  uuid.UUID       `json:"task_id"`
 	Kind    string          `json:"kind"`
 	UserID  uuid.UUID       `json:"user_id"`

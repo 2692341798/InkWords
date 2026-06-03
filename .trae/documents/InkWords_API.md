@@ -1,6 +1,9 @@
 # 墨言知识训练平台 (InkWords Trainer) - API 接口文档
 
 ## 0. 变更记录
+- 2026-06-03：Task 6 继续推进 `parser-service` 异步化。`POST /api/v1/tasks/parse` 仍由 `core-api` 创建 `parse_file / parse_archive` 任务并发布到 RabbitMQ `parse.requested`；`parser-service` 作为 parse worker 消费任务并把结果回写到 `job_tasks`。前端当前对 `.zip` 课件包和 `50MB` 以上普通单文件默认走任务式解析，`50MB` 及以下普通单文件仍保留 `/api/v1/project/parse` 作为同步兼容路径。
+- 2026-06-03：Task 3 为 `core-api / llm-stream / parser-service / export-service / review-service` 补齐统一运行契约。各服务新增 `GET /health`（进程存活）与 `GET /ready`（依赖就绪）端点，并继续保留 `GET /api/v1/ping` 兼容检查；请求链路统一注入/透传 `X-Request-ID`，服务端访问日志统一输出 `service / request_id / path / method / status / latency_ms` 结构化字段。Docker Compose 同步为五个后端服务与前端增加 healthcheck，前端依赖改为等待各后端 `healthy` 后再启动。
+- 2026-06-03：Task 2 将任务式 SSE 收口为默认生成主链路。前端默认通过 `POST /api/v1/tasks/generation` 创建 `generate_single / generate_series / continue / polish` 四类任务，再订阅 `GET /api/v1/tasks/:id/stream`；旧 `/api/v1/stream/*`、`/api/v1/blogs/:id/continue`、`/api/v1/blogs/:id/polish` 继续保留，仅作为回滚兼容入口。
 - 2026-06-03：生成链路进入 RabbitMQ 任务式 SSE Phase B。新增任务接口族：`POST /api/v1/tasks/generation`、`GET /api/v1/tasks/:id`、`GET /api/v1/tasks/:id/stream`、`POST /api/v1/tasks/:id/cancel`；前端公开入口仍保持 `http://localhost` 与 `/api/*` 不变，`core-api` 负责创建/查询/取消任务与基于数据库事件表输出 SSE，`llm-stream` 负责消费 RabbitMQ 中的生成任务。
 - 2026-06-03：Docker 微服务化 Phase 2（已落地到代码与编排）。对外 API 路由与请求/响应字段保持不变；前端 Nginx 继续作为单一公开入口并按路径分流到 `core-api/llm-stream/parser-service/export-service/review-service`：`/api/v1/project/parse` → `parser-service`，`/api/v1/blogs/:id/export*` → `export-service`，`/api/v1/review/*` → `review-service`；review 拆库后的数据迁移需按 Runbook 执行：[review-db-migration.md](file:///Users/huangqijun/Documents/%E5%A2%A8%E8%A8%80%E5%8D%9A%E5%AE%A2%E5%8A%A9%E6%89%8B/InkWords/docs/runbooks/review-db-migration.md)。
 - 2026-06-03：Docker 微服务化 Phase 1。对外 API 路由与请求/响应字段保持不变；Docker Compose 中后端拆分为 `core-api` 与 `llm-stream`，由前端 Nginx 按路径分流（`/api/v1/stream/*` 与 `/api/v1/blogs/:id/(continue|polish)` → `llm-stream`，其余 `/api/*` → `core-api`），支持仅扩容 `llm-stream`。
@@ -33,6 +36,17 @@
 - 2026-05-08：后端 Auth Domain 垂直切片迁移（无 API 路由变更）。
 - 2026-05-08：后端 Stream/Project Domain 垂直切片迁移（无 API 路由变更）。
 - 2026-05-10：修复导出到 Obsidian 时“初始化知识库目录失败”（兼容 Obsidian Local REST API 目录列表 `{ "files": [...] }` 返回格式；无 API 路由变更）。
+
+## 0.1 运行契约补充
+- 所有 HTTP 请求都会透传或生成 `X-Request-ID` 响应头；若上游已携带该请求头，后端优先沿用，便于跨服务排障。
+- 以下运维健康检查端点由各后端服务直接暴露给容器内探针使用：
+
+| 接口地址 | 请求方法 | 功能描述 | 说明 |
+| -------- | -------- | -------- | ---- |
+| `/api/v1/ping` | GET | 兼容历史探针 | 返回既有 `{ code, message, data }` 结构 |
+| `/health` | GET | 进程存活检查 | 不检查外部依赖，只表示服务进程已启动 |
+| `/ready` | GET | 依赖就绪检查 | 默认至少检查数据库；`llm-stream` 额外检查 RabbitMQ 配置是否可用 |
+
 ## 1. 认证模块 (AuthAPI)
 | 接口地址 | 请求方法 | 功能描述 | 参数 |
 | -------- | -------- | -------- | ---- |
@@ -76,9 +90,9 @@
 | -------- | -------- | -------- | ---- |
 | `/api/v1/stream/scan` | POST | 快速扫描 Git 仓库一级目录并通过 README 智能提取描述 | `{ git_url }` -> SSE Stream |
 | `/api/v1/stream/analyze` | POST | 实时流式拉取 Git 或解析长文本文件生成大纲 | `{ git_url, selected_modules, source_type, source_content, scenario_mode }` -> SSE Stream；当请求仅包含 `source_content` 且未传 `git_url` 时，后端会兼容判定为 `file` 来源；文件来源完成时会在结果中返回 `resolved_prompt_profile` |
-| `/api/v1/stream/generate` | POST | 根据大纲或内容流式生成博客章节 | `{ source_content, source_type, git_url, outline, series_title, parent_id, article_style, scenario_mode, prompt_profile_key, document_kind }` -> SSE Stream |
-| `/api/v1/blogs/:id/continue` | POST | 继续生成被截断的单篇博客 (Legacy) | 无 -> SSE Stream |
-| `/api/v1/blogs/:id/polish` | POST | 对当前草稿全文润色并返回“润色草稿” | `{ title, content }` -> SSE Stream |
+| `/api/v1/stream/generate` | POST | 根据大纲或内容流式生成博客章节 (Legacy/Rollback) | `{ source_content, source_type, git_url, outline, series_title, parent_id, article_style, scenario_mode, prompt_profile_key, document_kind }` -> SSE Stream |
+| `/api/v1/blogs/:id/continue` | POST | 继续生成被截断的单篇博客 (Legacy/Rollback) | 无 -> SSE Stream |
+| `/api/v1/blogs/:id/polish` | POST | 对当前草稿全文润色并返回“润色草稿” (Legacy/Rollback) | `{ title, content }` -> SSE Stream |
 
 ### 4.1 `scenario_mode` 场景字段说明
 - 支持枚举：
@@ -201,9 +215,12 @@
 | 接口地址 | 请求方法 | 功能描述 | 参数 |
 | -------- | -------- | -------- | ---- |
 | `/api/v1/tasks/generation` | POST | 创建一个生成任务并返回任务 ID 与 SSE 订阅地址 | `{ kind, payload, idempotency_key? }` |
+| `/api/v1/tasks/parse` | POST | 创建一个解析任务并返回任务 ID 与 SSE 订阅地址 | `{ kind, payload, idempotency_key? }` |
+| `/api/v1/tasks/export` | POST | 创建一个 PDF 导出任务并返回任务 ID 与 SSE 订阅地址 | `{ kind: "export_pdf", payload: { blog_id }, idempotency_key? }` |
 | `/api/v1/tasks/:id` | GET | 查询任务当前状态、结果摘要与错误信息 | 路径参数 `id` |
 | `/api/v1/tasks/:id/stream` | GET | 订阅任务事件流（DB 事件表轮询转 SSE） | 路径参数 `id` -> SSE Stream |
 | `/api/v1/tasks/:id/cancel` | POST | 请求取消一个排队中或执行中的任务 | 路径参数 `id` |
+| `/api/v1/tasks/:id/download` | GET | 下载已完成导出任务的 PDF 产物（成功后删除文件） | 路径参数 `id` |
 
 ### 4.6.1 创建生成任务
 - 请求头：`Authorization: Bearer <token>`
@@ -235,7 +252,67 @@
   - `idempotency_key` 可选；当同一用户重复提交相同 key 时，服务端可直接复用既有未完成任务，避免前端重复点击造成重复生成。
   - 当前阶段由 `core-api` 创建任务并把消息投递到 RabbitMQ，实际生成仍由 `llm-stream` worker 异步执行。
 
-### 4.6.2 查询与取消任务
+### 4.6.2 创建解析任务
+- 请求头：`Authorization: Bearer <token>`
+- 请求体最小结构：
+
+```json
+{
+  "kind": "parse_archive",
+  "payload": {
+    "filename": "courseware.zip",
+    "content_base64": "<base64>"
+  },
+  "idempotency_key": "parse:courseware.zip:12345:1717400000"
+}
+```
+
+- 成功响应（`202 Accepted`）：
+
+```json
+{
+  "task_id": "123e4567-e89b-12d3-a456-426614174000",
+  "status": "queued",
+  "stream_url": "/api/v1/tasks/123e4567-e89b-12d3-a456-426614174000/stream"
+}
+```
+
+- 行为约束：
+  - `kind` 当前支持 `parse_file`、`parse_archive` 两类。
+  - `payload.filename` 必填；`payload.content_base64` 保存文件内容的 Base64 文本，用于让 `core-api -> RabbitMQ -> parser-service` 之间保持纯 JSON 任务载荷。
+  - `parser-service` 消费 `parse.requested` 后，会把解析结果写回任务 `result`，其中至少包含 `source_content`，ZIP 课件包额外包含 `archive_summary`。
+  - 当前前端默认让 `.zip` 课件包和 `50MB` 以上的普通单文件走该异步路径；`50MB` 及以下普通单文件解析继续保留 `/api/v1/project/parse` 同步接口作为兼容与回滚路径。
+
+### 4.6.3 创建 PDF 导出任务
+- 请求头：`Authorization: Bearer <token>`
+- 请求体最小结构：
+
+```json
+{
+  "kind": "export_pdf",
+  "payload": {
+    "blog_id": "123e4567-e89b-12d3-a456-426614174000"
+  },
+  "idempotency_key": "export-pdf:123e4567-e89b-12d3-a456-426614174000"
+}
+```
+
+- 成功响应（`202 Accepted`）：
+
+```json
+{
+  "task_id": "223e4567-e89b-12d3-a456-426614174000",
+  "status": "queued",
+  "stream_url": "/api/v1/tasks/223e4567-e89b-12d3-a456-426614174000/stream"
+}
+```
+
+- 行为约束：
+  - 当前 `kind` 仅支持 `export_pdf`。
+  - `export-service` 消费 `export.requested` 后，会复用既有 Chromium PDF 导出能力生成文件，再把受控下载元数据写回任务 `result_json`。
+  - `GET /api/v1/tasks/:id/download` 只接受 `status=succeeded` 的 `export` 任务；文件下载成功后会从 `EXPORT_ARTIFACTS_DIR` 共享目录中删除，避免产物长期堆积。
+
+### 4.6.4 查询与取消任务
 - `GET /api/v1/tasks/:id` 返回任务状态快照，典型字段包括：
   - `id`
   - `status`：`pending / queued / running / streaming / succeeded / failed / cancelled`
@@ -246,7 +323,7 @@
   - 队列中任务会被标记为 `cancelled`
   - 运行中任务依赖 worker 周期性检查取消状态后尽快停止
 
-### 4.6.3 任务 SSE 订阅语义
+### 4.6.5 任务 SSE 订阅语义
 - `GET /api/v1/tasks/:id/stream` 由 `core-api` 轮询 `job_task_events` 表并向前端输出标准 SSE。
 - 当前阶段的典型事件：
   - `chunk`：正文或进度片段
