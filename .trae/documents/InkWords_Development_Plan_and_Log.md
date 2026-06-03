@@ -2,6 +2,16 @@
 > **目标**：跟踪项目的核心开发模块、里程碑进度以及每日开发记录。
 
 ### [2026-06-03] Chore - Task 9 微服务冒烟检查前置到 CI 与 Runbook
+- **补充修复（CI 回归）**：
+  1. GitHub Actions `microservices-smoke` 首次在空 `pgdata` 下运行时，`inkwords-db` 因初始化脚本失败被判定为 `unhealthy`。
+  2. 根因确认为 `backend/db/init/00-create-review-db.sql` 把 `CREATE DATABASE inkwords_review_db;` 包在 `DO $$ ... $$` 事务块中，而 PostgreSQL 不允许在事务块中执行 `CREATE DATABASE`。
+  3. 本次将初始化脚本改为顶层 `CREATE DATABASE inkwords_review_db;`，并新增 `backend/internal/infra/db/init_sql_test.go` 锁定该约束，避免后续再次把数据库初始化逻辑写回事务块。
+- **补充验证**：
+  - `cd backend && go test ./internal/infra/db -count=1` 通过
+  - `docker compose --env-file backend/.env.example down -v` 后重新执行 `docker compose --env-file backend/.env.example up -d --build`，`inkwords-db` 与整套服务均恢复 `healthy`
+  - `docker exec inkwords-db psql -U inkwords -d postgres -tAc "SELECT datname FROM pg_database WHERE datname='inkwords_review_db';"` 返回 `inkwords_review_db`
+
+### [2026-06-03] Chore - Task 9 微服务冒烟检查前置到 CI 与 Runbook
 - **需求背景**：
   1. 长期微服务计划的 Task 9 要求把“多服务能否正常工作”从人工经验变成可重复验证的工程流程。
   2. 当前仓库虽然已有 `docker compose config` 校验和 README 中的人工命令，但 `.github/workflows/ci.yml` 还没有真正执行 Compose 启动、健康检查与网关连通性验证，也缺少统一的微服务冒烟 Runbook。

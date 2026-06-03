@@ -2,6 +2,22 @@
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
 ### 对话 96：继续长期微服务计划，执行 Task 9 的 CI 冒烟与 Runbook 固化
+- **补充回归：修复 `microservices-smoke` 中 `inkwords-db is unhealthy`**
+- **用户需求**：用户在 PR 创建后反馈 GitHub Actions 的 `microservices-smoke` 失败截图，要求继续处理当前 PR 分支上的 CI 问题。
+- **AI 动作**：
+  1. 先完成知识库 Query，并回读 `[[微服务冒烟检查与 CI 前置]]` 等页面，确认这是“已有冒烟流程的初始化缺陷回归”，而不是新的微服务范围扩展。
+  2. 审计 `.github/workflows/ci.yml`、`docker-compose.yml` 与 `backend/db/init/00-create-review-db.sql`，识别出根因是：`CREATE DATABASE inkwords_review_db` 被放进 `DO $$ ... $$` 事务块，导致空 `pgdata` 首次初始化时报错。
+  3. 按 TDD 先新增 `backend/internal/infra/db/init_sql_test.go` 红灯测试，锁定“初始化脚本必须使用顶层 `CREATE DATABASE`，不能包事务块”。
+  4. 将初始化 SQL 改为单行顶层 `CREATE DATABASE inkwords_review_db;`，随后在空卷条件下重新执行 `docker compose --env-file backend/.env.example up -d --build`，确认 `db` 与整套服务恢复 `healthy`。
+- **决策/变更**：
+  - 这次不改 CI 健康检查逻辑本身，因为失败根因不在 workflow 轮询，而在 Postgres 初始化脚本写法违反数据库约束。
+  - 回归测试放在 `backend/internal/infra/db/`，避免把 Go 测试文件挂进 `docker-entrypoint-initdb.d` 污染容器初始化日志。
+- **验证**：
+  - `cd backend && go test ./internal/infra/db -count=1` 通过
+  - `docker compose --env-file backend/.env.example down -v && ... up -d --build` 后，`docker compose --env-file backend/.env.example ps` 显示 `inkwords-db` 与其它服务均为 `healthy`
+  - `curl -I http://localhost` 与 `curl http://localhost/api/v1/ping` 通过
+
+### 对话 96：继续长期微服务计划，执行 Task 9 的 CI 冒烟与 Runbook 固化
 - **用户需求**：用户明确要求继续执行长期微服务计划中的 `Task 9`。
 - **AI 动作**：
   1. 先完成知识库 Query，确认当前项目已进入“边界治理 + 交付固化”阶段，而不是继续扩展新业务链路。
