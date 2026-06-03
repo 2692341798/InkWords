@@ -66,7 +66,9 @@ interface StreamState {
   seriesTitle: string
   outline: Chapter[] | null
   chapterStatus: Record<number, 'pending' | 'generating' | 'completed' | 'error'>
+  chapterPhases: Record<number, ChapterPhase>
   chapterErrors: Record<number, string>
+  chapterUsage: Record<number, ChapterUsage>
   generatedContent: string
   chapterContents: Record<number, string>
   isScanning: boolean
@@ -94,6 +96,8 @@ interface StreamState {
   removeChapter: (sort: number) => void
   moveChapter: (sort: number, direction: 'up' | 'down') => void
   updateChapterStatus: (sort: number, status: 'pending' | 'generating' | 'completed' | 'error') => void
+  updateChapterPhase: (sort: number, phase: ChapterPhase) => void
+  setChapterUsage: (sort: number, usage: ChapterUsage) => void
   setChapterError: (sort: number, message: string) => void
   clearChapterError: (sort: number) => void
   appendGeneratedContent: (chunk: string) => void
@@ -159,7 +163,9 @@ export const useStreamStore = create<StreamState>((set, get) => {
     seriesTitle: '',
     outline: null,
     chapterStatus: {},
+    chapterPhases: {},
     chapterErrors: {},
+    chapterUsage: {},
     generatedContent: '',
     chapterContents: {},
     isScanning: false,
@@ -189,12 +195,19 @@ export const useStreamStore = create<StreamState>((set, get) => {
     setSourceContent: (content) => set({ sourceContent: content }),
     setSeriesTitle: (title) => set({ seriesTitle: title }),
     setScenarioMode: (mode) => set({ scenarioMode: mode }),
-    setOutline: (outline) => set({
-      outline,
-      chapterStatus: outline ? outline.reduce((acc, ch) => ({ ...acc, [ch.sort]: 'pending' }), {}) : {},
-      chapterErrors: {},
-      chapterContents: outline ? outline.reduce((acc, ch) => ({ ...acc, [ch.sort]: '' }), {}) : {}
-    }),
+    setOutline: (outline) =>
+      set({
+        outline,
+        chapterStatus: outline
+          ? outline.reduce((acc, ch) => ({ ...acc, [ch.sort]: 'pending' }), {})
+          : {},
+        chapterPhases: outline
+          ? outline.reduce((acc, ch) => ({ ...acc, [ch.sort]: 'pending' }), {})
+          : {},
+        chapterErrors: {},
+        chapterUsage: {},
+        chapterContents: outline ? outline.reduce((acc, ch) => ({ ...acc, [ch.sort]: '' }), {}) : {},
+      }),
   updateChapter: (sort, field, value) => set((state) => ({
     outline: state.outline?.map(ch => 
       ch.sort === sort ? { ...ch, [field]: value } : ch
@@ -247,6 +260,20 @@ export const useStreamStore = create<StreamState>((set, get) => {
         ...state.chapterStatus,
         [sort]: status
       }
+    })),
+  updateChapterPhase: (sort, phase) =>
+    set((state) => ({
+      chapterPhases: {
+        ...state.chapterPhases,
+        [sort]: phase,
+      },
+    })),
+  setChapterUsage: (sort, usage) =>
+    set((state) => ({
+      chapterUsage: {
+        ...state.chapterUsage,
+        [sort]: usage,
+      },
     })),
   setChapterError: (sort, message) =>
     set((state) => ({
@@ -414,7 +441,9 @@ export const useStreamStore = create<StreamState>((set, get) => {
       seriesTitle: '',
       outline: null,
       chapterStatus: {},
+      chapterPhases: {},
       chapterErrors: {},
+      chapterUsage: {},
       generatedContent: '',
       chapterContents: {},
       isScanning: false,

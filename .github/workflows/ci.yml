@@ -23,6 +23,8 @@ jobs:
 
   frontend-test-build:
     runs-on: ubuntu-latest
+    env:
+      NODE_OPTIONS: --max-old-space-size=4096
     steps:
       - uses: actions/checkout@v4
 
@@ -49,5 +51,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: ensure docker compose
+        run: |
+          docker --version
+          if docker compose version; then
+            exit 0
+          fi
+          sudo apt-get update
+          sudo apt-get install -y docker-compose-plugin
+          docker compose version
+
       - name: docker compose config
-        run: docker compose --env-file backend/.env.example config
+        run: |
+          mkdir -p /tmp/obsidian-vault
+          OBSIDIAN_VAULT_PATH=/tmp/obsidian-vault docker compose config

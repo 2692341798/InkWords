@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -20,11 +21,12 @@ import (
 	"inkwords-backend/internal/prompt"
 )
 
-func TestDecompositionService_GenerateSeries_PersistsChildDraftBeforeStreaming(t *testing.T) {
+func openDecompositionPersistTestDB(t *testing.T) *gorm.DB {
+	t.Helper()
+
 	testDB, err := gorm.Open(sqlite.Open(seriesPersistTestDSN()), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, testDB.AutoMigrate(&model.User{}, &model.Blog{}))
-
 	return testDB
 }
 
@@ -211,18 +213,34 @@ func TestDecompositionService_GenerateSeries_ReportsTokenUpdateFailureAndKeepsDr
 		db.DB = previousDB
 	}()
 
-	var streamCallCount atomic.Int32
 	llmServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		callNumber := streamCallCount.Add(1)
-		w.Header().Set("Content-Type", "text/event-stream")
-		if callNumber == 1 {
+		requestBody, _ := io.ReadAll(r.Body)
+		body := string(requestBody)
+
+		if strings.Contains(body, "\"stream\":true") {
+			w.Header().Set("Content-Type", "text/event-stream")
 			_, _ = fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"章节正文\"},\"finish_reason\":null}]}\n\n")
 			_, _ = fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n")
+			_, _ = fmt.Fprint(w, "data: [DONE]\n\n")
 			return
 		}
 
-		_, _ = fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"系列导读正文\"},\"finish_reason\":null}]}\n\n")
-		_, _ = fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n")
+		var content string
+		switch {
+		case strings.Contains(body, "当前阶段：章节理解"):
+			content = "{\"chapter_goal\":\"目标\",\"reader_questions\":[],\"must_explain\":[\"机制\"],\"must_include_examples\":[\"示例\"],\"avoid_overlap\":[],\"bridge_context\":{\"from_previous\":\"\",\"to_next\":\"\"}}"
+		case strings.Contains(body, "当前阶段：章节写作"):
+			content = "{\"draft_markdown\":\"# 草稿\\n\\n内容\",\"coverage_check\":{\"goal_covered\":true,\"mechanism_explained\":true,\"examples_present\":true,\"repro_present\":true,\"edge_cases_present\":true},\"example_inventory\":[{\"example_type\":\"code\",\"supports_claim\":\"ok\"}]}"
+		case strings.Contains(body, "当前阶段：章节审稿"):
+			content = "{\"depth_issues\":[],\"example_issues\":[],\"structure_issues\":[],\"revision_actions\":[\"补强\"],\"scorecard\":{\"depth\":5,\"examples\":5,\"reproducibility\":5,\"clarity\":5}}"
+		case strings.Contains(body, "提取出涉及的核心技术栈名称"):
+			content = "[\"Go\"]"
+		default:
+			content = "OK"
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, "{\"choices\":[{\"message\":{\"content\":%q}}]}", content)
 	}))
 	defer llmServer.Close()
 
