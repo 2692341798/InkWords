@@ -24,7 +24,19 @@ const (
 	streamOperationPolish   streamOperation = "polish"
 	streamOperationAnalyze  streamOperation = "analyze"
 	streamOperationScan     streamOperation = "scan"
+	streamChannelBufferSize                 = 128
 )
+
+func newGenerateStreamChannels() (chan string, chan error) {
+	return make(chan string, streamChannelBufferSize), make(chan error, 1)
+}
+
+func writeStreamEvent(c *gin.Context, w io.Writer, event string, payload interface{}) {
+	c.SSEvent(event, payload)
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
 
 type Handler struct {
 	service  *Service
@@ -95,8 +107,7 @@ func (h *Handler) GenerateBlogStreamHandler(c *gin.Context) {
 	req.SourceType = resolveAnalyzeSourceType(req)
 	req.ScenarioMode = string(normalizeScenarioMode(req.ScenarioMode, req.SourceType))
 
-	chunkChan := make(chan string)
-	errChan := make(chan error)
+	chunkChan, errChan := newGenerateStreamChannels()
 
 	ctx := c.Request.Context()
 
@@ -132,7 +143,7 @@ func (h *Handler) GenerateBlogStreamHandler(c *gin.Context) {
 			return false
 		case err, ok := <-errChan:
 			if ok && err != nil {
-				c.SSEvent("error", externalStreamErrorMessage(streamOperationGenerate, err))
+				writeStreamEvent(c, w, "error", externalStreamErrorMessage(streamOperationGenerate, err))
 				return false
 			}
 			if !ok {
@@ -141,13 +152,13 @@ func (h *Handler) GenerateBlogStreamHandler(c *gin.Context) {
 			return true
 		case chunk, ok := <-chunkChan:
 			if !ok {
-				c.SSEvent("done", "[DONE]")
+				writeStreamEvent(c, w, "done", "[DONE]")
 				return false
 			}
-			c.SSEvent("chunk", chunk)
+			writeStreamEvent(c, w, "chunk", chunk)
 			return true
 		case <-time.After(10 * time.Second):
-			c.SSEvent("ping", "keepalive")
+			writeStreamEvent(c, w, "ping", "keepalive")
 			return true
 		}
 	})
@@ -171,8 +182,7 @@ func (h *Handler) ContinueBlogStreamHandler(c *gin.Context) {
 		return
 	}
 
-	chunkChan := make(chan string)
-	errChan := make(chan error)
+	chunkChan, errChan := newGenerateStreamChannels()
 
 	bgCtx := context.WithoutCancel(c.Request.Context())
 	ctx := c.Request.Context()
@@ -204,7 +214,7 @@ func (h *Handler) ContinueBlogStreamHandler(c *gin.Context) {
 			return false
 		case err, ok := <-errChan:
 			if ok && err != nil {
-				c.SSEvent("error", externalStreamErrorMessage(streamOperationContinue, err))
+				writeStreamEvent(c, w, "error", externalStreamErrorMessage(streamOperationContinue, err))
 				return false
 			}
 			if !ok {
@@ -213,13 +223,13 @@ func (h *Handler) ContinueBlogStreamHandler(c *gin.Context) {
 			return true
 		case chunk, ok := <-chunkChan:
 			if !ok {
-				c.SSEvent("done", "[DONE]")
+				writeStreamEvent(c, w, "done", "[DONE]")
 				return false
 			}
-			c.SSEvent("chunk", chunk)
+			writeStreamEvent(c, w, "chunk", chunk)
 			return true
 		case <-time.After(10 * time.Second):
-			c.SSEvent("ping", "keepalive")
+			writeStreamEvent(c, w, "ping", "keepalive")
 			return true
 		}
 	})
@@ -254,8 +264,7 @@ func (h *Handler) PolishBlogStreamHandler(c *gin.Context) {
 		return
 	}
 
-	chunkChan := make(chan string)
-	errChan := make(chan error)
+	chunkChan, errChan := newGenerateStreamChannels()
 
 	ctx := c.Request.Context()
 	go h.service.Polish(ctx, req, chunkChan, errChan)
@@ -285,7 +294,7 @@ func (h *Handler) PolishBlogStreamHandler(c *gin.Context) {
 			return false
 		case err, ok := <-errChan:
 			if ok && err != nil {
-				c.SSEvent("error", externalStreamErrorMessage(streamOperationPolish, err))
+				writeStreamEvent(c, w, "error", externalStreamErrorMessage(streamOperationPolish, err))
 				return false
 			}
 			if !ok {
@@ -294,13 +303,13 @@ func (h *Handler) PolishBlogStreamHandler(c *gin.Context) {
 			return true
 		case chunk, ok := <-chunkChan:
 			if !ok {
-				c.SSEvent("done", "[DONE]")
+				writeStreamEvent(c, w, "done", "[DONE]")
 				return false
 			}
-			c.SSEvent("chunk", chunk)
+			writeStreamEvent(c, w, "chunk", chunk)
 			return true
 		case <-time.After(10 * time.Second):
-			c.SSEvent("ping", "keepalive")
+			writeStreamEvent(c, w, "ping", "keepalive")
 			return true
 		}
 	})
@@ -327,8 +336,8 @@ func (h *Handler) AnalyzeStreamHandler(c *gin.Context) {
 		return
 	}
 
-	progressChan := make(chan string)
-	errChan := make(chan error)
+	progressChan := make(chan string, streamChannelBufferSize)
+	errChan := make(chan error, 1)
 
 	bgCtx := context.WithoutCancel(c.Request.Context())
 	ctx := c.Request.Context()
@@ -374,7 +383,7 @@ func (h *Handler) AnalyzeStreamHandler(c *gin.Context) {
 			return false
 		case err, ok := <-errChan:
 			if ok && err != nil {
-				c.SSEvent("error", externalStreamErrorMessage(streamOperationAnalyze, err))
+				writeStreamEvent(c, w, "error", externalStreamErrorMessage(streamOperationAnalyze, err))
 				return false
 			}
 			if !ok {
@@ -383,16 +392,13 @@ func (h *Handler) AnalyzeStreamHandler(c *gin.Context) {
 			return true
 		case msg, ok := <-progressChan:
 			if !ok {
-				c.SSEvent("done", "[DONE]")
+				writeStreamEvent(c, w, "done", "[DONE]")
 				return false
 			}
-			c.SSEvent("chunk", msg)
-			if f, ok := w.(http.Flusher); ok {
-				f.Flush()
-			}
+			writeStreamEvent(c, w, "chunk", msg)
 			return true
 		case <-time.After(10 * time.Second):
-			c.SSEvent("ping", "keepalive")
+			writeStreamEvent(c, w, "ping", "keepalive")
 			return true
 		}
 	})
@@ -427,8 +433,8 @@ func (h *Handler) ScanStreamHandler(c *gin.Context) {
 		return
 	}
 
-	progressChan := make(chan string)
-	errChan := make(chan error)
+	progressChan := make(chan string, streamChannelBufferSize)
+	errChan := make(chan error, 1)
 	resultChan := make(chan []ModuleCard)
 
 	bgCtx := context.WithoutCancel(c.Request.Context())
@@ -470,7 +476,7 @@ func (h *Handler) ScanStreamHandler(c *gin.Context) {
 			return false
 		case err, ok := <-errChan:
 			if ok && err != nil {
-				c.SSEvent("error", externalStreamErrorMessage(streamOperationScan, err))
+				writeStreamEvent(c, w, "error", externalStreamErrorMessage(streamOperationScan, err))
 				return false
 			}
 			return true
@@ -478,22 +484,16 @@ func (h *Handler) ScanStreamHandler(c *gin.Context) {
 			if !ok {
 				return false
 			}
-			c.SSEvent("progress", msg)
-			if f, ok := w.(http.Flusher); ok {
-				f.Flush()
-			}
+			writeStreamEvent(c, w, "progress", msg)
 			return true
 		case modules, ok := <-resultChan:
 			if ok {
-				c.SSEvent("result", modules)
-				c.SSEvent("done", "[DONE]")
-				if f, ok := w.(http.Flusher); ok {
-					f.Flush()
-				}
+				writeStreamEvent(c, w, "result", modules)
+				writeStreamEvent(c, w, "done", "[DONE]")
 			}
 			return false
 		case <-time.After(10 * time.Second):
-			c.SSEvent("ping", "keepalive")
+			writeStreamEvent(c, w, "ping", "keepalive")
 			return true
 		}
 	})

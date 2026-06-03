@@ -1,6 +1,8 @@
 # 墨言知识训练平台 (InkWords Trainer) - 架构设计与工程规范
 
 ## 0. 变更记录
+- 2026-06-02：优化后端 Docker 构建稳定性。`backend/Dockerfile` 不再强制把 Alpine 软件源切到阿里云镜像，改为直接使用默认 `dl-cdn.alpinelinux.org`，原因是当前运行环境下默认 CDN 首包明显更快；经 `docker compose --env-file backend/.env down && up -d --build` 实测，整套重建耗时约 48.47 秒，后端最重的 Chromium/字体/PDF 运行时依赖层约 16.1 秒完成，不再出现“像卡住”的长时间停顿。
+- 2026-06-02：修复系列文章生成失败时前端只显示 `Error` 的可观测性缺陷。前端 `streamStore` 新增 `chapterErrors`，生成进度面板与侧边栏任务区可直接显示每章/系列导读的失败原因；后端 `stream` handler 为生成类 SSE 通道增加缓冲并在每次写事件后主动 `flush`，降低慢客户端导致的流式背压与误超时风险。
 - 2026-06-01：文件来源 Analyze 新增“动态提示词 profile 锁定”链路。后端在 `stream/analyze(file)` 阶段先做轻量内容分类并返回 `resolved_prompt_profile`，前端在大纲阶段展示“当前提示词类型”只读标签；后续 `stream/generate`（单篇/系列/导读）统一透传并沿用同一个 profile，避免 Analyze 与 Generate 语义漂移。
 - 2026-06-01：知识漫游复习从“固定模板问答”升级为“文章驱动的结构化追问”；后端 `review` 会在建 session 时提炼 `session_outline`，并在回答阶段返回结构化 `review_feedback`，前端 `ReviewSessionCard` 新增“本轮目标 / 你答到的点 / 你还漏掉的点 / 下一步建议”展示区。
 - 2026-05-29：工程化结构拆分 Phase 1 落地：review 领域 service 按题卡/历史/会话职责拆成同包多文件，`Sidebar` 拆成 shell、批量操作条、选择 hook 与导出 service，生成链路的 decomposition 辅助逻辑拆为更小文件；本次不新增 API 路由或数据库结构。

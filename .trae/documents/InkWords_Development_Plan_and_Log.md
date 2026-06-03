@@ -1,6 +1,38 @@
 # 墨言知识训练平台 (InkWords Trainer) - 开发计划与日志
 > **目标**：跟踪项目的核心开发模块、里程碑进度以及每日开发记录。
 
+### [2026-06-02] Fix - 后端 Docker 构建镜像源回退与重建耗时验证
+- **需求背景**：
+  1. 用户在 `docker compose --env-file backend/.env up -d --build` 时观察到后端镜像构建极慢，体感像“卡住”。
+  2. 排查后确认慢点不在 Go 编译，而在后端运行时镜像安装 `chromium + font-noto-cjk + poppler-utils` 等重依赖时，同时 Dockerfile 还强制把 Alpine 源切到阿里云镜像。
+- **本次完成**：
+  1. 对照 `backend/Dockerfile` 与构建日志，确认瓶颈集中在 `apk add` 安装 176 个 Alpine 包的运行时层。
+  2. 实测默认 Alpine CDN 与阿里云镜像首包延迟，当前环境下默认 CDN 更快，因此移除 Dockerfile 中两处强制替换阿里云镜像源的逻辑。
+  3. 重新执行 `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build` 做整链路验证。
+- **验证记录**：
+  - 默认 Alpine CDN 首包约 `0.22s`
+  - 阿里云 Alpine 镜像首包约 `1.78s`
+  - `docker compose --env-file backend/.env down` 通过
+  - `docker compose --env-file backend/.env up -d --build` 通过，整套耗时约 `48.47s`
+  - 后端最重的运行时依赖层 `apk add chromium/font/poppler-utils/...` 约 `16.1s`
+  - 容器启动成功：`db` healthy，`backend/frontend` started
+
+### [2026-06-02] Fix - 系列生成失败原因可视化与 SSE 稳定性修复
+- **需求背景**：
+  1. 用户反馈系列文章生成时，右侧章节列表会直接显示 `Error`，但界面没有给出任何失败原因，导致无法判断是模型超时、限流还是后端流式异常。
+  2. 目标是在保持最小改动的前提下，同时解决“前端看不见原因”和“后端流式写出容易被慢客户端背压”的问题。
+- **本次完成**：
+  1. 按 TDD 先补前端红灯测试，锁定“章节状态为 error 时，生成进度面板必须展示失败原因”。
+  2. 为前端 `streamStore` 新增 `chapterErrors`，并在 `useSeriesGenerator` 中接收系列 SSE 的 `status=error` 消息后持久化每章失败原因；章节重新进入 `generating/completed/retrying` 时自动清理旧错误。
+  3. 更新 `GeneratorStatus` 与 `StreamOutlineSection`，将原本只显示 `Error` 的状态改为中文 `失败`，并直接透出“失败原因：...”，覆盖章节与系列导读两类卡片。
+  4. 按 TDD 新增后端 `stream` handler 测试，锁定“生成流通道应有缓冲”“写 SSE 事件后应主动 flush”；随后将生成类/分析类流式 handler 统一改为带缓冲通道，并抽出 `writeStreamEvent` 负责写事件后刷新响应。
+- **验证记录**：
+  - `cd frontend && npm test -- src/components/generator/GeneratorStageViews.test.tsx` 先失败、后通过
+  - `cd backend && go test ./internal/domain/stream -run 'TestNewGenerateStreamChannels_UsesBufferedChannels|TestWriteStreamEvent_FlushesAfterWriting'` 先失败、后通过
+  - `cd frontend && npm test -- src/components/generator/GeneratorStageViews.test.tsx src/hooks/generator/streamRequestBuilders.test.ts` 通过（12 个测试）
+  - `cd backend && go test ./internal/domain/stream ./internal/service` 通过
+  - `cd frontend && npm run build` 通过
+
 ### [2026-06-01] Fix - 超大 PDF 全量解析与章节覆盖率修复
 - **需求背景**：
   1. 用户反馈上传 800 多页 PDF 时，系统只能识别前面一部分内容，后续章节经常丢失。

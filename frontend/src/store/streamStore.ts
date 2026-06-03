@@ -45,6 +45,7 @@ interface StreamState {
   seriesTitle: string
   outline: Chapter[] | null
   chapterStatus: Record<number, 'pending' | 'generating' | 'completed' | 'error'>
+  chapterErrors: Record<number, string>
   generatedContent: string
   chapterContents: Record<number, string>
   isScanning: boolean
@@ -72,6 +73,8 @@ interface StreamState {
   removeChapter: (sort: number) => void
   moveChapter: (sort: number, direction: 'up' | 'down') => void
   updateChapterStatus: (sort: number, status: 'pending' | 'generating' | 'completed' | 'error') => void
+  setChapterError: (sort: number, message: string) => void
+  clearChapterError: (sort: number) => void
   appendGeneratedContent: (chunk: string) => void
   appendChapterContent: (sort: number, content: string) => void
   appendChapterContents: (updates: Record<number, string>) => void
@@ -113,6 +116,7 @@ export const useStreamStore = create<StreamState>((set, get) => ({
   seriesTitle: '',
   outline: null,
   chapterStatus: {},
+  chapterErrors: {},
   generatedContent: '',
   chapterContents: {},
   isScanning: false,
@@ -145,6 +149,7 @@ export const useStreamStore = create<StreamState>((set, get) => ({
   setOutline: (outline) => set({ 
     outline,
     chapterStatus: outline ? outline.reduce((acc, ch) => ({ ...acc, [ch.sort]: 'pending' }), {}) : {},
+    chapterErrors: {},
     chapterContents: outline ? outline.reduce((acc, ch) => ({ ...acc, [ch.sort]: '' }), {}) : {}
   }),
   updateChapter: (sort, field, value) => set((state) => ({
@@ -170,10 +175,12 @@ export const useStreamStore = create<StreamState>((set, get) => ({
       .filter(ch => ch.sort !== sort)
       .map((ch, index) => ({ ...ch, sort: index + 1 }));
     const newStatus = { ...state.chapterStatus };
+    const newErrors = { ...state.chapterErrors };
     const newContents = { ...state.chapterContents };
     delete newStatus[sort];
+    delete newErrors[sort];
     delete newContents[sort];
-    return { outline: newOutline, chapterStatus: newStatus, chapterContents: newContents };
+    return { outline: newOutline, chapterStatus: newStatus, chapterErrors: newErrors, chapterContents: newContents };
   }),
   moveChapter: (sort, direction) => set((state) => {
     if (!state.outline) return state;
@@ -198,6 +205,22 @@ export const useStreamStore = create<StreamState>((set, get) => ({
         [sort]: status
       }
     })),
+  setChapterError: (sort, message) =>
+    set((state) => ({
+      chapterErrors: {
+        ...state.chapterErrors,
+        [sort]: message,
+      },
+    })),
+  clearChapterError: (sort) =>
+    set((state) => {
+      if (!(sort in state.chapterErrors)) {
+        return state
+      }
+      const nextErrors = { ...state.chapterErrors }
+      delete nextErrors[sort]
+      return { chapterErrors: nextErrors }
+    }),
   appendGeneratedContent: (chunk) => set((state) => ({ generatedContent: state.generatedContent + chunk })),
   appendChapterContent: (sort, chunk) =>
     set((state) => ({
@@ -318,6 +341,7 @@ export const useStreamStore = create<StreamState>((set, get) => ({
       seriesTitle: '',
       outline: null,
       chapterStatus: {},
+      chapterErrors: {},
       generatedContent: '',
       chapterContents: {},
       isScanning: false,

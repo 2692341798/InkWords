@@ -133,6 +133,7 @@ export const useSeriesGenerator = () => {
               const sort = data.chapter_sort
               
               if (data.status === 'generating') {
+                store.clearChapterError(sort)
                 store.updateChapterStatus(sort, 'generating')
                 if (data.title) {
                   store.setCurrentChapterTitle(data.title)
@@ -142,10 +143,15 @@ export const useSeriesGenerator = () => {
               } else if (data.status === 'streaming') {
                 store.appendChapterContent(sort, data.content)
               } else if (data.status === 'completed') {
+                store.clearChapterError(sort)
                 store.updateChapterStatus(sort, 'completed')
               } else if (data.status === 'error') {
+                if (typeof data.message === 'string' && data.message.trim()) {
+                  store.setChapterError(sort, data.message)
+                }
                 store.updateChapterStatus(sort, 'error')
               } else if (data.status === 'retrying') {
+                store.clearChapterError(sort)
                 store.updateChapterStatus(sort, 'pending') // or maybe a special retrying state, but pending is fine
               }
             } catch {

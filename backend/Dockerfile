@@ -3,9 +3,8 @@ FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
 
-# 安装必要的系统依赖 (使用阿里云镜像加速)
-RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories && \
-    apk add --no-cache git tzdata
+# Why: 当前环境下默认 Alpine CDN 比硬编码阿里云镜像更快，避免构建阶段在系统包下载上异常变慢。
+RUN apk add --no-cache git tzdata
 
 # 设置 Go 代理加速
 ENV GOPROXY=https://goproxy.cn,direct
@@ -23,9 +22,8 @@ FROM alpine:3.19
 
 WORKDIR /app
 
-# 设置时区为上海，并安装 git 供拉取代码使用 (使用阿里云镜像加速)
-RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories && \
-    apk add --no-cache \
+# Why: Chromium/字体/PDF 运行时依赖本身很重，优先使用默认 Alpine CDN，减少镜像源导致的额外等待。
+RUN apk add --no-cache \
     ca-certificates \
     chromium \
     font-noto-cjk \

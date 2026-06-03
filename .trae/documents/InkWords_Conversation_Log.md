@@ -1,6 +1,41 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 89：排查后端 Docker 镜像构建过慢并回退 Alpine 镜像源
+- **用户需求**：用户在接受“系列生成错误可视化修复”后，继续要求排查“为什么后端 Docker 镜像构建这么慢/像是卡住”，随后同意做最小修复。
+- **AI 动作**：
+  1. 先完成知识库 Query，回读 `[[部署与Docker构建]]`、`[[PDF导出与Chromium集成]]`、`[[Docker容器化与环境一致性]]`，确认 InkWords 后端运行时镜像本来就依赖 Chromium、中文字体与 PDF 工具链，因此构建慢点应优先从运行时层排查。
+  2. 读取 `backend/Dockerfile` 与 `docker-compose.yml`，定位到真正的重层是运行时阶段 `apk add chromium font-noto-cjk poppler-utils ...`，而非 Go 编译层。
+  3. 对比 Alpine 默认 CDN 与阿里云镜像首包延迟，当前环境下默认 CDN 明显更快，因此将 Dockerfile 中两处 `sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g'` 删除，回退到默认软件源。
+  4. 按容器化约束重新执行 `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build`，记录整体重建耗时和关键慢层耗时。
+- **决策/变更**：
+  - 保持“最小改动原则”，只修 Dockerfile 中的 Alpine 镜像源策略，不拆服务、不改镜像结构。
+  - 继续保留 Chromium/PDF 运行时依赖，因为它们属于现有业务功能要求；本次优化只解决“镜像源选择不当导致额外变慢”的问题。
+- **验证**：
+  - 默认 Alpine CDN 首包约 `0.22s`
+  - 阿里云 Alpine 镜像首包约 `1.78s`
+  - `docker compose --env-file backend/.env down` 通过
+  - `docker compose --env-file backend/.env up -d --build` 通过，整套耗时约 `48.47s`
+  - 后端重运行时层 `apk add chromium/font/poppler-utils/...` 约 `16.1s`
+  - `db healthy`，`backend/frontend started`
+
+### 对话 88：修复系列生成只显示 Error、无法定位失败原因
+- **用户需求**：用户反馈“文章生成失败”，补充截图后确认是系列文章生成场景；界面右侧多个章节直接显示 `Error`，但没有失败详情。用户最终确认按“方案 2”修复：既要把失败原因显示出来，也要顺带提升后端流式写出的稳定性。
+- **AI 动作**：
+  1. 先完成知识库 Query，回读 `[[系列文章生成器：流式生成与自动续写]]`、`[[错误处理与重试机制]]`、`[[前端生成器Hooks详解]]`，结合仓库代码定位到：后端实际已经通过 SSE 发送章节级 `status=error/message=...`，但前端只改了 `chapterStatus`，没有保存和渲染失败原因。
+  2. 按 TDD 先在 `GeneratorStageViews.test.tsx` 增加红灯测试，锁定“章节 error 卡片应显示失败原因”；确认失败后，再实施最小前端修复。
+  3. 前端新增 `streamStore.chapterErrors`，并在 `useSeriesGenerator` 中将系列 SSE 的错误消息写入 store；`GeneratorStatus` 与 `StreamOutlineSection` 改为显示中文状态 `失败` 与具体失败原因，同时在章节重新生成或完成时清理旧错误。
+  4. 后端同样按 TDD 在 `internal/domain/stream/handler_test.go` 新增红灯测试，锁定“流式通道应有缓冲”“写 SSE 事件后要主动 flush”；随后在 `handler.go` 中抽出 `newGenerateStreamChannels` 与 `writeStreamEvent`，统一给生成/继续生成/润色/分析/扫描流增加缓冲和刷新。
+- **决策/变更**：
+  - 不改数据库、不改生成协议，只增强现有 SSE 错误消息的前端可见性，保持最小改动。
+  - 不重做整个流式状态机，而是在 handler 层加缓冲与主动刷新，优先解决慢客户端读流时可能放大为后端超时的问题。
+- **验证**：
+  - `cd frontend && npm test -- src/components/generator/GeneratorStageViews.test.tsx` 先失败、后通过
+  - `cd backend && go test ./internal/domain/stream -run 'TestNewGenerateStreamChannels_UsesBufferedChannels|TestWriteStreamEvent_FlushesAfterWriting'` 先失败、后通过
+  - `cd frontend && npm test -- src/components/generator/GeneratorStageViews.test.tsx src/hooks/generator/streamRequestBuilders.test.ts` 通过
+  - `cd backend && go test ./internal/domain/stream ./internal/service` 通过
+  - `cd frontend && npm run build` 通过
+
 ### 对话 87：同步动态提示词 profile 文档并执行回归验证
 - **用户需求**：按既定 `Task4` 更新项目文档（`API/Architecture/Conversation_Log/Development_Plan_and_Log/PRD/README`），并执行后端、前端测试与 `docker compose` 回归验证，最终返回修改文件、测试和验证结果。
 - **AI 动作**：
