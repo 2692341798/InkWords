@@ -11,13 +11,13 @@ import { useSeriesGenerator } from './generator/useSeriesGenerator'
  * how each sub-hook coordinates with the shared stream store.
  */
 export const useBlogStream = () => {
-  const store = useStreamStore()
   const { scanGit } = useProjectScanner()
   const { analyzeGit } = useProjectAnalyzer()
   const { parseFile, analyzeParsedFile } = useFileParser()
   const { generateSeries, generateSingle } = useSeriesGenerator()
 
   const stopAnalyzing = useCallback(() => {
+    const store = useStreamStore.getState()
     if (store.abortController) {
       store.abortController.abort()
       store.setAbortController(null)
@@ -25,16 +25,17 @@ export const useBlogStream = () => {
     store.setAnalyzing(false)
     store.setScanning(false)
     store.setAnalysisMessage('解析已取消')
-  }, [store])
+  }, [])
 
   const stopGenerating = useCallback(() => {
+    const store = useStreamStore.getState()
     if (store.abortController) {
       store.abortController.abort()
       store.setAbortController(null)
     }
     store.setGenerating(false)
     store.setProgress('已停止生成')
-  }, [store])
+  }, [])
 
   return {
     scanGit,

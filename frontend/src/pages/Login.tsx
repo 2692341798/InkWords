@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Mail, Lock, User, Loader2, ArrowRight } from 'lucide-react'
 import { authService } from '@/services/auth'
+import { authTokenStore } from '@/lib/authTokenStore'
 
 // Custom GitHub SVG icon since it was removed from lucide-react
 const GithubIcon = ({ className }: { className?: string }) => (
@@ -125,10 +126,8 @@ export function Login() {
               })
 
       if (data.token) {
-        localStorage.setItem('token', data.token)
+        authTokenStore.setToken(data.token)
       }
-
-      window.location.reload()
     } catch (err: unknown) {
       if (err instanceof Error) {
         if (err.message.includes('图形验证码')) {

@@ -45,8 +45,11 @@
 ## 5. 快速开始 (Quick Start)
 
 ### 5.1 推荐：Docker 一键部署
-项目已提供完整的容器化支持。Docker Compose 运行时约定统一从 `backend/.env` 读取环境变量，再拉起前后端与数据库：
+项目已提供完整的容器化支持。Docker Compose 运行时通过 CLI `--env-file` 注入环境变量，再拉起前后端与数据库：
 ```bash
+# 首次启动：先准备配置文件
+cp backend/.env.example backend/.env
+
 # 标准启动命令
 docker compose --env-file backend/.env up -d --build
 ```
@@ -133,7 +136,7 @@ docker compose --env-file backend/.env down && docker compose --env-file backend
 **启动后端：**
 ```bash
 cd backend
-cp .env  # 并配置数据库与 API 密钥
+cp .env.example .env
 go mod tidy
 go run ./cmd/server/main.go
 ```

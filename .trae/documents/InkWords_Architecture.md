@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - 架构设计与工程规范
 
 ## 0. 变更记录
+- 2026-06-03：收紧后端生命周期与请求取消边界。`backend/cmd/server/main.go` 不再使用裸 `r.Run`，改为显式 `http.Server`（`ReadTimeout=15s`、`ReadHeaderTimeout=10s`、`WriteTimeout=0`、`IdleTimeout=60s`）并接入 `SIGINT/SIGTERM` 优雅停机；`internal/domain/stream/handler.go` 收回 `Continue/Analyze/Scan` 主链路里默认的 `context.WithoutCancel`，改为直接透传 `c.Request.Context()`，让客户端断连/请求取消可以真实传递到分析、扫描和续写任务。
 - 2026-06-02：优化后端 Docker 构建稳定性。`backend/Dockerfile` 不再强制把 Alpine 软件源切到阿里云镜像，改为直接使用默认 `dl-cdn.alpinelinux.org`，原因是当前运行环境下默认 CDN 首包明显更快；经 `docker compose --env-file backend/.env down && up -d --build` 实测，整套重建耗时约 48.47 秒，后端最重的 Chromium/字体/PDF 运行时依赖层约 16.1 秒完成，不再出现“像卡住”的长时间停顿。
 - 2026-06-02：修复系列文章生成失败时前端只显示 `Error` 的可观测性缺陷。前端 `streamStore` 新增 `chapterErrors`，生成进度面板与侧边栏任务区可直接显示每章/系列导读的失败原因；后端 `stream` handler 为生成类 SSE 通道增加缓冲并在每次写事件后主动 `flush`，降低慢客户端导致的流式背压与误超时风险。
 - 2026-06-01：文件来源 Analyze 新增“动态提示词 profile 锁定”链路。后端在 `stream/analyze(file)` 阶段先做轻量内容分类并返回 `resolved_prompt_profile`，前端在大纲阶段展示“当前提示词类型”只读标签；后续 `stream/generate`（单篇/系列/导读）统一透传并沿用同一个 profile，避免 Analyze 与 Generate 语义漂移。

@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - API 接口文档
 
 ## 0. 变更记录
+- 2026-06-03：稳定性与工程化优化（Task 1-5）。本次不新增、不删除任何后端 API 路由或请求/响应字段；主要变更为：后端启动链路补齐显式 `http.Server` 与优雅停机，`/api/v1/stream/scan`、`/api/v1/stream/analyze`、`/api/v1/blogs/:id/continue` 等流式主链路恢复遵守请求取消语义（客户端断开后默认停止后台任务）；系列生成链路补齐“前置草稿创建/清理 + 章节完成落库 + Token 记账”的事务边界与可观测错误；前端对 SSE 401 统一收口为清 token 并返回登录页，不再强制 `location.reload()`。
 - 2026-06-02：系列生成失败原因可视化与 SSE 稳定性修复。本次不新增、不删除任何后端 API 路由、请求字段或响应字段；前端开始消费并展示既有系列生成 SSE 事件中的 `status=error` 与 `message`，后端 `stream` handler 统一为生成/分析类流增加缓冲并在每次写事件后主动 `flush`，降低慢客户端导致的流式背压与误超时风险。
 - 2026-06-01：文件来源 Analyze 链路新增“动态提示词 profile”锁定机制。`POST /api/v1/stream/analyze` 在完成大纲分析后会额外返回 `resolved_prompt_profile`（含 `key`、`display_name`、`document_kind`、`reason`）；`POST /api/v1/stream/generate` 请求新增 `prompt_profile_key`、`document_kind`，用于让单篇/系列生成沿用同一次 Analyze 已锁定的内容类型提示词。
 - 2026-06-01：知识漫游复习会话升级为“文章驱动提问 + 结构化反馈”；`POST /api/v1/review/sessions` 与 `GET /api/v1/review/sessions/:id` 新增 `session_outline`、`current_round_goal`，`POST /api/v1/review/sessions/:id/respond` 新增 `review_feedback` 与 `current_round_goal`，用于明确返回本轮目标、命中点、遗漏点与下一步建议。

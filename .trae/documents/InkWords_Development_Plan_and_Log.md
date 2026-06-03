@@ -1,6 +1,21 @@
 # 墨言知识训练平台 (InkWords Trainer) - 开发计划与日志
 > **目标**：跟踪项目的核心开发模块、里程碑进度以及每日开发记录。
 
+### [2026-06-03] Fix - 后端生命周期治理与 stream 请求取消边界收紧
+- **需求背景**：
+  1. 优化计划 `Task 1` 明确指出后端启动链路仍使用裸 `r.Run`，缺少显式 `http.Server`、优雅停机和统一超时边界。
+  2. `internal/domain/stream/handler.go` 在 `Continue/Analyze/Scan` 主链路上默认使用 `context.WithoutCancel`，导致客户端断连或主动取消时，后端任务仍可能继续运行，生命周期边界不清晰。
+- **本次完成**：
+  1. 按 TDD 先在 `backend/internal/domain/stream/handler_test.go` 增加失败测试，锁定 `Continue/Analyze/Scan` 三条链路必须继承请求上下文的取消语义。
+  2. 新增 `backend/cmd/server/main_test.go`，锁定显式 `http.Server` 的超时配置，以及 `shutdownServerOnContextDone` 在收到信号后必须用独立超时上下文触发优雅停机。
+  3. 将 `stream.Handler` 改为依赖可替换服务接口，并把 `Continue/Analyze/Scan` 中的 `context.WithoutCancel` 收回为 `c.Request.Context()`，让请求取消能够真实向下传播。
+  4. 将 `backend/cmd/server/main.go` 改为显式创建 `http.Server`，配置 `ReadTimeout=15s`、`ReadHeaderTimeout=10s`、`WriteTimeout=0`、`IdleTimeout=60s`，并接入 `signal.NotifyContext` + `Shutdown(15s)` 的优雅停机流程。
+- **验证记录**：
+  - `cd backend && go test ./cmd/server/... ./internal/domain/stream/...` 先失败、后通过
+  - `cd backend && go test ./cmd/server/... ./internal/domain/stream/... ./internal/transport/http/v1/...` 通过
+  - `cd backend && gofmt -w cmd/server/main.go cmd/server/main_test.go internal/domain/stream/handler.go internal/domain/stream/handler_test.go` 完成
+  - `grep -R "WithoutCancel" backend/cmd backend/internal/domain/stream` 无匹配
+
 ### [2026-06-02] Fix - 后端 Docker 构建镜像源回退与重建耗时验证
 - **需求背景**：
   1. 用户在 `docker compose --env-file backend/.env up -d --build` 时观察到后端镜像构建极慢，体感像“卡住”。

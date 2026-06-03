@@ -8,15 +8,27 @@ import { cn } from '@/lib/utils'
 import { Button } from './ui/button'
 import { ConfirmDialog } from './ui/confirm-dialog'
 import { toast } from 'sonner'
+import { authTokenStore } from '@/lib/authTokenStore'
 import { useBatchExportZip } from '@/hooks/useBatchExportZip'
 import { exportSeriesPdfs, syncSeriesToObsidian } from '@/services/sidebarExport'
 import { useSidebarBatchSelection } from '@/hooks/useSidebarBatchSelection'
+import { useShallow } from 'zustand/react/shallow'
 import { SidebarBatchActionBar } from './sidebar/SidebarBatchActionBar'
 import { SidebarShell } from './sidebar/SidebarShell'
 import { StreamOutlineSection } from './sidebar/StreamOutlineSection'
 
 export function Sidebar() {
-  const streamStore = useStreamStore()
+  const streamStore = useStreamStore(
+    useShallow((state) => ({
+      outline: state.outline,
+      chapterStatus: state.chapterStatus,
+      chapterErrors: state.chapterErrors,
+      parentBlogId: state.parentBlogId,
+      isGenerating: state.isGenerating,
+      isAnalyzing: state.isAnalyzing,
+      reset: state.reset,
+    })),
+  )
   const { blogs, fetchBlogs, createDraftBlog, selectedBlog, selectBlog, currentView, setCurrentView } = useBlogStore()
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set())
   const [isSyncingSeriesToObsidian, setIsSyncingSeriesToObsidian] = useState(false)
@@ -24,6 +36,8 @@ export function Sidebar() {
   const [isExportingPDF, setIsExportingPDF] = useState(false)
   const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false)
   const [isCreatingDraft, setIsCreatingDraft] = useState(false)
+  const [showWorkspaceResetConfirm, setShowWorkspaceResetConfirm] = useState(false)
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
   const {
     isBatchMode,
     selectedForExport,
@@ -131,7 +145,7 @@ export function Sidebar() {
       resetBatchSelection()
     } catch (err) {
       console.error('Failed to batch delete blogs:', err)
-      alert('批量删除失败，请稍后重试')
+      toast.error('批量删除失败，请稍后重试')
     } finally {
       setIsDeleting(false)
     }
@@ -231,10 +245,7 @@ export function Sidebar() {
         className="w-full gap-2 bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm"
         onClick={() => {
           if (streamStore.isGenerating || streamStore.isAnalyzing) {
-            if (window.confirm('当前有任务正在执行，确定要终止并开启新工作区吗？')) {
-              streamStore.reset()
-              setCurrentView('home-entry')
-            }
+            setShowWorkspaceResetConfirm(true)
           } else {
             streamStore.reset()
             setCurrentView('home-entry')
@@ -296,8 +307,7 @@ export function Sidebar() {
         variant="ghost"
         className="w-full flex items-center justify-start gap-2 text-zinc-600 hover:text-red-600 hover:bg-red-50"
         onClick={() => {
-          localStorage.removeItem('token')
-          window.location.href = '/'
+          setShowLogoutConfirm(true)
         }}
       >
         <LogOut className="w-4 h-4" />
@@ -383,6 +393,35 @@ export function Sidebar() {
         confirmText="确认删除"
         onConfirm={executeBatchDelete}
         onCancel={() => setShowBatchDeleteConfirm(false)}
+        isDestructive={true}
+      />
+
+      <ConfirmDialog
+        isOpen={showWorkspaceResetConfirm}
+        title="开启新工作区"
+        message="当前有任务正在执行，确定要终止并开启新工作区吗？"
+        confirmText="终止并新建"
+        cancelText="取消"
+        onConfirm={() => {
+          streamStore.reset()
+          setCurrentView('home-entry')
+          setShowWorkspaceResetConfirm(false)
+        }}
+        onCancel={() => setShowWorkspaceResetConfirm(false)}
+        isDestructive={true}
+      />
+
+      <ConfirmDialog
+        isOpen={showLogoutConfirm}
+        title="退出登录"
+        message="确定要退出登录吗？"
+        confirmText="退出登录"
+        cancelText="取消"
+        onConfirm={() => {
+          authTokenStore.clearToken()
+          setShowLogoutConfirm(false)
+        }}
+        onCancel={() => setShowLogoutConfirm(false)}
         isDestructive={true}
       />
     </>

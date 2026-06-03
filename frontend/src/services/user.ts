@@ -1,4 +1,5 @@
 import { buildAuthHeaders } from './auth'
+import { authTokenStore } from '@/lib/authTokenStore'
 
 interface ApiEnvelope<T> {
   code: number
@@ -27,13 +28,6 @@ export interface UserProfileResponse {
   token_limit: number
 }
 
-const getLocalStorage = () => {
-  if (typeof window === 'undefined' && typeof globalThis.localStorage === 'undefined') {
-    return null
-  }
-  return globalThis.localStorage ?? null
-}
-
 async function requestJson<T>(url: string, init?: RequestInit, fallbackMessage = '请求用户接口失败') {
   const response = await fetch(url, {
     ...init,
@@ -41,7 +35,7 @@ async function requestJson<T>(url: string, init?: RequestInit, fallbackMessage =
   })
 
   if (response.status === 401) {
-    getLocalStorage()?.removeItem('token')
+    authTokenStore.clearToken()
     throw new Error('登录已过期，请重新登录')
   }
 

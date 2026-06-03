@@ -2,6 +2,7 @@ import type { Dispatch, SetStateAction } from 'react'
 import { Button } from '@/components/ui/button'
 import { ArrowUp, ArrowDown, Trash2, Plus, ChevronDown, ChevronUp } from 'lucide-react'
 import { useStreamStore } from '@/store/streamStore'
+import { useShallow } from 'zustand/react/shallow'
 
 interface GeneratorOutlineProps {
   isOutlineExpanded: boolean
@@ -19,7 +20,13 @@ export function GeneratorOutline({
   handleGenerate,
   stopGenerating,
 }: GeneratorOutlineProps) {
-  const store = useStreamStore()
+  const store = useStreamStore(
+    useShallow((state) => ({
+      outline: state.outline,
+      isGenerating: state.isGenerating,
+      setOutline: state.setOutline,
+    })),
+  )
 
   if (!store.outline || store.outline.length === 0) return null
 

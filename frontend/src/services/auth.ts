@@ -1,3 +1,5 @@
+import { authTokenStore } from '@/lib/authTokenStore'
+
 interface ApiEnvelope<T> {
   code: number
   message: string
@@ -37,16 +39,9 @@ export interface AuthSuccessResponse {
   token?: string
 }
 
-const getLocalStorage = () => {
-  if (typeof window === 'undefined' && typeof globalThis.localStorage === 'undefined') {
-    return null
-  }
-  return globalThis.localStorage ?? null
-}
-
 export function buildAuthHeaders(init?: HeadersInit) {
   const headers = new Headers(init)
-  const token = getLocalStorage()?.getItem('token')
+  const token = authTokenStore.getSnapshot()
 
   if (token) {
     headers.set('Authorization', `Bearer ${token}`)
@@ -62,7 +57,7 @@ async function requestJson<T>(url: string, init?: RequestInit, fallbackMessage =
   })
 
   if (response.status === 401) {
-    getLocalStorage()?.removeItem('token')
+    authTokenStore.clearToken()
     throw new Error('登录已过期，请重新登录')
   }
 

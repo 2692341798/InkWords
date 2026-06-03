@@ -13,7 +13,9 @@ import { Button } from '@/components/ui/button'
 import { StepStrip, type StepStripItem } from '@/components/shared/StepStrip'
 import { scenarioModeOptions } from '@/lib/scenarioMode'
 import { cn } from '@/lib/utils'
+import { useShallow } from 'zustand/react/shallow'
 import { getGeneratorViewState } from './generatorViewState'
+import { toast } from 'sonner'
 
 /**
  * Coordinates the step-focused generator workspace, including source input,
@@ -21,7 +23,29 @@ import { getGeneratorViewState } from './generatorViewState'
  * shared stream store and generator hooks.
  */
 export function Generator() {
-  const store = useStreamStore()
+  const store = useStreamStore(
+    useShallow((state) => ({
+      sourceType: state.sourceType,
+      sourceContent: state.sourceContent,
+      scenarioMode: state.scenarioMode,
+      resolvedPromptProfile: state.resolvedPromptProfile,
+      modules: state.modules,
+      selectedModules: state.selectedModules,
+      outline: state.outline,
+      isScanning: state.isScanning,
+      isAnalyzing: state.isAnalyzing,
+      isGenerating: state.isGenerating,
+      gitUrl: state.gitUrl,
+      setGitUrl: state.setGitUrl,
+      setScenarioMode: state.setScenarioMode,
+      setSelectedModules: state.setSelectedModules,
+      reset: state.reset,
+      setModules: state.setModules,
+      setOutline: state.setOutline,
+      setParentBlogId: state.setParentBlogId,
+      setSourceContent: state.setSourceContent,
+    })),
+  )
   const { scanGit, analyzeGit, parseFile, analyzeParsedFile, generateSeries, generateSingle, stopAnalyzing, stopGenerating } = useBlogStream()
   const viewState = getGeneratorViewState({
     sourceType: store.sourceType,
@@ -111,7 +135,7 @@ export function Generator() {
     const file = e.dataTransfer.files[0]
     if (file) {
       if (file.size > 888 * 1024 * 1024) {
-        alert('文件大小不能超过 888MB')
+        toast.error('文件大小不能超过 888MB')
         return
       }
       try {
@@ -128,7 +152,7 @@ export function Generator() {
     const file = e.target.files?.[0]
     if (file) {
       if (file.size > 888 * 1024 * 1024) {
-        alert('文件大小不能超过 888MB')
+        toast.error('文件大小不能超过 888MB')
         if (fileInputRef.current) {
           fileInputRef.current.value = ''
         }

@@ -1,9 +1,14 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useStreamStore } from './streamStore'
+import { STREAM_FLUSH_DELAY_MS } from '../lib/streamFlushBuffer'
 
 describe('useStreamStore scenario mode', () => {
   beforeEach(() => {
     useStreamStore.getState().reset()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('defaults to ebook interpretation and restores it on reset', () => {
@@ -60,5 +65,37 @@ describe('useStreamStore scenario mode', () => {
       classificationReason: '',
       resolvedPromptProfile: null,
     })
+  })
+
+  it('buffers chapter content until the flush window ends', () => {
+    vi.useFakeTimers()
+    useStreamStore.getState().setOutline([
+      { sort: 1, title: '第一章', summary: '摘要' },
+    ])
+
+    useStreamStore.getState().bufferChapterContent(1, 'Hello')
+    useStreamStore.getState().bufferChapterContent(1, ' World')
+
+    expect(useStreamStore.getState().chapterContents[1]).toBe('')
+
+    vi.advanceTimersByTime(STREAM_FLUSH_DELAY_MS)
+
+    expect(useStreamStore.getState().chapterContents[1]).toBe('Hello World')
+  })
+
+  it('clears pending stream buffers when stopping all streams', () => {
+    vi.useFakeTimers()
+    useStreamStore.getState().setOutline([
+      { sort: 1, title: '第一章', summary: '摘要' },
+    ])
+    useStreamStore.getState().setAbortController(new AbortController())
+
+    useStreamStore.getState().bufferChapterContent(1, '不会写入')
+    useStreamStore.getState().bufferContent('也不会写入')
+    useStreamStore.getState().stopAllStreams()
+    vi.runAllTimers()
+
+    expect(useStreamStore.getState().chapterContents[1]).toBe('')
+    expect(useStreamStore.getState().content).toBe('')
   })
 })

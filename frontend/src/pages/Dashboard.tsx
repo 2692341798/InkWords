@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { Coins, FileText, Hash, User, Loader2, Upload, BookOpen } from 'lucide-react'
 import { userService } from '@/services/user'
+import { toast } from 'sonner'
 
 interface TechStackStat {
   name: string
@@ -70,7 +71,7 @@ export function Dashboard() {
     if (!file) return
 
     if (file.size > 2 * 1024 * 1024) {
-      alert('图片大小不能超过 2MB')
+      toast.error('图片大小不能超过 2MB')
       return
     }
 
@@ -83,7 +84,7 @@ export function Dashboard() {
       setProfile(prev => prev ? { ...prev, avatar_url: avatarUrl } : null)
     } catch (e) {
       console.error('Failed to upload avatar:', e)
-      alert(e instanceof Error ? e.message : '上传失败')
+      toast.error(e instanceof Error ? e.message : '上传失败')
     } finally {
       setUploadingAvatar(false)
     }

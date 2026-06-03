@@ -2,10 +2,9 @@ import { useCallback } from 'react'
 import { useStreamStore } from '@/store/streamStore'
 import type { ModuleCard } from '@/store/streamStore'
 import { fetchEventSourceWithAuth } from '@/services/sse'
+import { toast } from 'sonner'
 
 export const useProjectScanner = () => {
-  const store = useStreamStore()
-
   const normalizeModules = (input: unknown): ModuleCard[] => {
     const isModuleCard = (value: unknown): value is ModuleCard => {
       if (!value || typeof value !== 'object') return false
@@ -35,8 +34,9 @@ export const useProjectScanner = () => {
   }
 
   const scanGit = useCallback(async (gitUrl: string) => {
+    const store = useStreamStore.getState()
     if (!gitUrl.startsWith('http://') && !gitUrl.startsWith('https://') && !gitUrl.startsWith('git@') && !gitUrl.startsWith('file://')) {
-      alert('请输入有效的 Git 仓库链接 (以 http://, https://, git@ 或 file:// 开头)')
+      toast.error('请输入有效的 Git 仓库链接 (以 http://, https://, git@ 或 file:// 开头)')
       throw new Error('invalid url')
     }
 
@@ -115,11 +115,11 @@ export const useProjectScanner = () => {
       store.setScanning(false)
       const error = err as Error
       if (error.name !== 'AbortError') {
-        alert(error.message || '扫描失败')
+        toast.error(error.message || '扫描失败')
       }
       throw error
     }
-  }, [store])
+  }, [])
 
   return { scanGit }
 }

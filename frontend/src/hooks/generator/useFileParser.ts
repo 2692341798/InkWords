@@ -3,6 +3,7 @@ import { useStreamStore } from '@/store/streamStore'
 import type { Chapter, ResolvedPromptProfile } from '@/store/streamStore'
 import { fetchEventSourceWithAuth } from '@/services/sse'
 import { projectService } from '@/services/project'
+import { toast } from 'sonner'
 import {
   buildLargeFileAnalysisHint,
   extractArchiveSummary,
@@ -98,7 +99,7 @@ export async function parseUploadedFile({
     store.setAnalyzing(false)
     const errMsg = err instanceof Error ? err.message : '文件解析失败'
     if (errMsg !== 'AbortError' && errMsg !== 'The user aborted a request.') {
-      alert(errMsg)
+      toast.error(errMsg)
     }
     throw err
   }
@@ -190,7 +191,7 @@ export async function analyzeParsedFileContent(sourceContent: string) {
     onerror(err) {
       store.setAnalyzing(false)
       if (err instanceof StopStreamError) {
-        alert(err.message)
+        toast.error(err.message)
         throw err
       }
       throw err
@@ -199,15 +200,13 @@ export async function analyzeParsedFileContent(sourceContent: string) {
 }
 
 export const useFileParser = () => {
-  const store = useStreamStore()
-
   const parseFile = useCallback(async (file: File) => {
     return parseUploadedFile({
       file,
-      store,
+      store: useStreamStore.getState(),
       parseProjectFile: projectService.parseProjectFile,
     })
-  }, [store])
+  }, [])
 
   const analyzeParsedFile = useCallback(async () => {
     const sourceContent = useStreamStore.getState().sourceContent

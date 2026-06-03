@@ -39,11 +39,20 @@ func writeStreamEvent(c *gin.Context, w io.Writer, event string, payload interfa
 }
 
 type Handler struct {
-	service  *Service
+	service  streamService
 	blogRepo BlogReadable
 }
 
-func NewHandler(service *Service, blogRepo BlogReadable) *Handler {
+type streamService interface {
+	CheckQuota(uuid.UUID) error
+	Generate(context.Context, uuid.UUID, GenerateRequest, chan<- string, chan<- error)
+	Continue(context.Context, uuid.UUID, uuid.UUID, chan<- string, chan<- error)
+	Polish(context.Context, PolishRequest, chan<- string, chan<- error)
+	AnalyzeStream(context.Context, uuid.UUID, GenerateRequest, chan<- string, chan<- error)
+	ScanProjectModules(context.Context, string, chan<- string) ([]ModuleCard, error)
+}
+
+func NewHandler(service streamService, blogRepo BlogReadable) *Handler {
 	return &Handler{service: service, blogRepo: blogRepo}
 }
 
@@ -184,10 +193,9 @@ func (h *Handler) ContinueBlogStreamHandler(c *gin.Context) {
 
 	chunkChan, errChan := newGenerateStreamChannels()
 
-	bgCtx := context.WithoutCancel(c.Request.Context())
 	ctx := c.Request.Context()
 
-	go h.service.Continue(bgCtx, userID, blogID, chunkChan, errChan)
+	go h.service.Continue(ctx, userID, blogID, chunkChan, errChan)
 
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")
@@ -339,7 +347,6 @@ func (h *Handler) AnalyzeStreamHandler(c *gin.Context) {
 	progressChan := make(chan string, streamChannelBufferSize)
 	errChan := make(chan error, 1)
 
-	bgCtx := context.WithoutCancel(c.Request.Context())
 	ctx := c.Request.Context()
 
 	var wg sync.WaitGroup
@@ -352,7 +359,7 @@ func (h *Handler) AnalyzeStreamHandler(c *gin.Context) {
 
 	go func() {
 		defer wg.Done()
-		h.service.AnalyzeStream(bgCtx, userID, req, progressChan, errChan)
+		h.service.AnalyzeStream(ctx, userID, req, progressChan, errChan)
 	}()
 
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
@@ -437,7 +444,6 @@ func (h *Handler) ScanStreamHandler(c *gin.Context) {
 	errChan := make(chan error, 1)
 	resultChan := make(chan []ModuleCard)
 
-	bgCtx := context.WithoutCancel(c.Request.Context())
 	ctx := c.Request.Context()
 
 	var wg sync.WaitGroup
@@ -445,7 +451,7 @@ func (h *Handler) ScanStreamHandler(c *gin.Context) {
 
 	go func() {
 		defer wg.Done()
-		modules, err := h.service.ScanProjectModules(bgCtx, req.GitURL, progressChan)
+		modules, err := h.service.ScanProjectModules(ctx, req.GitURL, progressChan)
 		if err != nil {
 			errChan <- err
 			return
