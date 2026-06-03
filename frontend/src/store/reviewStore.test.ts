@@ -106,17 +106,20 @@ describe('useReviewStore', () => {
     expect(mockedReviewService.listNotes).toHaveBeenCalledWith({ query: '并发' })
   })
 
-  it('updates selected mode and reset clears review state', () => {
+  it('updates selected mode, tracks resume intent, and reset clears review state', () => {
     useReviewStore.getState().setSelectedMode('detailed_qa')
+    useReviewStore.getState().setShouldResumeSessionOnOpen(true)
     useReviewStore.setState({
       recommendationCard: randomCard,
     })
 
     expect(useReviewStore.getState().selectedMode).toBe('detailed_qa')
+    expect(useReviewStore.getState().shouldResumeSessionOnOpen).toBe(true)
 
     useReviewStore.getState().reset()
 
     expect(useReviewStore.getState().selectedMode).toBe('light_recall')
+    expect(useReviewStore.getState().shouldResumeSessionOnOpen).toBe(false)
     expect(useReviewStore.getState().recommendationCard).toBeNull()
     expect(useReviewStore.getState().noteOptions).toEqual([])
   })
@@ -207,5 +210,44 @@ describe('useReviewStore', () => {
     expect(mockedReviewService.getHistory).toHaveBeenCalledWith(5)
     expect(useReviewStore.getState().historyItems).toHaveLength(1)
     expect(useReviewStore.getState().historyItems[0]?.title).toBe('并发控制')
+  })
+
+  it('clears the active session state before the user chooses a new article', () => {
+    useReviewStore.setState({
+      currentSession: {
+        session_id: 'session-1',
+        status: 'in_progress',
+        mode: 'light_recall',
+        title: '旧的复习会话',
+        opening_prompt: '先讲一讲',
+        initial_hints: [],
+        session_outline: {
+          summary: '旧会话摘要',
+          main_question: '旧会话在讨论什么？',
+          core_concepts: ['旧主线'],
+          process_steps: [],
+          application_cases: [],
+          checkpoints: ['继续说明旧主线'],
+        },
+        turn_index: 2,
+      },
+      shouldResumeSessionOnOpen: true,
+      latestStageFeedback: '上一轮反馈',
+      latestHint: '上一轮提示',
+      finalFeedback: {
+        summary: '旧总结',
+        strengths: [],
+        gaps: [],
+        next_focus: [],
+      },
+    })
+
+    useReviewStore.getState().clearSessionState()
+
+    expect(useReviewStore.getState().currentSession).toBeNull()
+    expect(useReviewStore.getState().shouldResumeSessionOnOpen).toBe(false)
+    expect(useReviewStore.getState().latestStageFeedback).toBeNull()
+    expect(useReviewStore.getState().latestHint).toBeNull()
+    expect(useReviewStore.getState().finalFeedback).toBeNull()
   })
 })

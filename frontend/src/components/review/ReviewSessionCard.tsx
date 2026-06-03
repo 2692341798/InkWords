@@ -65,14 +65,11 @@ export function ReviewSessionCard({
           <p className="mt-1 text-sm text-zinc-600">
             当前主题：{session.title} · 模式：{modeLabels[session.mode]}
           </p>
+          <p className="mt-2 text-xs leading-5 text-zinc-500">
+            会话开始后模式已锁定，如需切换请返回入口后重新开始。
+          </p>
         </div>
         <div className="flex gap-3">
-          <Button variant={selectedMode === 'light_recall' ? 'default' : 'outline'} onClick={() => onModeChange('light_recall')}>
-            轻提示复述
-          </Button>
-          <Button variant={selectedMode === 'detailed_qa' ? 'default' : 'outline'} onClick={() => onModeChange('detailed_qa')}>
-            细致提问
-          </Button>
           {onClose ? (
             <Button variant="outline" onClick={onClose}>
               返回入口

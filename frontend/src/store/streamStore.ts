@@ -35,6 +35,23 @@ export interface ResolvedPromptProfile {
   reason: string
 }
 
+export type ChapterPhase =
+  | 'pending'
+  | 'understanding'
+  | 'drafting'
+  | 'reviewing'
+  | 'revising'
+  | 'streaming'
+  | 'completed'
+  | 'error'
+
+export interface ChapterUsage {
+  prompt_tokens: number
+  completion_tokens: number
+  prompt_cache_hit_tokens: number
+  prompt_cache_miss_tokens: number
+}
+
 interface StreamState {
   sourceType: 'git' | 'file' | null
   sourceContent: string
@@ -311,9 +328,16 @@ export const useStreamStore = create<StreamState>((set, get) => ({
     }
     set((state) => {
       const newStatus = { ...state.chapterStatus };
+      const newPhases = { ...state.chapterPhases };
       Object.keys(newStatus).forEach((key) => {
         if (newStatus[Number(key)] === 'generating') {
           newStatus[Number(key)] = 'pending';
+        }
+        if (
+          newPhases[Number(key)] &&
+          !['pending', 'completed', 'error'].includes(newPhases[Number(key)])
+        ) {
+          newPhases[Number(key)] = 'pending';
         }
       });
       return { 
@@ -322,7 +346,8 @@ export const useStreamStore = create<StreamState>((set, get) => ({
         isGenerating: false, 
         analysisStep: -1, 
         abortController: null,
-        chapterStatus: newStatus
+        chapterStatus: newStatus,
+        chapterPhases: newPhases,
       };
     });
   },

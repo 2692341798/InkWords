@@ -125,12 +125,6 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
 
   setCurrentSession: (session) => set({ currentSession: session }),
 
-  setLatestStageFeedback: (feedback) => set({ latestStageFeedback: feedback }),
-
-  setLatestHint: (hint) => set({ latestHint: hint }),
-
-  setFinalFeedback: (feedback) => set({ finalFeedback: feedback }),
-
   clearSessionState: () =>
     set({
       currentSession: null,
@@ -139,6 +133,12 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
       latestHint: null,
       finalFeedback: null,
     }),
+
+  setLatestStageFeedback: (feedback) => set({ latestStageFeedback: feedback }),
+
+  setLatestHint: (hint) => set({ latestHint: hint }),
+
+  setFinalFeedback: (feedback) => set({ finalFeedback: feedback }),
 
   reset: () =>
     set({

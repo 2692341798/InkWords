@@ -61,4 +61,50 @@ describe('useStreamStore scenario mode', () => {
       resolvedPromptProfile: null,
     })
   })
+
+  it('tracks chapter quality phase and cache usage for each chapter', () => {
+    useStreamStore.getState().setOutline([
+      { sort: 1, title: 'Gin 路由', summary: '请求流转' },
+    ])
+
+    useStreamStore.getState().updateChapterPhase(1, 'reviewing')
+    useStreamStore.getState().setChapterUsage(1, {
+      prompt_tokens: 1200,
+      completion_tokens: 500,
+      prompt_cache_hit_tokens: 900,
+      prompt_cache_miss_tokens: 300,
+    })
+
+    expect(useStreamStore.getState()).toMatchObject({
+      chapterPhases: {
+        1: 'reviewing',
+      },
+      chapterUsage: {
+        1: {
+          prompt_cache_hit_tokens: 900,
+          prompt_cache_miss_tokens: 300,
+        },
+      },
+    })
+  })
+
+  it('clears chapter quality phase and cache usage on reset', () => {
+    useStreamStore.getState().setOutline([
+      { sort: 1, title: 'Gin 路由', summary: '请求流转' },
+    ])
+    useStreamStore.getState().updateChapterPhase(1, 'streaming')
+    useStreamStore.getState().setChapterUsage(1, {
+      prompt_tokens: 1200,
+      completion_tokens: 500,
+      prompt_cache_hit_tokens: 900,
+      prompt_cache_miss_tokens: 300,
+    })
+
+    useStreamStore.getState().reset()
+
+    expect(useStreamStore.getState()).toMatchObject({
+      chapterPhases: {},
+      chapterUsage: {},
+    })
+  })
 })

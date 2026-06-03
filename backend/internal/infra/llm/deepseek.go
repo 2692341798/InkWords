@@ -23,14 +23,14 @@ type Message struct {
 
 // ChatRequest represents the request payload for DeepSeek API
 type ChatRequest struct {
-	Model          string            `json:"model"`
-	Messages       []Message         `json:"messages"`
-	Stream         bool              `json:"stream"`
-	Temperature    *float64          `json:"temperature,omitempty"`
-	MaxTokens      int               `json:"max_tokens,omitempty"`
-	Thinking       map[string]string `json:"thinking,omitempty"`
-	ReasoningEffort string           `json:"reasoning_effort,omitempty"`
-	ResponseFormat map[string]string `json:"response_format,omitempty"`
+	Model           string            `json:"model"`
+	Messages        []Message         `json:"messages"`
+	Stream          bool              `json:"stream"`
+	Temperature     *float64          `json:"temperature,omitempty"`
+	MaxTokens       int               `json:"max_tokens,omitempty"`
+	Thinking        map[string]string `json:"thinking,omitempty"`
+	ReasoningEffort string            `json:"reasoning_effort,omitempty"`
+	ResponseFormat  map[string]string `json:"response_format,omitempty"`
 }
 
 // ChatCompletionChunk represents a single chunk from the stream
@@ -49,6 +49,14 @@ type ChatCompletionChunk struct {
 	} `json:"choices"`
 }
 
+// CompletionUsage captures token usage and prompt cache telemetry returned by DeepSeek.
+type CompletionUsage struct {
+	PromptTokens          int `json:"prompt_tokens"`
+	CompletionTokens      int `json:"completion_tokens"`
+	PromptCacheHitTokens  int `json:"prompt_cache_hit_tokens"`
+	PromptCacheMissTokens int `json:"prompt_cache_miss_tokens"`
+}
+
 // DeepSeekClient is the client for calling DeepSeek API
 type DeepSeekClient struct {
 	APIKey string
@@ -65,24 +73,23 @@ func NewDeepSeekClient(apiKey string) *DeepSeekClient {
 	}
 }
 
-// Generate calls the DeepSeek API with stream=false and returns the full response content
-func (c *DeepSeekClient) Generate(ctx context.Context, model string, messages []Message) (string, error) {
-	reqBody := ChatRequest{
-		Model:           model,
-		Messages:        messages,
-		Stream:          false,
-		Thinking:        map[string]string{"type": "enabled"},
-		ReasoningEffort: "high",
+func parseCompletionUsage(body []byte) CompletionUsage {
+	var payload struct {
+		Usage CompletionUsage `json:"usage"`
 	}
+	_ = json.Unmarshal(body, &payload)
+	return payload.Usage
+}
 
+func (c *DeepSeekClient) doChatCompletion(ctx context.Context, reqBody ChatRequest) ([]byte, error) {
 	jsonData, err := json.Marshal(reqBody)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal request body: %w", err)
+		return nil, fmt.Errorf("failed to marshal request body: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.APIURL, bytes.NewBuffer(jsonData))
 	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -90,19 +97,23 @@ func (c *DeepSeekClient) Generate(ctx context.Context, model string, messages []
 
 	resp, err := c.Client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("failed to execute request: %w", err)
+		return nil, fmt.Errorf("failed to execute request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("failed to read response body: %w", err)
+		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
+	return bodyBytes, nil
+}
+
+func extractCompletionContent(bodyBytes []byte) (string, error) {
 	var result struct {
 		Choices []struct {
 			Message struct {
@@ -124,8 +135,43 @@ func (c *DeepSeekClient) Generate(ctx context.Context, model string, messages []
 	return strings.TrimSpace(content), nil
 }
 
+// Generate calls the DeepSeek API with stream=false and returns the full response content
+func (c *DeepSeekClient) Generate(ctx context.Context, model string, messages []Message) (string, error) {
+	content, _, err := c.GenerateWithUsage(ctx, model, messages)
+	return content, err
+}
+
+// GenerateWithUsage calls the DeepSeek API with stream=false and returns the full response content plus usage.
+func (c *DeepSeekClient) GenerateWithUsage(ctx context.Context, model string, messages []Message) (string, CompletionUsage, error) {
+	reqBody := ChatRequest{
+		Model:           model,
+		Messages:        messages,
+		Stream:          false,
+		Thinking:        map[string]string{"type": "enabled"},
+		ReasoningEffort: "high",
+	}
+
+	bodyBytes, err := c.doChatCompletion(ctx, reqBody)
+	if err != nil {
+		return "", CompletionUsage{}, err
+	}
+
+	content, err := extractCompletionContent(bodyBytes)
+	if err != nil {
+		return "", CompletionUsage{}, err
+	}
+
+	return content, parseCompletionUsage(bodyBytes), nil
+}
+
 // GenerateJSON calls the DeepSeek API with stream=false and response_format={"type": "json_object"}
 func (c *DeepSeekClient) GenerateJSON(ctx context.Context, model string, messages []Message) (string, error) {
+	content, _, err := c.GenerateJSONWithUsage(ctx, model, messages)
+	return content, err
+}
+
+// GenerateJSONWithUsage calls the DeepSeek API with stream=false and response_format={"type": "json_object"}.
+func (c *DeepSeekClient) GenerateJSONWithUsage(ctx context.Context, model string, messages []Message) (string, CompletionUsage, error) {
 	temp := 0.1 // Recommend 0.1 for stable JSON output
 	reqBody := ChatRequest{
 		Model:           model,
@@ -137,58 +183,28 @@ func (c *DeepSeekClient) GenerateJSON(ctx context.Context, model string, message
 		ResponseFormat:  map[string]string{"type": "json_object"},
 	}
 
-	jsonData, err := json.Marshal(reqBody)
+	bodyBytes, err := c.doChatCompletion(ctx, reqBody)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal request body: %w", err)
+		return "", CompletionUsage{}, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.APIURL, bytes.NewBuffer(jsonData))
+	content, err := extractCompletionContent(bodyBytes)
 	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
+		return "", CompletionUsage{}, err
 	}
 
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.APIKey)
-
-	resp, err := c.Client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("failed to execute request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(bodyBytes))
-	}
-
-	var result struct {
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-	}
-
-	if err := json.Unmarshal(bodyBytes, &result); err != nil {
-		return "", fmt.Errorf("failed to unmarshal response: %w", err)
-	}
-
-	if len(result.Choices) == 0 {
-		return "", fmt.Errorf("API returned empty choices")
-	}
-
-	content := result.Choices[0].Message.Content
-	content = thinkBlockPattern.ReplaceAllString(content, "")
-	return strings.TrimSpace(content), nil
+	return content, parseCompletionUsage(bodyBytes), nil
 }
 
 // GenerateStream calls the DeepSeek API with stream=true and parses the chunks
 // It sends the content deltas to the provided channel. It returns the finish reason and any error.
 func (c *DeepSeekClient) GenerateStream(ctx context.Context, model string, messages []Message, chunkChan chan<- string) (string, error) {
+	finishReason, _, err := c.GenerateStreamWithUsage(ctx, model, messages, chunkChan)
+	return finishReason, err
+}
+
+// GenerateStreamWithUsage calls the DeepSeek API with stream=true, emits content deltas, and captures final usage.
+func (c *DeepSeekClient) GenerateStreamWithUsage(ctx context.Context, model string, messages []Message, chunkChan chan<- string) (string, CompletionUsage, error) {
 	defer close(chunkChan)
 	reqBody := ChatRequest{
 		Model:           model,
@@ -200,12 +216,12 @@ func (c *DeepSeekClient) GenerateStream(ctx context.Context, model string, messa
 
 	jsonData, err := json.Marshal(reqBody)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal request body: %w", err)
+		return "", CompletionUsage{}, fmt.Errorf("failed to marshal request body: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.APIURL, bytes.NewBuffer(jsonData))
 	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
+		return "", CompletionUsage{}, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -213,17 +229,18 @@ func (c *DeepSeekClient) GenerateStream(ctx context.Context, model string, messa
 
 	resp, err := c.Client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("failed to execute request: %w", err)
+		return "", CompletionUsage{}, fmt.Errorf("failed to execute request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+		return "", CompletionUsage{}, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
 	reader := bufio.NewReader(resp.Body)
 	var finalFinishReason string
+	var usage CompletionUsage
 	var leadingBuffer strings.Builder
 	leadingFlushed := false
 	flushLeadingBuffer := func() {
@@ -241,7 +258,7 @@ func (c *DeepSeekClient) GenerateStream(ctx context.Context, model string, messa
 	for {
 		select {
 		case <-ctx.Done():
-			return "", ctx.Err()
+			return "", usage, ctx.Err()
 		default:
 		}
 
@@ -249,9 +266,9 @@ func (c *DeepSeekClient) GenerateStream(ctx context.Context, model string, messa
 		if err != nil {
 			if err == io.EOF {
 				flushLeadingBuffer()
-				return finalFinishReason, nil
+				return finalFinishReason, usage, nil
 			}
-			return "", fmt.Errorf("failed to read stream: %w", err)
+			return "", usage, fmt.Errorf("failed to read stream: %w", err)
 		}
 
 		lineStr := strings.TrimSpace(string(line))
@@ -266,7 +283,12 @@ func (c *DeepSeekClient) GenerateStream(ctx context.Context, model string, messa
 		data := strings.TrimPrefix(lineStr, "data: ")
 		if data == "[DONE]" {
 			flushLeadingBuffer()
-			return finalFinishReason, nil
+			return finalFinishReason, usage, nil
+		}
+
+		parsedUsage := parseCompletionUsage([]byte(data))
+		if parsedUsage != (CompletionUsage{}) {
+			usage = parsedUsage
 		}
 
 		var chunk ChatCompletionChunk
@@ -301,7 +323,7 @@ func (c *DeepSeekClient) GenerateStream(ctx context.Context, model string, messa
 				finalFinishReason = *chunk.Choices[0].FinishReason
 				if finalFinishReason == "stop" || finalFinishReason == "length" {
 					flushLeadingBuffer()
-					return finalFinishReason, nil
+					continue
 				}
 			}
 		}

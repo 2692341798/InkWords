@@ -145,6 +145,54 @@
 - 设计目标：
   - 用户最终看到和落库的正文应只包含 Markdown 正文内容，不应混入模型思考过程或对话式套话
 
+### 4.5 `/api/v1/stream/generate` 系列章节阶段事件
+- 适用范围：
+  - 仅系列章节生成链路；单篇生成与系列导读仍沿用既有事件语义。
+- 新增状态：
+  - `understanding`：章节理解阶段开始
+  - `drafting`：章节草稿生成阶段开始
+  - `reviewing`：章节技术审稿阶段开始
+  - `revising`：终稿补强准备阶段开始
+  - `streaming`：仅终稿补强阶段持续输出正文 chunk
+  - `usage`：终稿补强完成后返回本章节的 DeepSeek usage 与 Prompt Cache 命中统计
+- `usage` 事件载荷：
+  - `prompt_tokens`
+  - `completion_tokens`
+  - `prompt_cache_hit_tokens`
+  - `prompt_cache_miss_tokens`
+- 典型 `event: chunk` 载荷示例：
+
+```json
+{
+  "status": "understanding",
+  "chapter_sort": 1,
+  "title": "Gin 路由"
+}
+```
+
+```json
+{
+  "status": "streaming",
+  "chapter_sort": 1,
+  "title": "Gin 路由",
+  "content": "### 1. 请求先进入 Engine\\n"
+}
+```
+
+```json
+{
+  "status": "usage",
+  "chapter_sort": 1,
+  "prompt_tokens": 1200,
+  "completion_tokens": 500,
+  "prompt_cache_hit_tokens": 900,
+  "prompt_cache_miss_tokens": 300
+}
+```
+- 兼容说明：
+  - 路由、请求体、`completed/error` 终态事件不变。
+  - 旧前端即使暂未消费新增阶段，也仍可通过 `streaming/completed/error` 维持基本链路。
+
 ## 5. 知识漫游复习模块 (ReviewAPI)
 | 接口地址 | 请求方法 | 功能描述 | 参数 |
 | -------- | -------- | -------- | ---- |
