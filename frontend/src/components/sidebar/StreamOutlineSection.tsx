@@ -11,6 +11,7 @@ type BlogMapValue = { node: BlogNode; parentId: string | null }
 type StreamOutlineSectionProps = {
   outline: Chapter[]
   chapterStatus: Record<number, 'pending' | 'generating' | 'completed' | 'error'>
+  chapterErrors: Record<number, string>
   parentBlogId: string | null
   isGenerating: boolean
   isAnalyzing: boolean
@@ -28,6 +29,7 @@ export function StreamOutlineSection(props: StreamOutlineSectionProps) {
   const {
     outline,
     chapterStatus,
+    chapterErrors,
     parentBlogId,
     isGenerating,
     isAnalyzing,
@@ -113,7 +115,9 @@ export function StreamOutlineSection(props: StreamOutlineSectionProps) {
             </div>
             <div className="flex-1">
               <div className="text-sm font-medium text-zinc-800">系列导读</div>
-              <div className="text-xs text-zinc-500 mt-1 line-clamp-2">全系列的引言与总结概览</div>
+                <div className="text-xs text-zinc-500 mt-1 line-clamp-2">
+                  {chapterStatus[0] === 'error' && chapterErrors[0] ? `失败原因：${chapterErrors[0]}` : '全系列的引言与总结概览'}
+                </div>
             </div>
           </div>
         )}
@@ -157,7 +161,9 @@ export function StreamOutlineSection(props: StreamOutlineSectionProps) {
               </div>
               <div className="flex-1">
                 <div className="text-sm font-medium text-zinc-800">{ch.title}</div>
-                <div className="text-xs text-zinc-500 mt-1 line-clamp-2">{ch.summary}</div>
+                <div className="text-xs text-zinc-500 mt-1 line-clamp-2">
+                  {status === 'error' && chapterErrors[ch.sort] ? `失败原因：${chapterErrors[ch.sort]}` : ch.summary}
+                </div>
               </div>
             </div>
           )
@@ -166,4 +172,3 @@ export function StreamOutlineSection(props: StreamOutlineSectionProps) {
     </div>
   )
 }
-

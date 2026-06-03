@@ -318,6 +318,7 @@ export function Sidebar() {
           <StreamOutlineSection
             outline={streamStore.outline}
             chapterStatus={streamStore.chapterStatus}
+            chapterErrors={streamStore.chapterErrors}
             parentBlogId={streamStore.parentBlogId}
             isGenerating={streamStore.isGenerating}
             isAnalyzing={streamStore.isAnalyzing}

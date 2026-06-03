@@ -1,15 +1,8 @@
 # 墨言知识训练平台 (InkWords Trainer) - 架构设计与工程规范
 
 ## 0. 变更记录
-- 2026-06-01：知识漫游复习前端构建收尾；`frontend/src/store/reviewStore.ts` 清理了重复的状态 setter/clear 方法定义，相关测试夹具同步补齐 `session_outline`，使当前 `review` 状态模型与前端测试/构建保持一致。本次仅修复前端状态层与测试层，不改变后端架构、容器编排、模块边界或运行时链路。
-- 2026-06-01：仓库 Git 治理收尾；`CONTRIBUTING.md` 被重新定义为本地协作辅助文件，不再进入版本库，`.gitignore` 继续忽略该文件与系列质量流水线计划稿。该变更仅影响仓库追踪边界，不改变前后端架构、容器编排、模块边界或运行时链路。
-- 2026-06-01：最小可回滚修复：`backend/internal/service` 中依赖 SQLite 的持久化测试改为“每次 setup 使用唯一命名内存库”，消除 `users.email` 唯一键冲突；本轮相关文档里的 Docker 重建命令同步收敛为 `docker compose --env-file backend/.env ...`，避免再次依赖当前 shell 预先导出环境。
-- 2026-06-01：系列章节质量流水线完成 Task 6 文档同步与验证收尾。本轮未再改实现代码，但补齐了文档契约与验证记录：前端全量 Vitest 已通过；后端全量 `go test ./...` 暴露 `internal/service` 中 `TestGenerateSeries_PersistsFinalChapterFromQualityPipeline` 的既有隔离问题（SQLite 测试库里 `users.email` 唯一键冲突）；Docker 通过 `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build` 成功完成重建，`inkwords-backend/frontend/db/redis/obsidian-bridge` 全部 `Up`，`http://localhost` 返回 `200 OK`。
-- 2026-06-01：系列章节质量流水线继续落地 Task 5。前端 `streamStore` 新增 `chapterPhases` 与 `chapterUsage` 两块系列章节运行时状态，`useSeriesGenerator` 统一解析章节质量阶段 / usage 事件并写入 store，`GeneratorStatus` 进度卡开始直接展示中文“质量阶段”与“缓存命中 / 未命中”摘要；本次仅扩展前端消费层，不改后端 SSE 协议与数据库结构。
-- 2026-06-01：系列章节质量流水线继续落地 Task 4。DeepSeek 客户端新增 `CompletionUsage` 与 `GenerateWithUsage / GenerateJSONWithUsage / GenerateStreamWithUsage`，用于从非流式响应体和流式尾块里统一回收 `prompt_tokens / completion_tokens / prompt_cache_hit_tokens / prompt_cache_miss_tokens`；系列章节终稿补强结束后会通过现有 SSE `progressChan` 追加 `usage` 事件，把单章节缓存命中情况透传给前端，为后续系列级成本观测与前缀复用优化打底。
-- 2026-06-01：系列章节质量流水线继续落地 Task 3。`GenerateSeriesWithProfile` 的章节主链路已切换到 `runSeriesChapterQualityPipeline()`：先执行章节理解、草稿写作、结构化审稿，再由 `finalizeSeriesChapterDraft()` 负责终稿补强并向前端流式输出；章节草稿与审稿中间态不再直接透给前端，避免用户看到未过门禁的半成品正文。
-- 2026-06-01：系列章节质量流水线继续落地 Task 2。后端新增 `internal/service/series_quality_pipeline.go`，先抽出 `buildSeriesSharedPromptPrefix()` 作为系列级稳定前缀 builder，再实现 `parseSeriesChapterUnderstanding()` 与 `generateSeriesChapterUnderstanding()`，用于把“系列级固定规则前置、章节级变量后置”的 Prompt 结构固化下来；`decomposition_generate_prompt_helpers.go` 同步新增 `buildSeriesReaderProfile()`，为后续质量流水线统一生成读者画像。当前仍未切换 `GenerateSeriesWithProfile` 主链路与前端 SSE 协议。
-- 2026-06-01：系列章节质量流水线开始落地 Task 1。后端在 `internal/service` 新增 `series_quality_pipeline_types.go`，统一定义 `SeriesChapterUnderstanding / Draft / Review / Final / Usage` 结构体，并在结构化输出进入后续阶段前增加硬门禁校验，先从类型边界拦截“缺机制解释、缺案例、缺修订动作”的空心结果；本次尚未切换 `GenerateSeriesWithProfile` 主链路和前端 SSE 协议。
+- 2026-06-02：优化后端 Docker 构建稳定性。`backend/Dockerfile` 不再强制把 Alpine 软件源切到阿里云镜像，改为直接使用默认 `dl-cdn.alpinelinux.org`，原因是当前运行环境下默认 CDN 首包明显更快；经 `docker compose --env-file backend/.env down && up -d --build` 实测，整套重建耗时约 48.47 秒，后端最重的 Chromium/字体/PDF 运行时依赖层约 16.1 秒完成，不再出现“像卡住”的长时间停顿。
+- 2026-06-02：修复系列文章生成失败时前端只显示 `Error` 的可观测性缺陷。前端 `streamStore` 新增 `chapterErrors`，生成进度面板与侧边栏任务区可直接显示每章/系列导读的失败原因；后端 `stream` handler 为生成类 SSE 通道增加缓冲并在每次写事件后主动 `flush`，降低慢客户端导致的流式背压与误超时风险。
 - 2026-06-01：文件来源 Analyze 新增“动态提示词 profile 锁定”链路。后端在 `stream/analyze(file)` 阶段先做轻量内容分类并返回 `resolved_prompt_profile`，前端在大纲阶段展示“当前提示词类型”只读标签；后续 `stream/generate`（单篇/系列/导读）统一透传并沿用同一个 profile，避免 Analyze 与 Generate 语义漂移。
 - 2026-06-01：知识漫游复习从“固定模板问答”升级为“文章驱动的结构化追问”；后端 `review` 会在建 session 时提炼 `session_outline`，并在回答阶段返回结构化 `review_feedback`，前端 `ReviewSessionCard` 新增“本轮目标 / 你答到的点 / 你还漏掉的点 / 下一步建议”展示区。
 - 2026-05-29：工程化结构拆分 Phase 1 落地：review 领域 service 按题卡/历史/会话职责拆成同包多文件，`Sidebar` 拆成 shell、批量操作条、选择 hook 与导出 service，生成链路的 decomposition 辅助逻辑拆为更小文件；本次不新增 API 路由或数据库结构。

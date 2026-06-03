@@ -137,6 +137,7 @@ export function GeneratorStatus() {
                   const phase = store.chapterPhases?.[chapter.sort] || 'pending';
                   const usage = store.chapterUsage?.[chapter.sort];
                   const content = store.chapterContents[chapter.sort] || '';
+                  const errorMessage = store.chapterErrors[chapter.sort] || '';
                   const snippet = content.length > 80 ? '...' + content.slice(-80) : content;
                   return (
                     <div key={chapter.sort} className={cn(
@@ -158,17 +159,14 @@ export function GeneratorStatus() {
                           )}>{chapter.title}</span>
                         </div>
                         <span className="text-xs px-2 py-1 rounded-md bg-zinc-100 dark:bg-zinc-800/80 text-zinc-500 dark:text-zinc-400 capitalize">
-                          {status === 'generating' ? '生成中' : status === 'completed' ? '已完成' : status === 'pending' ? '等待中' : status}
+                          {status === 'generating' ? '生成中' : status === 'completed' ? '已完成' : status === 'pending' ? '等待中' : status === 'error' ? '失败' : status}
                         </span>
                       </div>
-                      <div className="text-xs text-zinc-500 dark:text-zinc-400">
-                        质量阶段：{phaseLabelMap[phase]}
-                      </div>
-                      {usage ? (
-                        <div className="text-xs text-zinc-500 dark:text-zinc-400">
-                          缓存命中 {usage.prompt_cache_hit_tokens} / 未命中 {usage.prompt_cache_miss_tokens}
+                      {status === 'error' && errorMessage && (
+                        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">
+                          失败原因：{errorMessage}
                         </div>
-                      ) : null}
+                      )}
                       {snippet && (
                         <div className="text-sm text-zinc-500 dark:text-zinc-400 font-mono bg-zinc-100/50 dark:bg-zinc-900/50 p-3 rounded-lg border border-zinc-100 dark:border-zinc-800/50 line-clamp-2 leading-relaxed">
                           {snippet}
@@ -199,17 +197,14 @@ export function GeneratorStatus() {
                         )}>系列导读</span>
                       </div>
                       <span className="text-xs px-2 py-1 rounded-md bg-zinc-100 dark:bg-zinc-800/80 text-zinc-500 dark:text-zinc-400 capitalize">
-                        {store.chapterStatus[0] === 'generating' ? '生成中' : store.chapterStatus[0] === 'completed' ? '已完成' : store.chapterStatus[0] === 'pending' ? '等待中' : store.chapterStatus[0]}
+                        {store.chapterStatus[0] === 'generating' ? '生成中' : store.chapterStatus[0] === 'completed' ? '已完成' : store.chapterStatus[0] === 'pending' ? '等待中' : store.chapterStatus[0] === 'error' ? '失败' : store.chapterStatus[0]}
                       </span>
                     </div>
-                    <div className="text-xs text-zinc-500 dark:text-zinc-400">
-                      质量阶段：{phaseLabelMap[store.chapterPhases?.[0] || 'pending']}
-                    </div>
-                    {store.chapterUsage?.[0] ? (
-                      <div className="text-xs text-zinc-500 dark:text-zinc-400">
-                        缓存命中 {store.chapterUsage[0].prompt_cache_hit_tokens} / 未命中 {store.chapterUsage[0].prompt_cache_miss_tokens}
+                    {store.chapterStatus[0] === 'error' && store.chapterErrors[0] && (
+                      <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">
+                        失败原因：{store.chapterErrors[0]}
                       </div>
-                    ) : null}
+                    )}
                     {store.chapterContents[0] && (
                       <div className="text-sm text-zinc-500 dark:text-zinc-400 font-mono bg-zinc-100/50 dark:bg-zinc-900/50 p-3 rounded-lg border border-zinc-100 dark:border-zinc-800/50 line-clamp-2 leading-relaxed">
                         {store.chapterContents[0].length > 80 ? '...' + store.chapterContents[0].slice(-80) : store.chapterContents[0]}

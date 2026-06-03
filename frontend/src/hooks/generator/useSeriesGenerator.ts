@@ -209,7 +209,31 @@ export const useSeriesGenerator = () => {
             store.setProgress(msg.data)
           } else if (msg.event === 'chunk') {
             try {
-              handleSeriesChunkMessage(store, msg.data)
+              const data = JSON.parse(msg.data)
+              const sort = data.chapter_sort
+              
+              if (data.status === 'generating') {
+                store.clearChapterError(sort)
+                store.updateChapterStatus(sort, 'generating')
+                if (data.title) {
+                  store.setCurrentChapterTitle(data.title)
+                }
+              } else if (data.status === 'progress') {
+                store.setProgress(data.message)
+              } else if (data.status === 'streaming') {
+                store.appendChapterContent(sort, data.content)
+              } else if (data.status === 'completed') {
+                store.clearChapterError(sort)
+                store.updateChapterStatus(sort, 'completed')
+              } else if (data.status === 'error') {
+                if (typeof data.message === 'string' && data.message.trim()) {
+                  store.setChapterError(sort, data.message)
+                }
+                store.updateChapterStatus(sort, 'error')
+              } else if (data.status === 'retrying') {
+                store.clearChapterError(sort)
+                store.updateChapterStatus(sort, 'pending') // or maybe a special retrying state, but pending is fine
+              }
             } catch {
               // If it's not JSON, maybe it's just raw text (for single blog generation)
               store.appendContent(msg.data)

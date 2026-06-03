@@ -30,6 +30,7 @@ const mockStreamState = {
   outline: null as { sort: number; title: string; summary: string }[] | null,
   chapterStatus: {} as Record<number, 'pending' | 'generating' | 'completed' | 'error'>,
   chapterContents: {} as Record<number, string>,
+  chapterErrors: {} as Record<number, string>,
   setGitUrl: vi.fn(),
   setScenarioMode: vi.fn(),
   setModules: vi.fn(),
@@ -76,6 +77,7 @@ describe('Generator stage views', () => {
     mockStreamState.outline = null
     mockStreamState.chapterStatus = {}
     mockStreamState.chapterContents = {}
+    mockStreamState.chapterErrors = {}
     mockStreamState.setGitUrl.mockReset()
     mockStreamState.setScenarioMode.mockReset()
     mockStreamState.setModules.mockReset()
@@ -92,6 +94,7 @@ describe('Generator stage views', () => {
     mockStreamState.outline = null
     mockStreamState.chapterStatus = {}
     mockStreamState.chapterContents = {}
+    mockStreamState.chapterErrors = {}
   })
 
   it('renders a dedicated source stage wrapper around the source input choices', () => {
@@ -252,6 +255,19 @@ describe('Generator stage views', () => {
     expect(html).toContain('解析进度')
     expect(html).not.toContain('fixed inset-0')
     expect(html).toContain('overflow-hidden rounded-3xl')
+  })
+
+  it('shows chapter error reasons in the inline generation progress panel', () => {
+    mockStreamState.outline = [{ sort: 1, title: '第一篇', summary: '摘要' }]
+    mockStreamState.isGenerating = true
+    mockStreamState.chapterStatus = { 1: 'error' }
+    mockStreamState.chapterErrors = { 1: 'DeepSeek 请求超时，请稍后重试' }
+
+    const html = renderToStaticMarkup(<GeneratorStatus />)
+
+    expect(html).toContain('第一篇')
+    expect(html).toContain('失败原因')
+    expect(html).toContain('DeepSeek 请求超时，请稍后重试')
   })
 
   it('retires the dedicated progress stage shell and keeps only the inline status panel', () => {

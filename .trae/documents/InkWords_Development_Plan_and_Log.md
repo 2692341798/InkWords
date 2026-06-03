@@ -1,128 +1,37 @@
 # 墨言知识训练平台 (InkWords Trainer) - 开发计划与日志
 > **目标**：跟踪项目的核心开发模块、里程碑进度以及每日开发记录。
 
-### [2026-06-01] Fix - 知识漫游复习前端构建收尾
+### [2026-06-02] Fix - 后端 Docker 构建镜像源回退与重建耗时验证
 - **需求背景**：
-  1. 用户要求把当前登录排障后的可提交改动同步到 GitHub，但仓库先处于进行中的 rebase 状态，需要先安全收尾历史提交。
-  2. 在按规范执行 `docker compose --env-file backend/.env up -d --build` 验证登录链路时，前端构建暴露既有 TypeScript 错误：`reviewStore` 存在重复声明，测试 mock 也未对齐当前 `session_outline` 会话模型。
+  1. 用户在 `docker compose --env-file backend/.env up -d --build` 时观察到后端镜像构建极慢，体感像“卡住”。
+  2. 排查后确认慢点不在 Go 编译，而在后端运行时镜像安装 `chromium + font-noto-cjk + poppler-utils` 等重依赖时，同时 Dockerfile 还强制把 Alpine 源切到阿里云镜像。
 - **本次完成**：
-  1. 先解决 rebase 中 6 份项目文档冲突并完成 `chore(repo): untrack contributing helper file` 收尾，恢复仓库到可继续提交状态。
-  2. 在 `frontend/src/store/reviewStore.ts` 清理重复的 `setShouldResumeSessionOnOpen` 与 `clearSessionState` 定义，恢复 `reviewStore` 类型声明与对象实现的一致性。
-  3. 在 `frontend/src/store/reviewStore.test.ts` 与 `frontend/src/pages/KnowledgeReview.test.tsx` 中补齐 `session_outline`，并让测试夹具显式满足当前 `ReviewSessionResponse` 类型要求。
-  4. 同步补写 `API / Architecture / Conversation_Log / Database / PRD / README`，记录本次“只修前端构建与测试对齐、不改 API/DB 契约”的最小边界。
+  1. 对照 `backend/Dockerfile` 与构建日志，确认瓶颈集中在 `apk add` 安装 176 个 Alpine 包的运行时层。
+  2. 实测默认 Alpine CDN 与阿里云镜像首包延迟，当前环境下默认 CDN 更快，因此移除 Dockerfile 中两处强制替换阿里云镜像源的逻辑。
+  3. 重新执行 `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build` 做整链路验证。
 - **验证记录**：
+  - 默认 Alpine CDN 首包约 `0.22s`
+  - 阿里云 Alpine 镜像首包约 `1.78s`
+  - `docker compose --env-file backend/.env down` 通过
+  - `docker compose --env-file backend/.env up -d --build` 通过，整套耗时约 `48.47s`
+  - 后端最重的运行时依赖层 `apk add chromium/font/poppler-utils/...` 约 `16.1s`
+  - 容器启动成功：`db` healthy，`backend/frontend` started
+
+### [2026-06-02] Fix - 系列生成失败原因可视化与 SSE 稳定性修复
+- **需求背景**：
+  1. 用户反馈系列文章生成时，右侧章节列表会直接显示 `Error`，但界面没有给出任何失败原因，导致无法判断是模型超时、限流还是后端流式异常。
+  2. 目标是在保持最小改动的前提下，同时解决“前端看不见原因”和“后端流式写出容易被慢客户端背压”的问题。
+- **本次完成**：
+  1. 按 TDD 先补前端红灯测试，锁定“章节状态为 error 时，生成进度面板必须展示失败原因”。
+  2. 为前端 `streamStore` 新增 `chapterErrors`，并在 `useSeriesGenerator` 中接收系列 SSE 的 `status=error` 消息后持久化每章失败原因；章节重新进入 `generating/completed/retrying` 时自动清理旧错误。
+  3. 更新 `GeneratorStatus` 与 `StreamOutlineSection`，将原本只显示 `Error` 的状态改为中文 `失败`，并直接透出“失败原因：...”，覆盖章节与系列导读两类卡片。
+  4. 按 TDD 新增后端 `stream` handler 测试，锁定“生成流通道应有缓冲”“写 SSE 事件后应主动 flush”；随后将生成类/分析类流式 handler 统一改为带缓冲通道，并抽出 `writeStreamEvent` 负责写事件后刷新响应。
+- **验证记录**：
+  - `cd frontend && npm test -- src/components/generator/GeneratorStageViews.test.tsx` 先失败、后通过
+  - `cd backend && go test ./internal/domain/stream -run 'TestNewGenerateStreamChannels_UsesBufferedChannels|TestWriteStreamEvent_FlushesAfterWriting'` 先失败、后通过
+  - `cd frontend && npm test -- src/components/generator/GeneratorStageViews.test.tsx src/hooks/generator/streamRequestBuilders.test.ts` 通过（12 个测试）
+  - `cd backend && go test ./internal/domain/stream ./internal/service` 通过
   - `cd frontend && npm run build` 通过
-  - `docker compose --env-file backend/.env up -d --build` 通过（在补齐前端构建错误后恢复）
-  - `curl -I http://localhost` 返回 `HTTP/1.1 200 OK`
-
-### [2026-06-01] Chore - 取消跟踪本地协作辅助文件 `CONTRIBUTING.md`
-- **需求背景**：
-  1. 用户希望 `CONTRIBUTING.md` 与系列质量流水线计划稿都不再被 Git 跟踪。
-  2. 上一轮 `.gitignore` 虽已生效，但由于远端 `main` 先前已纳入 `CONTRIBUTING.md`，仅靠忽略规则无法让它自动退出版本控制。
-- **本次完成**：
-  1. 先用 `git ls-files --stage CONTRIBUTING.md` 复核，确认该文件仍在索引中，而 `docs/superpowers/plans/2026-06-01-series-chapter-quality-pipeline.md` 已仅由 `.gitignore` 忽略。
-  2. 按 Docs-as-Code 要求同步 `API / Architecture / Conversation_Log / Database / Development_Plan_and_Log / PRD / README`，把这次变更明确记录为“仓库治理收尾”，避免 review 时误判为漏更文档。
-  3. 对 `CONTRIBUTING.md` 执行 `git rm --cached`，只移除 Git 跟踪，不删除本地工作文件；随后创建最小分支、提交、发起 PR 并合并回 `main`。
-- **验证记录**：
-  - `git ls-files --stage CONTRIBUTING.md docs/superpowers/plans/2026-06-01-series-chapter-quality-pipeline.md .gitignore` 用于确认提交前基线
-  - `git diff --staged` 用于复核本次最小变更范围
-  - 合并后用 `git ls-files CONTRIBUTING.md`、`git status`、`git pull --ff-only origin main` 复核本地与远端同步状态
-
-### [2026-06-01] Fix - service 测试隔离与 Compose 命令统一
-- **需求背景**：
-  1. 后端 `internal/service` 全量测试因 SQLite 共享内存 DSN 导致 `users.email` 唯一键冲突，阻塞了本轮提交收尾。
-  2. 同时，本轮相关文档里仍混有未显式声明 `--env-file backend/.env` 的 Compose 启动/重建命令，需要与当前 Docker-First 约束统一。
-- **本次完成**：
-  1. 在 `backend/internal/service/decomposition_generate_persist_test.go` 先补红灯用例 `TestOpenDecompositionPersistTestDB_IsolatesUserFixtures`，锁定“每次测试 setup 都应拿到独立 SQLite 库”的约束。
-  2. 将该文件中的 SQLite 测试 helper 改为每次生成唯一命名的内存 DSN，并让相关持久化测试复用同一入口，保留原有业务断言不变。
-  3. 同步补写 `API / Architecture / Conversation_Log / Database / PRD / README` 的本轮最小记录，并把遗漏的 Compose 启动命令统一为 `docker compose --env-file backend/.env ...`。
-- **验证记录**：
-  - `cd backend && go test ./internal/service -run TestOpenDecompositionPersistTestDB_IsolatesUserFixtures -count=1` 先失败、后通过
-  - `cd backend && go test ./internal/service -count=1` 通过
-
-### [2026-06-01] Docs - 系列章节质量流水线 Task 6 文档同步与最终验证
-- **需求背景**：
-  1. Task 1-5 已完成系列章节质量流水线、缓存命中 telemetry 与前端阶段展示，但还缺少面向交付的最终文档同步、全量测试记录和 Docker 冒烟留痕。
-  2. 当前目标是只补齐计划要求的 6 份文档，并给出真实验证结果与残留风险；不改功能代码，不触碰 `CONTRIBUTING.md`。
-- **本次完成**：
-  1. 回读实现与文档后，补充 `InkWords_API.md` 的系列章节 SSE 载荷示例，明确 `content` 只出现在 `streaming`，`usage` 只返回缓存命中统计。
-  2. 在 `InkWords_Architecture.md`、`InkWords_PRD.md` 与 `README.md` 中补齐当前前端状态消费方式、Docker 环境装载注意事项，以及系列章节质量流水线的验证命令与验收入口 `http://localhost`。
-  3. 在 `InkWords_Conversation_Log.md` 与本日志中记录本轮真实验证，包括后端全量测试失败点、前端全量测试通过，以及 Docker 首次因 `OBSIDIAN_VAULT_PATH` 未导出而失败、随后重试成功的过程。
-- **验证记录**：
-  - `cd backend && go test ./...` 未通过：`internal/service` 中 `TestGenerateSeries_PersistsFinalChapterFromQualityPipeline` 报 `UNIQUE constraint failed: users.email`
-  - `cd frontend && npm run test -- --run` 通过（37 个测试文件、115 个测试）
-  - 未显式声明 `--env-file backend/.env` 的 Compose 链路首次失败：当前 shell 未装载 `OBSIDIAN_VAULT_PATH`
-  - 导出 `backend/.env` 后再次执行 Compose 重建成功
-  - `docker compose --env-file backend/.env ps` 显示 `inkwords-backend/frontend/db/redis/obsidian-bridge` 全部 `Up`
-  - `curl -I http://localhost` 返回 `HTTP/1.1 200 OK`
-
-### [2026-06-01] Feat - 系列章节质量流水线 Task 5 前端阶段显示与缓存摘要
-- **需求背景**：
-  1. Task 4 已把系列章节 `usage` 与缓存命中统计透传进 SSE，但当前前端仍看不到章节处于“理解 / 草稿 / 审稿 / 补强”的哪一步，也无法直接查看缓存命中摘要。
-  2. 当前目标是按 TDD 在前端最小补齐 store、事件映射和进度卡展示，而不改后端协议与大体 UI 结构。
-- **本次完成**：
-  1. 在 `frontend/src/store/streamStore.test.ts` 先补红灯测试，锁定 `chapterPhases/chapterUsage` 的写入与 reset 行为；新增 `frontend/src/hooks/generator/useSeriesGenerator.test.ts`，锁定章节阶段与 usage 事件的 store 映射。
-  2. 在 `frontend/src/store/streamStore.ts` 新增 `ChapterPhase`、`ChapterUsage`、`updateChapterPhase()`、`setChapterUsage()`，并在 `setOutline/reset/stopAllStreams/removeChapter` 中同步维护新状态。
-  3. 在 `frontend/src/hooks/generator/useSeriesGenerator.ts` 抽出 `handleSeriesChunkMessage()`，统一处理 `understanding / drafting / reviewing / revising / streaming / usage / completed / error / retrying` 事件，保持现有 SSE 主链路和 raw text fallback 不变。
-  4. 在 `frontend/src/components/generator/GeneratorStatus.tsx` 进度卡中新增中文“质量阶段”文案和“缓存命中 / 未命中”摘要，继续沿用既有卡片布局。
-  5. 同步更新 API / Architecture / Conversation Log / Database / PRD / README，记录这次前端可见性落地与“无数据库变更”的事实。
-- **验证记录**：
-  - `cd frontend && npm run test -- --run src/store/streamStore.test.ts src/hooks/generator/useSeriesGenerator.test.ts` 先失败（缺少前端阶段状态与事件解析能力）、后通过
-  - `cd frontend && npm run test -- --run src/store/streamStore.test.ts src/hooks/generator/useSeriesGenerator.test.ts src/hooks/generator/streamRequestBuilders.test.ts src/components/generator/GeneratorStageViews.test.tsx` 通过
-  - `cd frontend && npm run build` 通过（存在既有 bundle chunk size warning，但不影响构建产物生成）
-
-### [2026-06-01] Feat - 系列章节质量流水线 Task 4 usage / cache telemetry
-- **需求背景**：
-  1. Task 3 已把系列章节主链路切到 `理解 -> 草稿 -> 审稿 -> 终稿补强`，但目前还无法观测稳定前缀是否真的提升了 DeepSeek 原生 Prompt Cache 命中率。
-  2. 当前目标是按 TDD 为 DeepSeek 客户端补齐 `usage` 与 `prompt_cache_hit/miss` 采集，并把单章节 usage 事件接入现有系列 SSE 流。
-- **本次完成**：
-  1. 新增 `backend/internal/infra/llm/deepseek_usage_test.go`，先锁定 `parseCompletionUsage()` 和 `GenerateStreamWithUsage()` 的红灯行为。
-  2. 在 `backend/internal/service/series_quality_pipeline_test.go` 扩展章节阶段顺序断言，要求阶段序列从 `understanding -> drafting -> reviewing -> revising -> streaming` 扩展为追加 `usage`，并断言缓存命中字段正确透传。
-  3. 在 `backend/internal/infra/llm/deepseek.go` 新增 `CompletionUsage`、`GenerateWithUsage()`、`GenerateJSONWithUsage()`、`GenerateStreamWithUsage()`，统一从非流式响应体和流式尾块中解析 `prompt_tokens / completion_tokens / prompt_cache_hit_tokens / prompt_cache_miss_tokens`。
-  4. 修正流式收尾边界：即使先收到 `finish_reason`，仍继续读到 `[DONE]` 或 EOF 才返回，避免 usage 尾块被提前吞掉。
-  5. 在 `backend/internal/service/decomposition_generate_runner.go` 的 `finalizeSeriesChapterDraft()` 中追加 `usage` 事件，把单章节终稿阶段 usage 透传到现有 SSE 进度流。
-- **验证记录**：
-  - `cd backend && go test ./internal/infra/llm -run 'ParseCompletionUsage|GenerateStreamWithUsage' -v` 先失败（新类型/方法未定义）、后通过
-  - `cd backend && go test ./internal/service -run 'RunSeriesChapterQualityPipeline_StreamsOnlyFinalStageAndPreservesStageOrder' -v` 先失败（缺少 usage 事件 / usage 为 0）、后通过
-  - `cd backend && go test ./internal/infra/llm ./internal/service -run 'ParseCompletionUsage|GenerateStreamWithUsage|RunSeriesChapterQualityPipeline|ValidateSeriesChapter|BuildSeriesSharedPromptPrefix|ParseSeriesChapterUnderstanding' -v` 通过
-
-### [2026-06-01] Feat - 系列章节质量流水线 Task 3 接入主链路
-- **需求背景**：
-  1. Task 1/2 已完成结构化类型、硬门禁与章节理解阶段，但 `GenerateSeriesWithProfile` 仍停留在“单次直接流式生成”老链路，尚未真正走四段式质量流水线。
-  2. 当前目标是按 TDD 把“草稿 -> 审稿 -> 终稿流式补强”接入系列章节主链路，同时保持原有章节落库、技术栈提取和导读生成逻辑可继续工作。
-- **本次完成**：
-  1. 在 `backend/internal/service/series_quality_pipeline_test.go` 先补红灯测试，锁定“缺失 `revision_actions` 的审稿结果必须失败”和“只有终稿阶段允许向前端流式输出正文”的顺序约束。
-  2. 在 `backend/internal/service/decomposition_generate_persist_test.go` 补主链路集成测试，通过记录 LLM 请求类型序列，锁定系列章节现在必须先走 `json -> text -> json -> stream` 的章节质量流水线，再进入技术栈提取和系列导读。
-  3. 在 `backend/internal/service/series_quality_pipeline.go` 新增草稿/审稿解析器、Prompt builder、`generateSeriesChapterDraft()`、`reviewSeriesChapterDraft()` 与 `runSeriesChapterQualityPipeline()`。
-  4. 在 `backend/internal/service/decomposition_generate_runner.go` 新增 `finalizeSeriesChapterDraft()`，只在终稿补强阶段以 `streaming` 状态向前端推送正文 chunk。
-  5. 在 `backend/internal/service/decomposition_generate.go` 将系列章节主链路切换到 `runSeriesChapterQualityPipeline()`，并保留既有失败落库、最终落库、技术栈提取与 `completed/error` 事件分支。
-- **验证记录**：
-  - `cd backend && go test ./internal/service -run 'RunSeriesChapterQualityPipeline|GenerateSeries_PersistsFinalChapterFromQualityPipeline' -v` 先失败（缺少流水线入口）、后通过
-  - `cd backend && go test ./internal/service -run 'RunSeriesChapterQualityPipeline|TestStreamSeriesChapter|TestGenerateSeries' -v` 通过
-
-### [2026-06-01] Feat - 系列章节质量流水线 Task 2 稳定前缀与章节理解阶段
-- **需求背景**：
-  1. 系列博客单章节质量流水线在完成 Task 1 的结构体与门禁后，需要继续为后续多阶段 Prompt 复用打基础，避免每个阶段临时拼接一份散乱规则。
-  2. 当前目标仅完成 Task 2：按 TDD 抽出稳定系列级前缀 builder，实现章节理解阶段解析器，并补充统一的读者画像 helper。
-- **本次完成**：
-  1. 在 `backend/internal/service/series_quality_pipeline_test.go` 先补两个红灯测试，锁定“稳定前缀相同输入必须完全一致”和“章节理解 JSON 即使能反序列化，也必须继续通过 `must_explain` 等门禁”。
-  2. 新增 `backend/internal/service/series_quality_pipeline.go`，实现 `buildSeriesSharedPromptPrefix`、`parseSeriesChapterUnderstanding`、`generateSeriesChapterUnderstanding`。
-  3. 在 `backend/internal/service/decomposition_generate_prompt_helpers.go` 补充 `buildSeriesReaderProfile`，统一维护场景模式到读者画像的映射，为后续流水线接入复用做准备。
-- **验证记录**：
-  - `cd backend && go test ./internal/service -run 'BuildSeriesSharedPromptPrefix|ParseSeriesChapterUnderstanding' -v` 先失败（函数未定义）、后通过
-  - `cd backend && go test ./internal/service -run 'ValidateSeriesChapter|BuildSeriesSharedPromptPrefix|ParseSeriesChapterUnderstanding' -v` 通过
-
-### [2026-06-01] Feat - 系列章节质量流水线 Task 1 基础门禁
-- **需求背景**：
-  1. 系列博客后续将切换到“章节理解 -> 章节写作 -> 章节审稿 -> 定向补强与轻统稿”的四段式质量流水线，需要先把结构化输出类型和基础门禁钉牢。
-  2. 当前目标仅完成 Task 1：先通过 TDD 建立章节质量结构体与硬门禁校验，为后续阶段解析、进度事件和缓存命中观测打底。
-- **本次完成**：
-  1. 在 `backend/internal/service/series_quality_pipeline_test.go` 先补三个红灯测试，分别锁定章节理解缺少 `must_explain/must_include_examples`、章节草稿缺少案例与复现覆盖、章节审稿缺少 `revision_actions` 时必须失败。
-  2. 新增 `backend/internal/service/series_quality_pipeline_types.go`，定义 `SeriesChapterUnderstanding`、`SeriesChapterCoverageCheck`、`SeriesChapterExample`、`SeriesChapterDraft`、`SeriesChapterReview`、`SeriesChapterFinal`、`SeriesChapterUsage`。
-  3. 为章节理解、草稿、审稿增加最小硬门禁校验函数，在结构化结果进入后续流水线前先拦截空心输出。
-- **验证记录**：
-  - `cd backend && go test ./internal/service -run 'ValidateSeriesChapter|SeriesChapterReview' -v` 先失败（未定义类型/函数）、后通过
-  - `cd backend && go test ./internal/service` 通过
 
 ### [2026-06-01] Fix - 超大 PDF 全量解析与章节覆盖率修复
 - **需求背景**：
