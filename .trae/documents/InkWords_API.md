@@ -1,6 +1,9 @@
 # 墨言知识训练平台 (InkWords Trainer) - API 接口文档
 
 ## 0. 变更记录
+- 2026-06-03：生成链路进入 RabbitMQ 任务式 SSE Phase B。新增任务接口族：`POST /api/v1/tasks/generation`、`GET /api/v1/tasks/:id`、`GET /api/v1/tasks/:id/stream`、`POST /api/v1/tasks/:id/cancel`；前端公开入口仍保持 `http://localhost` 与 `/api/*` 不变，`core-api` 负责创建/查询/取消任务与基于数据库事件表输出 SSE，`llm-stream` 负责消费 RabbitMQ 中的生成任务。
+- 2026-06-03：Docker 微服务化 Phase 2（已落地到代码与编排）。对外 API 路由与请求/响应字段保持不变；前端 Nginx 继续作为单一公开入口并按路径分流到 `core-api/llm-stream/parser-service/export-service/review-service`：`/api/v1/project/parse` → `parser-service`，`/api/v1/blogs/:id/export*` → `export-service`，`/api/v1/review/*` → `review-service`；review 拆库后的数据迁移需按 Runbook 执行：[review-db-migration.md](file:///Users/huangqijun/Documents/%E5%A2%A8%E8%A8%80%E5%8D%9A%E5%AE%A2%E5%8A%A9%E6%89%8B/InkWords/docs/runbooks/review-db-migration.md)。
+- 2026-06-03：Docker 微服务化 Phase 1。对外 API 路由与请求/响应字段保持不变；Docker Compose 中后端拆分为 `core-api` 与 `llm-stream`，由前端 Nginx 按路径分流（`/api/v1/stream/*` 与 `/api/v1/blogs/:id/(continue|polish)` → `llm-stream`，其余 `/api/*` → `core-api`），支持仅扩容 `llm-stream`。
 - 2026-06-03：稳定性与工程化优化（Task 1-5）。本次不新增、不删除任何后端 API 路由或请求/响应字段；主要变更为：后端启动链路补齐显式 `http.Server` 与优雅停机，`/api/v1/stream/scan`、`/api/v1/stream/analyze`、`/api/v1/blogs/:id/continue` 等流式主链路恢复遵守请求取消语义（客户端断开后默认停止后台任务）；系列生成链路补齐“前置草稿创建/清理 + 章节完成落库 + Token 记账”的事务边界与可观测错误；前端对 SSE 401 统一收口为清 token 并返回登录页，不再强制 `location.reload()`。
 - 2026-06-02：系列生成失败原因可视化与 SSE 稳定性修复。本次不新增、不删除任何后端 API 路由、请求字段或响应字段；前端开始消费并展示既有系列生成 SSE 事件中的 `status=error` 与 `message`，后端 `stream` handler 统一为生成/分析类流增加缓冲并在每次写事件后主动 `flush`，降低慢客户端导致的流式背压与误超时风险。
 - 2026-06-01：文件来源 Analyze 链路新增“动态提示词 profile”锁定机制。`POST /api/v1/stream/analyze` 在完成大纲分析后会额外返回 `resolved_prompt_profile`（含 `key`、`display_name`、`document_kind`、`reason`）；`POST /api/v1/stream/generate` 请求新增 `prompt_profile_key`、`document_kind`，用于让单篇/系列生成沿用同一次 Analyze 已锁定的内容类型提示词。
@@ -193,6 +196,66 @@
 - 兼容说明：
   - 路由、请求体、`completed/error` 终态事件不变。
   - 旧前端即使暂未消费新增阶段，也仍可通过 `streaming/completed/error` 维持基本链路。
+
+## 4.6 任务式生成模块 (TaskAPI)
+| 接口地址 | 请求方法 | 功能描述 | 参数 |
+| -------- | -------- | -------- | ---- |
+| `/api/v1/tasks/generation` | POST | 创建一个生成任务并返回任务 ID 与 SSE 订阅地址 | `{ kind, payload, idempotency_key? }` |
+| `/api/v1/tasks/:id` | GET | 查询任务当前状态、结果摘要与错误信息 | 路径参数 `id` |
+| `/api/v1/tasks/:id/stream` | GET | 订阅任务事件流（DB 事件表轮询转 SSE） | 路径参数 `id` -> SSE Stream |
+| `/api/v1/tasks/:id/cancel` | POST | 请求取消一个排队中或执行中的任务 | 路径参数 `id` |
+
+### 4.6.1 创建生成任务
+- 请求头：`Authorization: Bearer <token>`
+- 请求体最小结构：
+
+```json
+{
+  "kind": "generate_series",
+  "payload": {
+    "source_type": "file",
+    "source_content": "..."
+  },
+  "idempotency_key": "series:abc"
+}
+```
+
+- 成功响应（`202 Accepted`）：
+
+```json
+{
+  "task_id": "123e4567-e89b-12d3-a456-426614174000",
+  "status": "queued",
+  "stream_url": "/api/v1/tasks/123e4567-e89b-12d3-a456-426614174000/stream"
+}
+```
+
+- 行为约束：
+  - `kind` 用于区分生成子类型，例如 `generate_single`、`generate_series`。
+  - `idempotency_key` 可选；当同一用户重复提交相同 key 时，服务端可直接复用既有未完成任务，避免前端重复点击造成重复生成。
+  - 当前阶段由 `core-api` 创建任务并把消息投递到 RabbitMQ，实际生成仍由 `llm-stream` worker 异步执行。
+
+### 4.6.2 查询与取消任务
+- `GET /api/v1/tasks/:id` 返回任务状态快照，典型字段包括：
+  - `id`
+  - `status`：`pending / queued / running / streaming / succeeded / failed / cancelled`
+  - `task_type`、`task_subtype`
+  - `result`
+  - `error_message`
+- `POST /api/v1/tasks/:id/cancel` 用于请求取消任务；第一阶段的取消语义为：
+  - 队列中任务会被标记为 `cancelled`
+  - 运行中任务依赖 worker 周期性检查取消状态后尽快停止
+
+### 4.6.3 任务 SSE 订阅语义
+- `GET /api/v1/tasks/:id/stream` 由 `core-api` 轮询 `job_task_events` 表并向前端输出标准 SSE。
+- 当前阶段的典型事件：
+  - `chunk`：正文或进度片段
+  - `error`：任务流执行失败
+  - `done`：任务完成，数据为 `[DONE]`
+- 设计边界：
+  - 对外仍是标准 `text/event-stream`
+  - 对内不再要求前端直接命中 `llm-stream` 长连接；任务创建与状态查询统一经 `core-api`
+  - 旧 `/api/v1/stream/*` 链路仍保留，作为任务式前端稳定前的兼容路径
 
 ## 5. 知识漫游复习模块 (ReviewAPI)
 | 接口地址 | 请求方法 | 功能描述 | 参数 |

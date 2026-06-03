@@ -1,6 +1,10 @@
 # 墨言知识训练平台 (InkWords Trainer) - 架构设计与工程规范
 
 ## 0. 变更记录
+- 2026-06-03：生成链路进入 RabbitMQ 事件驱动 Phase B。Compose 新增 `rabbitmq` 服务，`core-api` 与 `llm-stream` 通过 `RABBITMQ_URL / RABBITMQ_EXCHANGE / RABBITMQ_GENERATION_QUEUE` 接入任务队列；对外入口仍保持 `http://localhost` 与 `/api/*` 不变，`core-api` 负责创建任务、查询任务与基于 `job_task_events` 输出 SSE，`llm-stream` 负责消费生成任务并写回任务事件。
+- 2026-06-03：澄清生产形态为 Docker Compose 多服务 + 前端 Nginx 单入口；`backend/Dockerfile` 不再构建/复制 `server` 二进制，镜像默认 CMD 调整为运行 `core-api`；`cmd/server` 明确为本地/集成调试聚合入口。
+- 2026-06-03：Docker 微服务化 Phase 2（已落地到代码与编排）。后端在 Compose 中进一步拆分为 `core-api` / `llm-stream` / `parser-service` / `export-service` / `review-service`，对外入口仍为 `http://localhost`，由前端 Nginx 按路径分流；review 数据迁移与拆库（同 Postgres 实例、不同 database：`inkwords_review_db`）需按 Runbook 执行：[review-db-migration.md](file:///Users/huangqijun/Documents/%E5%A2%A8%E8%A8%80%E5%8D%9A%E5%AE%A2%E5%8A%A9%E6%89%8B/InkWords/docs/runbooks/review-db-migration.md)。
+- 2026-06-03：Docker 微服务化 Phase 1。对外入口仍为 `http://localhost`，前端 Nginx 继续代理 `/api/*`；后端在 Docker Compose 中拆分为 `core-api` 与 `llm-stream` 两个服务，支持仅扩容 `llm-stream` 承接流式生成压力。
 - 2026-06-03：收紧后端生命周期与请求取消边界。`backend/cmd/server/main.go` 不再使用裸 `r.Run`，改为显式 `http.Server`（`ReadTimeout=15s`、`ReadHeaderTimeout=10s`、`WriteTimeout=0`、`IdleTimeout=60s`）并接入 `SIGINT/SIGTERM` 优雅停机；`internal/domain/stream/handler.go` 收回 `Continue/Analyze/Scan` 主链路里默认的 `context.WithoutCancel`，改为直接透传 `c.Request.Context()`，让客户端断连/请求取消可以真实传递到分析、扫描和续写任务。
 - 2026-06-02：优化后端 Docker 构建稳定性。`backend/Dockerfile` 不再强制把 Alpine 软件源切到阿里云镜像，改为直接使用默认 `dl-cdn.alpinelinux.org`，原因是当前运行环境下默认 CDN 首包明显更快；经 `docker compose --env-file backend/.env down && up -d --build` 实测，整套重建耗时约 48.47 秒，后端最重的 Chromium/字体/PDF 运行时依赖层约 16.1 秒完成，不再出现“像卡住”的长时间停顿。
 - 2026-06-02：修复系列文章生成失败时前端只显示 `Error` 的可观测性缺陷。前端 `streamStore` 新增 `chapterErrors`，生成进度面板与侧边栏任务区可直接显示每章/系列导读的失败原因；后端 `stream` handler 为生成类 SSE 通道增加缓冲并在每次写事件后主动 `flush`，降低慢客户端导致的流式背压与误超时风险。
@@ -89,10 +93,15 @@
   - `Respond` 不再只返回一段泛化鼓励文案，而是同时返回 `current_round_goal + review_feedback`，让前端可以显式展示“命中点 / 遗漏点 / 下一步建议”。
   - `cmd/server/main.go` 启动时统一组装 `review` 的 repository、service、handler，并注册 `/api/v1/review/*` 路由。
 - **数据推送**: 基于标准 HTTP `text/event-stream` 实现 SSE 推送机制。
+- **RabbitMQ 任务队列化生成**：
+  - `core-api` 负责把生成请求转换为任务记录，并把消息投递到 `generation.requested`。
+  - `llm-stream` 通过 RabbitMQ consumer 异步消费任务，复用既有生成服务执行业务逻辑。
+  - 任务进度与正文 chunk 先落 PostgreSQL 事件表，再由 `core-api` 统一向前端输出 SSE，避免第一阶段引入跨服务内存总线。
 - **正文净化层**：`internal/infra/llm` 在流式输出进入业务层前统一做开头段落清洗，剥离 `<think>` 标签、跳过 `reasoning_content`，并删除“收到你的需求 / 作为高级全栈架构师”等非正文前言；前端润色应用正文前再做一次兜底提取，避免污染 `blogs.content`。
 
 ### 2.3 基础设施 (Infrastructure)
 - **数据库**: PostgreSQL 14 (Docker volume 挂载持久化)
+- **消息队列**: RabbitMQ 3 Management（当前仅用于生成链路任务投递；管理界面端口保留在容器内网，不对宿主机暴露）
 - **本地知识库导出**: 后端通过 Obsidian Local REST API（HTTPS + API Key）写入用户本地 Vault，并遵循 Karpathy LLM Wiki Pattern 将系列批量 Ingest 为 `sources/`、`concepts/`、`entities/` 并自动编织双向链接网络，同时自动生成 `sources/_index.md`、`concepts/_index.md`、`entities/_index.md`、`domains/_index.md` 等“地图索引页”以避免知识孤岛与空页面；容器通过 sidecar `obsidian-bridge`（27125）转发访问宿主机插件端口（27124）
 - **本地知识库复习输入**: Review 模块默认从 `OBSIDIAN_WIKI_DIR` 指向的 `wiki/` 根目录读取候选笔记；若 Obsidian Store 初始化失败，服务仍可启动，但 review 入口会返回稳定错误而不是让整个服务崩溃。
 - **系列 PDF 导出**: 后端将系列 Markdown 渲染为 HTML（封面 + 目录 + 正文），并使用容器内 Chromium Headless 打印为 PDF（前端在侧边栏批量模式中逐个触发下载）。为保证中文正常显示，后端运行时镜像需安装 `chromium` 与 `font-noto-cjk` 等字体依赖。
@@ -138,13 +147,27 @@
   - `streamStore.setSource` 仅更新来源信息，不再在来源切换时覆盖用户手动选择的场景。
   - 文件 Analyze 请求在发起时通过 `useStreamStore.getState()` 读取最新 `scenario_mode`，避免旧渲染快照导致“UI 显示 A、请求发送 B”。
 
+## 3.2 RabbitMQ 事件驱动 Phase B
+- **目标**：把生成链路从“前端直连长 SSE 请求”收口为“创建任务 -> 队列消费 -> DB 事件回放”的后台任务模型，同时保持前端单入口与 `/api/*` 路径不变。
+- **主链路**：
+  1. 前端向 `core-api` 提交 `/api/v1/tasks/generation` 创建任务。
+  2. `core-api` 写入 `job_tasks`，并把消息发布到 RabbitMQ exchange `inkwords.events`。
+  3. `llm-stream` 订阅 `inkwords.generation` 队列，消费生成任务并执行既有生成逻辑。
+  4. Worker 把状态变化与 chunk 追加到 `job_task_events`。
+  5. 前端再通过 `GET /api/v1/tasks/:id/stream` 从 `core-api` 订阅 SSE；`core-api` 轮询事件表并对外回放。
+- **当前边界**：
+  - 第一阶段优先使用 PostgreSQL 事件表作为跨服务事实来源，不额外引入 Redis pubsub。
+  - 旧 `/api/v1/stream/*` 路由仍保留，作为兼容回滚路径。
+  - 取消任务由 `core-api` 标记任务状态，worker 通过轮询取消状态尽快停止。
+
 ## 4. 部署架构 (Docker-First)
 - **前端镜像**: 采用多阶段构建（Node.js 安装依赖并构建，Nginx 轻量级运行并作为反向代理网关）。默认仅映射宿主机 `80` 端口，统一以 `http://localhost` 作为前端入口。
-- **后端镜像**: 采用多阶段构建（Go 官方镜像编译，Alpine 运行）。使用 `FRONTEND_URL`、`DATABASE_URL`、`REDIS_URL` 等环境变量控制运行逻辑，但默认只在 Docker 内部网络暴露 `8080`，不直接对宿主机开放。
+- **后端镜像**: 采用多阶段构建（Go 官方镜像编译，Alpine 运行）。Phase 2 后端拆分为 `core-api` / `llm-stream` / `parser-service` / `export-service` / `review-service` 五个服务，对外入口仍保持不变：统一由前端 Nginx 网关按路径分流转发到对应服务；后端各服务默认只在 Docker 内部网络暴露 `8080`，不直接对宿主机开放。
 - **PDF 运行时依赖**: 后端 Alpine 运行时镜像除 `chromium`、`font-noto-cjk` 外，还需安装 `poppler-utils`，以便 `DocParser` 在中文 PDF 提取失真时回退到 `pdftotext`。
-- **数据库 / Redis**: PostgreSQL 与 Redis Stack 默认仅在容器网络内暴露，避免开发态无意开放宿主机调试端口。
-- **容器互联**: 全部服务显式加入 `inkwords-network` 内部网络，后端通过服务名 `db:5432`、`redis:6379`、`obsidian-bridge:27125` 与依赖互通。
+- **数据库 / Redis**: PostgreSQL 与 Redis Stack 默认仅在容器网络内暴露，避免开发态无意开放宿主机调试端口。Phase 2 引入 review 拆库：同一 Postgres 实例新增 `inkwords_review_db`，`review-service` 使用 `REVIEW_DATABASE_URL` 连接；数据迁移与回滚步骤见 Runbook：[review-db-migration.md](file:///Users/huangqijun/Documents/%E5%A2%A8%E8%A8%80%E5%8D%9A%E5%AE%A2%E5%8A%A9%E6%89%8B/InkWords/docs/runbooks/review-db-migration.md)。
+- **容器互联**: 全部服务显式加入 `inkwords-network` 内部网络，后端通过服务名 `db:5432`、`redis:6379`、`rabbitmq:5672`、`obsidian-bridge:27125` 与依赖互通。
 - **环境装载约定**: Docker Compose 运行时统一建议通过 `docker compose --env-file backend/.env ...` 启动；`OBSIDIAN_VAULT_PATH` 必须显式提供，不再回退到某台开发机的绝对路径。
+- **任务队列环境变量**: `core-api` 与 `llm-stream` 统一读取 `RABBITMQ_URL`、`RABBITMQ_EXCHANGE`、`RABBITMQ_GENERATION_QUEUE`；默认值分别指向 `amqp://guest:guest@rabbitmq:5672/`、`inkwords.events`、`inkwords.generation`。
 - **Task 6 冒烟验证补充**: 请直接使用 `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build`；这样 Compose 会显式加载 `backend/.env`，避免因 `OBSIDIAN_VAULT_PATH` 等变量缺失而在解析 bind mount 时直接失败。
 
 ## 4.1 仓库产物与敏感信息策略

@@ -1,6 +1,30 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 91：落地 RabbitMQ 任务式生成链路第一阶段并同步交付文档
+- **用户需求**：用户要求“将项目服务进行拆分，变成微服务架构”，在完成方案共创后确认采用“多服务 + Nginx 单入口 + 共享 Postgres + RabbitMQ 事件驱动”的渐进式路线，并继续要求按 `Subagent-Driven` 方式逐个执行生成链路的 `Task 1` 到 `Task 6`，最终再把项目提交到 GitHub。
+- **AI 动作**：
+  1. 先完成知识库 Query，回读 `[[InkWords 生产形态：多服务与聚合入口]]`、`[[InkWords 系统架构]]`、`[[Monorepo架构与工程约束]]`、`[[Docker容器化与环境一致性]]`，确认项目运行时已经是“前端 Nginx + 多后端服务”的过渡态，而不是从零开始拆单体。
+  2. 对代码仓库做只读盘点，确认 `core-api / llm-stream / parser-service / export-service / review-service`、`docker-compose.yml`、`frontend/nginx.conf`、`backend/cmd/*` 的现状，输出“现有多服务、边界尚未硬化、长任务缺少事件总线”的判断。
+  3. 完成共创设计与计划，沉淀 `docs/superpowers/specs/2026-06-03-rabbitmq-microservices-design.md` 与 `docs/superpowers/plans/2026-06-03-rabbitmq-generation-phase-plan.md`，明确第一阶段只做“生成链路任务化”，不把 parser/export/review 异步化混入同一批次。
+  4. 按 `Subagent-Driven` 顺序执行六个任务：`Task 1` 落地 `job_tasks/job_task_events` 模型与任务领域服务；`Task 2` 引入 RabbitMQ 消息 envelope 与发布器；`Task 3` 在 `core-api` 落地任务创建/查询/取消/SSE 接口；`Task 4` 在 `llm-stream` 增加 RabbitMQ consumer 并回写任务状态；`Task 5` 将前端生成链路切到“创建任务 + 订阅 task stream”；`Task 6` 同步 Compose、环境变量、README 与 `.trae` 文档。
+  5. 逐任务执行定向 Go 测试、前端 Vitest、`vite build`、`docker compose config`、`docker compose up -d --build`、`docker compose ps` 和 `curl -I http://localhost`，确认代码、构建与容器编排均通过。
+- **决策/变更**：
+  - 微服务路线不推翻现有多服务，而是在已落地的路径分流基础上增加 RabbitMQ 事件驱动层。
+  - 第一阶段只任务化生成链路：`core-api` 接单，`llm-stream` 消费，前端改用任务式 SSE；`parser/export` 后续再独立立项。
+  - 对外入口与路径保持稳定：仍通过 `http://localhost` 访问，前端仍只请求 `/api/*`，内部由 Nginx 和 Docker 网络分流。
+  - 提交前必须同步 API、架构、数据库、开发日志、Conversation Log、PRD 和 README，保持 Docs-as-Code 一致。
+- **验证**：
+  - `cd backend && go test ./internal/domain/task ./internal/infra/mq ./internal/domain/stream ./internal/transport/http/v1 -count=1` 通过
+  - `cd backend && go test ./cmd/core-api -run '^$'` 通过
+  - `cd backend && go test ./cmd/llm-stream -run '^$'` 通过
+  - `cd frontend && npm test -- --run src/services/generationTasks.test.ts src/hooks/generator/useSeriesGenerator.test.ts` 通过
+  - `cd frontend && npm run build` 通过
+  - `docker compose --env-file backend/.env.example config` 通过
+  - `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build` 通过
+  - `docker compose --env-file backend/.env ps` 显示含 `inkwords-rabbitmq` 在内的核心容器 `Up`
+  - `curl -I http://localhost` 返回 `HTTP/1.1 200 OK`
+
 ### 对话 90：执行优化计划 Task 1，收紧后端生命周期与请求取消边界
 - **用户需求**：在 InkWords 仓库执行优化计划 `Task 1`；先为后端生命周期与请求取消边界写失败测试，再最小实现优雅停机、显式 `http.Server`、收回 `stream` 主链路不必要的 `context.WithoutCancel`，最后运行相关 Go 测试并汇报修改文件、测试结果和遗留风险；明确要求忽略根目录 `.tmp_kb_*` 未跟踪文件，不改无关文件。
 - **AI 动作**：

@@ -1,6 +1,8 @@
 # 墨言知识训练平台 (InkWords Trainer) - 数据库设计文档
 
 ## 0. 变更记录
+- 2026-06-03：生成链路进入 RabbitMQ 任务式 SSE Phase B。核心库新增 `job_tasks` 与 `job_task_events` 两张表，分别存储任务主状态与可回放事件流；RabbitMQ 仅负责跨服务投递，不承载最终状态，任务真实状态仍以 PostgreSQL 为准。
+- 2026-06-03：Docker 微服务化 Phase 2（已落地到代码与编排）。同一 Postgres 实例新增 review 独立 database：`inkwords_review_db`；`review-service` 使用 `REVIEW_DATABASE_URL` 连接；review 数据迁移与回滚按 Runbook 执行：[review-db-migration.md](file:///Users/huangqijun/Documents/%E5%A2%A8%E8%A8%80%E5%8D%9A%E5%AE%A2%E5%8A%A9%E6%89%8B/InkWords/docs/runbooks/review-db-migration.md)。本次不新增/不修改任何表字段表格（仅补充说明与引用）。
 - 2026-06-03：稳定性与工程化优化（Task 1-5）。本次不新增数据库表、字段或索引；主要变更为：系列生成链路补齐“前置草稿创建/清理 + 章节完成落库 + `users.tokens_used` 累加”的事务边界与可观测错误，避免章节正文写入成功但 Token 记账静默失败的状态不一致。
 - 2026-06-02：系列生成失败原因可视化与 SSE 稳定性修复仅调整前端状态管理和后端流式写出策略，不涉及 PostgreSQL 表结构、字段、索引、迁移或写入时机变更；`blogs`、`review_sessions`、`review_turns` 等既有表保持不变。
 - 2026-06-01：知识漫游复习升级为“文章驱动提问 + 结构化命中/遗漏反馈”；本次复习增强仅复用 `review_sessions.metadata_snapshot` 与 `key_points_snapshot` 存储会话快照，不新增数据库表、字段、索引或迁移脚本。
@@ -36,6 +38,11 @@
 - **ORM**: GORM (Go)
 - **连接字符串**: `postgres://inkwords:inkwords_password@db:5432/inkwords_db?sslmode=disable`
 - **挂载卷**: Docker volume `pgdata` 持久化至 `/var/lib/postgresql/data`。
+
+### 1.1 Phase 2：review 拆库（同实例不同 database）
+- **core db**：`inkwords_db`（博客、用户、导出相关结构化数据等）
+- **review db**：`inkwords_review_db`（仅 review 相关数据）
+- **迁移与回滚**：按 Runbook 执行：[review-db-migration.md](file:///Users/huangqijun/Documents/%E5%A2%A8%E8%A8%80%E5%8D%9A%E5%AE%A2%E5%8A%A9%E6%89%8B/InkWords/docs/runbooks/review-db-migration.md)
 
 ## 2. 表结构化设计
 
@@ -80,7 +87,39 @@
 | `tech_stacks` | JSONB | Nullable | 自动提取的涉及技术栈列表 |
 | `chapter_sort`| INTEGER | Default 1 | 在系列博客中的排序序号 |
 
-### 2.3 用户写作模板表 (`user_prompt_settings`)
+### 2.3 生成任务表 (`job_tasks`)
+存储任务式生成链路中的主任务状态，作为跨 `core-api` 与 `llm-stream` 的事实来源。
+
+| 字段名 | 数据类型 | 约束/索引 | 描述 |
+| ------ | -------- | --------- | ---- |
+| `id` | UUID | Primary Key | 任务唯一标识 |
+| `task_type` | VARCHAR(32) | Index | 任务大类，第一阶段固定为生成类任务 |
+| `task_subtype` | VARCHAR(64) | Index | 任务子类，如 `generate_single` / `generate_series` |
+| `status` | VARCHAR(16) | Index | 任务状态：`pending / queued / running / streaming / succeeded / failed / cancelled` |
+| `requested_by` | UUID | Index | 发起任务的用户 ID |
+| `idempotency_key` | VARCHAR(255) | Index | 幂等键；用于复用同一用户的重复提交 |
+| `payload_json` | JSONB | Not Null | 原始任务载荷 |
+| `result_json` | JSONB | Nullable | 任务成功后的结果摘要 |
+| `error_message` | TEXT | Nullable | 任务失败或取消原因 |
+| `retry_count` | INTEGER | Default 0 | 当前重试次数 |
+| `started_at` | TIMESTAMP | Nullable | 开始执行时间 |
+| `finished_at` | TIMESTAMP | Nullable | 结束时间 |
+| `created_at` | TIMESTAMP | | 创建时间 |
+| `updated_at` | TIMESTAMP | | 更新时间 |
+
+### 2.4 生成任务事件表 (`job_task_events`)
+存储可回放的任务事件流，供 `core-api` 轮询并向前端输出 SSE。
+
+| 字段名 | 数据类型 | 约束/索引 | 描述 |
+| ------ | -------- | --------- | ---- |
+| `id` | BIGSERIAL | Primary Key | 自增事件 ID，用于游标式拉取 |
+| `task_id` | UUID | Index | 关联 `job_tasks.id` |
+| `event_type` | VARCHAR(32) | Index | 事件类型，如 `chunk / error / done` |
+| `status` | VARCHAR(16) | Index | 事件产生时对应的任务状态 |
+| `payload` | JSONB | Not Null | 事件载荷，直接作为 SSE 数据源 |
+| `created_at` | TIMESTAMP | | 创建时间 |
+
+### 2.5 用户写作模板表 (`user_prompt_settings`)
 存储用户针对不同文章类型（如通用技术博客、小白手把手、备考复习）配置的“写作要求”覆盖值。
 
 | 字段名 | 数据类型 | 约束/索引 | 描述 |
@@ -90,7 +129,7 @@
 | `created_at` | TIMESTAMP | | 创建时间 |
 | `updated_at` | TIMESTAMP | | 更新时间 |
 
-### 2.4 复习会话表 (`review_sessions`)
+### 2.6 复习会话表 (`review_sessions`)
 存储一次“知识漫游复习”训练的主记录与最终反馈快照。
 
 | 字段名 | 数据类型 | 约束/索引 | 描述 |
@@ -124,7 +163,7 @@
 | `updated_at` | TIMESTAMP | | 更新时间 |
 | `deleted_at` | TIMESTAMP | Index | 软删除标识 |
 
-### 2.5 复习轮次表 (`review_turns`)
+### 2.7 复习轮次表 (`review_turns`)
 存储一次复习训练中的系统提问、提示、阶段反馈与用户回答。
 
 | 字段名 | 数据类型 | 约束/索引 | 描述 |
@@ -143,11 +182,14 @@
 ## 3. 关联关系 (Associations)
 - **User (1) <-> (N) Blog**: 一个用户可以拥有多篇博客历史记录。
 - **Blog (1) <-> (N) Blog**: 自引用（Self-Referencing）。一个父级 Blog（代表系列入口，例如 "Hydrogen语言系列"）可以拥有多个子级 Blog（代表具体章节内容，例如 "第 1 篇：架构概览"）。通过 `parent_id` 建立一对多父子关系。
+- **User (1) <-> (N) JobTask**: 一个用户可以发起多个任务式生成请求；通过 `job_tasks.requested_by` 关联用户维度的任务历史。
+- **JobTask (1) <-> (N) JobTaskEvent**: 一个生成任务会产生多条可回放事件；通过 `job_task_events.task_id` 与自增 `id` 形成顺序事件流。
 - **User (1) <-> (N) ReviewSession**: 一个用户可以发起多次“知识漫游复习”训练；通过 `review_sessions.user_id` 关联用户维度的复习历史。
 - **ReviewSession (1) <-> (N) ReviewTurn**: 一次复习会话包含多轮系统追问、提示与用户回答；通过 `review_turns.session_id` + `turn_index` 保证同一 session 内轮次有序且唯一。
 
 ## 4. 迁移策略 (Migration)
 - 系统在启动时，会通过 GORM 的 `AutoMigrate` 功能自动根据 Go 模型结构 (`internal/model`) 同步创建或更新数据库表。
+- `job_tasks` 与 `job_task_events` 已纳入 core db 的统一迁移列表；当前阶段不依赖单独迁移脚本，随 `core-api` / `llm-stream` 启动自动对齐。
 - `review_sessions` 与 `review_turns` 已纳入 `backend/internal/infra/db/db.go` 的统一迁移列表，避免主程序启动与测试路径使用不同的迁移集合。
 - 敏感数据如密码，在存入数据库之前必须经过 `golang.org/x/crypto/bcrypt` 进行哈希加密。
 

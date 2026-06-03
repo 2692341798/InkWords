@@ -87,6 +87,7 @@ interface StreamState {
   currentChapterTitle: string
   abortController: AbortController | null
   parentBlogId: string | null
+  currentTaskId: string | null
   setSource: (type: 'git' | 'file', content: string, gitUrl?: string) => void
   setSourceContent: (content: string) => void
   setSeriesTitle: (title: string) => void
@@ -129,6 +130,7 @@ interface StreamState {
   setCurrentChapterTitle: (title: string) => void
   setAbortController: (ctrl: AbortController | null) => void
   setParentBlogId: (id: string | null) => void
+  setCurrentTaskId: (taskId: string | null) => void
   setGitUrl: (url: string) => void
   setScenarioMode: (mode: ScenarioMode) => void
   setModules: (modules: ModuleCard[] | null) => void
@@ -184,6 +186,7 @@ export const useStreamStore = create<StreamState>((set, get) => {
     currentChapterTitle: '',
     abortController: null,
     parentBlogId: null,
+    currentTaskId: null,
     setSource: (type, content, gitUrl) =>
       set((state) => ({
         sourceType: type,
@@ -377,6 +380,7 @@ export const useStreamStore = create<StreamState>((set, get) => {
   setCurrentChapterTitle: (title) => set({ currentChapterTitle: title }),
   setAbortController: (ctrl) => set({ abortController: ctrl }),
   setParentBlogId: (id) => set({ parentBlogId: id }),
+  setCurrentTaskId: (taskId) => set({ currentTaskId: taskId }),
   setGitUrl: (url) => set((state) => {
     // If the user changes the git URL in the input box and we have modules, clear them
     if (state.gitUrl && url !== state.gitUrl && state.modules && state.modules.length > 0) {
@@ -419,6 +423,7 @@ export const useStreamStore = create<StreamState>((set, get) => {
         isGenerating: false, 
         analysisStep: -1, 
         abortController: null,
+        currentTaskId: null,
         chapterStatus: newStatus,
         chapterPhases: newPhases,
       };
@@ -461,7 +466,8 @@ export const useStreamStore = create<StreamState>((set, get) => {
       content: '',
       currentChapterTitle: '',
       abortController: null,
-      parentBlogId: null
+      parentBlogId: null,
+      currentTaskId: null,
     })
   }
 }

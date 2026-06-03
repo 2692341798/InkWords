@@ -53,13 +53,19 @@
 ## 5. 快速开始 (Quick Start)
 
 ### 5.1 推荐：Docker 一键部署
-项目已提供完整的容器化支持。Docker Compose 运行时通过 CLI `--env-file` 注入环境变量，再拉起前后端与数据库：
+项目已提供完整的容器化支持。Docker Compose 运行时通过 CLI `--env-file` 注入环境变量，再拉起前端网关、后端多服务、PostgreSQL、Redis 与 RabbitMQ：
 ```bash
 # 首次启动：先准备配置文件
 cp backend/.env.example backend/.env
 
 # 标准启动命令
 docker compose --env-file backend/.env up -d --build
+```
+
+如需仅对“流式生成服务”独立扩容（推荐在大规模生成、并发多章节时使用），可执行：
+
+```bash
+docker compose --env-file backend/.env up -d --build --scale llm-stream=3
 ```
 如需应用新代码或完整重启，请使用：
 ```bash
@@ -70,9 +76,11 @@ docker compose --env-file backend/.env down && docker compose --env-file backend
 启动前请先在 `backend/.env` 中配置必要环境变量：
 - **必须配置**：`DEEPSEEK_API_KEY`、`JWT_SECRET`、`OBSIDIAN_REST_API_KEY`、`OBSIDIAN_VAULT_PATH`
 - **Docker 运行时建议显式维护**：`POSTGRES_USER`、`POSTGRES_PASSWORD`、`POSTGRES_DB`
-- **按需覆盖**：`FRONTEND_URL`、`REDIS_URL`、`OBSIDIAN_REST_API_BASE_URL`、`OBSIDIAN_WIKI_DIR`
+- **按需覆盖**：`FRONTEND_URL`、`REDIS_URL`、`RABBITMQ_URL`、`RABBITMQ_EXCHANGE`、`RABBITMQ_GENERATION_QUEUE`、`OBSIDIAN_REST_API_BASE_URL`、`OBSIDIAN_WIKI_DIR`
 
-当前 Docker 默认仅暴露前端入口 `http://localhost`；`backend`、`db`、`redis` 仅在 Docker 内部网络 `inkwords-network` 中互通，不再默认暴露宿主机端口。当前 Docker 本地开发仍默认通过 `backend/.env` 中的 `OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY=true` 访问 Obsidian Local REST API，避免把宿主机错误文件挂载成证书；如需启用严格证书校验，请显式配置 `OBSIDIAN_REST_API_CERT_PATH` 指向真实插件证书，并将 `OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY=false`。
+当前 Docker 默认仅暴露前端入口 `http://localhost`；`core-api`、`llm-stream`、`parser-service`、`export-service`、`review-service`、`db`、`redis`、`rabbitmq` 仅在 Docker 内部网络 `inkwords-network` 中互通，不再默认暴露宿主机端口。当前 Docker 本地开发仍默认通过 `backend/.env` 中的 `OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY=true` 访问 Obsidian Local REST API，避免把宿主机错误文件挂载成证书；如需启用严格证书校验，请显式配置 `OBSIDIAN_REST_API_CERT_PATH` 指向真实插件证书，并将 `OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY=false`。
+
+生成链路当前已进入“任务式 SSE”第一阶段：前端先向 `core-api` 创建生成任务，任务消息经 RabbitMQ 投递给 `llm-stream` worker，再由 `core-api` 基于数据库中的任务事件表对外继续输出 SSE。这样可以在保持前端入口与 `/api/*` 路径不变的前提下，把长耗时生成从同步长请求收敛为可排队、可查询、可取消的后台任务。
 
 如果你需要在 Docker 模式下使用 GitHub OAuth，Compose 现在会默认把回调地址固定为 `http://localhost/api/v1/auth/callback/github`，避免错误跳回 Vite 本地开发端口 `5173`。如果你需要在 Docker 下覆盖这个地址（例如远程域名调试），请显式设置 `DOCKER_GITHUB_REDIRECT_URL`。如果你运行的是 Vite 本地开发服务器，再继续使用 `backend/.env` 中的 `GITHUB_REDIRECT_URL=http://localhost:5173/api/v1/auth/callback/github`。
 
@@ -172,6 +180,10 @@ go mod tidy
 go run ./cmd/server/main.go
 ```
 *后端服务默认运行在 `http://localhost:8080`*
+
+说明：
+- Docker Compose 的生产形态为多服务（`core-api/llm-stream/parser-service/export-service/review-service`），通过前端 Nginx 统一对外提供服务（入口 `http://localhost`）。
+- `cmd/server` 是聚合入口，用于本地开发/集成调试；Docker 镜像默认不再隐式启动该入口。
 
 **启动前端：**
 ```bash

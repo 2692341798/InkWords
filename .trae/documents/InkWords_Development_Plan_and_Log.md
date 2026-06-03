@@ -1,6 +1,37 @@
 # 墨言知识训练平台 (InkWords Trainer) - 开发计划与日志
 > **目标**：跟踪项目的核心开发模块、里程碑进度以及每日开发记录。
 
+### [2026-06-03] Docs/Infra - RabbitMQ 任务式生成 Phase B 的 Compose 与文档同步
+- **需求背景**：
+  1. RabbitMQ 任务式生成链路的代码与计划已进入落地阶段，但 Compose、环境变量样例和项目基准文档尚未完整同步，容易造成本地启动口径与真实架构脱节。
+  2. 本次限定只处理 `docker-compose.yml`、`backend/.env.example`、`README.md` 与 `.trae` 基准文档，不改业务代码，实现“编排与文档先对齐、再验证”。
+- **本次完成**：
+  1. 为 Compose 新增 `rabbitmq` 服务，并让 `core-api` / `llm-stream` 注入 `RABBITMQ_URL`、`RABBITMQ_EXCHANGE`、`RABBITMQ_GENERATION_QUEUE`，同时显式依赖 `rabbitmq`。
+  2. 更新 `backend/.env.example`，补齐 RabbitMQ 默认连接与交换机/队列变量，确保新同学首次复制 `.env` 后即可得到完整配置模板。
+  3. 更新 `README.md`、`InkWords_API.md`、`InkWords_Architecture.md`、`InkWords_Database.md`，补充“任务式 SSE + RabbitMQ + `job_tasks/job_task_events`”的一致口径。
+  4. 记录并执行 Task 6 所要求的配置校验、编译检查、前端构建与 Docker 冒烟验证。
+- **验证记录**：
+  - `test -f backend/.env && echo present || echo absent` -> `present`
+  - `docker compose --env-file backend/.env.example config` 通过，已确认 `rabbitmq` 服务和 `core-api` / `llm-stream` 的 RabbitMQ 环境变量渲染正确
+  - `cd backend && go test ./... -run '^$'` 通过
+  - `cd frontend && npm run build` 通过
+  - `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build` 通过，包含 `inkwords-rabbitmq`
+  - `docker compose --env-file backend/.env ps` 显示 `core-api / llm-stream / parser-service / export-service / review-service / db / redis / rabbitmq / frontend / obsidian-bridge` 均为 `Up`
+  - `curl -I http://localhost` 返回 `HTTP/1.1 200 OK`
+
+### [2026-06-03] Feat - Docker 微服务化 Phase 2（parser/export/review 拆分 + review 拆库）
+- **需求背景**：
+  1. 在 Phase 1（`core-api + llm-stream`）的基础上，进一步把重资源/高变更域拆分为独立服务，以便独立扩容、降低耦合并收敛职责边界。
+  2. review 作为“读 Obsidian、写 PostgreSQL”的独立领域，优先拆到独立数据库，避免与 core db 的写入路径互相影响，并确保迁移可回滚。
+- **本次完成（已落地到代码与编排）**：
+  1. 后端服务拆分为 `core-api` / `llm-stream` / `parser-service` / `export-service` / `review-service`，并保持对外入口仍为 `http://localhost`。
+  2. 前端 Nginx 继续作为单一公开入口，按路径分流到各后端服务（路由对外保持不变，分流归属见 API 文档变更记录）。
+  3. review 拆库采用“同 Postgres 实例、不同 database”的线路 A：新增 `inkwords_review_db`，由 `review-service` 使用 `REVIEW_DATABASE_URL` 连接；迁移与回滚按 Runbook 执行：[review-db-migration.md](file:///Users/huangqijun/Documents/%E5%A2%A8%E8%A8%80%E5%8D%9A%E5%AE%A2%E5%8A%A9%E6%89%8B/InkWords/docs/runbooks/review-db-migration.md)。
+- **验证记录**：
+  - `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build` 通过（5 服务均 `Up`，`db` healthy）
+  - `curl -I http://localhost` 返回 `HTTP/1.1 200 OK`
+  - `inkwords_review_db` 已创建；数据迁移已完成：`review_sessions=17`、`review_turns=80`（core db 与 review db 行数一致）
+
 ### [2026-06-03] Fix - 后端生命周期治理与 stream 请求取消边界收紧
 - **需求背景**：
   1. 优化计划 `Task 1` 明确指出后端启动链路仍使用裸 `r.Run`，缺少显式 `http.Server`、优雅停机和统一超时边界。
