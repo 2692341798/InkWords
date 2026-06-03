@@ -50,6 +50,7 @@
 - **提示词类型锁定策略**：当文件 Analyze 返回 `resolved_prompt_profile` 后，前端 `streamStore` 会持久化 `resolvedPromptProfile/classificationStatus/classificationReason`，并在大纲区展示“当前提示词类型”只读标签；后续单篇/系列生成请求统一透传 `prompt_profile_key` 与 `document_kind`。
 - **流程型工作台编排**：默认入口为 `HomeEntry`；`Generator`、`KnowledgeReview`、`HomeEntry` 三处共享 `StepStrip` 展示流程预览/进度，但业务状态仍保留在页面层，通过 `generatorViewState`、`knowledgeReviewViewState`、`homeEntryViewState` 做纯前端编排，避免把共享 UI 组件耦合成全局状态机。
 - **生成器三步模型**：`Generator` 当前固定为 `选择来源 -> 配置解析 -> 确认大纲` 三步；解析/分析时仍停留在 `configure` 并内嵌展示 `GeneratorStatus`，正文生成时仍停留在 `outline` 并内嵌展示章节进度，`progress` 不再是顶层页面阶段。
+- **系列章节质量阶段状态**：`streamStore` 额外维护 `chapterPhases` 与 `chapterUsage`，`useSeriesGenerator.handleSeriesChunkMessage()` 负责把后端 `understanding / drafting / reviewing / revising / streaming / usage / completed / error / retrying` 事件统一映射为前端运行时状态，`GeneratorStatus` 只消费 store 而不直接理解 SSE 协议细节。
 - **知识漫游复习工作台**：新增 `KnowledgeReview` 主视图，入口位于侧边栏；同一页面内收敛“随机抽一篇 / 选择文章复习 / 当前会话 / 最近记录”四类状态，避免在多个页面间来回跳转。
 
 ### 2.2 后端 (Backend)
@@ -107,6 +108,8 @@
    - 使用 `semaphore.NewWeighted(3)` 将全局并发数严格限制为 3。
    - 每个 `goroutine` 均拥有独立的错误隔离环境，通过同一个 `progressChan` 向前端推送包含自身 `chapter_sort` ID 的 Chunk（数据切片）。
   - 单篇生成、系列章节生成和系列导读生成都会复用同一份 `scenario_mode + article_style + resolved prompt profile` 组合后的 Prompt 约束，避免“大纲像心理学解读、正文回到通用技术博客”的割裂。
+  - 系列章节当前内部执行顺序已升级为 `understanding -> drafting -> reviewing -> revising(streaming)`；只有终稿补强阶段会把正文 chunk 推给前端，前置阶段只发送状态事件。
+  - 终稿补强的流式收尾阶段还会额外发送 `usage` 事件，携带 `prompt_tokens / completion_tokens / prompt_cache_hit_tokens / prompt_cache_miss_tokens`，用于衡量稳定前缀是否真正提升了同系列多章节的 DeepSeek 原生前缀缓存命中率。
 4. **系列导读生成**：
    - 所有单篇博客生成完毕后（`wg.Wait()` 返回），主流程自动触发一次 AI 调用，生成“系列导读”文章，将其作为整个系列的父节点，将各个单篇博客串联成专栏。
 5. **前端批量更新防卡顿**：
@@ -142,6 +145,7 @@
 - **数据库 / Redis**: PostgreSQL 与 Redis Stack 默认仅在容器网络内暴露，避免开发态无意开放宿主机调试端口。
 - **容器互联**: 全部服务显式加入 `inkwords-network` 内部网络，后端通过服务名 `db:5432`、`redis:6379`、`obsidian-bridge:27125` 与依赖互通。
 - **环境装载约定**: Docker Compose 运行时统一建议通过 `docker compose --env-file backend/.env ...` 启动；`OBSIDIAN_VAULT_PATH` 必须显式提供，不再回退到某台开发机的绝对路径。
+- **Task 6 冒烟验证补充**: 请直接使用 `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build`；这样 Compose 会显式加载 `backend/.env`，避免因 `OBSIDIAN_VAULT_PATH` 等变量缺失而在解析 bind mount 时直接失败。
 
 ## 4.1 仓库产物与敏感信息策略
 - 禁止提交构建产物与大文件（例如后端二进制、PDF、批量截图等），统一通过 `.gitignore` 管理本地产物目录。
@@ -151,3 +155,4 @@
 - **目标**：降低 DeepSeek Token 消耗，提高首字响应速度 (TTFT)。
 - **原生支持**：全面拥抱 DeepSeek V4 API 级别的原生前缀缓存 (Prompt Caching)。
 - **Prompt 结构重构**：将数百万字的巨量源码 `sourceContent` 提取至 `system` 消息并置于请求最前，将易变的“指令”置于 `user` 消息并置于请求尾部，以最大化原生缓存的命中率，将长文本输入成本降低 80% 以上。
+- **观测补强**：自 2026-06-01 的系列章节质量流水线 Task 4 起，后端会从 DeepSeek 非流式响应体与流式尾块中统一解析 `prompt_cache_hit_tokens / prompt_cache_miss_tokens`，并在系列章节终稿完成后把 usage 事件推给前端，避免“只设计缓存友好 Prompt，却无法验证是否真正命中”的黑盒状态。

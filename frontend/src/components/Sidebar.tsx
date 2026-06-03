@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useStreamStore } from '@/store/streamStore'
 import { useBlogStore } from '@/store/blogStore'
+import { useReviewStore } from '@/store/reviewStore'
 import type { BlogNode } from '@/store/blogStore'
 import { BookOpen, CheckSquare, ChevronDown, ChevronRight, FilePenLine, FolderArchive, GitBranch, Loader2, LogOut, Plus, RefreshCw, Sparkles, Square, User } from 'lucide-react'
 import { syncExpandedNodesWithSelection } from '@/lib/blogTreeSelection'
@@ -30,6 +31,7 @@ export function Sidebar() {
     })),
   )
   const { blogs, fetchBlogs, createDraftBlog, selectedBlog, selectBlog, currentView, setCurrentView } = useBlogStore()
+  const setShouldResumeSessionOnOpen = useReviewStore((state) => state.setShouldResumeSessionOnOpen)
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set())
   const [isSyncingSeriesToObsidian, setIsSyncingSeriesToObsidian] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
@@ -287,7 +289,10 @@ export function Sidebar() {
           'w-full flex items-center justify-start gap-2',
           currentView === 'knowledge-review' && !selectedBlog ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900'
         )}
-        onClick={() => setCurrentView('knowledge-review')}
+        onClick={() => {
+          setShouldResumeSessionOnOpen(false)
+          setCurrentView('knowledge-review')
+        }}
       >
         <Sparkles className="w-4 h-4" />
         知识漫游复习

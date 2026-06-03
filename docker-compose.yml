@@ -42,6 +42,9 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-inkwords}:${POSTGRES_PASSWORD:-inkwords_password}@db:5432/${POSTGRES_DB:-inkwords_db}?sslmode=disable
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
+      # Why: Docker mode is fronted by Nginx on http://localhost, so OAuth must
+      # return through that public entrypoint instead of a Vite-only dev server.
+      GITHUB_REDIRECT_URL: ${DOCKER_GITHUB_REDIRECT_URL:-http://localhost/api/v1/auth/callback/github}
       OBSIDIAN_REST_API_BASE_URL: ${OBSIDIAN_REST_API_BASE_URL:-https://obsidian-bridge:27125}
       OBSIDIAN_REST_API_KEY: ${OBSIDIAN_REST_API_KEY:-}
       OBSIDIAN_REST_API_CERT_PATH: ${OBSIDIAN_REST_API_CERT_PATH:-}

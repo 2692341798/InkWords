@@ -50,6 +50,89 @@ export function buildSingleGenerateRequest(
   }
 }
 
+type SeriesChunkStore = Pick<
+  ReturnType<typeof useStreamStore.getState>,
+  | 'appendChapterContent'
+  | 'appendContent'
+  | 'setChapterUsage'
+  | 'setCurrentChapterTitle'
+  | 'setProgress'
+  | 'updateChapterPhase'
+  | 'updateChapterStatus'
+>
+
+/**
+ * Why: 系列生成的 SSE `chunk` 事件已经同时承载正文流和结构化进度，
+ * 抽成纯函数后可以先用测试锁定事件映射，再让 Hook 复用同一套解析逻辑。
+ */
+export function handleSeriesChunkMessage(store: SeriesChunkStore, rawData: string) {
+  const data = JSON.parse(rawData)
+  const sort = Number(data.chapter_sort)
+
+  if (storeProgressShouldClear()) {
+    store.setProgress('')
+  }
+
+  if (data.title) {
+    store.setCurrentChapterTitle(data.title)
+  }
+
+  if (data.status === 'progress') {
+    store.setProgress(data.message)
+    return
+  }
+
+  if (data.status === 'usage') {
+    store.setChapterUsage(sort, {
+      prompt_tokens: data.prompt_tokens,
+      completion_tokens: data.completion_tokens,
+      prompt_cache_hit_tokens: data.prompt_cache_hit_tokens,
+      prompt_cache_miss_tokens: data.prompt_cache_miss_tokens,
+    })
+    return
+  }
+
+  if (
+    data.status === 'understanding' ||
+    data.status === 'drafting' ||
+    data.status === 'reviewing' ||
+    data.status === 'revising' ||
+    data.status === 'streaming'
+  ) {
+    store.updateChapterStatus(sort, 'generating')
+    store.updateChapterPhase(sort, data.status)
+    if (data.status === 'streaming') {
+      store.appendChapterContent(sort, data.content)
+    }
+    return
+  }
+
+  if (data.status === 'completed') {
+    store.updateChapterStatus(sort, 'completed')
+    store.updateChapterPhase(sort, 'completed')
+    return
+  }
+
+  if (data.status === 'error') {
+    store.updateChapterStatus(sort, 'error')
+    store.updateChapterPhase(sort, 'error')
+    return
+  }
+
+  if (data.status === 'retrying') {
+    store.updateChapterStatus(sort, 'pending')
+    store.updateChapterPhase(sort, 'pending')
+  }
+}
+
+function storeProgressShouldClear() {
+  return useStreamStore.getState().progress === '准备生成环境...'
+}
+
+/**
+ * Why: 生成 Hook 直接承接后端 SSE 事件，是系列创作流程的单一入口；
+ * 在这里统一解析阶段事件，能避免 UI 组件承担协议细节。
+ */
 export const useSeriesGenerator = () => {
   const fetchBlogs = useBlogStore((state) => state.fetchBlogs)
 

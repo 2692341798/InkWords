@@ -5,6 +5,18 @@ import { useShallow } from 'zustand/react/shallow'
 
 import { CheckCircle2, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import type { ChapterPhase } from '@/store/streamStore'
+
+const phaseLabelMap: Record<ChapterPhase, string> = {
+  pending: '等待中',
+  understanding: '理解章节',
+  drafting: '生成草稿',
+  reviewing: '技术审稿',
+  revising: '定向补强',
+  streaming: '输出终稿',
+  completed: '已完成',
+  error: '失败',
+}
 
 export function GeneratorStatus() {
   const store = useStreamStore(
@@ -140,6 +152,8 @@ export function GeneratorStatus() {
               <div className="space-y-3 pb-8">
                 {[...store.outline].sort((a,b)=>a.sort-b.sort).map(chapter => {
                   const status = store.chapterStatus[chapter.sort] || 'pending';
+                  const phase = store.chapterPhases?.[chapter.sort] || 'pending';
+                  const usage = store.chapterUsage?.[chapter.sort];
                   const content = store.chapterContents[chapter.sort] || '';
                   const errorMessage = store.chapterErrors[chapter.sort] || '';
                   const snippet = content.length > 80 ? '...' + content.slice(-80) : content;

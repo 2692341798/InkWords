@@ -25,6 +25,31 @@ func TestDecompositionService_GenerateSeries_PersistsChildDraftBeforeStreaming(t
 	require.NoError(t, err)
 	require.NoError(t, testDB.AutoMigrate(&model.User{}, &model.Blog{}))
 
+	return testDB
+}
+
+func TestOpenDecompositionPersistTestDB_IsolatesUserFixtures(t *testing.T) {
+	firstDB := openDecompositionPersistTestDB(t)
+	secondDB := openDecompositionPersistTestDB(t)
+
+	firstUserID := uuid.New()
+	require.NoError(t, firstDB.Create(&model.User{
+		ID:       firstUserID,
+		Username: "tester",
+		Email:    "tester@example.com",
+	}).Error)
+
+	secondUserID := uuid.New()
+	require.NoError(t, secondDB.Create(&model.User{
+		ID:       secondUserID,
+		Username: "tester",
+		Email:    "tester@example.com",
+	}).Error)
+}
+
+func TestDecompositionService_GenerateSeries_PersistsChildDraftBeforeStreaming(t *testing.T) {
+	testDB := openDecompositionPersistTestDB(t)
+
 	previousDB := db.DB
 	db.DB = testDB
 	defer func() {

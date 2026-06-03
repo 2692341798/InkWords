@@ -27,6 +27,17 @@ func buildSeriesChapterExtraRequirements(gitURL string, outline []Chapter, chapt
 	return extraRequirements
 }
 
+func buildSeriesReaderProfile(scenarioMode prompt.ScenarioMode) string {
+	switch scenarioMode {
+	case prompt.ScenarioModeBeginnerWalkthrough:
+		return "零基础读者，需要白话解释、步骤拆解和常见坑提醒"
+	case prompt.ScenarioModeOpenBookExamReview:
+		return "需要快速定位知识点、例题和结论的复习型读者"
+	default:
+		return "希望理解原理、案例和实现细节的技术博客读者"
+	}
+}
+
 func resolveSeriesOldContent(ctx context.Context, chapter Chapter) string {
 	if chapter.Action != "regenerate" || strings.TrimSpace(chapter.ID) == "" {
 		return ""
