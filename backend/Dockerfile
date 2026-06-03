@@ -15,7 +15,11 @@ RUN go mod download
 
 # 复制源码并构建
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o server ./cmd/server
+RUN CGO_ENABLED=0 GOOS=linux go build -o core-api ./cmd/core-api
+RUN CGO_ENABLED=0 GOOS=linux go build -o llm-stream ./cmd/llm-stream
+RUN CGO_ENABLED=0 GOOS=linux go build -o parser-service ./cmd/parser-service
+RUN CGO_ENABLED=0 GOOS=linux go build -o export-service ./cmd/export-service
+RUN CGO_ENABLED=0 GOOS=linux go build -o review-service ./cmd/review-service
 
 # Stage 2: Runtime
 FROM alpine:3.19
@@ -38,10 +42,14 @@ RUN apk add --no-cache \
     echo "Asia/Shanghai" > /etc/timezone
 
 # 复制编译产物
-COPY --from=builder /app/server .
+COPY --from=builder /app/core-api .
+COPY --from=builder /app/llm-stream .
+COPY --from=builder /app/parser-service .
+COPY --from=builder /app/export-service .
+COPY --from=builder /app/review-service .
 
 # 暴露端口
 EXPOSE 8080
 
 # 启动服务
-CMD ["./server"]
+CMD ["./core-api"]

@@ -3,6 +3,10 @@ import type { ScenarioMode } from '@/lib/scenarioMode'
 import { useStreamStore } from '@/store/streamStore'
 import { useBlogStore } from '@/store/blogStore'
 import { fetchEventSourceWithAuth } from '@/services/sse'
+import {
+  buildGenerationTaskRequest,
+  createGenerationTask,
+} from '@/services/generationTasks'
 import type { Chapter } from '@/store/streamStore'
 import { toast } from 'sonner'
 
@@ -54,7 +58,10 @@ type SeriesChunkStore = Pick<
   ReturnType<typeof useStreamStore.getState>,
   | 'appendChapterContent'
   | 'appendContent'
+  | 'bufferContent'
+  | 'clearChapterError'
   | 'setChapterUsage'
+  | 'setChapterError'
   | 'setCurrentChapterTitle'
   | 'setProgress'
   | 'updateChapterPhase'
@@ -99,6 +106,7 @@ export function handleSeriesChunkMessage(store: SeriesChunkStore, rawData: strin
     data.status === 'revising' ||
     data.status === 'streaming'
   ) {
+    store.clearChapterError(sort)
     store.updateChapterStatus(sort, 'generating')
     store.updateChapterPhase(sort, data.status)
     if (data.status === 'streaming') {
@@ -108,18 +116,23 @@ export function handleSeriesChunkMessage(store: SeriesChunkStore, rawData: strin
   }
 
   if (data.status === 'completed') {
+    store.clearChapterError(sort)
     store.updateChapterStatus(sort, 'completed')
     store.updateChapterPhase(sort, 'completed')
     return
   }
 
   if (data.status === 'error') {
+    if (typeof data.message === 'string' && data.message.trim()) {
+      store.setChapterError(sort, data.message)
+    }
     store.updateChapterStatus(sort, 'error')
     store.updateChapterPhase(sort, 'error')
     return
   }
 
   if (data.status === 'retrying') {
+    store.clearChapterError(sort)
     store.updateChapterStatus(sort, 'pending')
     store.updateChapterPhase(sort, 'pending')
   }
@@ -136,6 +149,26 @@ function storeProgressShouldClear() {
 export const useSeriesGenerator = () => {
   const fetchBlogs = useBlogStore((state) => state.fetchBlogs)
 
+  const finalizeGeneration = useCallback(async () => {
+    const currentStore = useStreamStore.getState()
+    currentStore.flushBufferedChapterContents()
+    currentStore.flushBufferedContent()
+    currentStore.setGenerating(false)
+    currentStore.setProgress('生成完成')
+    currentStore.setCurrentTaskId(null)
+
+    await fetchBlogs()
+
+    const { blogs, selectBlog } = useBlogStore.getState()
+    const parentId = useStreamStore.getState().parentBlogId
+    if (parentId) {
+      const parentBlog = blogs.find((blog) => blog.id === parentId)
+      if (parentBlog) {
+        selectBlog(parentBlog)
+      }
+    }
+  }, [fetchBlogs])
+
   const generateSeries = useCallback(async () => {
     const store = useStreamStore.getState()
     store.setContent('')
@@ -147,14 +180,12 @@ export const useSeriesGenerator = () => {
     }
     const ctrl = new AbortController()
     store.setAbortController(ctrl)
+    store.setCurrentTaskId(null)
     
     try {
-      await fetchEventSourceWithAuth('/api/v1/stream/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        signal: ctrl.signal,
-        openWhenHidden: true,
-        body: JSON.stringify(
+      const task = await createGenerationTask(
+        buildGenerationTaskRequest(
+          'generate_series',
           buildSeriesGenerateRequest({
             sourceType: store.sourceType,
             gitUrl: store.gitUrl,
@@ -167,39 +198,32 @@ export const useSeriesGenerator = () => {
             documentKind: store.resolvedPromptProfile?.documentKind,
           }),
         ),
+      )
+      useStreamStore.getState().setCurrentTaskId(task.task_id)
+
+      await fetchEventSourceWithAuth(task.stream_url, {
+        method: 'GET',
+        signal: ctrl.signal,
+        openWhenHidden: true,
         async onopen(response) {
           if (response.ok && response.headers.get('content-type')?.startsWith('text/event-stream')) {
-            return;
+            return
           }
           if (response.headers.get('content-type')?.includes('application/json')) {
-            const data = await response.json();
+            const data = await response.json()
             throw new StopStreamError(data.message || data.error || '请求失败');
           }
-          const text = await response.text();
-          throw new StopStreamError(text || `请求失败: ${response.status} ${response.statusText}`);
+          const text = await response.text()
+          throw new StopStreamError(text || `请求失败: ${response.status} ${response.statusText}`)
         },
         onmessage(msg) {
           const currentStore = useStreamStore.getState()
           if (msg.event === 'done') {
-            currentStore.flushBufferedChapterContents()
-            currentStore.flushBufferedContent()
-            currentStore.setGenerating(false)
-            currentStore.setProgress('生成完成')
-            fetchBlogs().then(() => {
-              const { blogs, selectBlog } = useBlogStore.getState()
-              const parentId = useStreamStore.getState().parentBlogId
-              if (parentId) {
-                const parentBlog = blogs.find(b => b.id === parentId)
-                if (parentBlog) {
-                  selectBlog(parentBlog)
-                }
-              }
+            void finalizeGeneration().then(() => {
+              setTimeout(() => {
+                useStreamStore.getState().reset()
+              }, 2000)
             })
-            
-            // Auto close/transition after 2 seconds
-            setTimeout(() => {
-              useStreamStore.getState().reset()
-            }, 2000)
             return
           }
           
@@ -212,40 +236,23 @@ export const useSeriesGenerator = () => {
           } else if (msg.event === 'progress') {
             currentStore.setProgress(msg.data)
           } else if (msg.event === 'chunk') {
-            if (useStreamStore.getState().progress === '准备生成环境...') {
-              currentStore.setProgress('')
-            }
             try {
               const data = JSON.parse(msg.data)
-              const sort = data.chapter_sort
-              
-              if (data.status === 'generating') {
-                currentStore.clearChapterError(sort)
-                currentStore.updateChapterStatus(sort, 'generating')
-                if (data.title) {
-                  currentStore.setCurrentChapterTitle(data.title)
-                }
-              } else if (data.status === 'progress') {
-                currentStore.setProgress(data.message)
-              } else if (data.status === 'streaming') {
-                currentStore.bufferChapterContent(sort, data.content)
-              } else if (data.status === 'completed') {
+              if (
+                data.status === 'completed' ||
+                data.status === 'error' ||
+                data.status === 'retrying'
+              ) {
                 currentStore.flushBufferedChapterContents()
-                currentStore.clearChapterError(sort)
-                currentStore.updateChapterStatus(sort, 'completed')
-              } else if (data.status === 'error') {
-                currentStore.flushBufferedChapterContents()
-                if (typeof data.message === 'string' && data.message.trim()) {
-                  currentStore.setChapterError(sort, data.message)
-                }
-                currentStore.updateChapterStatus(sort, 'error')
-              } else if (data.status === 'retrying') {
-                currentStore.flushBufferedChapterContents()
-                currentStore.clearChapterError(sort)
-                currentStore.updateChapterStatus(sort, 'pending')
               }
+              handleSeriesChunkMessage(
+                {
+                  ...currentStore,
+                  appendChapterContent: currentStore.bufferChapterContent,
+                },
+                msg.data,
+              )
             } catch {
-              // If it's not JSON, maybe it's just raw text (for single blog generation)
               currentStore.bufferContent(msg.data)
             }
           }
@@ -260,6 +267,7 @@ export const useSeriesGenerator = () => {
             currentStore.flushBufferedContent()
           }
           currentStore.setGenerating(false)
+          currentStore.setCurrentTaskId(null)
         },
         onerror(err) {
           const currentStore = useStreamStore.getState()
@@ -271,6 +279,7 @@ export const useSeriesGenerator = () => {
             currentStore.flushBufferedContent()
           }
           currentStore.setGenerating(false)
+          currentStore.setCurrentTaskId(null)
           if (err instanceof StopStreamError) {
             toast.error(err.message)
             throw err
@@ -279,10 +288,12 @@ export const useSeriesGenerator = () => {
         }
       })
     } catch (err) {
-      useStreamStore.getState().setGenerating(false)
+      const currentStore = useStreamStore.getState()
+      currentStore.setGenerating(false)
+      currentStore.setCurrentTaskId(null)
       throw err
     }
-  }, [fetchBlogs])
+  }, [finalizeGeneration])
 
   const generateSingle = useCallback(async (content: string) => {
     const store = useStreamStore.getState()
@@ -295,14 +306,12 @@ export const useSeriesGenerator = () => {
     }
     const ctrl = new AbortController()
     store.setAbortController(ctrl)
+    store.setCurrentTaskId(null)
     
     try {
-      await fetchEventSourceWithAuth('/api/v1/stream/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        signal: ctrl.signal,
-        openWhenHidden: true,
-        body: JSON.stringify(
+      const task = await createGenerationTask(
+        buildGenerationTaskRequest(
+          'generate_single',
           buildSingleGenerateRequest(
             content,
             store.scenarioMode,
@@ -310,16 +319,23 @@ export const useSeriesGenerator = () => {
             store.resolvedPromptProfile?.documentKind,
           ),
         ),
+      )
+      useStreamStore.getState().setCurrentTaskId(task.task_id)
+
+      await fetchEventSourceWithAuth(task.stream_url, {
+        method: 'GET',
+        signal: ctrl.signal,
+        openWhenHidden: true,
         async onopen(response) {
           if (response.ok && response.headers.get('content-type')?.startsWith('text/event-stream')) {
-            return;
+            return
           }
           if (response.headers.get('content-type')?.includes('application/json')) {
-            const data = await response.json();
-            throw new StopStreamError(data.message || data.error || '请求失败');
+            const data = await response.json()
+            throw new StopStreamError(data.message || data.error || '请求失败')
           }
-          const text = await response.text();
-          throw new StopStreamError(text || `请求失败: ${response.status} ${response.statusText}`);
+          const text = await response.text()
+          throw new StopStreamError(text || `请求失败: ${response.status} ${response.statusText}`)
         },
         onmessage(msg) {
           const currentStore = useStreamStore.getState()
@@ -327,7 +343,8 @@ export const useSeriesGenerator = () => {
             currentStore.flushBufferedContent()
             currentStore.setGenerating(false)
             currentStore.setProgress('生成完成')
-            fetchBlogs()
+            currentStore.setCurrentTaskId(null)
+            void fetchBlogs()
             return
           }
           
@@ -352,6 +369,7 @@ export const useSeriesGenerator = () => {
             currentStore.flushBufferedContent()
           }
           currentStore.setGenerating(false)
+          currentStore.setCurrentTaskId(null)
         },
         onerror(err) {
           const currentStore = useStreamStore.getState()
@@ -361,6 +379,7 @@ export const useSeriesGenerator = () => {
             currentStore.flushBufferedContent()
           }
           currentStore.setGenerating(false)
+          currentStore.setCurrentTaskId(null)
           if (err instanceof StopStreamError) {
             toast.error(err.message)
             throw err
@@ -369,7 +388,9 @@ export const useSeriesGenerator = () => {
         }
       })
     } catch (err) {
-      useStreamStore.getState().setGenerating(false)
+      const currentStore = useStreamStore.getState()
+      currentStore.setGenerating(false)
+      currentStore.setCurrentTaskId(null)
       throw err
     }
   }, [fetchBlogs])

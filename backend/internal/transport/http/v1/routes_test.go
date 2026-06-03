@@ -6,71 +6,88 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/require"
 )
 
-func TestRegister_PanicsWhenHandlerMissing(t *testing.T) {
+func TestRegisterParser_OnlyRegistersParseRoute(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-
 	r := gin.New()
-	authMiddleware := func(c *gin.Context) { c.Next() }
-	ok := func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) }
 
-	defer func() {
-		if recover() == nil {
-			t.Fatalf("expected panic when handlers are missing")
-		}
-	}()
-
-	Register(r, authMiddleware, Handlers{
-		Auth: AuthHandlers{
-			Register:      ok,
-			Login:         ok,
-			BindGithub:    ok,
-			GetCaptcha:    ok,
-			OAuthRedirect: ok,
-			OAuthCallback: ok,
-		},
-		User: UserHandlers{
-			GetProfile:    ok,
-			UpdateProfile: ok,
-			UploadAvatar:  ok,
-			GetUserStats:  ok,
-		},
-		Blog: BlogHandlers{
-			GetUserBlogs:           ok,
-			CreateDraftBlog:        ok,
-			BatchDeleteBlogs:       ok,
-			UpdateBlog:             ok,
-			ExportSeries:           ok,
-			ExportSeriesPDF:        ok,
-			ExportToObsidian:       ok,
-			ExportSeriesToObsidian: ok,
-			ContinueBlog:           ok,
-			PolishBlog:             ok,
-		},
-		Project: ProjectHandlers{
-			ScanGithubRepo: ok,
-			Analyze:        ok,
-			Parse:          ok,
-		},
-		Stream: StreamHandlers{
-			ScanStreamHandler:     ok,
-			AnalyzeStreamHandler:  ok,
-			GenerateStreamHandler: ok,
-		},
-		Review: ReviewHandlers{},
+	RegisterParser(r, func(c *gin.Context) { c.Next() }, ParserHandlers{
+		Parse: func(c *gin.Context) { c.Status(http.StatusOK) },
 	})
+
+	resp := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/project/parse", nil)
+	r.ServeHTTP(resp, req)
+	require.Equal(t, http.StatusOK, resp.Code)
+
+	resp = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/project/scan", nil)
+	r.ServeHTTP(resp, req)
+	require.Equal(t, http.StatusNotFound, resp.Code)
 }
 
-func TestRegister_RoutesAreReachable(t *testing.T) {
+func TestRegisterExport_OnlyRegistersExportRoutes(t *testing.T) {
 	gin.SetMode(gin.TestMode)
+	r := gin.New()
 
+	RegisterExport(r, func(c *gin.Context) { c.Next() }, ExportHandlers{
+		ExportSeries:           func(c *gin.Context) { c.Status(http.StatusOK) },
+		ExportSeriesPDF:        func(c *gin.Context) { c.Status(http.StatusOK) },
+		ExportToObsidian:       func(c *gin.Context) { c.Status(http.StatusOK) },
+		ExportSeriesToObsidian: func(c *gin.Context) { c.Status(http.StatusOK) },
+	})
+
+	resp := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/blogs/1/export", nil)
+	r.ServeHTTP(resp, req)
+	require.Equal(t, http.StatusOK, resp.Code)
+
+	resp = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/blogs", nil)
+	r.ServeHTTP(resp, req)
+	require.Equal(t, http.StatusNotFound, resp.Code)
+}
+
+func TestRegisterReview_RegistersReviewRoutes(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+
+	ok := func(c *gin.Context) { c.Status(http.StatusOK) }
+	RegisterReview(r, func(c *gin.Context) { c.Next() }, ReviewOnlyHandlers{
+		Review: ReviewHandlers{
+			GetTodayCard:  ok,
+			GetHistory:    ok,
+			PickRandom:    ok,
+			ListNotes:     ok,
+			CreateSession: ok,
+			GetSession:    ok,
+			Respond:       ok,
+			RequestHint:   ok,
+			Finish:        ok,
+		},
+	})
+
+	resp := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/review/today", nil)
+	r.ServeHTTP(resp, req)
+	require.Equal(t, http.StatusOK, resp.Code)
+
+	resp = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/blogs/1/export", nil)
+	r.ServeHTTP(resp, req)
+	require.Equal(t, http.StatusNotFound, resp.Code)
+}
+
+func TestRegisterCore_TaskRoutesAreReachable(t *testing.T) {
+	gin.SetMode(gin.TestMode)
 	r := gin.New()
 
 	authMiddleware := func(c *gin.Context) { c.Next() }
-	ok := func(c *gin.Context) { c.JSON(200, gin.H{"ok": true}) }
+	ok := func(c *gin.Context) { c.Status(http.StatusOK) }
 
-	Register(r, authMiddleware, Handlers{
+	RegisterCore(r, authMiddleware, CoreHandlers{
 		Auth: AuthHandlers{
 			Register:      ok,
 			Login:         ok,
@@ -87,38 +104,21 @@ func TestRegister_RoutesAreReachable(t *testing.T) {
 			GetPromptSettings:    ok,
 			UpdatePromptSettings: ok,
 		},
-		Blog: BlogHandlers{
-			GetUserBlogs:           ok,
-			CreateDraftBlog:        ok,
-			BatchDeleteBlogs:       ok,
-			UpdateBlog:             ok,
-			ExportSeries:           ok,
-			ExportSeriesPDF:        ok,
-			ExportToObsidian:       ok,
-			ExportSeriesToObsidian: ok,
-			ContinueBlog:           ok,
-			PolishBlog:             ok,
+		Blog: CoreBlogHandlers{
+			GetUserBlogs:     ok,
+			CreateDraftBlog:  ok,
+			BatchDeleteBlogs: ok,
+			UpdateBlog:       ok,
 		},
-		Project: ProjectHandlers{
+		Project: CoreProjectHandlers{
 			ScanGithubRepo: ok,
 			Analyze:        ok,
-			Parse:          ok,
 		},
-		Stream: StreamHandlers{
-			ScanStreamHandler:     ok,
-			AnalyzeStreamHandler:  ok,
-			GenerateStreamHandler: ok,
-		},
-		Review: ReviewHandlers{
-			GetTodayCard:  ok,
-			GetHistory:    ok,
-			PickRandom:    ok,
-			ListNotes:     ok,
-			CreateSession: ok,
-			GetSession:    ok,
-			Respond:       ok,
-			RequestHint:   ok,
-			Finish:        ok,
+		Task: TaskHandlers{
+			CreateGeneration: ok,
+			GetTask:          ok,
+			CancelTask:       ok,
+			StreamTask:       ok,
 		},
 	})
 
@@ -126,22 +126,14 @@ func TestRegister_RoutesAreReachable(t *testing.T) {
 		method string
 		path   string
 	}{
-		{http.MethodPost, "/api/v1/auth/login"},
-		{http.MethodGet, "/api/v1/user/profile"},
-		{http.MethodGet, "/api/v1/user/prompt-settings"},
-		{http.MethodPut, "/api/v1/user/prompt-settings"},
-		{http.MethodGet, "/api/v1/blogs"},
-		{http.MethodPost, "/api/v1/project/scan"},
-		{http.MethodPost, "/api/v1/stream/generate"},
-		{http.MethodGet, "/api/v1/review/today"},
-		{http.MethodGet, "/api/v1/review/history"},
-		{http.MethodPost, "/api/v1/review/sessions"},
+		{method: http.MethodPost, path: "/api/v1/tasks/generation"},
+		{method: http.MethodGet, path: "/api/v1/tasks/123e4567-e89b-12d3-a456-426614174000"},
+		{method: http.MethodPost, path: "/api/v1/tasks/123e4567-e89b-12d3-a456-426614174000/cancel"},
+		{method: http.MethodGet, path: "/api/v1/tasks/123e4567-e89b-12d3-a456-426614174000/stream"},
 	} {
 		req := httptest.NewRequest(tc.method, tc.path, nil)
-		w := httptest.NewRecorder()
-		r.ServeHTTP(w, req)
-		if w.Code != http.StatusOK {
-			t.Fatalf("%s %s expected 200, got %d", tc.method, tc.path, w.Code)
-		}
+		resp := httptest.NewRecorder()
+		r.ServeHTTP(resp, req)
+		require.Equal(t, http.StatusOK, resp.Code)
 	}
 }

@@ -2,9 +2,12 @@ name: inkwords
 
 services:
   obsidian-bridge:
-    image: alpine/socat:1.8.0.0-r0
+    image: alpine:3.19
     container_name: inkwords-obsidian-bridge
-    command: ["-d", "-d", "TCP-LISTEN:27125,fork,reuseaddr", "TCP:host.docker.internal:27124"]
+    command:
+      - /bin/sh
+      - -c
+      - apk add --no-cache socat && socat -d -d TCP-LISTEN:27125,fork,reuseaddr TCP:host.docker.internal:27124
     extra_hosts:
       - "host.docker.internal:host-gateway"
     expose:
@@ -24,6 +27,7 @@ services:
       - "5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./backend/db/init:/docker-entrypoint-initdb.d:ro
     networks:
       - inkwords-network
     restart: unless-stopped
@@ -33,11 +37,22 @@ services:
       timeout: 5s
       retries: 5
 
-  backend:
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: inkwords-rabbitmq
+    expose:
+      - "5672"
+      - "15672"
+    networks:
+      - inkwords-network
+    restart: unless-stopped
+
+  core-api:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: inkwords-backend
+    container_name: inkwords-core-api
+    command: ["./core-api"]
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-inkwords}:${POSTGRES_PASSWORD:-inkwords_password}@db:5432/${POSTGRES_DB:-inkwords_db}?sslmode=disable
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
@@ -52,6 +67,9 @@ services:
       OBSIDIAN_WIKI_DIR: ${OBSIDIAN_WIKI_DIR:-wiki}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-}
+      RABBITMQ_URL: ${RABBITMQ_URL:-amqp://guest:guest@rabbitmq:5672/}
+      RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-inkwords.events}
+      RABBITMQ_GENERATION_QUEUE: ${RABBITMQ_GENERATION_QUEUE:-inkwords.generation}
       JWT_SECRET: ${JWT_SECRET:-}
       GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
@@ -69,6 +87,119 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+      rabbitmq:
+        condition: service_started
+      obsidian-bridge:
+        condition: service_started
+    networks:
+      - inkwords-network
+    restart: unless-stopped
+
+  llm-stream:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: inkwords-llm-stream
+    command: ["./llm-stream"]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-inkwords}:${POSTGRES_PASSWORD:-inkwords_password}@db:5432/${POSTGRES_DB:-inkwords_db}?sslmode=disable
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-}
+      RABBITMQ_URL: ${RABBITMQ_URL:-amqp://guest:guest@rabbitmq:5672/}
+      RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-inkwords.events}
+      RABBITMQ_GENERATION_QUEUE: ${RABBITMQ_GENERATION_QUEUE:-inkwords.generation}
+      JWT_SECRET: ${JWT_SECRET:-}
+    expose:
+      - "8080"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    networks:
+      - inkwords-network
+    restart: unless-stopped
+
+  parser-service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: inkwords-parser-service
+    command: ["./parser-service"]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-inkwords}:${POSTGRES_PASSWORD:-inkwords_password}@db:5432/${POSTGRES_DB:-inkwords_db}?sslmode=disable
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      JWT_SECRET: ${JWT_SECRET:-}
+    expose:
+      - "8080"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - inkwords-network
+    restart: unless-stopped
+
+  export-service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: inkwords-export-service
+    command: ["./export-service"]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-inkwords}:${POSTGRES_PASSWORD:-inkwords_password}@db:5432/${POSTGRES_DB:-inkwords_db}?sslmode=disable
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
+      OBSIDIAN_REST_API_BASE_URL: ${OBSIDIAN_REST_API_BASE_URL:-https://obsidian-bridge:27125}
+      OBSIDIAN_REST_API_KEY: ${OBSIDIAN_REST_API_KEY:-}
+      OBSIDIAN_REST_API_CERT_PATH: ${OBSIDIAN_REST_API_CERT_PATH:-}
+      OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY: ${OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY:-}
+      OBSIDIAN_WIKI_DIR: ${OBSIDIAN_WIKI_DIR:-wiki}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-}
+      JWT_SECRET: ${JWT_SECRET:-}
+    expose:
+      - "8080"
+    volumes:
+      - type: bind
+        source: ${OBSIDIAN_VAULT_PATH:?Set OBSIDIAN_VAULT_PATH in backend/.env (used with --env-file) or your shell environment}
+        target: /app/obsidian
+    depends_on:
+      db:
+        condition: service_healthy
+      obsidian-bridge:
+        condition: service_started
+    networks:
+      - inkwords-network
+    restart: unless-stopped
+
+  review-service:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: inkwords-review-service
+    command: ["./review-service"]
+    environment:
+      REVIEW_DATABASE_URL: postgres://${POSTGRES_USER:-inkwords}:${POSTGRES_PASSWORD:-inkwords_password}@db:5432/inkwords_review_db?sslmode=disable
+      OBSIDIAN_REST_API_BASE_URL: ${OBSIDIAN_REST_API_BASE_URL:-https://obsidian-bridge:27125}
+      OBSIDIAN_REST_API_KEY: ${OBSIDIAN_REST_API_KEY:-}
+      OBSIDIAN_REST_API_CERT_PATH: ${OBSIDIAN_REST_API_CERT_PATH:-}
+      OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY: ${OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY:-}
+      OBSIDIAN_WIKI_DIR: ${OBSIDIAN_WIKI_DIR:-wiki}
+      JWT_SECRET: ${JWT_SECRET:-}
+    expose:
+      - "8080"
+    volumes:
+      - type: bind
+        source: ${OBSIDIAN_VAULT_PATH:?Set OBSIDIAN_VAULT_PATH in backend/.env (used with --env-file) or your shell environment}
+        target: /app/obsidian
+    depends_on:
+      db:
+        condition: service_healthy
       obsidian-bridge:
         condition: service_started
     networks:
@@ -96,7 +227,8 @@ services:
     ports:
       - "80:80"
     depends_on:
-      - backend
+      - core-api
+      - llm-stream
     networks:
       - inkwords-network
     restart: unless-stopped
