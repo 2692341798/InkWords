@@ -15,11 +15,14 @@ RUN go mod download
 
 # 复制源码并构建
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o core-api ./cmd/core-api
-RUN CGO_ENABLED=0 GOOS=linux go build -o llm-stream ./cmd/llm-stream
-RUN CGO_ENABLED=0 GOOS=linux go build -o parser-service ./cmd/parser-service
-RUN CGO_ENABLED=0 GOOS=linux go build -o export-service ./cmd/export-service
-RUN CGO_ENABLED=0 GOOS=linux go build -o review-service ./cmd/review-service
+
+# Why: Phase 1 先把 review/parser/export 三个服务的编译入口切到 service-owned 目录，
+# 保持镜像产物名称不变，便于后续逐步迁移领域实现而不打断现有 Compose 命令约定。
+RUN CGO_ENABLED=0 GOOS=linux go build -o core-api ./cmd/core-api && \
+    CGO_ENABLED=0 GOOS=linux go build -o llm-stream ./cmd/llm-stream && \
+    CGO_ENABLED=0 GOOS=linux go build -o parser-service ./services/parser-service/cmd && \
+    CGO_ENABLED=0 GOOS=linux go build -o export-service ./services/export-service/cmd && \
+    CGO_ENABLED=0 GOOS=linux go build -o review-service ./services/review-service/cmd
 
 # Stage 2: Runtime
 FROM alpine:3.19
