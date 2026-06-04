@@ -1,6 +1,20 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 100：执行 Task 3，收口 GeneratorService 的显式 persistence 接口
+- **用户需求**：用户要求直接按既定 `Task3` 执行，用测试先行把 `GeneratorService` 对 `blogs / users` 的直接写入抽成显式 persistence 接口；允许修改 `generator.go`、相关测试和新增 persistence 文件，并同步必要文档，但不得触碰未跟踪的 `docs/superpowers` 历史计划设计文件。
+- **AI 动作**：
+  1. 先核对 `backend/internal/service/generator.go`、`generator_persist_test.go` 与相关文档，确认当前 `saveToDB()` 仍直接通过全局 `db.DB` 事务写 `blogs` 并累计 `users.tokens_used`。
+  2. 按 TDD 先在 `generator_persist_test.go` 增加红灯测试，锁定“`saveToDB()` 必须委托给注入的 persistence，而不是直接依赖全局数据库”的目标行为；首次运行因缺少显式 persistence API 而失败。
+  3. 新增 `generator_persistence.go`，定义 `GeneratedBlogPersistence`/`GeneratedBlogPersistenceInput` 与默认 GORM 适配器；随后把 `GeneratorService` 改为持有显式 `persistence` 依赖，并新增 `NewGeneratorServiceWithPersistence()` 供测试与后续 DI 使用。
+  4. 保持 legacy 运行行为不变：`saveToDB()` 仍负责技术栈抽取，但最终只提交持久化输入，由 persistence 适配器统一处理事务写入；完成后同步更新 README、架构/数据库/开发日志/Runbook 文档。
+- **决策/变更**：
+  - 本轮没有直接删除 legacy GORM 落库逻辑，而是先把它包进显式 persistence 适配器，原因是当前 `core-api` 最终事实回收仍处于过渡阶段，需要保留最小回滚面。
+  - `GeneratorService` 的边界收口优先于 `DecompositionService`，因为单篇生成链路更集中、更适合作为后续系列链路收口模板。
+- **验证**：
+  - `cd backend && go test ./internal/service -run TestGeneratorService_saveToDB_UsesInjectedPersistence` 先失败、补实现后通过
+  - `cd backend && go test ./internal/service -run 'TestGeneratorService_saveToDB_UsesInjectedPersistence|TestGeneratorService_saveToDB_RollsBackWhenUserTokenUpdateFails|TestGeneratorService_saveToDB_PersistsBlogAndUpdatesTokens|TestGenerateBlogStream_DoesNotPersistBlogDirectlyWhenTaskModeEnabled|TestBuildSingleGenerateMessages_UsesResolvedPromptProfileRole'` 通过
+
 ### 对话 99：执行 `core-api / llm-stream` 深拆分第一轮
 - **用户需求**：用户要求根据 `docs/superpowers/plans/2026-06-04-core-api-llm-stream-deep-split.md` 直接执行，实现 `core-api / llm-stream` 的服务自有入口迁移，并开始把 `llm-stream` 的业务写库边界收紧到任务表。
 - **AI 动作**：

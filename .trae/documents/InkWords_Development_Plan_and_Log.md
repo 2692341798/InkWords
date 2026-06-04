@@ -1,6 +1,19 @@
 # 墨言知识训练平台 (InkWords Trainer) - 开发计划与日志
 > **目标**：跟踪项目的核心开发模块、里程碑进度以及每日开发记录。
 
+### [2026-06-04] Refactor - Task 3 收口 GeneratorService 的显式 persistence 边界
+- **需求背景**：
+  1. 用户要求按既定 `Task3` 继续执行，用测试先行把 `GeneratorService` 对 `blogs / users` 的直接写入抽成显式 persistence 接口。
+  2. 本轮只允许最小改动：可修改 `generator.go`、相关测试与新增 persistence 文件，并同步必要文档；不触碰未跟踪的 `docs/superpowers` 历史计划设计文件。
+- **本次完成**：
+  1. 按 TDD 先在 `backend/internal/service/generator_persist_test.go` 增加失败测试，锁定“`saveToDB()` 必须通过注入的 persistence 落库，而不是直接依赖全局数据库”的新契约。
+  2. 新增 `backend/internal/service/generator_persistence.go`，定义 `GeneratedBlogPersistence` 与 `GeneratedBlogPersistenceInput`，并提供默认 GORM 适配器，继续负责事务内创建 `blogs` 与累计 `users.tokens_used`。
+  3. 调整 `backend/internal/service/generator.go`：`GeneratorService` 新增显式 `persistence` 依赖，新增 `NewGeneratorServiceWithPersistence()`，`saveToDB()` 改为只负责提取技术栈和组装业务事实，再委托给 persistence 接口。
+  4. 同步更新 `README.md`、`InkWords_Architecture.md`、`InkWords_Database.md`、`InkWords_Conversation_Log.md` 与 `docs/runbooks/core-blog-task-boundary.md`，明确 `GeneratorService` 已从直接全局 `db.DB` 写入收口到显式边界，`decomposition_generate*.go` 仍是下一批待收口对象。
+- **验证记录**：
+  - `cd backend && go test ./internal/service -run TestGeneratorService_saveToDB_UsesInjectedPersistence` 先失败（缺少显式 persistence API），补实现后通过
+  - `cd backend && go test ./internal/service -run 'TestGeneratorService_saveToDB_UsesInjectedPersistence|TestGeneratorService_saveToDB_RollsBackWhenUserTokenUpdateFails|TestGeneratorService_saveToDB_PersistsBlogAndUpdatesTokens|TestGenerateBlogStream_DoesNotPersistBlogDirectlyWhenTaskModeEnabled|TestBuildSingleGenerateMessages_UsesResolvedPromptProfileRole'` 通过
+
 ### [2026-06-04] Refactor - Core-API / LLM-Stream 深拆分第一轮执行
 - **需求背景**：
   1. 用户要求按 `docs/superpowers/plans/2026-06-04-core-api-llm-stream-deep-split.md` 执行，把 `core-api` 与 `llm-stream` 从“共享业务核心 + 独立入口”继续收口为服务自有 `bootstrap/routes/cmd` 结构，并开始收紧 `llm-stream` 对 `blogs / users` 的直接写入。

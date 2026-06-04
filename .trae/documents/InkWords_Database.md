@@ -1,9 +1,10 @@
 # 墨言知识训练平台 (InkWords Trainer) - 数据库设计文档
 
 ## 0. 变更记录
+- 2026-06-04：Task 3 将 `GeneratorService` 的最终落库改为通过显式 `GeneratedBlogPersistence` 接口完成，默认 GORM 适配器仍在同一事务中创建 `blogs` 记录并累计 `users.tokens_used`。本次不新增表、字段、索引或迁移，但数据库写入边界从“service 直接拿全局 `db.DB`”收紧为“service 产出业务事实，再交给 persistence 适配器落库”。
 - 2026-06-04：Phase 2 执行 `core-api / llm-stream` 深层拆分第一轮。数据库表结构、索引与迁移保持不变，但服务写入边界进一步收紧：`core-api` 新增 `ResultPersister` 抽象，作为后续把任务结果落回 `blogs` 与累计 `users.tokens_used` 的服务自有承载点；同时新增 `INKWORDS_TASK_PERSISTENCE_MODE=task_only` 运行开关，让 legacy `generator / decomposition` 在显式开启时停止直接写 `blogs / users`，为最终把业务事实回收至 `core-api` 做过渡。
 - 2026-06-04：Task 4 将 `export-service` 的导出适配器、consumer、artifact store 与启动装配迁入 `backend/services/export-service/` 服务自有目录；本次不新增数据库表、字段、索引或迁移，`job_tasks / job_task_events` 的跨服务受控写入边界保持不变。
-- 2026-06-03：Task 4 补齐数据库层面的“服务写入归属矩阵”。明确 `core-api` 事实拥有 `users / oauth_tokens / user_prompt_settings / blogs / job_tasks / job_task_events`，`review-service` 事实拥有 `review_sessions / review_turns`；同时记录当前允许的跨服务例外仅限 worker 通过 `task` 领域接口写 `job_tasks / job_task_events`，并把 `GeneratorService / DecompositionService` 仍直接使用全局 `db.DB` 写 `blogs / users` 记为待收口技术债。
+- 2026-06-03：Task 4 补齐数据库层面的“服务写入归属矩阵”。明确 `core-api` 事实拥有 `users / oauth_tokens / user_prompt_settings / blogs / job_tasks / job_task_events`，`review-service` 事实拥有 `review_sessions / review_turns`；同时记录当前允许的跨服务例外仅限 worker 通过 `task` 领域接口写 `job_tasks / job_task_events`。其中 `GeneratorService` 已进一步收口到显式 `GeneratedBlogPersistence` 接口，`DecompositionService` 仍是待收口技术债。
 - 2026-06-03：生成链路进入 RabbitMQ 任务式 SSE Phase B。核心库新增 `job_tasks` 与 `job_task_events` 两张表，分别存储任务主状态与可回放事件流；RabbitMQ 仅负责跨服务投递，不承载最终状态，任务真实状态仍以 PostgreSQL 为准。
 - 2026-06-03：Docker 微服务化 Phase 2（已落地到代码与编排）。同一 Postgres 实例新增 review 独立 database：`inkwords_review_db`；`review-service` 使用 `REVIEW_DATABASE_URL` 连接；review 数据迁移与回滚按 Runbook 执行：[review-db-migration.md](file:///Users/huangqijun/Documents/%E5%A2%A8%E8%A8%80%E5%8D%9A%E5%AE%A2%E5%8A%A9%E6%89%8B/InkWords/docs/runbooks/review-db-migration.md)。本次不新增/不修改任何表字段表格（仅补充说明与引用）。
 - 2026-06-03：稳定性与工程化优化（Task 1-5）。本次不新增数据库表、字段或索引；主要变更为：系列生成链路补齐“前置草稿创建/清理 + 章节完成落库 + `users.tokens_used` 累加”的事务边界与可观测错误，避免章节正文写入成功但 Token 记账静默失败的状态不一致。
@@ -214,9 +215,9 @@
 - 敏感数据如密码，在存入数据库之前必须经过 `golang.org/x/crypto/bcrypt` 进行哈希加密。
 
 ### 4.1 当前待收口写点（Task 4 扫描结论）
-- `backend/internal/service/generator.go`：仍直接通过全局 `db.DB` 事务写 `blogs` 与 `users.tokens_used`。
+- `backend/internal/service/generator.go`：已不再直接操作全局 `db.DB`，而是通过 `GeneratedBlogPersistence` 显式接口提交 `blogs` 与 `users.tokens_used` 的持久化请求；默认 GORM 适配器位于 `backend/internal/service/generator_persistence.go`。
 - `backend/internal/service/decomposition_generate.go`、`decomposition_generate_intro.go`、`decomposition_generate_continue.go`、`decomposition_generate_persistence.go`：仍直接通过全局 `db.DB` 写系列父博客、章节草稿、续写正文和失败状态。
-- 这些写点虽然没有跨服务越权，但它们绕过了 `domain/blog` 的仓储边界；在推进独立实例拆分前，需要先收口到显式 repository / service 接口。
+- `GeneratorService` 已完成第一步边界收口；其余写点虽然没有跨服务越权，但仍绕过了 `domain/blog` 的仓储边界；在推进独立实例拆分前，需要继续收口到显式 repository / service 接口。
 
 ## 5. 外部数据持久化 (External Persistence)
 - **Obsidian 本地知识库导出**: 除关系型数据库外，系统支持将 `blogs` 表中的结构化数据导出为纯文本的 Markdown 文件，并在文件头部自动生成兼容 Karpathy LLM Wiki Pattern 的 YAML Frontmatter。导出支持两种形态：

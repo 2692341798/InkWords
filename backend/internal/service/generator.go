@@ -11,26 +11,38 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/datatypes"
-	"gorm.io/gorm"
 
 	"inkwords-backend/internal/infra/db"
 	"inkwords-backend/internal/infra/llm"
-	"inkwords-backend/internal/model"
 	"inkwords-backend/internal/prompt"
 )
 
 // GeneratorService handles the blog generation process
 type GeneratorService struct {
-	llmClient *llm.DeepSeekClient
-	promptReq *PromptRequirementsService
+	llmClient   *llm.DeepSeekClient
+	promptReq   *PromptRequirementsService
+	persistence GeneratedBlogPersistence
 }
 
 // NewGeneratorService creates a new generator service
 func NewGeneratorService(promptReq *PromptRequirementsService) *GeneratorService {
+	return NewGeneratorServiceWithPersistence(promptReq, nil)
+}
+
+// NewGeneratorServiceWithPersistence creates a generator service with an
+// explicit persistence dependency for final generated blog writes.
+func NewGeneratorServiceWithPersistence(
+	promptReq *PromptRequirementsService,
+	persistence GeneratedBlogPersistence,
+) *GeneratorService {
 	apiKey := os.Getenv("DEEPSEEK_API_KEY")
+	if persistence == nil {
+		persistence = newDatabaseGeneratedBlogPersistence(db.DB)
+	}
 	return &GeneratorService{
-		llmClient: llm.NewDeepSeekClient(apiKey),
-		promptReq: promptReq,
+		llmClient:   llm.NewDeepSeekClient(apiKey),
+		promptReq:   promptReq,
+		persistence: persistence,
 	}
 }
 
@@ -355,13 +367,7 @@ func taskOnlyPersistenceMode() bool {
 
 // saveToDB persists the generated blog content to the database
 func (s *GeneratorService) saveToDB(ctx context.Context, userID uuid.UUID, sourceType string, content string) error {
-	if db.DB == nil {
-		return fmt.Errorf("persist generated blog: database not configured")
-	}
-
 	title := "文件解析生成的博客"
-
-	// Calculate word count
 	wordCount := len([]rune(content))
 
 	// Extract Tech Stacks using LLM
@@ -386,37 +392,21 @@ func (s *GeneratorService) saveToDB(ctx context.Context, userID uuid.UUID, sourc
 		}
 	}
 
-	blog := &model.Blog{
-		UserID:      userID,
-		Title:       title,
-		Content:     content,
-		SourceType:  sourceType,
-		Status:      1, // completed
-		ChapterSort: 1,
-		WordCount:   wordCount,
-		TechStacks:  techStacks,
+	persistence := s.persistence
+	if persistence == nil {
+		persistence = newDatabaseGeneratedBlogPersistence(db.DB)
 	}
 
-	// Why: persisting the generated blog and its token accounting must stay consistent.
-	// A transaction avoids silently storing a blog row while skipping the quota update.
-	estimatedTokens := len([]rune(content)) * 2
-	if err := db.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(blog).Error; err != nil {
-			return fmt.Errorf("create blog record: %w", err)
-		}
+	input := GeneratedBlogPersistenceInput{
+		UserID:     userID,
+		Title:      title,
+		Content:    content,
+		SourceType: sourceType,
+		WordCount:  wordCount,
+		TechStacks: techStacks,
+	}
 
-		tokenUpdateResult := tx.Model(&model.User{}).
-			Where("id = ?", userID).
-			UpdateColumn("tokens_used", gorm.Expr("tokens_used + ?", estimatedTokens))
-		if tokenUpdateResult.Error != nil {
-			return fmt.Errorf("update user tokens: %w", tokenUpdateResult.Error)
-		}
-		if tokenUpdateResult.RowsAffected == 0 {
-			return fmt.Errorf("update user tokens: user not found")
-		}
-
-		return nil
-	}); err != nil {
+	if err := persistence.SaveGeneratedBlog(ctx, input); err != nil {
 		return fmt.Errorf("persist generated blog: %w", err)
 	}
 
