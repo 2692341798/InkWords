@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - 产品需求文档 (PRD)
 
 ## 0. 变更记录
+- 2026-06-04：Phase 2 执行 `core-api / llm-stream` 深层拆分第一轮。本次不新增用户可见产品功能，但把“生成任务由 `core-api` 负责业务事实落库、`llm-stream` 聚焦流式执行与任务表写入”正式收口为产品运行约束；系统仍保持 `http://localhost` 单入口、`/api/*` 路径不变，并保留旧 `/api/v1/stream/*` 与 `/api/v1/blogs/:id/(continue|polish)` 作为紧急回滚路径。
 - 2026-06-04：Task 4 完成 `export-service` 代码目录归属迁移。`export-service` 的启动装配、私有路由、consumer 与导出产物 store 迁入 `backend/services/export-service/`；本次不新增产品功能，不改变导出链路、对外 API、任务交互或数据库结构。
 - 2026-06-03：任务中心从“仅生成链路任务化”扩展到“生成 + 解析 + PDF 导出”三类后台任务。系统在保持 `http://localhost` 单入口不变的前提下，新增解析任务创建、PDF 导出任务创建与导出文件受控下载能力；其中 `.zip` 课件包与 `50MB` 以上普通单文件默认走任务式解析，系列 PDF 导出改为“创建任务 -> 等待完成 -> 下载产物”。
 - 2026-06-03：生成链路升级为“任务式 SSE 第一阶段”。在不改变 `http://localhost` 单入口与 `/api/*` 对外路径的前提下，新增 RabbitMQ 支撑的生成任务流：前端生成时需先创建任务，再订阅任务流；后端需提供任务创建、查询、取消与 SSE 订阅接口，并由生成服务异步消费任务、持续回写状态与正文 chunk。当前阶段仅覆盖生成链路，不要求 parser/export/review 同步任务化。

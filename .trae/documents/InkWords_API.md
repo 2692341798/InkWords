@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - API 接口文档
 
 ## 0. 变更记录
+- 2026-06-04：Phase 2 执行 `core-api / llm-stream` 深层拆分第一轮。对外 API 路由、请求/响应字段与 `http://localhost` 单入口保持不变，但 `core-api` 与 `llm-stream` 的主 HTTP 装配已分别迁入 `backend/services/core-api/` 与 `backend/services/llm-stream/` 的服务自有 `bootstrap/routes/cmd`；共享 `internal/transport/http/v1/routes.go` 与 `internal/transport/http/v1/api/stream_api.go` 仅保留为过渡兼容层。另新增 `INKWORDS_TASK_PERSISTENCE_MODE=task_only` 运行开关，用于在拆分阶段控制 legacy 生成链路不再由 `llm-stream` 直接把最终结果写入 `blogs / users`。
 - 2026-06-04：Task 4 将 `export-service` 的启动装配、私有路由、RabbitMQ consumer 与导出产物 store 收口到 `backend/services/export-service/` 服务自有目录；本次仅调整代码归属与服务入口组织，对外导出 API、任务接口、下载协议、请求/响应字段与数据库结构均保持不变。
 - 2026-06-03：Task 6 继续推进 `parser-service` 异步化。`POST /api/v1/tasks/parse` 仍由 `core-api` 创建 `parse_file / parse_archive` 任务并发布到 RabbitMQ `parse.requested`；`parser-service` 作为 parse worker 消费任务并把结果回写到 `job_tasks`。前端当前对 `.zip` 课件包和 `50MB` 以上普通单文件默认走任务式解析，`50MB` 及以下普通单文件仍保留 `/api/v1/project/parse` 作为同步兼容路径。
 - 2026-06-03：Task 3 为 `core-api / llm-stream / parser-service / export-service / review-service` 补齐统一运行契约。各服务新增 `GET /health`（进程存活）与 `GET /ready`（依赖就绪）端点，并继续保留 `GET /api/v1/ping` 兼容检查；请求链路统一注入/透传 `X-Request-ID`，服务端访问日志统一输出 `service / request_id / path / method / status / latency_ms` 结构化字段。Docker Compose 同步为五个后端服务与前端增加 healthcheck，前端依赖改为等待各后端 `healthy` 后再启动。

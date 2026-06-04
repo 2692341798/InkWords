@@ -28,21 +28,21 @@ func init() {
 }
 
 func main() {
-	router, taskDomainService, streamDomainService, err := bootstrap.BuildRouter()
+	router, taskService, streamService, err := bootstrap.BuildRouter()
 	if err != nil {
 		log.Fatalf("bootstrap llm-stream failed: %v", err)
 	}
 
+	server := httpx.NewServer(router)
 	signalContext, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	stopConsumer, err := startGenerationTaskConsumer(signalContext, taskDomainService, streamDomainService)
+	stopConsumer, err := startGenerationTaskConsumer(signalContext, taskService, streamService)
 	if err != nil {
 		log.Printf("RabbitMQ generation consumer initialization skipped: %v", err)
 	}
 	defer stopConsumer()
 
-	server := httpx.NewServer(router)
 	go func() {
 		if err := httpx.ShutdownOnContextDone(signalContext, server, 15*time.Second); err != nil {
 			log.Printf("Server shutdown failed: %v", err)

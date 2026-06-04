@@ -122,7 +122,8 @@ type Handlers struct {
 	Review  ReviewHandlers
 }
 
-// RegisterCore wires the default core-api surface, including task-based generation routes.
+// Deprecated: core-api now owns its primary HTTP surface in services/core-api/transport/http/v1.
+// RegisterCore remains only as a transitional compatibility layer for shared transport tests and rollback.
 func RegisterCore(r *gin.Engine, authMiddleware gin.HandlerFunc, handlers CoreHandlers) {
 	if authMiddleware == nil {
 		panic("missing middleware: authMiddleware")
@@ -244,7 +245,8 @@ func RegisterReview(r *gin.Engine, authMiddleware gin.HandlerFunc, handlers Revi
 	}
 }
 
-// RegisterStream wires legacy direct SSE routes so operators still have a rollback path.
+// Deprecated: llm-stream now owns its primary HTTP surface in services/llm-stream/transport/http/v1.
+// RegisterStream remains only as a transitional compatibility layer for rollback and shared transport tests.
 func RegisterStream(r *gin.Engine, authMiddleware gin.HandlerFunc, handlers StreamOnlyHandlers) {
 	if authMiddleware == nil {
 		panic("missing middleware: authMiddleware")

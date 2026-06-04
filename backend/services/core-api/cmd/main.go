@@ -11,7 +11,6 @@ import (
 
 	"github.com/joho/godotenv"
 
-	taskdomain "inkwords-backend/internal/domain/task"
 	"inkwords-backend/services/core-api/app/bootstrap"
 	"inkwords-backend/shared/kernel/httpx"
 )
@@ -42,8 +41,4 @@ func main() {
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatalf("Server startup failed: %v", err)
 	}
-}
-
-func initTaskPublisherFromEnv(factory func(string, string) (taskdomain.Publisher, func(), error)) (taskdomain.Publisher, func(), error) {
-	return bootstrap.InitTaskPublisherFromEnv(factory)
 }

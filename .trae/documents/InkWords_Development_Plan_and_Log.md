@@ -1,6 +1,31 @@
 # 墨言知识训练平台 (InkWords Trainer) - 开发计划与日志
 > **目标**：跟踪项目的核心开发模块、里程碑进度以及每日开发记录。
 
+### [2026-06-04] Refactor - Core-API / LLM-Stream 深拆分第一轮执行
+- **需求背景**：
+  1. 用户要求按 `docs/superpowers/plans/2026-06-04-core-api-llm-stream-deep-split.md` 执行，把 `core-api` 与 `llm-stream` 从“共享业务核心 + 独立入口”继续收口为服务自有 `bootstrap/routes/cmd` 结构，并开始收紧 `llm-stream` 对 `blogs / users` 的直接写入。
+  2. 运行约束保持不变：必须继续通过 `http://localhost` 单入口访问，`/api/*` 路径不变，最终必须通过 `go test ./... -count=1` 与 Compose 冒烟。
+- **本次完成**：
+  1. 按 TDD 分别新增 `backend/services/core-api/transport/http/v1/routes_test.go` 与 `backend/services/llm-stream/transport/http/v1/routes_test.go`，先锁定服务自有私有路由，再补齐 `services/core-api/**` 与 `services/llm-stream/**` 下的 `app/bootstrap`、`transport/http/v1`、`cmd`。
+  2. 将 `backend/cmd/core-api/main.go` 与 `backend/cmd/llm-stream/main.go` 改为复用新的服务自有 bootstrap；`backend/Dockerfile` 也切换为从 `./services/core-api/cmd` 与 `./services/llm-stream/cmd` 构建二进制。
+  3. 新增 `backend/services/llm-stream/domain/generation/` 包骨架，作为后续把 `generator / decomposition` 迁入 `llm-stream` 服务目录的承载点。
+  4. 新增 `backend/services/core-api/domain/task/result_persister.go`，固定“最终业务事实由 core-api 落库”的持久化边界。
+  5. 在 `backend/internal/service/generator.go`、`decomposition_generate_continue.go`、`decomposition_generate_persistence.go` 引入 `INKWORDS_TASK_PERSISTENCE_MODE=task_only` 开关，允许在显式开启时跳过 `llm-stream` 对 `blogs / users` 的直接写入。
+  6. 将共享 `backend/internal/transport/http/v1/routes.go` 与 `backend/internal/transport/http/v1/api/stream_api.go` 标记为过渡兼容层，并同步更新架构/API/数据库/PRD/README。
+- **验证记录**：
+  - `cd backend && go test ./services/core-api/transport/http/v1 -run TestRegisterCoreRoutes_RegistersCoreServiceSurface -v` 通过
+  - `cd backend && go test ./services/core-api/... ./cmd/core-api/...` 通过
+  - `cd backend && go test ./services/llm-stream/transport/http/v1 -run TestRegisterStreamRoutes_RegistersLegacyStreamEndpoints -v` 通过
+  - `cd backend && go test ./services/llm-stream/... ./cmd/llm-stream/...` 通过
+  - `cd backend && go test ./services/llm-stream/domain/generation ./internal/domain/stream/... -v` 通过
+  - `cd backend && go test ./services/core-api/domain/task -run TestResultPersister_PersistsGenerationResultToBlogRepository -v` 通过
+  - `cd backend && go test ./internal/service -run 'TestGenerateBlogStream_DoesNotPersistBlogDirectlyWhenTaskModeEnabled|Persist' -v` 通过
+  - `cd backend && go test ./... -count=1` 通过
+  - `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build` 通过
+  - `docker compose --env-file backend/.env ps` 显示 `core-api / llm-stream / parser-service / export-service / review-service / frontend` 均为 `healthy`
+  - `curl -I http://localhost` 返回 `HTTP/1.1 200 OK`
+  - `curl -sS http://localhost/api/v1/ping` 返回 `{"code":200,"data":null,"message":"pong"}`
+
 ### [2026-06-04] Chore - Task 6 文档同步与最终 Compose 冒烟收尾
 - **需求背景**：
   1. 用户要求在不修改计划/设计文档的前提下，围绕 Phase 1 已完成的 `review-service`、`parser-service`、`export-service` 服务目录迁移，同步架构/日志/README/runbook 等交付文档。

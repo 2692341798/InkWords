@@ -16,10 +16,9 @@ RUN go mod download
 # 复制源码并构建
 COPY . .
 
-# Why: Phase 1 先把 review/parser/export 三个服务的编译入口切到 service-owned 目录，
-# 保持镜像产物名称不变，便于后续逐步迁移领域实现而不打断现有 Compose 命令约定。
-RUN CGO_ENABLED=0 GOOS=linux go build -o core-api ./cmd/core-api && \
-    CGO_ENABLED=0 GOOS=linux go build -o llm-stream ./cmd/llm-stream && \
+# Why: core-api 也开始切到 service-owned 入口，保持镜像产物名称不变，避免影响 Compose 运行契约。
+RUN CGO_ENABLED=0 GOOS=linux go build -o core-api ./services/core-api/cmd && \
+    CGO_ENABLED=0 GOOS=linux go build -o llm-stream ./services/llm-stream/cmd && \
     CGO_ENABLED=0 GOOS=linux go build -o parser-service ./services/parser-service/cmd && \
     CGO_ENABLED=0 GOOS=linux go build -o export-service ./services/export-service/cmd && \
     CGO_ENABLED=0 GOOS=linux go build -o review-service ./services/review-service/cmd

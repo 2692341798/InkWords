@@ -1,6 +1,25 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 99：执行 `core-api / llm-stream` 深拆分第一轮
+- **用户需求**：用户要求根据 `docs/superpowers/plans/2026-06-04-core-api-llm-stream-deep-split.md` 直接执行，实现 `core-api / llm-stream` 的服务自有入口迁移，并开始把 `llm-stream` 的业务写库边界收紧到任务表。
+- **AI 动作**：
+  1. 先完成知识库 Query，回读 `[[InkWords 生产形态：多服务与聚合入口]]`、`[[微服务冒烟检查与 CI 前置]]` 等页面，再结合仓库文档确认本轮必须保持 `http://localhost` 单入口、`/api/*` 路径不变，并以 Compose 冒烟作为最终验证。
+  2. 只读审计当前仓库，确认 `core-api` 与 `llm-stream` 仍在使用共享 `internal/transport/http/v1/routes.go` 和旧 `cmd/*` 入口，而 `generator / decomposition` 仍直接写 `blogs / users`，与计划目标一致但尚未开始深拆分。
+  3. 按 TDD 先为 `services/core-api` 与 `services/llm-stream` 新增服务自有路由测试，再补齐各自的 `app/bootstrap`、`transport/http/v1`、`cmd`，并让旧 `cmd/core-api`、`cmd/llm-stream` 复用新的服务自有 bootstrap。
+  4. 新增 `services/llm-stream/domain/generation` 骨架与 `services/core-api/domain/task/ResultPersister` 抽象，随后通过 `INKWORDS_TASK_PERSISTENCE_MODE=task_only` 把 legacy `generator / decomposition` 的直接写库能力收口为显式开关。
+  5. 将共享 `routes.go` 与 `stream_api.go` 标记为过渡兼容层，更新架构/API/数据库/开发日志/PRD/README，并执行全量 Go 测试和 Docker Compose 冒烟。
+- **决策/变更**：
+  - 没有机械照抄计划里的最小示例路由，而是按当前真实接口面完整迁移 `auth/user/blog/project/task` 与回滚型 `stream` 路由，避免在拆分入口时丢失现有能力。
+  - `llm-stream` 的写库边界收紧采用“显式环境开关”而非直接删除 legacy 写逻辑，原因是当前真正的 `core-api` 结果回写链路还处于抽象建立阶段，需要保证可灰度、可回滚。
+  - 共享 transport 层暂不删除，只加 `Deprecated` 注释并保留测试/回滚用途，降低这轮深拆分的风险面。
+- **验证**：
+  - `cd backend && go test ./... -count=1` 通过
+  - `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build` 通过
+  - `docker compose --env-file backend/.env ps` 显示 `core-api / llm-stream / parser-service / export-service / review-service / frontend` 均为 `healthy`
+  - `curl -I http://localhost` 返回 `HTTP/1.1 200 OK`
+  - `curl -sS http://localhost/api/v1/ping` 返回 `{"code":200,"data":null,"message":"pong"}`
+
 ### 对话 98：执行 Task 6 收尾，同步服务目录迁移文档并完成最终冒烟
 - **用户需求**：用户要求在 `/Users/huangqijun/Documents/墨言博客助手/InkWords` 执行计划 `Task6`，围绕 Phase 1 已完成的 `review-service`、`parser-service`、`export-service` 服务目录迁移，同步架构/日志/README/runbook 等文档，并完成最终 `docker compose` 冒烟验证；若产生改动则按仓库规则提交，但不得修改计划/设计文档。
 - **AI 动作**：

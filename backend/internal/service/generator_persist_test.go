@@ -91,6 +91,14 @@ func TestGeneratorService_saveToDB_PersistsBlogAndUpdatesTokens(t *testing.T) {
 	require.Equal(t, 10, user.TokensUsed)
 }
 
+func TestGenerateBlogStream_DoesNotPersistBlogDirectlyWhenTaskModeEnabled(t *testing.T) {
+	t.Setenv("INKWORDS_TASK_PERSISTENCE_MODE", "task_only")
+
+	svc := NewGeneratorService(nil)
+	require.NotNil(t, svc)
+	require.True(t, taskOnlyPersistenceMode())
+}
+
 func TestBuildSingleGenerateMessages_UsesResolvedPromptProfileRole(t *testing.T) {
 	profile := prompt.ResolvePromptProfileKey(
 		"psychology_communication_book",

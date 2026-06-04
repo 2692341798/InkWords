@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - 数据库设计文档
 
 ## 0. 变更记录
+- 2026-06-04：Phase 2 执行 `core-api / llm-stream` 深层拆分第一轮。数据库表结构、索引与迁移保持不变，但服务写入边界进一步收紧：`core-api` 新增 `ResultPersister` 抽象，作为后续把任务结果落回 `blogs` 与累计 `users.tokens_used` 的服务自有承载点；同时新增 `INKWORDS_TASK_PERSISTENCE_MODE=task_only` 运行开关，让 legacy `generator / decomposition` 在显式开启时停止直接写 `blogs / users`，为最终把业务事实回收至 `core-api` 做过渡。
 - 2026-06-04：Task 4 将 `export-service` 的导出适配器、consumer、artifact store 与启动装配迁入 `backend/services/export-service/` 服务自有目录；本次不新增数据库表、字段、索引或迁移，`job_tasks / job_task_events` 的跨服务受控写入边界保持不变。
 - 2026-06-03：Task 4 补齐数据库层面的“服务写入归属矩阵”。明确 `core-api` 事实拥有 `users / oauth_tokens / user_prompt_settings / blogs / job_tasks / job_task_events`，`review-service` 事实拥有 `review_sessions / review_turns`；同时记录当前允许的跨服务例外仅限 worker 通过 `task` 领域接口写 `job_tasks / job_task_events`，并把 `GeneratorService / DecompositionService` 仍直接使用全局 `db.DB` 写 `blogs / users` 记为待收口技术债。
 - 2026-06-03：生成链路进入 RabbitMQ 任务式 SSE Phase B。核心库新增 `job_tasks` 与 `job_task_events` 两张表，分别存储任务主状态与可回放事件流；RabbitMQ 仅负责跨服务投递，不承载最终状态，任务真实状态仍以 PostgreSQL 为准。
