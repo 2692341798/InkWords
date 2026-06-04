@@ -1,6 +1,77 @@
 # 墨言知识训练平台 (InkWords Trainer) - 开发计划与日志
 > **目标**：跟踪项目的核心开发模块、里程碑进度以及每日开发记录。
 
+### [2026-06-04] Build - 增加 FRONTEND_PORT 以绕过宿主机 80 端口冲突
+- **需求背景**：
+  1. 本轮微服务化代码与后端服务已完成，但 Docker Compose 冒烟阶段多次被宿主机 `:80` 端口占用阻塞，`frontend` 容器无法绑定默认入口。
+  2. 用户同意采用最小兼容改动，把前端宿主机端口做成可配置变量，以便在不破坏默认入口约定的前提下完成本地验证。
+- **本次完成**：
+  1. 调整 `docker-compose.yml`：`frontend` 端口映射从固定 `80:80` 改为 `${FRONTEND_PORT:-80}:80`。
+  2. 保持默认行为不变：未显式设置时仍使用 `http://localhost`。
+  3. 使用 `FRONTEND_PORT=8088` 完成一次本地验证，确认 `frontend` 可在 `http://localhost:8088` 启动并继续代理 `/api/*`。
+- **验证记录**：
+  - `FRONTEND_PORT=8088 docker compose --env-file backend/.env up -d --build frontend` 通过
+  - `FRONTEND_PORT=8088 docker compose --env-file backend/.env ps` 显示 `frontend` 绑定 `0.0.0.0:8088->80/tcp`
+  - `curl -I http://localhost:8088` 返回 `200 OK`
+  - `curl -sS http://localhost:8088/api/v1/ping` 返回 `{"code":200,"data":null,"message":"pong"}`
+
+### [2026-06-04] Feat - Generation task_only Task 4 打通 generate_series 父子结果闭环
+- **需求背景**：
+  1. 用户要求执行 `Task 4`，先完成系列生成的代码闭环，再补文档同步并准备第四个原子 commit。
+  2. 本轮目标是让 `generate_series` 进入与单篇/续写一致的 `task_only` 闭环，不改变对外 API 与 SSE 路径。
+- **本次完成**：
+  1. 为 `generate_series` 新增结构化结果 contract：`parent_blog` 与 `chapters[]`，明确系列父博客导读、章节正文、技术栈、成功/失败状态和错误信息。
+  2. 在 `DecompositionService` 中新增系列结果 collector 与结果缓存：`task_only` 下章节成功/失败和导读完成只收集业务事实，不再直写 `blogs/users`。
+  3. 调整 `task_consumer` 与 `stream.Service`：系列生成成功后不再写固定 `{"done":true}`，而是从 collector 取回真实 `generate_series` 结果并写入 `job_tasks.result_json`。
+  4. 调整 `core-api` generation result repository：新增 `generate_series` 分支，事务更新系列父博客与章节草稿，并保留 token 统一累计。
+- **验证记录**：
+  - `cd backend && go test ./internal/domain/stream ./internal/service ./services/core-api/domain/task -run 'BuildGenerateSeriesTaskResult|SeriesTaskResultCollector|HandleSeriesChapterCompletion|PersistGenerateSeriesResult' -v` 先失败（缺少 builder/collector/helper），补实现后通过
+  - `cd backend && go test ./internal/domain/stream ./internal/service -run 'GenerateSeries_UsesStructuredSeriesResult|TakeGenerateSeriesTaskResult' -v` 先失败（缺少系列结果缓存交接），补实现后通过
+  - `cd backend && go test ./internal/service ./internal/domain/stream ./services/core-api/domain/task -run 'Series|GenerateSeries|PersistGenerateSeriesResult|TaskOnlyMode' -v` 通过
+
+### [2026-06-04] Feat - Generation task_only Task 3 打通 continue 结果与正文追加
+- **需求背景**：
+  1. 用户要求先补 `Task 3` 的文档同步，再把 `Task 3` 提交成第三个原子 commit。
+  2. 本轮只允许在 `Task 2` 的单篇持久化闭环基础上继续收口 `continue`，不提前混入 `generate_series`。
+- **本次完成**：
+  1. 为 `continue` 新增结构化结果 contract：`blog_id / appended_content / final_content / estimated_tokens`。
+  2. 调整 `task_consumer`：续写成功后不再写固定 `{"done":true}`，而是写真实 `continue` 结果。
+  3. 调整 `DecompositionService`：在 `task_only` 下只收集续写业务事实快照，不直接更新 `blogs`。
+  4. 调整 `core-api` generation result repository`：新增 `continue` 分支，依据 `payload.final_content` 更新博客正文，并继续累计 token。
+- **验证记录**：
+  - `cd backend && go test ./internal/domain/stream -run TestBuildContinueTaskResult_ProducesFinalContent -v` 先失败（缺少 builder），补实现后通过
+  - `cd backend && go test ./internal/service -run TestContinueGeneration_TaskOnlyMode_DoesNotUpdateBlogDirectly -v` 先失败（缺少 continue 快照构造），补实现后通过
+  - `cd backend && go test ./services/core-api/domain/task -run TestGormGenerationResultRepository_PersistContinueResult -v` 先失败（正文未更新），补实现后通过
+  - `cd backend && go test ./internal/service ./internal/domain/stream ./services/core-api/domain/task -run 'Continue|TaskOnlyMode|PersistContinueResult' -v` 通过
+
+### [2026-06-04] Feat - Generation task_only Task 2 打通 core-api 单篇结果持久化
+- **需求背景**：
+  1. 用户要求先把 `Task 2` 做成第二个原子 commit，再继续后续 `Task 3`。
+  2. 本轮只允许承接 `Task 1` 已提交的单篇结构化结果 contract，把 `core-api` 成功路径接成真实业务落库，不提前混入 `continue / generate_series`。
+- **本次完成**：
+  1. 新增 `backend/services/core-api/domain/task/generation_result.go` 与 `generation_result_repository.go`，明确 `core-api` 可消费的 generation result 结构，并用 GORM repository 把单篇结果落回 `blogs` 与 `users.tokens_used`。
+  2. 调整 `backend/internal/domain/task/service.go` 与测试：`MarkSucceeded()` 在 generation 任务成功时会解析结构化 `result_json`，调用 `ResultPersister` 完成最终业务持久化。
+  3. 调整 `backend/services/core-api/app/bootstrap/bootstrap.go`：不再注入空壳 persister，而是注入真实 `GormGenerationResultRepository`。
+  4. 同步修正 `parser-service / llm-stream / export-service` 等调用点的 `taskdomain.NewService(...)` 构造参数，保持编译一致性。
+- **验证记录**：
+  - `cd backend && go test ./services/core-api/domain/task -run TestGormGenerationResultRepository_PersistSingleGenerationResult -v` 先失败（缺少 repository），补实现后通过
+  - `cd backend && go test ./internal/domain/task -run TestService_MarkSucceeded_PersistsGenerationResultThroughPersister -v` 先失败（构造函数签名变化），补实现后通过
+  - `cd backend && go test ./services/core-api/domain/task ./internal/domain/task ./services/core-api/app/bootstrap -v` 通过
+
+### [2026-06-04] Feat - Generation task_only Task 1 打通单篇结构化任务结果
+- **需求背景**：
+  1. 用户要求按 `Subagent-Driven` 方式继续推进微服务化，并在继续下一批改动前先把当前 `Task 1` 产出提交。
+  2. 本轮只允许完成计划中的 `Task 1`：为单篇生成建立结构化 `generation result` contract，并让 `task_only` 模式下的任务成功结果不再固定为 `{"done":true}`。
+- **本次完成**：
+  1. 新增 `backend/internal/domain/stream/generation_result.go` 与对应测试，锁定单篇 `generate_single` 任务结果 contract，包含 `result_version / task_type / task_subtype / persistence_mode / final_status / usage / payload`。
+  2. 调整 `backend/internal/domain/stream/task_consumer.go` 与测试：单篇生成成功后会基于最终正文写入结构化 `job_tasks.result_json`，不再固定写 `{"done":true}`。
+  3. 调整 `backend/internal/service/generator.go` 与测试：`GeneratorService` 新增 `BuildGenerateSingleTaskResult()`，在 `INKWORDS_TASK_PERSISTENCE_MODE=task_only` 下只产出结构化结果，不触发业务表写入。
+  4. 同步更新 README、架构/API/数据库/PRD/对话日志，明确本轮只完成单篇结果交接，`core-api` 最终业务落库闭环属于下一任务。
+- **验证记录**：
+  - `cd backend && go test ./internal/domain/stream -run TestBuildGenerateSingleTaskResult_ProducesTaskOnlyContract -v` 先失败（缺少 builder），补实现后通过
+  - `cd backend && go test ./internal/service ./internal/domain/stream -run 'BuildGenerateSingleTaskResult|HandleGenerationRequested_MarkSucceededWithStructuredResult|RunGenerateSingle_AppendsChunkAndCompletes' -v` 先失败、补实现后通过
+  - `cd backend && go test ./internal/domain/stream ./internal/service -run 'TaskResult|GenerateBlogStream|HandleGenerationRequested' -v` 通过
+
 ### [2026-06-04] Refactor - Task 3 收口 GeneratorService 的显式 persistence 边界
 - **需求背景**：
   1. 用户要求按既定 `Task3` 继续执行，用测试先行把 `GeneratorService` 对 `blogs / users` 的直接写入抽成显式 persistence 接口。

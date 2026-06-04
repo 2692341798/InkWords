@@ -55,7 +55,7 @@ func main() {
 	blogDomainService := blogdomain.NewService(blogRepo)
 	blogDomainHandler := blogdomain.NewHandlerWithLegacy(blogDomainService, blogService)
 	taskRepo := taskdomain.NewGormRepository(db.DB)
-	taskDomainService := taskdomain.NewService(taskRepo, nil)
+	taskDomainService := taskdomain.NewService(taskRepo, nil, nil)
 	blogAPI := api.NewBlogAPIWithDeps(blogService, blogDomainHandler)
 
 	authMiddleware := middleware.AuthMiddleware()

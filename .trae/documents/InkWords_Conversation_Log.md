@@ -1,6 +1,80 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 105：提交 FRONTEND_PORT 端口兼容改动
+- **用户需求**：在确认 `http://localhost:8088` 冒烟成功后，用户要求“提交端口改动”。
+- **AI 动作**：
+  1. 先检查工作区，确认当前唯一已跟踪改动是 `docker-compose.yml` 中 `frontend` 的端口映射调整，未跟踪的 `docs/superpowers/*` 草稿不在提交范围内。
+  2. 按提交前规则同步文档，只记录本轮新增的 `FRONTEND_PORT` 端口覆盖能力，以及 `8088` 的本地验证事实，不将其误写为默认产品入口已改变。
+  3. 准备把 `docker-compose.yml` 与本轮文档同步作为单一主题提交，作为微服务化验证阶段的环境兼容补丁。
+- **决策/变更**：
+  - 默认入口仍保持 `http://localhost`；`FRONTEND_PORT` 只是宿主机端口冲突时的本地覆盖变量。
+  - 本次提交不修改 API、数据库或业务逻辑，只解决 Docker Compose 前端宿主机端口冲突。
+- **验证**：
+  - `FRONTEND_PORT=8088 docker compose --env-file backend/.env up -d --build frontend` 通过
+  - `FRONTEND_PORT=8088 docker compose --env-file backend/.env ps` 显示 `frontend` 绑定 `0.0.0.0:8088->80/tcp`
+  - `curl -I http://localhost:8088` 返回 `200 OK`
+  - `curl -sS http://localhost:8088/api/v1/ping` 返回 `{"code":200,"data":null,"message":"pong"}`
+
+### 对话 104：执行 Task 4，并补齐 generate_series 的最终结果交接
+- **用户需求**：用户要求直接执行 `Task 4`。
+- **AI 动作**：
+  1. 先按 TDD 为系列结果 builder、collector 与 `core-api` 父子持久化补失败测试，并观察到缺少 `BuildGenerateSeriesTaskResult`、collector helper、以及系列父子博客未更新的预期失败。
+  2. 实现 `generate_series` 的结构化结果 contract、`seriesTaskResultCollector`、`task_only` 下章节/导读只收集结果不直写库、以及 `core-api` 的父子博客事务持久化。
+  3. 在收口检查中发现 `task_consumer` 对 `generate_series` 仍写 `{"done":true}`，于是继续补第二轮 TDD：增加系列结果缓存与 `stream.Service -> task_consumer` 的最终交接，让 `generate_series` 真正写入结构化 `job_tasks.result_json`。
+  4. 在用户确认“同意”后，开始同步 `Task 4` 文档，准备后续第四个原子 commit。
+- **决策/变更**：
+  - 本次明确 `generate_series` 的最终业务事实也归 `core-api`，`llm-stream` 只负责收集并交接系列结果。
+  - 由于当前系列执行与收尾仍在同一 worker 进程，本轮采用进程内结果缓存完成系列结果交接；后续若拆分成跨进程收尾，再升级为显式共享存储。
+- **验证**：
+  - `cd backend && go test ./internal/domain/stream ./internal/service ./services/core-api/domain/task -run 'BuildGenerateSeriesTaskResult|SeriesTaskResultCollector|HandleSeriesChapterCompletion|PersistGenerateSeriesResult' -v` 先失败、补实现后通过
+  - `cd backend && go test ./internal/domain/stream ./internal/service -run 'GenerateSeries_UsesStructuredSeriesResult|TakeGenerateSeriesTaskResult' -v` 先失败、补实现后通过
+  - `cd backend && go test ./internal/service ./internal/domain/stream ./services/core-api/domain/task -run 'Series|GenerateSeries|PersistGenerateSeriesResult|TaskOnlyMode' -v` 通过
+
+### 对话 103：先补 Task 3 文档同步，再提交第三个原子 commit
+- **用户需求**：用户要求“先补 Task 3 的文档同步，再把 Task 3 提交成第三个原子 commit”。
+- **AI 动作**：
+  1. 先检查 `Task 3` 当前工作区，确认只包含 `continue` 相关代码改动和一个新增测试文件，未跟踪的 `docs/superpowers/*` 草稿仍留在工作区但不会进入提交。
+  2. 按仓库规则补齐核心文档，只记录已落地的 `continue` 结果 contract、`task_consumer` 真实 `result_json`、以及 `core-api` 基于 `final_content` 的正文更新。
+  3. 准备在文档同步完成后，仅暂存 `Task 3` 代码与本轮文档，生成第三个原子 commit。
+- **决策/变更**：
+  - 本次 commit 继续只覆盖 `Task 3`，不提前写入 `generate_series` 的设计或实现结论。
+  - `continue` 的关键约束被明确为：`task_only` 下 `llm-stream` 只产出业务事实快照，最终正文更新由 `core-api` 完成。
+- **验证**：
+  - `cd backend && go test ./internal/domain/stream -run TestBuildContinueTaskResult_ProducesFinalContent -v` 先失败、补实现后通过
+  - `cd backend && go test ./internal/service -run TestContinueGeneration_TaskOnlyMode_DoesNotUpdateBlogDirectly -v` 先失败、补实现后通过
+  - `cd backend && go test ./services/core-api/domain/task -run TestGormGenerationResultRepository_PersistContinueResult -v` 先失败、补实现后通过
+  - `cd backend && go test ./internal/service ./internal/domain/stream ./services/core-api/domain/task -run 'Continue|TaskOnlyMode|PersistContinueResult' -v` 通过
+
+### 对话 102：提交 Task 2，并继续推进 generation task_only
+- **用户需求**：用户在确认 `Task 2` 已实现并通过测试后，要求“把 Task 2 再提交成第二个原子 commit，再继续”。
+- **AI 动作**：
+  1. 先执行 `git status` 与定向 `git diff`，确认当前工作区只包含 `Task 2` 相关代码：`core-api` generation result repository、任务成功路径接线、bootstrap 注入与其余服务构造函数签名兼容修正。
+  2. 按提交前规则补齐文档同步，只记录本轮已经落地的 `Task 2`：`core-api` 开始消费单篇 `generate_single` 的结构化 `job_tasks.result_json` 并把正文/Token 记账落回业务表。
+  3. 准备把代码与文档作为第二个原子 commit 提交，再继续后续 `Task 3`。
+- **决策/变更**：
+  - 本次 commit 继续保持单一主题：只覆盖 `Task 2`，不提前混入 `continue / generate_series`。
+  - `parser-service / llm-stream / export-service` 的改动仅限构造函数签名兼容，不视为独立功能。
+- **验证**：
+  - `cd backend && go test ./services/core-api/domain/task -run TestGormGenerationResultRepository_PersistSingleGenerationResult -v` 先失败、补实现后通过
+  - `cd backend && go test ./internal/domain/task -run TestService_MarkSucceeded_PersistsGenerationResultThroughPersister -v` 先失败、补实现后通过
+  - `cd backend && go test ./services/core-api/domain/task ./internal/domain/task ./services/core-api/app/bootstrap -v` 通过
+
+### 对话 101：执行 generation task_only 的 Task 1，并先提交当前进度
+- **用户需求**：用户先确认采用 `Subagent-Driven` 方式继续推进“生成链路 task_only 持久化”，随后在执行到 `Task 2` 前要求“先提交，再继续改动”。
+- **AI 动作**：
+  1. 按计划先派子代理执行 `Task 1`，用 TDD 为单篇 `generate_single` 建立结构化 `generation result` contract，并把 `task_consumer` 的任务成功结果从固定 `{"done":true}` 升级为结构化 `job_tasks.result_json`。
+  2. 在 `GeneratorService` 中新增 `BuildGenerateSingleTaskResult()`，让 `INKWORDS_TASK_PERSISTENCE_MODE=task_only` 下的单篇生成仅产出结构化结果，不再触发业务表写入。
+  3. 在准备继续执行 `Task 2` 时，发现工作区里已有刚完成的 `Task 1` 改动且尚未提交，于是先停下并征求用户处理方式；用户明确要求“先提交，再继续改动”。
+  4. 回到主线程后先做 `git status` 与定向 `git diff`，确认只提交本次原子变更所需文件，并同步更新架构/API/数据库/PRD/README/开发日志。
+- **决策/变更**：
+  - 本次提交只覆盖 `Task 1`：单篇生成结构化结果 contract 与对应测试，不提前混入 `core-api` 结果持久化闭环。
+  - 继续保留 `task_only` 的渐进式推进策略：先让任务结果 contract 稳定，再让 `core-api` 真正消费并持久化业务事实。
+- **验证**：
+  - `cd backend && go test ./internal/domain/stream -run TestBuildGenerateSingleTaskResult_ProducesTaskOnlyContract -v` 先失败、补实现后通过
+  - `cd backend && go test ./internal/service ./internal/domain/stream -run 'BuildGenerateSingleTaskResult|HandleGenerationRequested_MarkSucceededWithStructuredResult|RunGenerateSingle_AppendsChunkAndCompletes' -v` 先失败、补实现后通过
+  - `cd backend && go test ./internal/domain/stream ./internal/service -run 'TaskResult|GenerateBlogStream|HandleGenerationRequested' -v` 通过
+
 ### 对话 100：执行 Task 3，收口 GeneratorService 的显式 persistence 接口
 - **用户需求**：用户要求直接按既定 `Task3` 执行，用测试先行把 `GeneratorService` 对 `blogs / users` 的直接写入抽成显式 persistence 接口；允许修改 `generator.go`、相关测试和新增 persistence 文件，并同步必要文档，但不得触碰未跟踪的 `docs/superpowers` 历史计划设计文件。
 - **AI 动作**：

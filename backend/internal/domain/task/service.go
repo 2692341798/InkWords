@@ -14,16 +14,24 @@ import (
 
 // Service 封装生成任务的创建、取消与事件查询逻辑。
 type Service struct {
-	repo      Repository
-	publisher Publisher
+	repo            Repository
+	publisher       Publisher
+	resultPersister ResultPersister
 }
 
 // NewService 通过依赖注入组装任务领域服务。
-func NewService(repo Repository, publisher Publisher) *Service {
+func NewService(repo Repository, publisher Publisher, resultPersister ResultPersister) *Service {
 	return &Service{
-		repo:      repo,
-		publisher: publisher,
+		repo:            repo,
+		publisher:       publisher,
+		resultPersister: resultPersister,
 	}
+}
+
+// ResultPersister defines the core-api owned success-path side effect that
+// materializes structured task results into business facts.
+type ResultPersister interface {
+	PersistGenerationResult(ctx context.Context, taskID uuid.UUID, result map[string]any) error
 }
 
 // CreateGenerationTask 负责创建一条可幂等复用的生成任务，并在可用时发布创建事件。
@@ -243,8 +251,19 @@ func (s *Service) MarkSucceeded(ctx context.Context, taskID uuid.UUID, result []
 	if task.Status == model.JobTaskStatusCancelled {
 		return nil
 	}
-	if err := s.repo.UpdateResult(ctx, taskID, normalizeJSON(result)); err != nil {
+	normalizedResult := normalizeJSON(result)
+	if err := s.repo.UpdateResult(ctx, taskID, normalizedResult); err != nil {
 		return fmt.Errorf("更新任务结果失败: %w", err)
+	}
+
+	if s.resultPersister != nil && task.TaskType == taskTypeGeneration {
+		var decoded map[string]any
+		if err := json.Unmarshal(normalizedResult, &decoded); err != nil {
+			return fmt.Errorf("解析任务结果失败: %w", err)
+		}
+		if err := s.resultPersister.PersistGenerationResult(ctx, taskID, decoded); err != nil {
+			return fmt.Errorf("持久化 generation 结果失败: %w", err)
+		}
 	}
 	if err := s.repo.UpdateStatus(ctx, taskID, model.JobTaskStatusSucceeded, ""); err != nil {
 		return fmt.Errorf("更新任务成功状态失败: %w", err)

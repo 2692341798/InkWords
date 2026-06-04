@@ -25,6 +25,7 @@ func (s *DecompositionService) generateSeriesIntro(
 	scenarioMode prompt.ScenarioMode,
 	style prompt.ArticleStyle,
 	profile prompt.PromptProfile,
+	collector *seriesTaskResultCollector,
 	progressChan chan<- string,
 	errChan chan<- error,
 ) {
@@ -136,14 +137,21 @@ func (s *DecompositionService) generateSeriesIntro(
 		case err, ok := <-internalErrChan:
 			if ok && err != nil {
 				sendProgress("error", "", err.Error())
-				db.DB.WithContext(ctx).Model(&model.Blog{}).Where("id = ?", parentID).Updates(map[string]interface{}{
-					"status": 2,
-				})
+				if !taskOnlyPersistenceMode() {
+					db.DB.WithContext(ctx).Model(&model.Blog{}).Where("id = ?", parentID).Updates(map[string]interface{}{
+						"status": 2,
+					})
+				}
 				return
 			}
 		case chunk, ok := <-chunkChan:
 			if !ok {
 				finalContent := contentBuilder.String()
+				if taskOnlyPersistenceMode() {
+					collector.SetParentContent(finalContent)
+					sendProgress("completed", "", "")
+					return
+				}
 				db.DB.WithContext(ctx).Model(&model.Blog{}).Where("id = ?", parentID).Updates(map[string]interface{}{
 					"content": finalContent,
 					"status":  1,

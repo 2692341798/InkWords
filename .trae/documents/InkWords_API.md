@@ -1,6 +1,11 @@
 # 墨言知识训练平台 (InkWords Trainer) - API 接口文档
 
 ## 0. 变更记录
+- 2026-06-04：新增 `FRONTEND_PORT` 作为 Docker Compose 前端宿主机端口覆盖变量。本次不新增也不修改任何 API 路由、请求字段或响应字段；仅补充运行约定：默认仍通过 `http://localhost` 访问，当宿主机 `:80` 被占用时，可临时用 `FRONTEND_PORT=8088` 将前端入口切到 `http://localhost:8088`，其 `/api/*` 代理语义保持不变。
+- 2026-06-04：Generation Task-Only Task 4 继续扩展 generation 任务成功路径的内部语义，不新增也不修改任何对外 API 路由、请求字段或响应字段；当 `generate_series` 任务成功时，系统会把结构化 `result_json` 中的 `parent_blog` 与 `chapters[]` 交给 `core-api` 消费，并由 `core-api` 完成系列父博客与章节草稿的最终持久化。
+- 2026-06-04：Generation Task-Only Task 3 继续扩展 generation 任务成功路径的内部语义，不新增也不修改任何对外 API 路由、请求字段或响应字段；当 `continue` 任务成功时，系统会把结构化 `result_json` 中的 `blog_id / appended_content / final_content` 交给 `core-api` 消费，并以 `final_content` 完成正文更新。
+- 2026-06-04：Generation Task-Only Task 2 继续收紧 generation 任务成功路径的内部语义，不新增也不修改任何对外 API 路由、请求字段或响应字段；当 `generate_single` 任务成功且 `job_tasks.result_json` 为结构化结果时，`core-api` 现会在任务成功路径中消费该结果并完成最终博客正文与 token 记账的业务落库。
+- 2026-06-04：Generation Task-Only Task 1 仅加强生成任务成功结果的内部契约，不新增也不修改任何对外 API 路由、请求字段或响应字段；`generate_single` 任务在 `INKWORDS_TASK_PERSISTENCE_MODE=task_only` 下写入 `job_tasks.result_json` 时，不再固定保存 `{"done":true}`，而是保存带 `result_version / task_type / task_subtype / persistence_mode / final_status / usage / payload` 的结构化结果，供后续 `core-api` 持久化闭环消费。
 - 2026-06-04：Phase 2 执行 `core-api / llm-stream` 深层拆分第一轮。对外 API 路由、请求/响应字段与 `http://localhost` 单入口保持不变，但 `core-api` 与 `llm-stream` 的主 HTTP 装配已分别迁入 `backend/services/core-api/` 与 `backend/services/llm-stream/` 的服务自有 `bootstrap/routes/cmd`；共享 `internal/transport/http/v1/routes.go` 与 `internal/transport/http/v1/api/stream_api.go` 仅保留为过渡兼容层。另新增 `INKWORDS_TASK_PERSISTENCE_MODE=task_only` 运行开关，用于在拆分阶段控制 legacy 生成链路不再由 `llm-stream` 直接把最终结果写入 `blogs / users`。
 - 2026-06-04：Task 4 将 `export-service` 的启动装配、私有路由、RabbitMQ consumer 与导出产物 store 收口到 `backend/services/export-service/` 服务自有目录；本次仅调整代码归属与服务入口组织，对外导出 API、任务接口、下载协议、请求/响应字段与数据库结构均保持不变。
 - 2026-06-03：Task 6 继续推进 `parser-service` 异步化。`POST /api/v1/tasks/parse` 仍由 `core-api` 创建 `parse_file / parse_archive` 任务并发布到 RabbitMQ `parse.requested`；`parser-service` 作为 parse worker 消费任务并把结果回写到 `job_tasks`。前端当前对 `.zip` 课件包和 `50MB` 以上普通单文件默认走任务式解析，`50MB` 及以下普通单文件仍保留 `/api/v1/project/parse` 作为同步兼容路径。

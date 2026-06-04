@@ -24,6 +24,11 @@ type GeneratorService struct {
 	persistence GeneratedBlogPersistence
 }
 
+// GenerateBlogTaskResult 表示单篇生成完成后可交给任务层的结构化结果。
+type GenerateBlogTaskResult struct {
+	ResultJSON []byte
+}
+
 // NewGeneratorService creates a new generator service
 func NewGeneratorService(promptReq *PromptRequirementsService) *GeneratorService {
 	return NewGeneratorServiceWithPersistence(promptReq, nil)
@@ -365,31 +370,43 @@ func taskOnlyPersistenceMode() bool {
 	return strings.EqualFold(os.Getenv("INKWORDS_TASK_PERSISTENCE_MODE"), "task_only")
 }
 
+// BuildGenerateSingleTaskResult 为 task_only 单篇生成构造结构化任务结果，而不触发业务表写入。
+func (s *GeneratorService) BuildGenerateSingleTaskResult(
+	ctx context.Context,
+	sourceType string,
+	content string,
+) (GenerateBlogTaskResult, error) {
+	facts := s.buildGeneratedBlogFacts(ctx, sourceType, content)
+	resultJSON, err := json.Marshal(map[string]any{
+		"result_version":   1,
+		"task_type":        "generation",
+		"task_subtype":     "generate_single",
+		"persistence_mode": "task_only",
+		"final_status":     "succeeded",
+		"usage": map[string]any{
+			"estimated_tokens": facts.EstimatedTokens,
+		},
+		"payload": map[string]any{
+			"title":       facts.Title,
+			"content":     facts.Content,
+			"source_type": facts.SourceType,
+			"word_count":  facts.WordCount,
+			"tech_stacks": facts.TechStacks,
+		},
+	})
+	if err != nil {
+		return GenerateBlogTaskResult{}, fmt.Errorf("marshal generate single task result: %w", err)
+	}
+
+	return GenerateBlogTaskResult{ResultJSON: resultJSON}, nil
+}
+
 // saveToDB persists the generated blog content to the database
 func (s *GeneratorService) saveToDB(ctx context.Context, userID uuid.UUID, sourceType string, content string) error {
-	title := "文件解析生成的博客"
-	wordCount := len([]rune(content))
-
-	// Extract Tech Stacks using LLM
-	var techStacks datatypes.JSON
-	extractPrompt := "请从以下文章内容中提取出涉及的核心技术栈名称（如 React, Go, Docker 等），以 JSON 数组格式返回，不要有任何其他多余字符。\n\n例如：[\"React\", \"Go\"]\n\n文章内容：\n\n" + content
-	messages := []llm.Message{
-		{Role: "user", Content: extractPrompt},
-	}
-	modelType := "deepseek-v4-flash"
-	if envModel := os.Getenv("DEEPSEEK_MODEL"); envModel != "" {
-		modelType = envModel
-	}
-
-	if s.llmClient != nil {
-		extractedJSON, err := s.llmClient.GenerateJSON(ctx, modelType, messages)
-		if err == nil && len(extractedJSON) > 0 {
-			// basic validation that it is a json array
-			var parsed []string
-			if json.Unmarshal([]byte(extractedJSON), &parsed) == nil {
-				techStacks = datatypes.JSON(extractedJSON)
-			}
-		}
+	facts := s.buildGeneratedBlogFacts(ctx, sourceType, content)
+	techStacksJSON, err := json.Marshal(facts.TechStacks)
+	if err != nil {
+		return fmt.Errorf("marshal tech stacks: %w", err)
 	}
 
 	persistence := s.persistence
@@ -399,11 +416,11 @@ func (s *GeneratorService) saveToDB(ctx context.Context, userID uuid.UUID, sourc
 
 	input := GeneratedBlogPersistenceInput{
 		UserID:     userID,
-		Title:      title,
-		Content:    content,
-		SourceType: sourceType,
-		WordCount:  wordCount,
-		TechStacks: techStacks,
+		Title:      facts.Title,
+		Content:    facts.Content,
+		SourceType: facts.SourceType,
+		WordCount:  facts.WordCount,
+		TechStacks: datatypes.JSON(techStacksJSON),
 	}
 
 	if err := persistence.SaveGeneratedBlog(ctx, input); err != nil {
@@ -411,4 +428,52 @@ func (s *GeneratorService) saveToDB(ctx context.Context, userID uuid.UUID, sourc
 	}
 
 	return nil
+}
+
+type generatedBlogFacts struct {
+	Title           string
+	Content         string
+	SourceType      string
+	WordCount       int
+	TechStacks      []string
+	EstimatedTokens int
+}
+
+func (s *GeneratorService) buildGeneratedBlogFacts(ctx context.Context, sourceType string, content string) generatedBlogFacts {
+	wordCount := len([]rune(content))
+	return generatedBlogFacts{
+		Title:           "文件解析生成的博客",
+		Content:         content,
+		SourceType:      sourceType,
+		WordCount:       wordCount,
+		TechStacks:      s.extractTechStacks(ctx, content),
+		EstimatedTokens: wordCount * 2,
+	}
+}
+
+func (s *GeneratorService) extractTechStacks(ctx context.Context, content string) []string {
+	extractPrompt := "请从以下文章内容中提取出涉及的核心技术栈名称（如 React, Go, Docker 等），以 JSON 数组格式返回，不要有任何其他多余字符。\n\n例如：[\"React\", \"Go\"]\n\n文章内容：\n\n" + content
+	messages := []llm.Message{
+		{Role: "user", Content: extractPrompt},
+	}
+	modelType := "deepseek-v4-flash"
+	if envModel := os.Getenv("DEEPSEEK_MODEL"); envModel != "" {
+		modelType = envModel
+	}
+
+	if s.llmClient == nil {
+		return nil
+	}
+
+	extractedJSON, err := s.llmClient.GenerateJSON(ctx, modelType, messages)
+	if err != nil || len(extractedJSON) == 0 {
+		return nil
+	}
+
+	var parsed []string
+	if json.Unmarshal([]byte(extractedJSON), &parsed) != nil {
+		return nil
+	}
+
+	return parsed
 }

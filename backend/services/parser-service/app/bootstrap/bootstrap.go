@@ -39,7 +39,7 @@ func BuildRouter() (*gin.Engine, *parsedomain.Service, *taskdomain.Service, erro
 	docParser := parserinfra.NewDocParser()
 	archiveParser := parserinfra.NewArchiveParser(docParser)
 	parseService := parsedomain.NewService(docParser, archiveParser)
-	taskService := taskdomain.NewService(taskdomain.NewGormRepository(dbConn), nil)
+	taskService := taskdomain.NewService(taskdomain.NewGormRepository(dbConn), nil, nil)
 	parseHandler := parsedomain.NewHandler(parseService, userService)
 	parserroutes.RegisterParserRoutes(r, middleware.AuthMiddleware(), parseHandler)
 

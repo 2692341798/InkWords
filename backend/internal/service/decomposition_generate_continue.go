@@ -14,6 +14,15 @@ import (
 	"github.com/google/uuid"
 )
 
+// ContinueTaskResultSnapshot captures the business facts needed to build the
+// continue task_only result without directly touching core-api owned writes.
+type ContinueTaskResultSnapshot struct {
+	BlogID          string
+	AppendedContent string
+	FinalContent    string
+	EstimatedTokens int
+}
+
 func (s *DecompositionService) ContinueGeneration(ctx context.Context, userID uuid.UUID, blogID uuid.UUID, chunkChan chan<- string, errChan chan<- error) {
 	defer close(chunkChan)
 	defer close(errChan)
@@ -133,4 +142,26 @@ func (s *DecompositionService) ContinueGeneration(ctx context.Context, userID uu
 			chunkChan <- chunk
 		}
 	}
+}
+
+// BuildContinueTaskResult builds the task_only result for continue without
+// directly mutating blogs, so core-api can own the final business persistence.
+func (s *DecompositionService) BuildContinueTaskResult(
+	ctx context.Context,
+	userID uuid.UUID,
+	blogID uuid.UUID,
+	appendedContent string,
+) (ContinueTaskResultSnapshot, error) {
+	var blog model.Blog
+	if err := db.DB.WithContext(ctx).Select("id", "content").First(&blog, "id = ? AND user_id = ?", blogID, userID).Error; err != nil {
+		return ContinueTaskResultSnapshot{}, fmt.Errorf("load continue blog for task result: %w", err)
+	}
+
+	finalContent := blog.Content + appendedContent
+	return ContinueTaskResultSnapshot{
+		BlogID:          blog.ID.String(),
+		AppendedContent: appendedContent,
+		FinalContent:    finalContent,
+		EstimatedTokens: len([]rune(appendedContent)) * 2,
+	}, nil
 }

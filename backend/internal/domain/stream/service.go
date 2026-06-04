@@ -2,6 +2,7 @@ package stream
 
 import (
 	"context"
+	"errors"
 
 	"github.com/google/uuid"
 
@@ -86,6 +87,54 @@ func (s *Service) Generate(ctx context.Context, userID uuid.UUID, req GenerateRe
 		chunkChan,
 		errChan,
 	)
+}
+
+// BuildGenerateSingleTaskResult 基于单篇生成最终正文构造结构化任务结果。
+func (s *Service) BuildGenerateSingleTaskResult(ctx context.Context, req GenerateRequest, content string) ([]byte, error) {
+	if s == nil || s.generator == nil {
+		return nil, errors.New("generator service is not configured")
+	}
+
+	result, err := s.generator.BuildGenerateSingleTaskResult(ctx, req.SourceType, content)
+	if err != nil {
+		return nil, err
+	}
+
+	return result.ResultJSON, nil
+}
+
+// BuildContinueTaskResult 基于续写追加正文构造结构化任务结果。
+func (s *Service) BuildContinueTaskResult(ctx context.Context, userID uuid.UUID, blogID uuid.UUID, appendedContent string) ([]byte, error) {
+	if s == nil || s.decomposition == nil {
+		return nil, errors.New("decomposition service is not configured")
+	}
+
+	snapshot, err := s.decomposition.BuildContinueTaskResult(ctx, userID, blogID, appendedContent)
+	if err != nil {
+		return nil, err
+	}
+
+	return BuildContinueTaskResult(ContinueTaskResultInput{
+		BlogID:          snapshot.BlogID,
+		AppendedContent: snapshot.AppendedContent,
+		FinalContent:    snapshot.FinalContent,
+		EstimatedTokens: snapshot.EstimatedTokens,
+	})
+}
+
+// BuildGenerateSeriesTaskResult 提取系列生成完成后缓存的结构化任务结果。
+func (s *Service) BuildGenerateSeriesTaskResult(ctx context.Context, req GenerateRequest) ([]byte, error) {
+	if s == nil || s.decomposition == nil {
+		return nil, errors.New("decomposition service is not configured")
+	}
+
+	parentID, err := uuid.Parse(req.ParentID)
+	if err != nil {
+		return nil, errors.New("invalid generation payload")
+	}
+
+	_ = ctx
+	return s.decomposition.TakeGenerateSeriesTaskResult(parentID)
 }
 
 func (s *Service) Continue(bgCtx context.Context, userID uuid.UUID, blogID uuid.UUID, chunkChan chan<- string, errChan chan<- error) {

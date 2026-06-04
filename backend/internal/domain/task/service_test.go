@@ -16,7 +16,7 @@ import (
 
 func TestService_CreateGenerationTask_ReusesIdempotencyKey(t *testing.T) {
 	repo := newFakeRepository()
-	service := NewService(repo, nil)
+	service := NewService(repo, nil, nil)
 
 	req := CreateGenerationTaskInput{
 		RequestedBy:    uuid.MustParse("11111111-1111-1111-1111-111111111111"),
@@ -37,7 +37,7 @@ func TestService_CreateGenerationTask_ReusesIdempotencyKey(t *testing.T) {
 
 func TestService_AppendEvent_UpdatesStreamingState(t *testing.T) {
 	repo := newFakeRepository()
-	service := NewService(repo, nil)
+	service := NewService(repo, nil, nil)
 
 	task := repo.seedTask(model.JobTask{
 		ID:     uuid.MustParse("22222222-2222-2222-2222-222222222222"),
@@ -60,7 +60,7 @@ func TestService_AppendEvent_UpdatesStreamingState(t *testing.T) {
 
 func TestService_CancelTask_MarksCancelled(t *testing.T) {
 	repo := newFakeRepository()
-	service := NewService(repo, nil)
+	service := NewService(repo, nil, nil)
 
 	task := repo.seedTask(model.JobTask{
 		ID:          uuid.MustParse("33333333-3333-3333-3333-333333333333"),
@@ -259,13 +259,26 @@ func (p *fakePublisher) PublishExportRequested(_ context.Context, message Export
 	return nil
 }
 
+type fakeResultPersister struct {
+	calls      int
+	lastTaskID uuid.UUID
+	lastResult map[string]any
+}
+
+func (p *fakeResultPersister) PersistGenerationResult(_ context.Context, taskID uuid.UUID, result map[string]any) error {
+	p.calls++
+	p.lastTaskID = taskID
+	p.lastResult = result
+	return nil
+}
+
 var _ Repository = (*fakeRepository)(nil)
 var _ Publisher = (*fakePublisher)(nil)
 
 func TestService_CreateGenerationTask_PublishesMessage(t *testing.T) {
 	repo := newFakeRepository()
 	publisher := &fakePublisher{}
-	service := NewService(repo, publisher)
+	service := NewService(repo, publisher, nil)
 
 	task, err := service.CreateGenerationTask(context.Background(), CreateGenerationTaskInput{
 		RequestedBy:    uuid.MustParse("55555555-5555-5555-5555-555555555555"),
@@ -282,7 +295,7 @@ func TestService_CreateGenerationTask_PublishesMessage(t *testing.T) {
 func TestService_CreateParseTask_PublishesMessage(t *testing.T) {
 	repo := newFakeRepository()
 	publisher := &fakePublisher{}
-	service := NewService(repo, publisher)
+	service := NewService(repo, publisher, nil)
 
 	task, err := service.CreateParseTask(context.Background(), CreateParseTaskInput{
 		RequestedBy:    uuid.MustParse("77777777-7777-7777-7777-777777777777"),
@@ -301,7 +314,7 @@ func TestService_CreateParseTask_PublishesMessage(t *testing.T) {
 func TestService_CreateExportTask_PublishesMessage(t *testing.T) {
 	repo := newFakeRepository()
 	publisher := &fakePublisher{}
-	service := NewService(repo, publisher)
+	service := NewService(repo, publisher, nil)
 
 	task, err := service.CreateExportTask(context.Background(), CreateExportTaskInput{
 		RequestedBy:    uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
@@ -319,7 +332,7 @@ func TestService_CreateExportTask_PublishesMessage(t *testing.T) {
 func TestService_CreateGenerationTask_PropagatesPublishError(t *testing.T) {
 	repo := newFakeRepository()
 	publisher := &fakePublisher{err: errors.New("publish failed")}
-	service := NewService(repo, publisher)
+	service := NewService(repo, publisher, nil)
 
 	_, err := service.CreateGenerationTask(context.Background(), CreateGenerationTaskInput{
 		RequestedBy:    uuid.MustParse("66666666-6666-6666-6666-666666666666"),
@@ -334,7 +347,7 @@ func TestService_CreateGenerationTask_PropagatesPublishError(t *testing.T) {
 func TestService_CreateParseTask_PropagatesPublishError(t *testing.T) {
 	repo := newFakeRepository()
 	publisher := &fakePublisher{parseErr: errors.New("publish parse failed")}
-	service := NewService(repo, publisher)
+	service := NewService(repo, publisher, nil)
 
 	_, err := service.CreateParseTask(context.Background(), CreateParseTaskInput{
 		RequestedBy:    uuid.MustParse("88888888-8888-8888-8888-888888888888"),
@@ -348,7 +361,7 @@ func TestService_CreateParseTask_PropagatesPublishError(t *testing.T) {
 
 func TestService_ListStreamEvents_ReturnsDoneWhenTaskFinished(t *testing.T) {
 	repo := newFakeRepository()
-	service := NewService(repo, nil)
+	service := NewService(repo, nil, nil)
 	task := repo.seedTask(model.JobTask{
 		ID:     uuid.MustParse("77777777-7777-7777-7777-777777777777"),
 		Status: model.JobTaskStatusSucceeded,
@@ -368,7 +381,7 @@ func TestService_ListStreamEvents_ReturnsDoneWhenTaskFinished(t *testing.T) {
 
 func TestService_MarkRunning_UpdatesTaskStatus(t *testing.T) {
 	repo := newFakeRepository()
-	service := NewService(repo, nil)
+	service := NewService(repo, nil, nil)
 	task := repo.seedTask(model.JobTask{
 		ID:     uuid.MustParse("88888888-8888-8888-8888-888888888888"),
 		Status: model.JobTaskStatusQueued,
@@ -385,7 +398,7 @@ func TestService_MarkRunning_UpdatesTaskStatus(t *testing.T) {
 
 func TestService_MarkFailed_AppendsErrorEventAndStoresMessage(t *testing.T) {
 	repo := newFakeRepository()
-	service := NewService(repo, nil)
+	service := NewService(repo, nil, nil)
 	task := repo.seedTask(model.JobTask{
 		ID:     uuid.MustParse("99999999-9999-9999-9999-999999999999"),
 		Status: model.JobTaskStatusRunning,
@@ -405,7 +418,7 @@ func TestService_MarkFailed_AppendsErrorEventAndStoresMessage(t *testing.T) {
 
 func TestService_MarkSucceeded_PersistsResult(t *testing.T) {
 	repo := newFakeRepository()
-	service := NewService(repo, nil)
+	service := NewService(repo, nil, nil)
 	task := repo.seedTask(model.JobTask{
 		ID:     uuid.MustParse("12121212-1212-1212-1212-121212121212"),
 		Status: model.JobTaskStatusStreaming,
@@ -418,4 +431,22 @@ func TestService_MarkSucceeded_PersistsResult(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, model.JobTaskStatusSucceeded, stored.Status)
 	require.JSONEq(t, `{"done":true}`, string(stored.ResultJSON))
+}
+
+func TestService_MarkSucceeded_PersistsGenerationResultThroughPersister(t *testing.T) {
+	repo := newFakeRepository()
+	persister := &fakeResultPersister{}
+	service := NewService(repo, nil, persister)
+	task := repo.seedTask(model.JobTask{
+		ID:       uuid.MustParse("13131313-1313-1313-1313-131313131313"),
+		TaskType: taskTypeGeneration,
+		Status:   model.JobTaskStatusStreaming,
+	})
+
+	resultJSON := []byte(`{"result_version":1,"task_type":"generation","task_subtype":"generate_single","persistence_mode":"task_only","final_status":"succeeded","usage":{"estimated_tokens":24},"payload":{"blog_id":"33333333-3333-3333-3333-333333333333","title":"文件解析生成的博客","content":"# 标题","source_type":"file","word_count":3,"tech_stacks":["Go","Docker"]}}`)
+	err := service.MarkSucceeded(context.Background(), task.ID, resultJSON)
+	require.NoError(t, err)
+	require.Equal(t, 1, persister.calls)
+	require.Equal(t, task.ID, persister.lastTaskID)
+	require.Equal(t, "generate_single", persister.lastResult["task_subtype"])
 }

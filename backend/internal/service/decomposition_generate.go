@@ -7,11 +7,130 @@ import (
 	"inkwords-backend/internal/infra/db"
 	"inkwords-backend/internal/model"
 	"inkwords-backend/internal/prompt"
+	"sort"
 	"sync"
 
 	"github.com/google/uuid"
 	"golang.org/x/sync/semaphore"
 )
+
+type seriesChapterTaskResult struct {
+	BlogID       string   `json:"blog_id"`
+	ChapterSort  int      `json:"chapter_sort"`
+	Title        string   `json:"title"`
+	Content      string   `json:"content"`
+	WordCount    int      `json:"word_count"`
+	TechStacks   []string `json:"tech_stacks"`
+	Status       string   `json:"status"`
+	ErrorMessage string   `json:"error_message"`
+}
+
+type seriesTaskResultCollector struct {
+	mu              sync.Mutex
+	ParentBlogID    string
+	ParentTitle     string
+	ParentContent   string
+	EstimatedTokens int
+	Chapters        []seriesChapterTaskResult
+}
+
+func newSeriesTaskResultCollector(parentBlogID string, parentTitle string) *seriesTaskResultCollector {
+	return &seriesTaskResultCollector{
+		ParentBlogID: parentBlogID,
+		ParentTitle:  parentTitle,
+		Chapters:     make([]seriesChapterTaskResult, 0),
+	}
+}
+
+func (c *seriesTaskResultCollector) AddChapterSuccess(chapter Chapter, content string, wordCount int, techStacks []string) {
+	if c == nil {
+		return
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.Chapters = append(c.Chapters, seriesChapterTaskResult{
+		BlogID:       chapter.ID,
+		ChapterSort:  chapter.Sort,
+		Title:        chapter.Title,
+		Content:      content,
+		WordCount:    wordCount,
+		TechStacks:   append([]string(nil), techStacks...),
+		Status:       "succeeded",
+		ErrorMessage: "",
+	})
+	c.EstimatedTokens += wordCount * 2
+}
+
+func (c *seriesTaskResultCollector) AddChapterFailure(chapter Chapter, errorMessage string) {
+	if c == nil {
+		return
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.Chapters = append(c.Chapters, seriesChapterTaskResult{
+		BlogID:       chapter.ID,
+		ChapterSort:  chapter.Sort,
+		Title:        chapter.Title,
+		Content:      "章节生成失败，请重试。",
+		WordCount:    0,
+		TechStacks:   []string{},
+		Status:       "failed",
+		ErrorMessage: errorMessage,
+	})
+}
+
+func (c *seriesTaskResultCollector) SetParentContent(content string) {
+	if c == nil {
+		return
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.ParentContent = content
+	c.EstimatedTokens += len([]rune(content)) * 2
+}
+
+func (c *seriesTaskResultCollector) BuildTaskResult() ([]byte, error) {
+	if c == nil {
+		return nil, fmt.Errorf("series task result collector is required")
+	}
+
+	c.mu.Lock()
+	chapters := append([]seriesChapterTaskResult(nil), c.Chapters...)
+	parentBlogID := c.ParentBlogID
+	parentTitle := c.ParentTitle
+	parentContent := c.ParentContent
+	estimatedTokens := c.EstimatedTokens
+	c.mu.Unlock()
+
+	sort.Slice(chapters, func(i, j int) bool {
+		return chapters[i].ChapterSort < chapters[j].ChapterSort
+	})
+
+	return json.Marshal(map[string]any{
+		"result_version":   1,
+		"task_type":        "generation",
+		"task_subtype":     "generate_series",
+		"persistence_mode": "task_only",
+		"final_status":     "succeeded",
+		"usage": map[string]any{
+			"estimated_tokens": estimatedTokens,
+		},
+		"payload": map[string]any{
+			"parent_blog": map[string]any{
+				"blog_id": parentBlogID,
+				"title":   parentTitle,
+				"content": parentContent,
+			},
+			"chapters": chapters,
+		},
+	})
+}
 
 // GenerateSeries generates blog chapters sequentially based on the outline with streaming.
 func (s *DecompositionService) GenerateSeries(
@@ -114,6 +233,11 @@ func (s *DecompositionService) GenerateSeriesWithProfile(
 	}
 	outline = updatedOutline
 
+	var resultCollector *seriesTaskResultCollector
+	if taskOnlyPersistenceMode() {
+		resultCollector = newSeriesTaskResultCollector(parentID.String(), parentTitle)
+	}
+
 	maxWorkers := maxWorkersFromEnv(len(outline))
 	sem := semaphore.NewWeighted(int64(maxWorkers))
 	var wg sync.WaitGroup
@@ -167,14 +291,7 @@ func (s *DecompositionService) GenerateSeriesWithProfile(
 				ProgressChan:         progressChan,
 			})
 			if streamErr != nil {
-				if chapter.ID != "" {
-					if blogID, err := uuid.Parse(chapter.ID); err == nil {
-						db.DB.WithContext(ctx).Model(&model.Blog{}).Where("id = ? AND user_id = ?", blogID, userID).Updates(map[string]interface{}{
-							"status":  2,
-							"content": "章节生成失败，请重试。",
-						})
-					}
-				}
+				handleSeriesChapterFailure(ctx, userID, chapter, streamErr, resultCollector)
 
 				errMsg := map[string]interface{}{
 					"status":       "error",
@@ -190,9 +307,9 @@ func (s *DecompositionService) GenerateSeriesWithProfile(
 			wordCount := len([]rune(content))
 
 			llmModel := "deepseek-v4-flash"
-			techStacks := s.extractSeriesChapterTechStacks(ctx, llmModel, content)
+			techStacks := decodeTechStacksJSON(s.extractSeriesChapterTechStacks(ctx, llmModel, content))
 
-			if err := persistSeriesChapterCompletion(
+			if err := handleSeriesChapterCompletion(
 				ctx,
 				userID,
 				parentID,
@@ -201,6 +318,7 @@ func (s *DecompositionService) GenerateSeriesWithProfile(
 				content,
 				wordCount,
 				techStacks,
+				resultCollector,
 			); err != nil {
 				errMsg := map[string]interface{}{
 					"status":       "error",
@@ -225,6 +343,14 @@ func (s *DecompositionService) GenerateSeriesWithProfile(
 	wg.Wait()
 
 	if ctx.Err() == nil {
-		s.generateSeriesIntro(ctx, userID, parentID, seriesTitle, outline, scenarioMode, prompt.ArticleStyle(style), profile, progressChan, errChan)
+		s.generateSeriesIntro(ctx, userID, parentID, seriesTitle, outline, scenarioMode, prompt.ArticleStyle(style), profile, resultCollector, progressChan, errChan)
+		if taskOnlyPersistenceMode() && resultCollector != nil {
+			resultJSON, err := resultCollector.BuildTaskResult()
+			if err != nil {
+				errChan <- fmt.Errorf("build generate_series task result: %w", err)
+				return
+			}
+			s.StoreGenerateSeriesTaskResult(parentID, resultJSON)
+		}
 	}
 }
