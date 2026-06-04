@@ -101,6 +101,8 @@ Task 9 已新增微服务冒烟 Runbook：[microservices-smoke-check.md](file://
 
 `export-service` 现已接入同一套任务中心：前端侧边栏导出 PDF 时，会先向 `core-api` 创建 `POST /api/v1/tasks/export`，随后订阅统一任务流，等待 `export-service` worker 消费 RabbitMQ `export.requested` 后生成 PDF，并通过 `GET /api/v1/tasks/:id/download` 走受控下载。当前导出产物落在共享卷 `EXPORT_ARTIFACTS_DIR`，下载成功后会立即删除文件；同步 `/api/v1/blogs/:id/export/pdf` 仍保留，作为紧急回滚路径。
 
+Task 4 已把 `export-service` 的启动装配、私有路由、RabbitMQ consumer 与 artifact store 收口到 `backend/services/export-service/` 服务自有目录，和 `parser-service`、`review-service` 保持一致的目录归属；本轮仅调整服务代码边界，不改变上述导出行为、对外 API、任务协议或数据库结构。
+
 如果你需要在 Docker 模式下使用 GitHub OAuth，Compose 现在会默认把回调地址固定为 `http://localhost/api/v1/auth/callback/github`，避免错误跳回 Vite 本地开发端口 `5173`。如果你需要在 Docker 下覆盖这个地址（例如远程域名调试），请显式设置 `DOCKER_GITHUB_REDIRECT_URL`。如果你运行的是 Vite 本地开发服务器，再继续使用 `backend/.env` 中的 `GITHUB_REDIRECT_URL=http://localhost:5173/api/v1/auth/callback/github`。
 
 `OBSIDIAN_VAULT_PATH` 不再提供任何机器私有的默认绝对路径。请显式把它设置为你的 Obsidian `wiki/` 根目录，否则容器启动前的 Compose 渲染会直接报错，避免静默挂载到错误位置。

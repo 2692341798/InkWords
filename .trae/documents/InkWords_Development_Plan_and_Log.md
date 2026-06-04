@@ -1,6 +1,22 @@
 # 墨言知识训练平台 (InkWords Trainer) - 开发计划与日志
 > **目标**：跟踪项目的核心开发模块、里程碑进度以及每日开发记录。
 
+### [2026-06-04] Refactor - Task 4 export-service 服务自有目录迁移与提交同步
+- **需求背景**：
+  1. `docs/superpowers/plans/2026-06-03-backend-real-service-split-phase1.md` 的 Task 4 要求把 `export-service` 的运行时装配从共享/骨架状态收口到 `backend/services/export-service/` 服务自有目录。
+  2. 用户随后明确授权按仓库规则提交，因此必须同步更新 7 份项目文档，但文档内容只允许围绕“目录归属变化，行为/API/数据库不变”。
+- **本次完成**：
+  1. 按 TDD 先新增 `backend/services/export-service/transport/http/v1/routes_test.go` 红灯测试，锁定服务自有私有路由注册。
+  2. 新增 `backend/services/export-service/domain/export/service.go`、`consumer.go`、`infra/artifact/store.go`、`transport/http/v1/routes.go`，并将 `app/bootstrap/bootstrap.go` 收口为 `BuildRouter()`。
+  3. 更新 `backend/services/export-service/cmd/main.go`，改为使用服务自有 `BuildRouter()`、`StartExportConsumer()` 与 `httpx` 启停。
+  4. 同步更新 `InkWords_API.md`、`InkWords_Architecture.md`、`InkWords_Conversation_Log.md`、`InkWords_Database.md`、`InkWords_Development_Plan_and_Log.md`、`InkWords_PRD.md` 与 `README.md`，明确本轮仅为目录归属迁移。
+- **验证记录**：
+  - `cd backend && go test ./services/export-service/... -v` 先失败（缺少服务自有路由实现），补实现后通过
+  - `cd backend && go build -o /tmp/export-service ./services/export-service/cmd` 通过
+  - `cd backend && go test ./internal/domain/task/... ./internal/service/... -run 'Export|PDF|Obsidian' -v` 通过
+  - `docker compose --env-file backend/.env up -d --build export-service` 通过
+  - `docker ps --filter name=inkwords-export-service --format '{{.Names}} {{.Status}}'` 显示 `inkwords-export-service Up ... (healthy)`
+
 ### [2026-06-03] Chore - Task 9 微服务冒烟检查前置到 CI 与 Runbook
 - **补充修复（CI 回归）**：
   1. GitHub Actions `microservices-smoke` 首次在空 `pgdata` 下运行时，`inkwords-db` 因初始化脚本失败被判定为 `unhealthy`。

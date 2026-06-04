@@ -1,6 +1,24 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 97：执行 Task 4 收尾，迁移 export-service 到服务自有目录并按仓库规则提交
+- **用户需求**：用户要求继续执行 `Task4`，把 `export-service` 迁到 `backend/services/export-service` 自有目录，迁移 export 相关业务实现、私有路由与 bootstrap/consumer/artifact store，保证相关测试通过；随后又明确授权按仓库规则同步 7 份项目文档并提交，仅限本任务相关改动。
+- **AI 动作**：
+  1. 先完成知识库 Query，回读 `[[export-service 异步导出与受控下载]]`，确认这次是“服务目录归属迁移”，不是新的导出行为变更。
+  2. 按 TDD 先在 `backend/services/export-service/transport/http/v1/routes_test.go` 补红灯测试，锁定服务自有路由注册契约。
+  3. 在 `backend/services/export-service/` 下补齐 `domain/export/service.go`、`domain/export/consumer.go`、`infra/artifact/store.go`、`transport/http/v1/routes.go`，并把 `app/bootstrap` 与 `cmd/main.go` 切到服务自有装配入口。
+  4. 按仓库规则同步更新 `InkWords_API.md`、`InkWords_Architecture.md`、`InkWords_Conversation_Log.md`、`InkWords_Database.md`、`InkWords_Development_Plan_and_Log.md`、`InkWords_PRD.md` 与 `README.md`，只记录“目录归属变化、行为/API/数据库不变”。
+  5. 运行 Go 测试、显式构建、容器健康检查与 `git diff --staged` 后，定向暂存 `Task4` 代码与文档并提交。
+- **决策/变更**：
+  - `export-service` 的运行时边界现与 `parser-service`、`review-service` 保持一致，统一由 `backend/services/export-service/` 承载服务私有入口与装配。
+  - 本轮不切换 Compose 或 Docker 构建入口，也不修改对外 API、任务协议、数据库表结构与写入边界；这些仍保持 Task 7 落地后的行为。
+  - 提交严格排除 `docs/superpowers/` 下的计划/设计文档，仅包含 `Task4` 代码与仓库规则要求的 7 份文档同步。
+- **验证**：
+  - `cd backend && go test ./services/export-service/... -v` 通过
+  - `cd backend && go build -o /tmp/export-service ./services/export-service/cmd` 通过
+  - `cd backend && go test ./internal/domain/task/... ./internal/service/... -run 'Export|PDF|Obsidian' -v` 通过
+  - `docker compose --env-file backend/.env up -d --build export-service` 后，`docker ps --filter name=inkwords-export-service --format '{{.Names}} {{.Status}}'` 显示 `Up (... healthy)`
+
 ### 对话 96：继续长期微服务计划，执行 Task 9 的 CI 冒烟与 Runbook 固化
 - **补充回归：修复 `microservices-smoke` 中 `inkwords-db is unhealthy`**
 - **用户需求**：用户在 PR 创建后反馈 GitHub Actions 的 `microservices-smoke` 失败截图，要求继续处理当前 PR 分支上的 CI 问题。
