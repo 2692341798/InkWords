@@ -122,6 +122,21 @@ func (s *Service) BuildContinueTaskResult(ctx context.Context, userID uuid.UUID,
 	})
 }
 
+// BuildGenerateSeriesTaskResult 提取系列生成完成后缓存的结构化任务结果。
+func (s *Service) BuildGenerateSeriesTaskResult(ctx context.Context, req GenerateRequest) ([]byte, error) {
+	if s == nil || s.decomposition == nil {
+		return nil, errors.New("decomposition service is not configured")
+	}
+
+	parentID, err := uuid.Parse(req.ParentID)
+	if err != nil {
+		return nil, errors.New("invalid generation payload")
+	}
+
+	_ = ctx
+	return s.decomposition.TakeGenerateSeriesTaskResult(parentID)
+}
+
 func (s *Service) Continue(bgCtx context.Context, userID uuid.UUID, blogID uuid.UUID, chunkChan chan<- string, errChan chan<- error) {
 	s.decomposition.ContinueGeneration(bgCtx, userID, blogID, chunkChan, errChan)
 }

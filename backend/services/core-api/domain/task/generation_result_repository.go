@@ -57,6 +57,63 @@ func (r *GormGenerationResultRepository) PersistGenerationResult(ctx context.Con
 		return updateBlogByID(ctx, r.db, blogID, map[string]any{
 			"content": readPayloadString(decoded.Payload, "final_content"),
 		}, "update continued blog")
+	case "generate_series":
+		parentRaw, ok := decoded.Payload["parent_blog"].(map[string]any)
+		if !ok {
+			return fmt.Errorf("read parent_blog: invalid payload")
+		}
+		parentID, err := readPayloadUUID(parentRaw, "blog_id")
+		if err != nil {
+			return err
+		}
+
+		rawChapters, ok := decoded.Payload["chapters"].([]any)
+		if !ok {
+			return fmt.Errorf("read chapters: invalid payload")
+		}
+
+		return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			if err := updateBlogByID(ctx, tx, parentID, map[string]any{
+				"title":   readPayloadString(parentRaw, "title"),
+				"content": readPayloadString(parentRaw, "content"),
+				"status":  int16(1),
+			}, "update series parent blog"); err != nil {
+				return err
+			}
+
+			for _, rawChapter := range rawChapters {
+				chapter, ok := rawChapter.(map[string]any)
+				if !ok {
+					return fmt.Errorf("read chapter: invalid payload")
+				}
+				blogID, err := readPayloadUUID(chapter, "blog_id")
+				if err != nil {
+					return err
+				}
+				techStacksJSON, err := marshalStringSlice(readPayloadStringSlice(chapter, "tech_stacks"))
+				if err != nil {
+					return err
+				}
+
+				status := int16(1)
+				if readPayloadString(chapter, "status") == "failed" {
+					status = 2
+				}
+
+				if err := updateBlogByID(ctx, tx, blogID, map[string]any{
+					"chapter_sort": readPayloadInt(chapter, "chapter_sort"),
+					"title":        readPayloadString(chapter, "title"),
+					"content":      readPayloadString(chapter, "content"),
+					"word_count":   readPayloadInt(chapter, "word_count"),
+					"tech_stacks":  datatypes.JSON(techStacksJSON),
+					"status":       status,
+				}, "update series chapter blog"); err != nil {
+					return err
+				}
+			}
+
+			return nil
+		})
 	default:
 		return nil
 	}

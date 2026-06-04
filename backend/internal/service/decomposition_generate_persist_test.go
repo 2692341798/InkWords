@@ -297,6 +297,75 @@ func TestDecompositionService_GenerateSeries_ReportsTokenUpdateFailureAndKeepsDr
 	require.Equal(t, "正在生成章节内容...", child.Content)
 }
 
+func TestHandleSeriesChapterCompletion_TaskOnlyMode_CollectsChapterResultWithoutDirectPersistence(t *testing.T) {
+	t.Setenv("INKWORDS_TASK_PERSISTENCE_MODE", "task_only")
+
+	testDB := openDecompositionPersistTestDB(t)
+	previousDB := db.DB
+	db.DB = testDB
+	defer func() {
+		db.DB = previousDB
+	}()
+
+	userID := uuid.New()
+	parentID := uuid.New()
+	childID := uuid.New()
+	require.NoError(t, testDB.Create(&model.User{
+		ID:       userID,
+		Username: "tester",
+		Email:    "tester@example.com",
+	}).Error)
+	require.NoError(t, testDB.Create(&model.Blog{
+		ID:         parentID,
+		UserID:     userID,
+		Title:      "系列父稿",
+		Content:    "正在生成系列导读...",
+		SourceType: "file",
+		IsSeries:   true,
+		Status:     0,
+	}).Error)
+	require.NoError(t, testDB.Create(&model.Blog{
+		ID:          childID,
+		UserID:      userID,
+		ParentID:    &parentID,
+		ChapterSort: 1,
+		Title:       "第 1 章",
+		Content:     "正在生成章节内容...",
+		SourceType:  "file",
+		Status:      0,
+	}).Error)
+
+	collector := newSeriesTaskResultCollector(parentID.String(), "系列父稿")
+	err := handleSeriesChapterCompletion(
+		context.Background(),
+		userID,
+		parentID,
+		"file",
+		Chapter{
+			ID:    childID.String(),
+			Title: "第 1 章",
+			Sort:  1,
+		},
+		"章节终稿",
+		4,
+		[]string{"Go"},
+		collector,
+	)
+	require.NoError(t, err)
+	require.Len(t, collector.Chapters, 1)
+	require.Equal(t, "succeeded", collector.Chapters[0].Status)
+	require.Equal(t, "章节终稿", collector.Chapters[0].Content)
+
+	var child model.Blog
+	require.NoError(t, testDB.First(&child, "id = ?", childID).Error)
+	require.Equal(t, "正在生成章节内容...", child.Content)
+	require.EqualValues(t, 0, child.Status)
+
+	var user model.User
+	require.NoError(t, testDB.First(&user, "id = ?", userID).Error)
+	require.Equal(t, 0, user.TokensUsed)
+}
+
 func collectSeriesProgressPayloads(t *testing.T, progressChan <-chan string) []map[string]interface{} {
 	t.Helper()
 

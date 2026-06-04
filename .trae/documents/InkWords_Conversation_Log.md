@@ -1,6 +1,21 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 104：执行 Task 4，并补齐 generate_series 的最终结果交接
+- **用户需求**：用户要求直接执行 `Task 4`。
+- **AI 动作**：
+  1. 先按 TDD 为系列结果 builder、collector 与 `core-api` 父子持久化补失败测试，并观察到缺少 `BuildGenerateSeriesTaskResult`、collector helper、以及系列父子博客未更新的预期失败。
+  2. 实现 `generate_series` 的结构化结果 contract、`seriesTaskResultCollector`、`task_only` 下章节/导读只收集结果不直写库、以及 `core-api` 的父子博客事务持久化。
+  3. 在收口检查中发现 `task_consumer` 对 `generate_series` 仍写 `{"done":true}`，于是继续补第二轮 TDD：增加系列结果缓存与 `stream.Service -> task_consumer` 的最终交接，让 `generate_series` 真正写入结构化 `job_tasks.result_json`。
+  4. 在用户确认“同意”后，开始同步 `Task 4` 文档，准备后续第四个原子 commit。
+- **决策/变更**：
+  - 本次明确 `generate_series` 的最终业务事实也归 `core-api`，`llm-stream` 只负责收集并交接系列结果。
+  - 由于当前系列执行与收尾仍在同一 worker 进程，本轮采用进程内结果缓存完成系列结果交接；后续若拆分成跨进程收尾，再升级为显式共享存储。
+- **验证**：
+  - `cd backend && go test ./internal/domain/stream ./internal/service ./services/core-api/domain/task -run 'BuildGenerateSeriesTaskResult|SeriesTaskResultCollector|HandleSeriesChapterCompletion|PersistGenerateSeriesResult' -v` 先失败、补实现后通过
+  - `cd backend && go test ./internal/domain/stream ./internal/service -run 'GenerateSeries_UsesStructuredSeriesResult|TakeGenerateSeriesTaskResult' -v` 先失败、补实现后通过
+  - `cd backend && go test ./internal/service ./internal/domain/stream ./services/core-api/domain/task -run 'Series|GenerateSeries|PersistGenerateSeriesResult|TaskOnlyMode' -v` 通过
+
 ### 对话 103：先补 Task 3 文档同步，再提交第三个原子 commit
 - **用户需求**：用户要求“先补 Task 3 的文档同步，再把 Task 3 提交成第三个原子 commit”。
 - **AI 动作**：

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -174,4 +175,77 @@ func persistSeriesChapterCompletion(
 
 		return nil
 	})
+}
+
+func handleSeriesChapterCompletion(
+	ctx context.Context,
+	userID uuid.UUID,
+	parentID uuid.UUID,
+	sourceType string,
+	chapter Chapter,
+	content string,
+	wordCount int,
+	techStacks []string,
+	collector *seriesTaskResultCollector,
+) error {
+	// Why: task_only 模式下系列章节的最终业务事实必须先收口进 result_json，
+	// 否则 core-api 无法在任务成功路径里一次性接管父子博客持久化。
+	if taskOnlyPersistenceMode() {
+		collector.AddChapterSuccess(chapter, content, wordCount, techStacks)
+		return nil
+	}
+
+	techStacksJSON, err := json.Marshal(techStacks)
+	if err != nil {
+		return fmt.Errorf("marshal series chapter tech stacks: %w", err)
+	}
+
+	return persistSeriesChapterCompletion(
+		ctx,
+		userID,
+		parentID,
+		sourceType,
+		chapter,
+		content,
+		wordCount,
+		datatypes.JSON(techStacksJSON),
+	)
+}
+
+func handleSeriesChapterFailure(
+	ctx context.Context,
+	userID uuid.UUID,
+	chapter Chapter,
+	streamErr error,
+	collector *seriesTaskResultCollector,
+) {
+	if taskOnlyPersistenceMode() {
+		collector.AddChapterFailure(chapter, streamErr.Error())
+		return
+	}
+
+	if chapter.ID == "" {
+		return
+	}
+
+	blogID, err := uuid.Parse(chapter.ID)
+	if err != nil {
+		return
+	}
+
+	db.DB.WithContext(ctx).Model(&model.Blog{}).Where("id = ? AND user_id = ?", blogID, userID).Updates(map[string]interface{}{
+		"status":  2,
+		"content": "章节生成失败，请重试。",
+	})
+}
+
+func decodeTechStacksJSON(raw datatypes.JSON) []string {
+	var techStacks []string
+	if len(raw) == 0 {
+		return []string{}
+	}
+	if err := json.Unmarshal(raw, &techStacks); err != nil {
+		return []string{}
+	}
+	return techStacks
 }

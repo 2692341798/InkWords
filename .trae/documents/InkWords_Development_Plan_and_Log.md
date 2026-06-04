@@ -1,6 +1,20 @@
 # 墨言知识训练平台 (InkWords Trainer) - 开发计划与日志
 > **目标**：跟踪项目的核心开发模块、里程碑进度以及每日开发记录。
 
+### [2026-06-04] Feat - Generation task_only Task 4 打通 generate_series 父子结果闭环
+- **需求背景**：
+  1. 用户要求执行 `Task 4`，先完成系列生成的代码闭环，再补文档同步并准备第四个原子 commit。
+  2. 本轮目标是让 `generate_series` 进入与单篇/续写一致的 `task_only` 闭环，不改变对外 API 与 SSE 路径。
+- **本次完成**：
+  1. 为 `generate_series` 新增结构化结果 contract：`parent_blog` 与 `chapters[]`，明确系列父博客导读、章节正文、技术栈、成功/失败状态和错误信息。
+  2. 在 `DecompositionService` 中新增系列结果 collector 与结果缓存：`task_only` 下章节成功/失败和导读完成只收集业务事实，不再直写 `blogs/users`。
+  3. 调整 `task_consumer` 与 `stream.Service`：系列生成成功后不再写固定 `{"done":true}`，而是从 collector 取回真实 `generate_series` 结果并写入 `job_tasks.result_json`。
+  4. 调整 `core-api` generation result repository：新增 `generate_series` 分支，事务更新系列父博客与章节草稿，并保留 token 统一累计。
+- **验证记录**：
+  - `cd backend && go test ./internal/domain/stream ./internal/service ./services/core-api/domain/task -run 'BuildGenerateSeriesTaskResult|SeriesTaskResultCollector|HandleSeriesChapterCompletion|PersistGenerateSeriesResult' -v` 先失败（缺少 builder/collector/helper），补实现后通过
+  - `cd backend && go test ./internal/domain/stream ./internal/service -run 'GenerateSeries_UsesStructuredSeriesResult|TakeGenerateSeriesTaskResult' -v` 先失败（缺少系列结果缓存交接），补实现后通过
+  - `cd backend && go test ./internal/service ./internal/domain/stream ./services/core-api/domain/task -run 'Series|GenerateSeries|PersistGenerateSeriesResult|TaskOnlyMode' -v` 通过
+
 ### [2026-06-04] Feat - Generation task_only Task 3 打通 continue 结果与正文追加
 - **需求背景**：
   1. 用户要求先补 `Task 3` 的文档同步，再把 `Task 3` 提交成第三个原子 commit。

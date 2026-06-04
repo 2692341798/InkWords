@@ -37,6 +37,34 @@ type ContinueTaskResultInput struct {
 	EstimatedTokens int
 }
 
+// SeriesParentTaskResult 表示系列任务中父博客最终需要持久化的业务事实。
+type SeriesParentTaskResult struct {
+	BlogID  string `json:"blog_id"`
+	Title   string `json:"title"`
+	Content string `json:"content"`
+}
+
+// SeriesChapterTaskResult 表示系列任务中单个章节最终需要持久化的业务事实。
+type SeriesChapterTaskResult struct {
+	BlogID       string   `json:"blog_id"`
+	ChapterSort  int      `json:"chapter_sort"`
+	Title        string   `json:"title"`
+	Content      string   `json:"content"`
+	WordCount    int      `json:"word_count"`
+	TechStacks   []string `json:"tech_stacks"`
+	Status       string   `json:"status"`
+	ErrorMessage string   `json:"error_message"`
+}
+
+// GenerateSeriesTaskResultInput 表示系列生成完成后交给 core-api 的父子博客快照。
+type GenerateSeriesTaskResultInput struct {
+	ParentBlogID    string
+	ParentTitle     string
+	ParentContent   string
+	EstimatedTokens int
+	Chapters        []SeriesChapterTaskResult
+}
+
 // BuildGenerateSingleTaskResult 构造 generate_single 的 task_only 结果契约。
 func BuildGenerateSingleTaskResult(input GenerateSingleTaskResultInput) ([]byte, error) {
 	envelope := TaskResultEnvelope{
@@ -72,6 +100,28 @@ func BuildContinueTaskResult(input ContinueTaskResultInput) ([]byte, error) {
 			"blog_id":          input.BlogID,
 			"appended_content": input.AppendedContent,
 			"final_content":    input.FinalContent,
+		},
+	}
+
+	return json.Marshal(envelope)
+}
+
+// BuildGenerateSeriesTaskResult 构造 generate_series 的 task_only 结果契约。
+func BuildGenerateSeriesTaskResult(input GenerateSeriesTaskResultInput) ([]byte, error) {
+	envelope := TaskResultEnvelope{
+		ResultVersion:   1,
+		TaskType:        "generation",
+		TaskSubtype:     "generate_series",
+		PersistenceMode: "task_only",
+		FinalStatus:     "succeeded",
+		Usage:           TaskResultUsage{EstimatedTokens: input.EstimatedTokens},
+		Payload: map[string]any{
+			"parent_blog": SeriesParentTaskResult{
+				BlogID:  input.ParentBlogID,
+				Title:   input.ParentTitle,
+				Content: input.ParentContent,
+			},
+			"chapters": input.Chapters,
 		},
 	}
 

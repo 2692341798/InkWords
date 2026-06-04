@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - 数据库设计文档
 
 ## 0. 变更记录
+- 2026-06-04：Generation Task-Only Task 4 为 `generate_series` 任务增强 `job_tasks.result_json` 语义并打通最终业务写入。系列成功结果现在保存 `parent_blog` 与 `chapters[]`：父博客包含系列标题与导读正文，章节包含 `blog_id / chapter_sort / title / content / word_count / tech_stacks / status / error_message`；`core-api` 会基于该结果事务性更新 `blogs` 中的父子记录，并继续使用 `usage.estimated_tokens` 累计 `users.tokens_used`。本次不新增表、字段、索引或迁移。
 - 2026-06-04：Generation Task-Only Task 3 为 `continue` 任务增强 `job_tasks.result_json` 语义并打通最终业务写入。续写成功结果现在保存 `blog_id / appended_content / final_content`，`core-api` 会基于 `payload.final_content` 更新 `blogs.content`，并继续使用 `usage.estimated_tokens` 累计 `users.tokens_used`。本次不新增表、字段、索引或迁移。
 - 2026-06-04：Generation Task-Only Task 2 让 `core-api` 开始消费单篇 `generate_single` 的结构化 `job_tasks.result_json` 并完成最终业务写入：当任务成功时，会把 `payload.title/content/source_type/word_count/tech_stacks` 写回 `blogs`，并基于 `usage.estimated_tokens` 累计 `users.tokens_used`。本次不新增表、字段、索引或迁移，但 `job_tasks.result_json -> blogs/users` 的单篇持久化闭环已从设计进入实现。
 - 2026-06-04：Generation Task-Only Task 1 为 `generate_single` 任务增强 `job_tasks.result_json` 语义。在 `INKWORDS_TASK_PERSISTENCE_MODE=task_only` 下，单篇生成成功结果不再固定为 `{"done":true}`，而是保存结构化 JSON：外层含 `result_version / task_type / task_subtype / persistence_mode / final_status / usage`，`payload` 含单篇标题、正文、来源类型、字数与技术栈；本次不新增表、字段、索引或迁移。

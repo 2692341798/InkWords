@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - 架构设计与工程规范
 
 ## 0. 变更记录
+- 2026-06-04：Generation Task-Only Task 4 打通 `generate_series` 系列链路的结果收集、任务结果交接与父子博客持久化。`llm-stream` 现会在系列生成完成后把父博客导读、章节成功/失败状态、章节正文与技术栈汇总为结构化 `job_tasks.result_json`；`core-api` 在 generation 成功路径中消费该结果，并以事务方式更新系列父博客与章节草稿。
 - 2026-06-04：Generation Task-Only Task 3 打通 `continue` 续写链路的结果交接与最终持久化。`llm-stream` 现会在续写成功后输出带 `blog_id / appended_content / final_content` 的结构化 `job_tasks.result_json`；`core-api` 在 generation 成功路径中消费该结果，依据 `final_content` 更新目标博客正文，并统一累计 `users.tokens_used`。
 - 2026-06-04：Generation Task-Only Task 2 打通 `core-api` 对单篇 `generate_single` 任务结果的最终持久化闭环。`core-api` 现通过服务自有 `generation_result_repository` 消费结构化 `job_tasks.result_json`，在 generation 任务成功路径中把单篇正文落回 `blogs` 并累计 `users.tokens_used`；`llm-stream` 仍继续只负责生成执行、事件流与任务结果产出。
 - 2026-06-04：Generation Task-Only Task 1 落地单篇生成结果 contract。`llm-stream` 当前在 `generate_single + INKWORDS_TASK_PERSISTENCE_MODE=task_only` 下不再把任务成功固定写成 `{"done":true}`，而是输出带 `result_version / task_type / task_subtype / persistence_mode / final_status / usage / payload` 的结构化 `job_tasks.result_json`；本轮仅覆盖单篇生成结果交接，对外入口、SSE 路径与 `core-api` 最终业务落库职责暂未改变。

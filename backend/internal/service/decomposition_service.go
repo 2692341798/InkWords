@@ -4,6 +4,7 @@ import (
 	"math/rand"
 	"os"
 	"strconv"
+	"sync"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -75,6 +76,9 @@ type DecompositionService struct {
 	gitFetcher *parser.GitFetcher
 	limiter    *rate.Limiter
 	promptReq  *PromptRequirementsService
+
+	seriesTaskResultsMu sync.Mutex
+	seriesTaskResults   map[string][]byte
 }
 
 // NewDecompositionService creates a new decomposition service
@@ -94,5 +98,7 @@ func NewDecompositionService(promptReq *PromptRequirementsService) *Decompositio
 		gitFetcher: parser.NewGitFetcher(),
 		limiter:    rate.NewLimiter(limit, 1),
 		promptReq:  promptReq,
+
+		seriesTaskResults: make(map[string][]byte),
 	}
 }

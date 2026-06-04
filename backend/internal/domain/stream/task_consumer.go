@@ -28,6 +28,7 @@ type taskService interface {
 type generationStreamService interface {
 	Generate(ctx context.Context, userID uuid.UUID, req GenerateRequest, chunkChan chan<- string, errChan chan<- error)
 	BuildGenerateSingleTaskResult(ctx context.Context, req GenerateRequest, content string) ([]byte, error)
+	BuildGenerateSeriesTaskResult(ctx context.Context, req GenerateRequest) ([]byte, error)
 	BuildContinueTaskResult(ctx context.Context, userID uuid.UUID, blogID uuid.UUID, appendedContent string) ([]byte, error)
 	Continue(ctx context.Context, userID uuid.UUID, blogID uuid.UUID, chunkChan chan<- string, errChan chan<- error)
 	Polish(ctx context.Context, req PolishRequest, chunkChan chan<- string, errChan chan<- error)
@@ -58,6 +59,12 @@ func (c *TaskConsumer) HandleGenerationRequested(ctx context.Context, message mq
 	if !supportsGenerationKind(message.Kind) {
 		return c.tasks.MarkFailed(ctx, message.TaskID, fmt.Sprintf("unsupported generation kind: %s", strings.TrimSpace(message.Kind)))
 	}
+
+	normalizedMessage, err := normalizeGenerationMessage(message)
+	if err != nil {
+		return c.tasks.MarkFailed(ctx, message.TaskID, err.Error())
+	}
+	message = normalizedMessage
 
 	cancelled, err := c.tasks.IsCancelled(ctx, message.TaskID)
 	if err != nil {
@@ -180,6 +187,12 @@ func (c *TaskConsumer) buildFinalTaskResult(
 			return nil, errors.New("invalid generation payload")
 		}
 		return c.streams.BuildGenerateSingleTaskResult(ctx, req, fullContent)
+	case "generate_series":
+		var req GenerateRequest
+		if err := json.Unmarshal(message.Payload, &req); err != nil {
+			return nil, errors.New("invalid generation payload")
+		}
+		return c.streams.BuildGenerateSeriesTaskResult(ctx, req)
 	case "continue":
 		var payload struct {
 			BlogID string `json:"blog_id"`
@@ -195,6 +208,27 @@ func (c *TaskConsumer) buildFinalTaskResult(
 	default:
 		return []byte(`{"done":true}`), nil
 	}
+}
+
+func normalizeGenerationMessage(message mq.GenerationRequestedMessage) (mq.GenerationRequestedMessage, error) {
+	if strings.TrimSpace(message.Kind) != "generate_series" {
+		return message, nil
+	}
+
+	var req GenerateRequest
+	if err := json.Unmarshal(message.Payload, &req); err != nil {
+		return message, errors.New("invalid generation payload")
+	}
+	if strings.TrimSpace(req.ParentID) == "" {
+		req.ParentID = uuid.NewString()
+	}
+
+	normalizedPayload, err := json.Marshal(req)
+	if err != nil {
+		return message, errors.New("invalid generation payload")
+	}
+	message.Payload = normalizedPayload
+	return message, nil
 }
 
 func (c *TaskConsumer) startTaskStream(

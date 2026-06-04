@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - API 接口文档
 
 ## 0. 变更记录
+- 2026-06-04：Generation Task-Only Task 4 继续扩展 generation 任务成功路径的内部语义，不新增也不修改任何对外 API 路由、请求字段或响应字段；当 `generate_series` 任务成功时，系统会把结构化 `result_json` 中的 `parent_blog` 与 `chapters[]` 交给 `core-api` 消费，并由 `core-api` 完成系列父博客与章节草稿的最终持久化。
 - 2026-06-04：Generation Task-Only Task 3 继续扩展 generation 任务成功路径的内部语义，不新增也不修改任何对外 API 路由、请求字段或响应字段；当 `continue` 任务成功时，系统会把结构化 `result_json` 中的 `blog_id / appended_content / final_content` 交给 `core-api` 消费，并以 `final_content` 完成正文更新。
 - 2026-06-04：Generation Task-Only Task 2 继续收紧 generation 任务成功路径的内部语义，不新增也不修改任何对外 API 路由、请求字段或响应字段；当 `generate_single` 任务成功且 `job_tasks.result_json` 为结构化结果时，`core-api` 现会在任务成功路径中消费该结果并完成最终博客正文与 token 记账的业务落库。
 - 2026-06-04：Generation Task-Only Task 1 仅加强生成任务成功结果的内部契约，不新增也不修改任何对外 API 路由、请求字段或响应字段；`generate_single` 任务在 `INKWORDS_TASK_PERSISTENCE_MODE=task_only` 下写入 `job_tasks.result_json` 时，不再固定保存 `{"done":true}`，而是保存带 `result_version / task_type / task_subtype / persistence_mode / final_status / usage / payload` 的结构化结果，供后续 `core-api` 持久化闭环消费。
