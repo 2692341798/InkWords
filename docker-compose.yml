@@ -148,6 +148,9 @@ services:
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-inkwords}:${POSTGRES_PASSWORD:-inkwords_password}@db:5432/${POSTGRES_DB:-inkwords_db}?sslmode=disable
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      RABBITMQ_URL: ${RABBITMQ_URL:-amqp://guest:guest@rabbitmq:5672/}
+      RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-inkwords.events}
+      RABBITMQ_PARSE_QUEUE: ${RABBITMQ_PARSE_QUEUE:-inkwords.parse}
       JWT_SECRET: ${JWT_SECRET:-}
     expose:
       - "8080"
@@ -155,6 +158,8 @@ services:
       db:
         condition: service_healthy
       redis:
+        condition: service_started
+      rabbitmq:
         condition: service_started
     networks:
       - inkwords-network
