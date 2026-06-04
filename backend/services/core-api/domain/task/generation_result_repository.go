@@ -29,36 +29,37 @@ func (r *GormGenerationResultRepository) PersistGenerationResult(ctx context.Con
 	if err != nil {
 		return fmt.Errorf("decode generation result for task %s: %w", taskID, err)
 	}
-	if decoded.TaskSubtype != "generate_single" {
+	switch decoded.TaskSubtype {
+	case "generate_single":
+		blogID, err := readPayloadUUID(decoded.Payload, "blog_id")
+		if err != nil {
+			return err
+		}
+		techStacksJSON, err := marshalStringSlice(readPayloadStringSlice(decoded.Payload, "tech_stacks"))
+		if err != nil {
+			return err
+		}
+
+		updates := map[string]any{
+			"title":       readPayloadString(decoded.Payload, "title"),
+			"content":     readPayloadString(decoded.Payload, "content"),
+			"source_type": readPayloadString(decoded.Payload, "source_type"),
+			"word_count":  readPayloadInt(decoded.Payload, "word_count"),
+			"tech_stacks": datatypes.JSON(techStacksJSON),
+			"status":      int16(1),
+		}
+		return updateBlogByID(ctx, r.db, blogID, updates, "update generated blog")
+	case "continue":
+		blogID, err := readPayloadUUID(decoded.Payload, "blog_id")
+		if err != nil {
+			return err
+		}
+		return updateBlogByID(ctx, r.db, blogID, map[string]any{
+			"content": readPayloadString(decoded.Payload, "final_content"),
+		}, "update continued blog")
+	default:
 		return nil
 	}
-
-	blogID, err := readPayloadUUID(decoded.Payload, "blog_id")
-	if err != nil {
-		return err
-	}
-	techStacksJSON, err := marshalStringSlice(readPayloadStringSlice(decoded.Payload, "tech_stacks"))
-	if err != nil {
-		return err
-	}
-
-	updates := map[string]any{
-		"title":       readPayloadString(decoded.Payload, "title"),
-		"content":     readPayloadString(decoded.Payload, "content"),
-		"source_type": readPayloadString(decoded.Payload, "source_type"),
-		"word_count":  readPayloadInt(decoded.Payload, "word_count"),
-		"tech_stacks": datatypes.JSON(techStacksJSON),
-		"status":      int16(1),
-	}
-
-	resultTx := r.db.WithContext(ctx).Model(&model.Blog{}).Where("id = ?", blogID).Updates(updates)
-	if resultTx.Error != nil {
-		return fmt.Errorf("update generated blog: %w", resultTx.Error)
-	}
-	if resultTx.RowsAffected == 0 {
-		return fmt.Errorf("update generated blog: blog %s not found", blogID)
-	}
-	return nil
 }
 
 // AccumulateTokens applies token accounting after blogs have been updated.
@@ -67,7 +68,9 @@ func (r *GormGenerationResultRepository) AccumulateTokens(ctx context.Context, t
 	if err != nil {
 		return fmt.Errorf("decode generation result for task %s: %w", taskID, err)
 	}
-	if decoded.TaskSubtype != "generate_single" {
+	switch decoded.TaskSubtype {
+	case "generate_single", "continue":
+	default:
 		return nil
 	}
 
@@ -92,6 +95,17 @@ func (r *GormGenerationResultRepository) AccumulateTokens(ctx context.Context, t
 	}
 	if updateTx.RowsAffected == 0 {
 		return fmt.Errorf("accumulate user tokens: user %s not found", blog.UserID)
+	}
+	return nil
+}
+
+func updateBlogByID(ctx context.Context, db *gorm.DB, blogID uuid.UUID, updates map[string]any, action string) error {
+	resultTx := db.WithContext(ctx).Model(&model.Blog{}).Where("id = ?", blogID).Updates(updates)
+	if resultTx.Error != nil {
+		return fmt.Errorf("%s: %w", action, resultTx.Error)
+	}
+	if resultTx.RowsAffected == 0 {
+		return fmt.Errorf("%s: blog %s not found", action, blogID)
 	}
 	return nil
 }

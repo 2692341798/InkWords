@@ -27,3 +27,15 @@ func TestBuildGenerateSingleTaskResult_ProducesTaskOnlyContract(t *testing.T) {
 	require.Equal(t, "task_only", decoded["persistence_mode"])
 	require.Equal(t, "succeeded", decoded["final_status"])
 }
+
+func TestBuildContinueTaskResult_ProducesFinalContent(t *testing.T) {
+	result, err := BuildContinueTaskResult(ContinueTaskResultInput{
+		BlogID:          "11111111-1111-1111-1111-111111111111",
+		AppendedContent: "追加内容",
+		FinalContent:    "旧内容追加内容",
+		EstimatedTokens: 8,
+	})
+	require.NoError(t, err)
+	require.Contains(t, string(result), `"task_subtype":"continue"`)
+	require.Contains(t, string(result), `"final_content":"旧内容追加内容"`)
+}

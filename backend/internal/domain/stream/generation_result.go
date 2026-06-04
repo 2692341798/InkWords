@@ -29,6 +29,14 @@ type GenerateSingleTaskResultInput struct {
 	EstimatedTokens int
 }
 
+// ContinueTaskResultInput 表示续写任务成功后交给 core-api 的业务事实快照。
+type ContinueTaskResultInput struct {
+	BlogID          string
+	AppendedContent string
+	FinalContent    string
+	EstimatedTokens int
+}
+
 // BuildGenerateSingleTaskResult 构造 generate_single 的 task_only 结果契约。
 func BuildGenerateSingleTaskResult(input GenerateSingleTaskResultInput) ([]byte, error) {
 	envelope := TaskResultEnvelope{
@@ -45,6 +53,25 @@ func BuildGenerateSingleTaskResult(input GenerateSingleTaskResultInput) ([]byte,
 			"source_type": input.SourceType,
 			"word_count":  input.WordCount,
 			"tech_stacks": input.TechStacks,
+		},
+	}
+
+	return json.Marshal(envelope)
+}
+
+// BuildContinueTaskResult 构造 continue 的 task_only 结果契约。
+func BuildContinueTaskResult(input ContinueTaskResultInput) ([]byte, error) {
+	envelope := TaskResultEnvelope{
+		ResultVersion:   1,
+		TaskType:        "generation",
+		TaskSubtype:     "continue",
+		PersistenceMode: "task_only",
+		FinalStatus:     "succeeded",
+		Usage:           TaskResultUsage{EstimatedTokens: input.EstimatedTokens},
+		Payload: map[string]any{
+			"blog_id":          input.BlogID,
+			"appended_content": input.AppendedContent,
+			"final_content":    input.FinalContent,
 		},
 	}
 

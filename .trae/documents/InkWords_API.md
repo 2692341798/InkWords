@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - API 接口文档
 
 ## 0. 变更记录
+- 2026-06-04：Generation Task-Only Task 3 继续扩展 generation 任务成功路径的内部语义，不新增也不修改任何对外 API 路由、请求字段或响应字段；当 `continue` 任务成功时，系统会把结构化 `result_json` 中的 `blog_id / appended_content / final_content` 交给 `core-api` 消费，并以 `final_content` 完成正文更新。
 - 2026-06-04：Generation Task-Only Task 2 继续收紧 generation 任务成功路径的内部语义，不新增也不修改任何对外 API 路由、请求字段或响应字段；当 `generate_single` 任务成功且 `job_tasks.result_json` 为结构化结果时，`core-api` 现会在任务成功路径中消费该结果并完成最终博客正文与 token 记账的业务落库。
 - 2026-06-04：Generation Task-Only Task 1 仅加强生成任务成功结果的内部契约，不新增也不修改任何对外 API 路由、请求字段或响应字段；`generate_single` 任务在 `INKWORDS_TASK_PERSISTENCE_MODE=task_only` 下写入 `job_tasks.result_json` 时，不再固定保存 `{"done":true}`，而是保存带 `result_version / task_type / task_subtype / persistence_mode / final_status / usage / payload` 的结构化结果，供后续 `core-api` 持久化闭环消费。
 - 2026-06-04：Phase 2 执行 `core-api / llm-stream` 深层拆分第一轮。对外 API 路由、请求/响应字段与 `http://localhost` 单入口保持不变，但 `core-api` 与 `llm-stream` 的主 HTTP 装配已分别迁入 `backend/services/core-api/` 与 `backend/services/llm-stream/` 的服务自有 `bootstrap/routes/cmd`；共享 `internal/transport/http/v1/routes.go` 与 `internal/transport/http/v1/api/stream_api.go` 仅保留为过渡兼容层。另新增 `INKWORDS_TASK_PERSISTENCE_MODE=task_only` 运行开关，用于在拆分阶段控制 legacy 生成链路不再由 `llm-stream` 直接把最终结果写入 `blogs / users`。

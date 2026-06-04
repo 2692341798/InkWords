@@ -1,6 +1,21 @@
 # 墨言知识训练平台 (InkWords Trainer) - 开发计划与日志
 > **目标**：跟踪项目的核心开发模块、里程碑进度以及每日开发记录。
 
+### [2026-06-04] Feat - Generation task_only Task 3 打通 continue 结果与正文追加
+- **需求背景**：
+  1. 用户要求先补 `Task 3` 的文档同步，再把 `Task 3` 提交成第三个原子 commit。
+  2. 本轮只允许在 `Task 2` 的单篇持久化闭环基础上继续收口 `continue`，不提前混入 `generate_series`。
+- **本次完成**：
+  1. 为 `continue` 新增结构化结果 contract：`blog_id / appended_content / final_content / estimated_tokens`。
+  2. 调整 `task_consumer`：续写成功后不再写固定 `{"done":true}`，而是写真实 `continue` 结果。
+  3. 调整 `DecompositionService`：在 `task_only` 下只收集续写业务事实快照，不直接更新 `blogs`。
+  4. 调整 `core-api` generation result repository`：新增 `continue` 分支，依据 `payload.final_content` 更新博客正文，并继续累计 token。
+- **验证记录**：
+  - `cd backend && go test ./internal/domain/stream -run TestBuildContinueTaskResult_ProducesFinalContent -v` 先失败（缺少 builder），补实现后通过
+  - `cd backend && go test ./internal/service -run TestContinueGeneration_TaskOnlyMode_DoesNotUpdateBlogDirectly -v` 先失败（缺少 continue 快照构造），补实现后通过
+  - `cd backend && go test ./services/core-api/domain/task -run TestGormGenerationResultRepository_PersistContinueResult -v` 先失败（正文未更新），补实现后通过
+  - `cd backend && go test ./internal/service ./internal/domain/stream ./services/core-api/domain/task -run 'Continue|TaskOnlyMode|PersistContinueResult' -v` 通过
+
 ### [2026-06-04] Feat - Generation task_only Task 2 打通 core-api 单篇结果持久化
 - **需求背景**：
   1. 用户要求先把 `Task 2` 做成第二个原子 commit，再继续后续 `Task 3`。

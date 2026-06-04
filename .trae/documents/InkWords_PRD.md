@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - 产品需求文档 (PRD)
 
 ## 0. 变更记录
+- 2026-06-04：Generation Task-Only Task 3 打通 `continue` 的后台持久化闭环。本次不新增用户可见功能，也不改变续写入口、SSE 或页面交互；仅要求系统在 `continue` 任务成功后，由 `core-api` 自动消费结构化 `result_json` 并把 `final_content` 更新回博客正文，同时继续记录 token 记账。
 - 2026-06-04：Generation Task-Only Task 2 打通单篇任务结果的后台持久化闭环。本次不新增用户可见功能，也不改变任务创建、SSE 或页面交互；仅要求系统在 `generate_single` 任务成功后，由 `core-api` 自动消费结构化 `result_json` 并把最终正文与 token 记账落回业务表，为后续继续把 `continue / generate_series` 纳入同一闭环做铺垫。
 - 2026-06-04：Generation Task-Only Task 1 落地单篇生成结果 contract。本次不新增用户可见功能，也不改变 `http://localhost` 单入口、任务创建/SSE 交互或最终博客展示；仅要求后端在 `generate_single + INKWORDS_TASK_PERSISTENCE_MODE=task_only` 下把任务成功结果升级为结构化 `result_json`，为后续由 `core-api` 接管最终业务落库做准备。
 - 2026-06-04：Phase 2 执行 `core-api / llm-stream` 深层拆分第一轮。本次不新增用户可见产品功能，但把“生成任务由 `core-api` 负责业务事实落库、`llm-stream` 聚焦流式执行与任务表写入”正式收口为产品运行约束；系统仍保持 `http://localhost` 单入口、`/api/*` 路径不变，并保留旧 `/api/v1/stream/*` 与 `/api/v1/blogs/:id/(continue|polish)` 作为紧急回滚路径。

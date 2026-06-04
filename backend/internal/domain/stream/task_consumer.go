@@ -28,6 +28,7 @@ type taskService interface {
 type generationStreamService interface {
 	Generate(ctx context.Context, userID uuid.UUID, req GenerateRequest, chunkChan chan<- string, errChan chan<- error)
 	BuildGenerateSingleTaskResult(ctx context.Context, req GenerateRequest, content string) ([]byte, error)
+	BuildContinueTaskResult(ctx context.Context, userID uuid.UUID, blogID uuid.UUID, appendedContent string) ([]byte, error)
 	Continue(ctx context.Context, userID uuid.UUID, blogID uuid.UUID, chunkChan chan<- string, errChan chan<- error)
 	Polish(ctx context.Context, req PolishRequest, chunkChan chan<- string, errChan chan<- error)
 }
@@ -179,6 +180,18 @@ func (c *TaskConsumer) buildFinalTaskResult(
 			return nil, errors.New("invalid generation payload")
 		}
 		return c.streams.BuildGenerateSingleTaskResult(ctx, req, fullContent)
+	case "continue":
+		var payload struct {
+			BlogID string `json:"blog_id"`
+		}
+		if err := json.Unmarshal(message.Payload, &payload); err != nil {
+			return nil, errors.New("invalid generation payload")
+		}
+		blogID, err := uuid.Parse(strings.TrimSpace(payload.BlogID))
+		if err != nil {
+			return nil, errors.New("invalid generation payload")
+		}
+		return c.streams.BuildContinueTaskResult(ctx, message.UserID, blogID, fullContent)
 	default:
 		return []byte(`{"done":true}`), nil
 	}

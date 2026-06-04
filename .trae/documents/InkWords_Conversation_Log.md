@@ -1,6 +1,21 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 103：先补 Task 3 文档同步，再提交第三个原子 commit
+- **用户需求**：用户要求“先补 Task 3 的文档同步，再把 Task 3 提交成第三个原子 commit”。
+- **AI 动作**：
+  1. 先检查 `Task 3` 当前工作区，确认只包含 `continue` 相关代码改动和一个新增测试文件，未跟踪的 `docs/superpowers/*` 草稿仍留在工作区但不会进入提交。
+  2. 按仓库规则补齐核心文档，只记录已落地的 `continue` 结果 contract、`task_consumer` 真实 `result_json`、以及 `core-api` 基于 `final_content` 的正文更新。
+  3. 准备在文档同步完成后，仅暂存 `Task 3` 代码与本轮文档，生成第三个原子 commit。
+- **决策/变更**：
+  - 本次 commit 继续只覆盖 `Task 3`，不提前写入 `generate_series` 的设计或实现结论。
+  - `continue` 的关键约束被明确为：`task_only` 下 `llm-stream` 只产出业务事实快照，最终正文更新由 `core-api` 完成。
+- **验证**：
+  - `cd backend && go test ./internal/domain/stream -run TestBuildContinueTaskResult_ProducesFinalContent -v` 先失败、补实现后通过
+  - `cd backend && go test ./internal/service -run TestContinueGeneration_TaskOnlyMode_DoesNotUpdateBlogDirectly -v` 先失败、补实现后通过
+  - `cd backend && go test ./services/core-api/domain/task -run TestGormGenerationResultRepository_PersistContinueResult -v` 先失败、补实现后通过
+  - `cd backend && go test ./internal/service ./internal/domain/stream ./services/core-api/domain/task -run 'Continue|TaskOnlyMode|PersistContinueResult' -v` 通过
+
 ### 对话 102：提交 Task 2，并继续推进 generation task_only
 - **用户需求**：用户在确认 `Task 2` 已实现并通过测试后，要求“把 Task 2 再提交成第二个原子 commit，再继续”。
 - **AI 动作**：

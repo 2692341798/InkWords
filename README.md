@@ -26,6 +26,7 @@
 - **全链路流式体验（SSE）**：从解析、分析到生成与润色，全链路使用 SSE 推送进度与内容，让过程可见、可中断、可续写。
 - **单篇生成任务结果结构化**：在 `INKWORDS_TASK_PERSISTENCE_MODE=task_only` 下，单篇 `generate_single` 任务成功后会把标题、正文、来源类型、字数、技术栈与 token 估算写入结构化 `job_tasks.result_json`，不再固定保存 `{"done":true}`，为后续由 `core-api` 接管最终业务落库打基础。
 - **core-api 单篇结果回收**：当前 `core-api` 已能在 generation 任务成功路径中消费单篇 `generate_single` 的结构化 `result_json`，把正文写回 `blogs` 并累计 `users.tokens_used`；`continue`、`generate_series` 仍按后续任务逐步收口。
+- **continue 续写结果回收**：当前 `continue` 任务也已进入同一条 `task_only` 闭环，续写成功后会把 `blog_id / appended_content / final_content` 写入结构化 `job_tasks.result_json`，再由 `core-api` 按 `final_content` 更新博客正文并累计 token。
 - **系列章节质量阶段可视化**：系列章节生成进度卡会直接显示 `理解章节 / 生成草稿 / 技术审稿 / 定向补强 / 输出终稿` 等中文阶段标签，帮助用户理解当前流水线停留在哪一步。
 - **阅后即焚的安全策略**：解析源文件只在内存中处理，任务完成后立即清理临时产物；对用户可见正文做净化，剥离 `<think>` 与对话式前言。
 - **可选的对外输出：博客生成与导出**：在知识沉淀基础上，支持生成可复现的系列技术博客、导读串联，以及批量导出为 Markdown ZIP 或直通 Obsidian Vault。

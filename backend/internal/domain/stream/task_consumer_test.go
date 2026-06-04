@@ -74,6 +74,11 @@ func TestTaskConsumer_RunContinue_UsesLegacyContinuationServiceBehindTaskEnvelop
 			close(chunkChan)
 			close(errChan)
 		},
+		buildContinueTaskResultFunc: func(ctx context.Context, userID uuid.UUID, blogID uuid.UUID, appendedContent string) ([]byte, error) {
+			require.Equal(t, uuid.MustParse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"), blogID)
+			require.Equal(t, "续写片段", appendedContent)
+			return []byte(`{"result_version":1,"task_type":"generation","task_subtype":"continue","persistence_mode":"task_only","final_status":"succeeded","usage":{"estimated_tokens":8},"payload":{"blog_id":"eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee","appended_content":"续写片段","final_content":"旧内容续写片段"}}`), nil
+		},
 	}
 
 	consumer := NewTaskConsumer(taskService, streamService)
@@ -91,6 +96,7 @@ func TestTaskConsumer_RunContinue_UsesLegacyContinuationServiceBehindTaskEnvelop
 	require.Equal(t, model.JobTaskStatusSucceeded, taskService.lastStatus)
 	require.Len(t, taskService.appendedPayloads, 1)
 	require.Contains(t, string(taskService.appendedPayloads[0]), `"续写片段"`)
+	require.JSONEq(t, `{"result_version":1,"task_type":"generation","task_subtype":"continue","persistence_mode":"task_only","final_status":"succeeded","usage":{"estimated_tokens":8},"payload":{"blog_id":"eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee","appended_content":"续写片段","final_content":"旧内容续写片段"}}`, string(taskService.lastResult))
 }
 
 func TestTaskConsumer_RunPolish_UsesLegacyPolishServiceBehindTaskEnvelope(t *testing.T) {
@@ -194,6 +200,7 @@ type fakeStreamService struct {
 	continueFunc                      func(ctx context.Context, userID uuid.UUID, blogID uuid.UUID, chunkChan chan<- string, errChan chan<- error)
 	polishFunc                        func(ctx context.Context, req PolishRequest, chunkChan chan<- string, errChan chan<- error)
 	buildGenerateSingleTaskResultFunc func(ctx context.Context, req GenerateRequest, content string) ([]byte, error)
+	buildContinueTaskResultFunc       func(ctx context.Context, userID uuid.UUID, blogID uuid.UUID, appendedContent string) ([]byte, error)
 }
 
 func (f *fakeStreamService) Generate(ctx context.Context, userID uuid.UUID, req GenerateRequest, chunkChan chan<- string, errChan chan<- error) {
@@ -226,6 +233,13 @@ func (f *fakeStreamService) Polish(ctx context.Context, req PolishRequest, chunk
 func (f *fakeStreamService) BuildGenerateSingleTaskResult(ctx context.Context, req GenerateRequest, content string) ([]byte, error) {
 	if f.buildGenerateSingleTaskResultFunc != nil {
 		return f.buildGenerateSingleTaskResultFunc(ctx, req, content)
+	}
+	return nil, nil
+}
+
+func (f *fakeStreamService) BuildContinueTaskResult(ctx context.Context, userID uuid.UUID, blogID uuid.UUID, appendedContent string) ([]byte, error) {
+	if f.buildContinueTaskResultFunc != nil {
+		return f.buildContinueTaskResultFunc(ctx, userID, blogID, appendedContent)
 	}
 	return nil, nil
 }

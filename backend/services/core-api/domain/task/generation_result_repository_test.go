@@ -69,3 +69,49 @@ func TestGormGenerationResultRepository_PersistSingleGenerationResult(t *testing
 	require.NoError(t, testDB.First(&user, "id = ?", userID).Error)
 	require.Equal(t, 24, user.TokensUsed)
 }
+
+func TestGormGenerationResultRepository_PersistContinueResult(t *testing.T) {
+	testDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, testDB.AutoMigrate(&model.User{}, &model.Blog{}))
+
+	userID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	blogID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	require.NoError(t, testDB.Create(&model.User{
+		ID:       userID,
+		Username: "tester",
+		Email:    "tester@example.com",
+	}).Error)
+	require.NoError(t, testDB.Create(&model.Blog{
+		ID:         blogID,
+		UserID:     userID,
+		Title:      "旧标题",
+		Content:    "旧内容",
+		SourceType: "file",
+		Status:     1,
+	}).Error)
+
+	repo := NewGormGenerationResultRepository(testDB)
+	result := map[string]any{
+		"result_version":   1,
+		"task_type":        "generation",
+		"task_subtype":     "continue",
+		"persistence_mode": "task_only",
+		"final_status":     "succeeded",
+		"usage": map[string]any{
+			"estimated_tokens": 8,
+		},
+		"payload": map[string]any{
+			"blog_id":          blogID.String(),
+			"appended_content": "追加内容",
+			"final_content":    "旧内容追加内容",
+		},
+	}
+
+	taskID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	require.NoError(t, repo.PersistGenerationResult(context.Background(), taskID, result))
+
+	var blog model.Blog
+	require.NoError(t, testDB.First(&blog, "id = ?", blogID).Error)
+	require.Equal(t, "旧内容追加内容", blog.Content)
+}

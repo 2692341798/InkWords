@@ -103,6 +103,25 @@ func (s *Service) BuildGenerateSingleTaskResult(ctx context.Context, req Generat
 	return result.ResultJSON, nil
 }
 
+// BuildContinueTaskResult 基于续写追加正文构造结构化任务结果。
+func (s *Service) BuildContinueTaskResult(ctx context.Context, userID uuid.UUID, blogID uuid.UUID, appendedContent string) ([]byte, error) {
+	if s == nil || s.decomposition == nil {
+		return nil, errors.New("decomposition service is not configured")
+	}
+
+	snapshot, err := s.decomposition.BuildContinueTaskResult(ctx, userID, blogID, appendedContent)
+	if err != nil {
+		return nil, err
+	}
+
+	return BuildContinueTaskResult(ContinueTaskResultInput{
+		BlogID:          snapshot.BlogID,
+		AppendedContent: snapshot.AppendedContent,
+		FinalContent:    snapshot.FinalContent,
+		EstimatedTokens: snapshot.EstimatedTokens,
+	})
+}
+
 func (s *Service) Continue(bgCtx context.Context, userID uuid.UUID, blogID uuid.UUID, chunkChan chan<- string, errChan chan<- error) {
 	s.decomposition.ContinueGeneration(bgCtx, userID, blogID, chunkChan, errChan)
 }
