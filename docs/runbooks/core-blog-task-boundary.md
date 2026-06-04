@@ -40,8 +40,8 @@
 
 ### 4.1 已确认的直接全局 `db.DB` 写点
 - `backend/internal/service/generator.go`
-  - 事务内直接写 `blogs`
-  - 事务内直接更新 `users.tokens_used`
+  - 已收口为显式 `GeneratedBlogPersistence` 接口
+  - 默认 GORM 适配器仍在事务内写 `blogs` 并更新 `users.tokens_used`
 - `backend/internal/service/decomposition_generate.go`
   - 直接更新章节标题、排序、失败状态
 - `backend/internal/service/decomposition_generate_intro.go`
@@ -53,14 +53,14 @@
 
 ### 4.2 当前判断
 - 以上写点都仍属于 `core-api` 自有业务边界，没有跨服务越权。
-- 但它们绕过了 `domain/blog` 的显式仓储边界，属于共享数据库阶段最需要先收口的技术债。
+- `GeneratorService` 已完成第一步边界收口，但默认 persistence 适配器仍是 legacy GORM 实现；其余写点仍绕过 `domain/blog` 的显式仓储边界，属于共享数据库阶段最需要继续收口的技术债。
 - 在这些写点没有被接口化之前，不适合推进 `blogs` 或 `job_tasks` 相关表的真正独立实例拆分。
 
 ## 5. 收口优先级建议
 
 ### 第一优先级
-- 把 `GeneratorService` 对 `blogs / users` 的事务写入抽成显式 repository 接口。
-- Why: 这是高频主链路，且已经带事务边界，最适合作为收口模板。
+- 继续沿着 `GeneratorService -> GeneratedBlogPersistence` 模板，把默认 GORM 适配器替换为更贴近 `core-api` 归属边界的 persistence / repository 实现。
+- Why: 单篇生成主链路已经接口化，下一步重点是让具体实现也逐步摆脱 legacy service 直连数据库的形态。
 
 ### 第二优先级
 - 把 `DecompositionService` 对系列父博客、章节草稿、失败状态和续写正文的写入从全局 `db.DB` 收口到 `domain/blog` 或专用 persistence interface。

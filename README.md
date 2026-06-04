@@ -105,7 +105,7 @@ Task 4 已把 `export-service` 的启动装配、私有路由、RabbitMQ consume
 
 Phase 1 当前可视为已完成服务目录归属收口：`parser-service`、`review-service`、`export-service` 的服务私有入口、bootstrap、私有路由与 worker 装配都以 `backend/services/<service>/` 为单一归属。后续如果改动这三个服务的 Docker 入口、路由或健康检查，请按 [microservices-smoke-check.md](file:///Users/huangqijun/Documents/墨言博客助手/InkWords/docs/runbooks/microservices-smoke-check.md) 重新执行整套 Compose 冒烟，而不是只验证单个容器。
 
-Phase 2 现已启动 `core-api / llm-stream` 深拆分第一轮：两者的主 HTTP 装配也已分别迁入 `backend/services/core-api/` 与 `backend/services/llm-stream/` 的服务自有 `bootstrap/routes/cmd`。对外 API 和单入口访问方式不变，但共享 `internal/transport/http/v1/routes.go` 与 `internal/transport/http/v1/api/stream_api.go` 已降级为过渡兼容层。与此同时，仓库新增 `INKWORDS_TASK_PERSISTENCE_MODE=task_only` 开关，用于在拆分阶段控制 legacy 生成链路不再由 `llm-stream` 直接把最终结果写入 `blogs / users`，为后续把业务事实统一回收到 `core-api` 做准备。
+Phase 2 现已启动 `core-api / llm-stream` 深拆分第一轮：两者的主 HTTP 装配也已分别迁入 `backend/services/core-api/` 与 `backend/services/llm-stream/` 的服务自有 `bootstrap/routes/cmd`。对外 API 和单入口访问方式不变，但共享 `internal/transport/http/v1/routes.go` 与 `internal/transport/http/v1/api/stream_api.go` 已降级为过渡兼容层。与此同时，`GeneratorService` 已把最终落库收口到显式 `GeneratedBlogPersistence` 接口，默认仍由 GORM 适配 legacy 写入；仓库继续保留 `INKWORDS_TASK_PERSISTENCE_MODE=task_only` 开关，用于在拆分阶段控制 legacy 生成链路不再由 `llm-stream` 直接把最终结果写入 `blogs / users`，为后续把业务事实统一回收到 `core-api` 做准备。
 
 如果你需要在 Docker 模式下使用 GitHub OAuth，Compose 现在会默认把回调地址固定为 `http://localhost/api/v1/auth/callback/github`，避免错误跳回 Vite 本地开发端口 `5173`。如果你需要在 Docker 下覆盖这个地址（例如远程域名调试），请显式设置 `DOCKER_GITHUB_REDIRECT_URL`。如果你运行的是 Vite 本地开发服务器，再继续使用 `backend/.env` 中的 `GITHUB_REDIRECT_URL=http://localhost:5173/api/v1/auth/callback/github`。
 
@@ -215,7 +215,7 @@ go run ./cmd/server/main.go
 - `core-api` 事实拥有并负责写入：`users`、`oauth_tokens`、`user_prompt_settings`、`blogs`、`job_tasks`、`job_task_events`
 - `review-service` 事实拥有并负责写入：`review_sessions`、`review_turns`
 - 当前唯一允许的跨服务写入例外：`llm-stream`、`parser-service`、`export-service` 可通过 `internal/domain/task` 的显式仓储接口写 `job_tasks / job_task_events`
-- 当前明确待收口的技术债：`backend/internal/service/generator.go` 与 `backend/internal/service/decomposition_generate*.go` 仍直接使用全局 `db.DB` 写 `blogs / users`；这些写入仍属于 `core-api` 自有边界，但已经绕过 `domain/blog` 的仓储封装
+- 当前明确待收口的技术债：`backend/internal/service/generator.go` 已先收口为显式 `GeneratedBlogPersistence` 接口，但默认适配器仍由 legacy GORM 实现承接；`backend/internal/service/decomposition_generate*.go` 仍直接使用全局 `db.DB` 写 `blogs / users`，是下一批需要继续收口的对象
 - 详细边界规则与后续收口步骤见 [core-blog-task-boundary.md](file:///Users/huangqijun/Documents/墨言博客助手/InkWords/docs/runbooks/core-blog-task-boundary.md)
 
 **启动前端：**

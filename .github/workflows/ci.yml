@@ -136,6 +136,20 @@ jobs:
           curl -I --fail http://localhost
           curl --fail --silent http://localhost/api/v1/ping
 
+      - name: parser worker smoke marker
+        env:
+          OBSIDIAN_VAULT_PATH: /tmp/obsidian-vault
+          DEEPSEEK_API_KEY: ci-placeholder-key
+          JWT_SECRET: ci-placeholder-jwt-secret
+          OBSIDIAN_REST_API_KEY: ci-placeholder-obsidian-key
+        run: |
+          docker compose --env-file backend/.env.example logs --no-color parser-service > /tmp/parser-service.log
+          if grep -q "parse consumer disabled" /tmp/parser-service.log; then
+            echo "parser worker is disabled"
+            cat /tmp/parser-service.log
+            exit 1
+          fi
+
       - name: dump compose logs on failure
         if: failure()
         env:

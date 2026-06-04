@@ -17,6 +17,39 @@ import (
 	"inkwords-backend/internal/prompt"
 )
 
+func TestGeneratorService_saveToDB_UsesInjectedPersistence(t *testing.T) {
+	previousDB := db.DB
+	db.DB = nil
+	defer func() {
+		db.DB = previousDB
+	}()
+
+	fakeLLM := newGeneratorPersistTestLLMServer(t)
+	defer fakeLLM.Close()
+
+	persistence := &generatorPersistenceRecorder{}
+	userID := uuid.New()
+	service := NewGeneratorServiceWithPersistence(
+		nil,
+		persistence,
+	)
+	service.llmClient = &llm.DeepSeekClient{
+		APIKey: "test-key",
+		APIURL: fakeLLM.URL,
+		Client: fakeLLM.Client(),
+	}
+
+	err := service.saveToDB(context.Background(), userID, "file", "hello")
+	require.NoError(t, err)
+	require.Equal(t, 1, persistence.calls)
+	require.Equal(t, userID, persistence.saved.UserID)
+	require.Equal(t, "文件解析生成的博客", persistence.saved.Title)
+	require.Equal(t, "file", persistence.saved.SourceType)
+	require.Equal(t, "hello", persistence.saved.Content)
+	require.Equal(t, 5, persistence.saved.WordCount)
+	require.JSONEq(t, `["Go","Docker"]`, string(persistence.saved.TechStacks))
+}
+
 func TestGeneratorService_saveToDB_RollsBackWhenUserTokenUpdateFails(t *testing.T) {
 	testDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
@@ -122,4 +155,16 @@ func newGeneratorPersistTestLLMServer(t *testing.T) *httptest.Server {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"[\"Go\",\"Docker\"]"}}]}`))
 	}))
+}
+
+type generatorPersistenceRecorder struct {
+	calls int
+	saved GeneratedBlogPersistenceInput
+	err   error
+}
+
+func (r *generatorPersistenceRecorder) SaveGeneratedBlog(_ context.Context, input GeneratedBlogPersistenceInput) error {
+	r.calls++
+	r.saved = input
+	return r.err
 }
