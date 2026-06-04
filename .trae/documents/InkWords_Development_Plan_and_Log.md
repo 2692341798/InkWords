@@ -1,6 +1,20 @@
 # 墨言知识训练平台 (InkWords Trainer) - 开发计划与日志
 > **目标**：跟踪项目的核心开发模块、里程碑进度以及每日开发记录。
 
+### [2026-06-04] Feat - Generation task_only Task 2 打通 core-api 单篇结果持久化
+- **需求背景**：
+  1. 用户要求先把 `Task 2` 做成第二个原子 commit，再继续后续 `Task 3`。
+  2. 本轮只允许承接 `Task 1` 已提交的单篇结构化结果 contract，把 `core-api` 成功路径接成真实业务落库，不提前混入 `continue / generate_series`。
+- **本次完成**：
+  1. 新增 `backend/services/core-api/domain/task/generation_result.go` 与 `generation_result_repository.go`，明确 `core-api` 可消费的 generation result 结构，并用 GORM repository 把单篇结果落回 `blogs` 与 `users.tokens_used`。
+  2. 调整 `backend/internal/domain/task/service.go` 与测试：`MarkSucceeded()` 在 generation 任务成功时会解析结构化 `result_json`，调用 `ResultPersister` 完成最终业务持久化。
+  3. 调整 `backend/services/core-api/app/bootstrap/bootstrap.go`：不再注入空壳 persister，而是注入真实 `GormGenerationResultRepository`。
+  4. 同步修正 `parser-service / llm-stream / export-service` 等调用点的 `taskdomain.NewService(...)` 构造参数，保持编译一致性。
+- **验证记录**：
+  - `cd backend && go test ./services/core-api/domain/task -run TestGormGenerationResultRepository_PersistSingleGenerationResult -v` 先失败（缺少 repository），补实现后通过
+  - `cd backend && go test ./internal/domain/task -run TestService_MarkSucceeded_PersistsGenerationResultThroughPersister -v` 先失败（构造函数签名变化），补实现后通过
+  - `cd backend && go test ./services/core-api/domain/task ./internal/domain/task ./services/core-api/app/bootstrap -v` 通过
+
 ### [2026-06-04] Feat - Generation task_only Task 1 打通单篇结构化任务结果
 - **需求背景**：
   1. 用户要求按 `Subagent-Driven` 方式继续推进微服务化，并在继续下一批改动前先把当前 `Task 1` 产出提交。

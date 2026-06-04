@@ -47,7 +47,7 @@ func BuildRouter() (*gin.Engine, *taskdomain.Service, *streamdomain.Service, err
 
 	streamDomainService := streamdomain.NewService(generatorService, decompositionService, userService)
 	taskRepo := taskdomain.NewGormRepository(dbConn)
-	taskDomainService := taskdomain.NewService(taskRepo, nil)
+	taskDomainService := taskdomain.NewService(taskRepo, nil, nil)
 	streamDomainHandler := streamdomain.NewHandler(streamDomainService, streamdomain.NewGormBlogReadable())
 	streamAPI := transportv1api.NewStreamAPIWithDeps(generatorService, decompositionService, userService, streamDomainHandler)
 	_ = generationService

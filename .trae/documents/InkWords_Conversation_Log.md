@@ -1,6 +1,20 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 102：提交 Task 2，并继续推进 generation task_only
+- **用户需求**：用户在确认 `Task 2` 已实现并通过测试后，要求“把 Task 2 再提交成第二个原子 commit，再继续”。
+- **AI 动作**：
+  1. 先执行 `git status` 与定向 `git diff`，确认当前工作区只包含 `Task 2` 相关代码：`core-api` generation result repository、任务成功路径接线、bootstrap 注入与其余服务构造函数签名兼容修正。
+  2. 按提交前规则补齐文档同步，只记录本轮已经落地的 `Task 2`：`core-api` 开始消费单篇 `generate_single` 的结构化 `job_tasks.result_json` 并把正文/Token 记账落回业务表。
+  3. 准备把代码与文档作为第二个原子 commit 提交，再继续后续 `Task 3`。
+- **决策/变更**：
+  - 本次 commit 继续保持单一主题：只覆盖 `Task 2`，不提前混入 `continue / generate_series`。
+  - `parser-service / llm-stream / export-service` 的改动仅限构造函数签名兼容，不视为独立功能。
+- **验证**：
+  - `cd backend && go test ./services/core-api/domain/task -run TestGormGenerationResultRepository_PersistSingleGenerationResult -v` 先失败、补实现后通过
+  - `cd backend && go test ./internal/domain/task -run TestService_MarkSucceeded_PersistsGenerationResultThroughPersister -v` 先失败、补实现后通过
+  - `cd backend && go test ./services/core-api/domain/task ./internal/domain/task ./services/core-api/app/bootstrap -v` 通过
+
 ### 对话 101：执行 generation task_only 的 Task 1，并先提交当前进度
 - **用户需求**：用户先确认采用 `Subagent-Driven` 方式继续推进“生成链路 task_only 持久化”，随后在执行到 `Task 2` 前要求“先提交，再继续改动”。
 - **AI 动作**：

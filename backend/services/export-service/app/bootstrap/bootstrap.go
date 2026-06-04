@@ -41,7 +41,7 @@ func BuildRouter() (*gin.Engine, *taskdomain.ExportConsumer, error) {
 	blogRepo := blogdomain.NewGormRepository(dbConn)
 	blogDomainService := blogdomain.NewService(blogRepo)
 	blogDomainHandler := blogdomain.NewHandlerWithLegacy(blogDomainService, exportService)
-	taskService := taskdomain.NewService(taskdomain.NewGormRepository(dbConn), nil)
+	taskService := taskdomain.NewService(taskdomain.NewGormRepository(dbConn), nil, nil)
 	blogAPI := transportv1api.NewBlogAPIWithDeps(blogService, blogDomainHandler)
 	exportroutes.RegisterExportRoutes(r, middleware.AuthMiddleware(), blogAPI)
 

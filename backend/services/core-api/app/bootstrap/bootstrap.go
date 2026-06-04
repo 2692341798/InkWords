@@ -77,10 +77,11 @@ func BuildRouter() (*gin.Engine, func(), error) {
 
 	projectDomainService := projectdomain.NewService(decompositionService, gitFetcher, docParser, userService)
 	projectDomainHandler := projectdomain.NewHandler(projectDomainService)
-	resultPersister := coretask.NewResultPersister(nil, nil)
+	generationResultRepo := coretask.NewGormGenerationResultRepository(dbConn)
+	resultPersister := coretask.NewResultPersister(generationResultRepo, generationResultRepo)
 
 	taskRepo := taskdomain.NewGormRepository(dbConn)
-	taskDomainService := taskdomain.NewService(taskRepo, taskPublisher)
+	taskDomainService := taskdomain.NewService(taskRepo, taskPublisher, resultPersister)
 	taskDomainHandler := taskdomain.NewHandler(
 		taskDomainService,
 		envOrDefault("EXPORT_ARTIFACTS_DIR", "/app/export-artifacts"),
@@ -91,8 +92,6 @@ func BuildRouter() (*gin.Engine, func(), error) {
 	projectAPI := transportv1api.NewProjectAPIWithDeps(decompositionService, gitFetcher, docParser, userService, projectDomainHandler)
 	blogAPI := transportv1api.NewBlogAPIWithDeps(blogService, blogDomainHandler)
 	taskAPI := transportv1api.NewTaskAPIWithDeps(taskDomainHandler)
-	_ = resultPersister
-
 	corev1.RegisterCoreRoutes(r, middleware.AuthMiddleware(), corev1.CoreHandlers{
 		AuthRegister:         authAPI.Register,
 		AuthLogin:            authAPI.Login,

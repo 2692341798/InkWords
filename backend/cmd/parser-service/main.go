@@ -57,7 +57,7 @@ func main() {
 	archiveParser := parser.NewArchiveParser(docParser)
 	fileParseService := fileparsedomain.NewService(docParser, archiveParser)
 	taskRepo := taskdomain.NewGormRepository(db.DB)
-	taskDomainService := taskdomain.NewService(taskRepo, nil)
+	taskDomainService := taskdomain.NewService(taskRepo, nil, nil)
 	fileParseHandler := fileparsedomain.NewHandler(fileParseService, userService)
 
 	authMiddleware := middleware.AuthMiddleware()
