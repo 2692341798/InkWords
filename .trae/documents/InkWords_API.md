@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - API 接口文档
 
 ## 0. 变更记录
+- 2026-06-04：新增 `FRONTEND_PORT` 作为 Docker Compose 前端宿主机端口覆盖变量。本次不新增也不修改任何 API 路由、请求字段或响应字段；仅补充运行约定：默认仍通过 `http://localhost` 访问，当宿主机 `:80` 被占用时，可临时用 `FRONTEND_PORT=8088` 将前端入口切到 `http://localhost:8088`，其 `/api/*` 代理语义保持不变。
 - 2026-06-04：Generation Task-Only Task 4 继续扩展 generation 任务成功路径的内部语义，不新增也不修改任何对外 API 路由、请求字段或响应字段；当 `generate_series` 任务成功时，系统会把结构化 `result_json` 中的 `parent_blog` 与 `chapters[]` 交给 `core-api` 消费，并由 `core-api` 完成系列父博客与章节草稿的最终持久化。
 - 2026-06-04：Generation Task-Only Task 3 继续扩展 generation 任务成功路径的内部语义，不新增也不修改任何对外 API 路由、请求字段或响应字段；当 `continue` 任务成功时，系统会把结构化 `result_json` 中的 `blog_id / appended_content / final_content` 交给 `core-api` 消费，并以 `final_content` 完成正文更新。
 - 2026-06-04：Generation Task-Only Task 2 继续收紧 generation 任务成功路径的内部语义，不新增也不修改任何对外 API 路由、请求字段或响应字段；当 `generate_single` 任务成功且 `job_tasks.result_json` 为结构化结果时，`core-api` 现会在任务成功路径中消费该结果并完成最终博客正文与 token 记账的业务落库。

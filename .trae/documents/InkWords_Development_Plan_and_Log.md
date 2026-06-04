@@ -1,6 +1,20 @@
 # 墨言知识训练平台 (InkWords Trainer) - 开发计划与日志
 > **目标**：跟踪项目的核心开发模块、里程碑进度以及每日开发记录。
 
+### [2026-06-04] Build - 增加 FRONTEND_PORT 以绕过宿主机 80 端口冲突
+- **需求背景**：
+  1. 本轮微服务化代码与后端服务已完成，但 Docker Compose 冒烟阶段多次被宿主机 `:80` 端口占用阻塞，`frontend` 容器无法绑定默认入口。
+  2. 用户同意采用最小兼容改动，把前端宿主机端口做成可配置变量，以便在不破坏默认入口约定的前提下完成本地验证。
+- **本次完成**：
+  1. 调整 `docker-compose.yml`：`frontend` 端口映射从固定 `80:80` 改为 `${FRONTEND_PORT:-80}:80`。
+  2. 保持默认行为不变：未显式设置时仍使用 `http://localhost`。
+  3. 使用 `FRONTEND_PORT=8088` 完成一次本地验证，确认 `frontend` 可在 `http://localhost:8088` 启动并继续代理 `/api/*`。
+- **验证记录**：
+  - `FRONTEND_PORT=8088 docker compose --env-file backend/.env up -d --build frontend` 通过
+  - `FRONTEND_PORT=8088 docker compose --env-file backend/.env ps` 显示 `frontend` 绑定 `0.0.0.0:8088->80/tcp`
+  - `curl -I http://localhost:8088` 返回 `200 OK`
+  - `curl -sS http://localhost:8088/api/v1/ping` 返回 `{"code":200,"data":null,"message":"pong"}`
+
 ### [2026-06-04] Feat - Generation task_only Task 4 打通 generate_series 父子结果闭环
 - **需求背景**：
   1. 用户要求执行 `Task 4`，先完成系列生成的代码闭环，再补文档同步并准备第四个原子 commit。

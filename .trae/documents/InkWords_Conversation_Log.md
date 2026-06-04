@@ -1,6 +1,21 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 105：提交 FRONTEND_PORT 端口兼容改动
+- **用户需求**：在确认 `http://localhost:8088` 冒烟成功后，用户要求“提交端口改动”。
+- **AI 动作**：
+  1. 先检查工作区，确认当前唯一已跟踪改动是 `docker-compose.yml` 中 `frontend` 的端口映射调整，未跟踪的 `docs/superpowers/*` 草稿不在提交范围内。
+  2. 按提交前规则同步文档，只记录本轮新增的 `FRONTEND_PORT` 端口覆盖能力，以及 `8088` 的本地验证事实，不将其误写为默认产品入口已改变。
+  3. 准备把 `docker-compose.yml` 与本轮文档同步作为单一主题提交，作为微服务化验证阶段的环境兼容补丁。
+- **决策/变更**：
+  - 默认入口仍保持 `http://localhost`；`FRONTEND_PORT` 只是宿主机端口冲突时的本地覆盖变量。
+  - 本次提交不修改 API、数据库或业务逻辑，只解决 Docker Compose 前端宿主机端口冲突。
+- **验证**：
+  - `FRONTEND_PORT=8088 docker compose --env-file backend/.env up -d --build frontend` 通过
+  - `FRONTEND_PORT=8088 docker compose --env-file backend/.env ps` 显示 `frontend` 绑定 `0.0.0.0:8088->80/tcp`
+  - `curl -I http://localhost:8088` 返回 `200 OK`
+  - `curl -sS http://localhost:8088/api/v1/ping` 返回 `{"code":200,"data":null,"message":"pong"}`
+
 ### 对话 104：执行 Task 4，并补齐 generate_series 的最终结果交接
 - **用户需求**：用户要求直接执行 `Task 4`。
 - **AI 动作**：

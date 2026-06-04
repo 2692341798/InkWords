@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - 产品需求文档 (PRD)
 
 ## 0. 变更记录
+- 2026-06-04：新增 `FRONTEND_PORT` 作为本地 Docker Compose 前端端口覆盖能力。本次不新增用户可见功能，也不改变默认产品入口 `http://localhost`；仅允许在宿主机 `:80` 被其它进程占用时，将前端入口临时切到如 `http://localhost:8088`，以便继续完成本地验证与演示。
 - 2026-06-04：Generation Task-Only Task 4 打通 `generate_series` 的后台持久化闭环。本次不新增用户可见功能，也不改变系列生成入口、SSE 或页面交互；仅要求系统在 `generate_series` 任务成功后，由 `core-api` 自动消费结构化 `result_json` 并把系列父博客导读与章节终态/正文落回业务表，同时继续记录 token 记账。
 - 2026-06-04：Generation Task-Only Task 3 打通 `continue` 的后台持久化闭环。本次不新增用户可见功能，也不改变续写入口、SSE 或页面交互；仅要求系统在 `continue` 任务成功后，由 `core-api` 自动消费结构化 `result_json` 并把 `final_content` 更新回博客正文，同时继续记录 token 记账。
 - 2026-06-04：Generation Task-Only Task 2 打通单篇任务结果的后台持久化闭环。本次不新增用户可见功能，也不改变任务创建、SSE 或页面交互；仅要求系统在 `generate_single` 任务成功后，由 `core-api` 自动消费结构化 `result_json` 并把最终正文与 token 记账落回业务表，为后续继续把 `continue / generate_series` 纳入同一闭环做铺垫。

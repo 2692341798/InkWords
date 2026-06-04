@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - 数据库设计文档
 
 ## 0. 变更记录
+- 2026-06-04：新增 `FRONTEND_PORT` 仅影响 Docker Compose 的前端宿主机端口映射，不涉及 PostgreSQL 表结构、字段、索引、迁移或任何数据库写入语义变更；本次仅用于在宿主机 `:80` 被占用时，将前端入口临时切到如 `http://localhost:8088` 完成运行验证。
 - 2026-06-04：Generation Task-Only Task 4 为 `generate_series` 任务增强 `job_tasks.result_json` 语义并打通最终业务写入。系列成功结果现在保存 `parent_blog` 与 `chapters[]`：父博客包含系列标题与导读正文，章节包含 `blog_id / chapter_sort / title / content / word_count / tech_stacks / status / error_message`；`core-api` 会基于该结果事务性更新 `blogs` 中的父子记录，并继续使用 `usage.estimated_tokens` 累计 `users.tokens_used`。本次不新增表、字段、索引或迁移。
 - 2026-06-04：Generation Task-Only Task 3 为 `continue` 任务增强 `job_tasks.result_json` 语义并打通最终业务写入。续写成功结果现在保存 `blog_id / appended_content / final_content`，`core-api` 会基于 `payload.final_content` 更新 `blogs.content`，并继续使用 `usage.estimated_tokens` 累计 `users.tokens_used`。本次不新增表、字段、索引或迁移。
 - 2026-06-04：Generation Task-Only Task 2 让 `core-api` 开始消费单篇 `generate_single` 的结构化 `job_tasks.result_json` 并完成最终业务写入：当任务成功时，会把 `payload.title/content/source_type/word_count/tech_stacks` 写回 `blogs`，并基于 `usage.estimated_tokens` 累计 `users.tokens_used`。本次不新增表、字段、索引或迁移，但 `job_tasks.result_json -> blogs/users` 的单篇持久化闭环已从设计进入实现。
