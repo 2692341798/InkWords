@@ -11,24 +11,15 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	amqp "github.com/rabbitmq/amqp091-go"
 
 	streamdomain "inkwords-backend/internal/domain/stream"
 	taskdomain "inkwords-backend/internal/domain/task"
-	"inkwords-backend/internal/infra/cache"
-	"inkwords-backend/internal/infra/db"
 	"inkwords-backend/internal/infra/mq"
-	"inkwords-backend/internal/service"
-	"inkwords-backend/internal/transport/http/middleware"
-	transportv1 "inkwords-backend/internal/transport/http/v1"
-	"inkwords-backend/internal/transport/http/v1/api"
+	"inkwords-backend/services/llm-stream/app/bootstrap"
+	"inkwords-backend/shared/kernel/httpx"
 )
-
-type shutdownableServer interface {
-	Shutdown(context.Context) error
-}
 
 func init() {
 	if err := godotenv.Load(); err != nil {
@@ -37,47 +28,10 @@ func init() {
 }
 
 func main() {
-	dsn := os.Getenv("DATABASE_URL")
-	if dsn == "" {
-		log.Fatal("DATABASE_URL environment variable is not set")
+	router, taskDomainService, streamDomainService, err := bootstrap.BuildRouter()
+	if err != nil {
+		log.Fatalf("bootstrap llm-stream failed: %v", err)
 	}
-	if err := db.InitCoreDB(dsn); err != nil {
-		log.Fatalf("Database initialization failed: %v", err)
-	}
-
-	if err := cache.InitRedis(); err != nil {
-		log.Printf("Redis initialization failed (cache will be disabled): %v", err)
-	}
-
-	r := gin.New()
-	r.Use(gin.Recovery(), middleware.RequestID(), middleware.RequestLogger("llm-stream"))
-	api.RegisterHealthRoutes(r, api.NewHealthAPI("llm-stream", map[string]api.ReadinessCheck{
-		"db":              api.NewGormReadinessCheck(db.DB),
-		"rabbitmq_config": api.NewRequiredValueCheck(os.Getenv("RABBITMQ_URL"), "RABBITMQ_URL is not configured"),
-	}))
-
-	userService := service.NewUserService(db.DB)
-	promptReqService := service.NewPromptRequirementsService(db.DB)
-	generatorService := service.NewGeneratorService(promptReqService)
-	decompositionService := service.NewDecompositionService(promptReqService)
-
-	streamDomainService := streamdomain.NewService(generatorService, decompositionService, userService)
-	taskRepo := taskdomain.NewGormRepository(db.DB)
-	taskDomainService := taskdomain.NewService(taskRepo, nil)
-	streamDomainHandler := streamdomain.NewHandler(streamDomainService, streamdomain.NewGormBlogReadable())
-	streamAPI := api.NewStreamAPIWithDeps(generatorService, decompositionService, userService, streamDomainHandler)
-
-	transportv1.RegisterStream(r, middleware.AuthMiddleware(), transportv1.StreamOnlyHandlers{
-		Blog: transportv1.StreamBlogHandlers{
-			ContinueBlog: streamAPI.ContinueBlogStreamHandler,
-			PolishBlog:   streamAPI.PolishBlogStreamHandler,
-		},
-		Stream: transportv1.StreamHandlers{
-			ScanStreamHandler:     streamAPI.ScanStreamHandler,
-			AnalyzeStreamHandler:  streamAPI.AnalyzeStreamHandler,
-			GenerateStreamHandler: streamAPI.GenerateBlogStreamHandler,
-		},
-	})
 
 	signalContext, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -88,34 +42,15 @@ func main() {
 	}
 	defer stopConsumer()
 
-	server := newHTTPServer(r)
-	go shutdownServerOnContextDone(signalContext, server, 15*time.Second)
+	server := httpx.NewServer(router)
+	go func() {
+		if err := httpx.ShutdownOnContextDone(signalContext, server, 15*time.Second); err != nil {
+			log.Printf("Server shutdown failed: %v", err)
+		}
+	}()
 
-	log.Printf("Server is running on %s", server.Addr)
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatalf("Server startup failed: %v", err)
-	}
-}
-
-func newHTTPServer(handler http.Handler) *http.Server {
-	return &http.Server{
-		Addr:              ":8080",
-		Handler:           handler,
-		ReadTimeout:       15 * time.Second,
-		ReadHeaderTimeout: 10 * time.Second,
-		WriteTimeout:      0,
-		IdleTimeout:       60 * time.Second,
-	}
-}
-
-func shutdownServerOnContextDone(signalContext context.Context, server shutdownableServer, timeout time.Duration) {
-	<-signalContext.Done()
-
-	shutdownContext, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	if err := server.Shutdown(shutdownContext); err != nil {
-		log.Printf("Server shutdown failed: %v", err)
 	}
 }
 

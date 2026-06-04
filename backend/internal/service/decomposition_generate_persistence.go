@@ -115,6 +115,10 @@ func persistSeriesChapterCompletion(
 	wordCount int,
 	techStacks datatypes.JSON,
 ) error {
+	if taskOnlyPersistenceMode() {
+		return nil
+	}
+
 	estimatedTokens := len([]rune(content)) * 2
 
 	return db.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {

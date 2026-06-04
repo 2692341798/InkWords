@@ -15,11 +15,13 @@ RUN go mod download
 
 # 复制源码并构建
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o core-api ./cmd/core-api
-RUN CGO_ENABLED=0 GOOS=linux go build -o llm-stream ./cmd/llm-stream
-RUN CGO_ENABLED=0 GOOS=linux go build -o parser-service ./cmd/parser-service
-RUN CGO_ENABLED=0 GOOS=linux go build -o export-service ./cmd/export-service
-RUN CGO_ENABLED=0 GOOS=linux go build -o review-service ./cmd/review-service
+
+# Why: core-api 也开始切到 service-owned 入口，保持镜像产物名称不变，避免影响 Compose 运行契约。
+RUN CGO_ENABLED=0 GOOS=linux go build -o core-api ./services/core-api/cmd && \
+    CGO_ENABLED=0 GOOS=linux go build -o llm-stream ./services/llm-stream/cmd && \
+    CGO_ENABLED=0 GOOS=linux go build -o parser-service ./services/parser-service/cmd && \
+    CGO_ENABLED=0 GOOS=linux go build -o export-service ./services/export-service/cmd && \
+    CGO_ENABLED=0 GOOS=linux go build -o review-service ./services/review-service/cmd
 
 # Stage 2: Runtime
 FROM alpine:3.19

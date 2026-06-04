@@ -1,6 +1,58 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 99：执行 `core-api / llm-stream` 深拆分第一轮
+- **用户需求**：用户要求根据 `docs/superpowers/plans/2026-06-04-core-api-llm-stream-deep-split.md` 直接执行，实现 `core-api / llm-stream` 的服务自有入口迁移，并开始把 `llm-stream` 的业务写库边界收紧到任务表。
+- **AI 动作**：
+  1. 先完成知识库 Query，回读 `[[InkWords 生产形态：多服务与聚合入口]]`、`[[微服务冒烟检查与 CI 前置]]` 等页面，再结合仓库文档确认本轮必须保持 `http://localhost` 单入口、`/api/*` 路径不变，并以 Compose 冒烟作为最终验证。
+  2. 只读审计当前仓库，确认 `core-api` 与 `llm-stream` 仍在使用共享 `internal/transport/http/v1/routes.go` 和旧 `cmd/*` 入口，而 `generator / decomposition` 仍直接写 `blogs / users`，与计划目标一致但尚未开始深拆分。
+  3. 按 TDD 先为 `services/core-api` 与 `services/llm-stream` 新增服务自有路由测试，再补齐各自的 `app/bootstrap`、`transport/http/v1`、`cmd`，并让旧 `cmd/core-api`、`cmd/llm-stream` 复用新的服务自有 bootstrap。
+  4. 新增 `services/llm-stream/domain/generation` 骨架与 `services/core-api/domain/task/ResultPersister` 抽象，随后通过 `INKWORDS_TASK_PERSISTENCE_MODE=task_only` 把 legacy `generator / decomposition` 的直接写库能力收口为显式开关。
+  5. 将共享 `routes.go` 与 `stream_api.go` 标记为过渡兼容层，更新架构/API/数据库/开发日志/PRD/README，并执行全量 Go 测试和 Docker Compose 冒烟。
+- **决策/变更**：
+  - 没有机械照抄计划里的最小示例路由，而是按当前真实接口面完整迁移 `auth/user/blog/project/task` 与回滚型 `stream` 路由，避免在拆分入口时丢失现有能力。
+  - `llm-stream` 的写库边界收紧采用“显式环境开关”而非直接删除 legacy 写逻辑，原因是当前真正的 `core-api` 结果回写链路还处于抽象建立阶段，需要保证可灰度、可回滚。
+  - 共享 transport 层暂不删除，只加 `Deprecated` 注释并保留测试/回滚用途，降低这轮深拆分的风险面。
+- **验证**：
+  - `cd backend && go test ./... -count=1` 通过
+  - `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build` 通过
+  - `docker compose --env-file backend/.env ps` 显示 `core-api / llm-stream / parser-service / export-service / review-service / frontend` 均为 `healthy`
+  - `curl -I http://localhost` 返回 `HTTP/1.1 200 OK`
+  - `curl -sS http://localhost/api/v1/ping` 返回 `{"code":200,"data":null,"message":"pong"}`
+
+### 对话 98：执行 Task 6 收尾，同步服务目录迁移文档并完成最终冒烟
+- **用户需求**：用户要求在 `/Users/huangqijun/Documents/墨言博客助手/InkWords` 执行计划 `Task6`，围绕 Phase 1 已完成的 `review-service`、`parser-service`、`export-service` 服务目录迁移，同步架构/日志/README/runbook 等文档，并完成最终 `docker compose` 冒烟验证；若产生改动则按仓库规则提交，但不得修改计划/设计文档。
+- **AI 动作**：
+  1. 先完成知识库 Query，回读 `[[InkWords 生产形态：多服务与聚合入口]]`、`[[export-service 异步导出与受控下载]]` 与 `[[微服务冒烟检查与 CI 前置]]`，确认当前任务属于“交付同步与验证收尾”，不是新的微服务范围扩张。
+  2. 只读审计 `README.md`、`InkWords_Architecture.md`、`InkWords_Development_Plan_and_Log.md`、`InkWords_Conversation_Log.md` 与 `docs/runbooks/microservices-smoke-check.md`，识别出仍需补一条明确基线：`parser-service`、`review-service`、`export-service` 的服务私有入口与装配均已收口到 `backend/services/<service>/`。
+  3. 明确排除工作区内未跟踪的 `docs/superpowers/*design/plan` 文件，不触碰计划/设计文档；随后补齐最小文档事实，并执行 `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build`、`docker compose ... ps`、`curl -I http://localhost`、`curl http://localhost/api/v1/ping`。
+- **决策/变更**：
+  - 本轮只同步“目录归属迁移已完成 + Compose 冒烟通过”的交付事实，不修改 API/数据库文档正文，因为对外契约与表结构没有新增变化。
+  - 冒烟结果以 `http://localhost` 为唯一外部入口进行判定，符合 Docker-First 与 Nginx 聚合入口约束。
+- **验证**：
+  - `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build` 通过
+  - `docker compose --env-file backend/.env ps` 显示 `core-api / llm-stream / parser-service / export-service / review-service / frontend` 均为 `healthy`
+  - `curl -I http://localhost` 返回 `HTTP/1.1 200 OK`
+  - `curl -sS http://localhost/api/v1/ping` 返回 `{"code":200,"data":null,"message":"pong"}`
+
+### 对话 97：执行 Task 4 收尾，迁移 export-service 到服务自有目录并按仓库规则提交
+- **用户需求**：用户要求继续执行 `Task4`，把 `export-service` 迁到 `backend/services/export-service` 自有目录，迁移 export 相关业务实现、私有路由与 bootstrap/consumer/artifact store，保证相关测试通过；随后又明确授权按仓库规则同步 7 份项目文档并提交，仅限本任务相关改动。
+- **AI 动作**：
+  1. 先完成知识库 Query，回读 `[[export-service 异步导出与受控下载]]`，确认这次是“服务目录归属迁移”，不是新的导出行为变更。
+  2. 按 TDD 先在 `backend/services/export-service/transport/http/v1/routes_test.go` 补红灯测试，锁定服务自有路由注册契约。
+  3. 在 `backend/services/export-service/` 下补齐 `domain/export/service.go`、`domain/export/consumer.go`、`infra/artifact/store.go`、`transport/http/v1/routes.go`，并把 `app/bootstrap` 与 `cmd/main.go` 切到服务自有装配入口。
+  4. 按仓库规则同步更新 `InkWords_API.md`、`InkWords_Architecture.md`、`InkWords_Conversation_Log.md`、`InkWords_Database.md`、`InkWords_Development_Plan_and_Log.md`、`InkWords_PRD.md` 与 `README.md`，只记录“目录归属变化、行为/API/数据库不变”。
+  5. 运行 Go 测试、显式构建、容器健康检查与 `git diff --staged` 后，定向暂存 `Task4` 代码与文档并提交。
+- **决策/变更**：
+  - `export-service` 的运行时边界现与 `parser-service`、`review-service` 保持一致，统一由 `backend/services/export-service/` 承载服务私有入口与装配。
+  - 本轮不切换 Compose 或 Docker 构建入口，也不修改对外 API、任务协议、数据库表结构与写入边界；这些仍保持 Task 7 落地后的行为。
+  - 提交严格排除 `docs/superpowers/` 下的计划/设计文档，仅包含 `Task4` 代码与仓库规则要求的 7 份文档同步。
+- **验证**：
+  - `cd backend && go test ./services/export-service/... -v` 通过
+  - `cd backend && go build -o /tmp/export-service ./services/export-service/cmd` 通过
+  - `cd backend && go test ./internal/domain/task/... ./internal/service/... -run 'Export|PDF|Obsidian' -v` 通过
+  - `docker compose --env-file backend/.env up -d --build export-service` 后，`docker ps --filter name=inkwords-export-service --format '{{.Names}} {{.Status}}'` 显示 `Up (... healthy)`
+
 ### 对话 96：继续长期微服务计划，执行 Task 9 的 CI 冒烟与 Runbook 固化
 - **补充回归：修复 `microservices-smoke` 中 `inkwords-db is unhealthy`**
 - **用户需求**：用户在 PR 创建后反馈 GitHub Actions 的 `microservices-smoke` 失败截图，要求继续处理当前 PR 分支上的 CI 问题。

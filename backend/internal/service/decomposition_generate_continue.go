@@ -113,7 +113,7 @@ func (s *DecompositionService) ContinueGeneration(ctx context.Context, userID uu
 		case chunk, ok := <-internalChunkChan:
 			if !ok {
 				finalNewContent := newContentBuilder.String()
-				if finalNewContent != "" {
+				if finalNewContent != "" && !taskOnlyPersistenceMode() {
 					updatedContent := blog.Content + finalNewContent
 					if err := db.DB.WithContext(ctx).Model(&blog).Update("content", updatedContent).Error; err != nil {
 						fmt.Printf("Failed to update blog content: %v\n", err)

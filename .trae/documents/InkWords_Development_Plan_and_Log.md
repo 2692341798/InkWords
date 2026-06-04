@@ -1,6 +1,61 @@
 # 墨言知识训练平台 (InkWords Trainer) - 开发计划与日志
 > **目标**：跟踪项目的核心开发模块、里程碑进度以及每日开发记录。
 
+### [2026-06-04] Refactor - Core-API / LLM-Stream 深拆分第一轮执行
+- **需求背景**：
+  1. 用户要求按 `docs/superpowers/plans/2026-06-04-core-api-llm-stream-deep-split.md` 执行，把 `core-api` 与 `llm-stream` 从“共享业务核心 + 独立入口”继续收口为服务自有 `bootstrap/routes/cmd` 结构，并开始收紧 `llm-stream` 对 `blogs / users` 的直接写入。
+  2. 运行约束保持不变：必须继续通过 `http://localhost` 单入口访问，`/api/*` 路径不变，最终必须通过 `go test ./... -count=1` 与 Compose 冒烟。
+- **本次完成**：
+  1. 按 TDD 分别新增 `backend/services/core-api/transport/http/v1/routes_test.go` 与 `backend/services/llm-stream/transport/http/v1/routes_test.go`，先锁定服务自有私有路由，再补齐 `services/core-api/**` 与 `services/llm-stream/**` 下的 `app/bootstrap`、`transport/http/v1`、`cmd`。
+  2. 将 `backend/cmd/core-api/main.go` 与 `backend/cmd/llm-stream/main.go` 改为复用新的服务自有 bootstrap；`backend/Dockerfile` 也切换为从 `./services/core-api/cmd` 与 `./services/llm-stream/cmd` 构建二进制。
+  3. 新增 `backend/services/llm-stream/domain/generation/` 包骨架，作为后续把 `generator / decomposition` 迁入 `llm-stream` 服务目录的承载点。
+  4. 新增 `backend/services/core-api/domain/task/result_persister.go`，固定“最终业务事实由 core-api 落库”的持久化边界。
+  5. 在 `backend/internal/service/generator.go`、`decomposition_generate_continue.go`、`decomposition_generate_persistence.go` 引入 `INKWORDS_TASK_PERSISTENCE_MODE=task_only` 开关，允许在显式开启时跳过 `llm-stream` 对 `blogs / users` 的直接写入。
+  6. 将共享 `backend/internal/transport/http/v1/routes.go` 与 `backend/internal/transport/http/v1/api/stream_api.go` 标记为过渡兼容层，并同步更新架构/API/数据库/PRD/README。
+- **验证记录**：
+  - `cd backend && go test ./services/core-api/transport/http/v1 -run TestRegisterCoreRoutes_RegistersCoreServiceSurface -v` 通过
+  - `cd backend && go test ./services/core-api/... ./cmd/core-api/...` 通过
+  - `cd backend && go test ./services/llm-stream/transport/http/v1 -run TestRegisterStreamRoutes_RegistersLegacyStreamEndpoints -v` 通过
+  - `cd backend && go test ./services/llm-stream/... ./cmd/llm-stream/...` 通过
+  - `cd backend && go test ./services/llm-stream/domain/generation ./internal/domain/stream/... -v` 通过
+  - `cd backend && go test ./services/core-api/domain/task -run TestResultPersister_PersistsGenerationResultToBlogRepository -v` 通过
+  - `cd backend && go test ./internal/service -run 'TestGenerateBlogStream_DoesNotPersistBlogDirectlyWhenTaskModeEnabled|Persist' -v` 通过
+  - `cd backend && go test ./... -count=1` 通过
+  - `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build` 通过
+  - `docker compose --env-file backend/.env ps` 显示 `core-api / llm-stream / parser-service / export-service / review-service / frontend` 均为 `healthy`
+  - `curl -I http://localhost` 返回 `HTTP/1.1 200 OK`
+  - `curl -sS http://localhost/api/v1/ping` 返回 `{"code":200,"data":null,"message":"pong"}`
+
+### [2026-06-04] Chore - Task 6 文档同步与最终 Compose 冒烟收尾
+- **需求背景**：
+  1. 用户要求在不修改计划/设计文档的前提下，围绕 Phase 1 已完成的 `review-service`、`parser-service`、`export-service` 服务目录迁移，同步架构/日志/README/runbook 等交付文档。
+  2. 本轮不新增业务功能，也不改变 API、数据库结构或任务协议；重点是确认“服务目录归属迁移”已被文档化，并给出最终 Docker Compose 冒烟证据。
+- **本次完成**：
+  1. 审计 `README.md`、`InkWords_Architecture.md`、`InkWords_Development_Plan_and_Log.md`、`InkWords_Conversation_Log.md` 与 `docs/runbooks/microservices-smoke-check.md`，补充 Phase 1 当前基线：`parser-service`、`review-service`、`export-service` 的服务私有入口与装配均以 `backend/services/<service>/` 为单一归属。
+  2. 保持计划/设计文档只读，不把工作区内未跟踪的 `docs/superpowers/*design/plan` 文件纳入本次修改或提交范围。
+  3. 按 Docker-First 约束执行标准重启与网关检查，作为 Task 6 的最终收尾验证。
+- **验证记录**：
+  - `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build` 通过
+  - `docker compose --env-file backend/.env ps` 显示 `core-api / llm-stream / parser-service / export-service / review-service / frontend` 均为 `Up (healthy)`
+  - `curl -I http://localhost` 返回 `HTTP/1.1 200 OK`
+  - `curl -sS http://localhost/api/v1/ping` 返回 `{"code":200,"data":null,"message":"pong"}`
+
+### [2026-06-04] Refactor - Task 4 export-service 服务自有目录迁移与提交同步
+- **需求背景**：
+  1. `docs/superpowers/plans/2026-06-03-backend-real-service-split-phase1.md` 的 Task 4 要求把 `export-service` 的运行时装配从共享/骨架状态收口到 `backend/services/export-service/` 服务自有目录。
+  2. 用户随后明确授权按仓库规则提交，因此必须同步更新 7 份项目文档，但文档内容只允许围绕“目录归属变化，行为/API/数据库不变”。
+- **本次完成**：
+  1. 按 TDD 先新增 `backend/services/export-service/transport/http/v1/routes_test.go` 红灯测试，锁定服务自有私有路由注册。
+  2. 新增 `backend/services/export-service/domain/export/service.go`、`consumer.go`、`infra/artifact/store.go`、`transport/http/v1/routes.go`，并将 `app/bootstrap/bootstrap.go` 收口为 `BuildRouter()`。
+  3. 更新 `backend/services/export-service/cmd/main.go`，改为使用服务自有 `BuildRouter()`、`StartExportConsumer()` 与 `httpx` 启停。
+  4. 同步更新 `InkWords_API.md`、`InkWords_Architecture.md`、`InkWords_Conversation_Log.md`、`InkWords_Database.md`、`InkWords_Development_Plan_and_Log.md`、`InkWords_PRD.md` 与 `README.md`，明确本轮仅为目录归属迁移。
+- **验证记录**：
+  - `cd backend && go test ./services/export-service/... -v` 先失败（缺少服务自有路由实现），补实现后通过
+  - `cd backend && go build -o /tmp/export-service ./services/export-service/cmd` 通过
+  - `cd backend && go test ./internal/domain/task/... ./internal/service/... -run 'Export|PDF|Obsidian' -v` 通过
+  - `docker compose --env-file backend/.env up -d --build export-service` 通过
+  - `docker ps --filter name=inkwords-export-service --format '{{.Names}} {{.Status}}'` 显示 `inkwords-export-service Up ... (healthy)`
+
 ### [2026-06-03] Chore - Task 9 微服务冒烟检查前置到 CI 与 Runbook
 - **补充修复（CI 回归）**：
   1. GitHub Actions `microservices-smoke` 首次在空 `pgdata` 下运行时，`inkwords-db` 因初始化脚本失败被判定为 `unhealthy`。

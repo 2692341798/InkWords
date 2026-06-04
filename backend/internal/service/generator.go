@@ -130,10 +130,12 @@ func (s *GeneratorService) GenerateBlogStreamWithProfile(
 				}
 			case chunk, ok := <-internalChunkChan:
 				if !ok {
-					// Why: a finished stream that fails to persist still needs to surface a stable failure
-					// to the caller, otherwise the UI sees a successful generation that never lands in history.
-					if err := s.saveToDB(ctx, userID, sourceType, fullContent); err != nil {
-						errChan <- err
+					// Why: task_only 模式下，最终业务事实应由 core-api 接管，这里不能再直写 blogs/users。
+					// 默认仍保留旧行为，避免在切流前破坏现有生成链路。
+					if !taskOnlyPersistenceMode() {
+						if err := s.saveToDB(ctx, userID, sourceType, fullContent); err != nil {
+							errChan <- err
+						}
 					}
 					return
 				}
@@ -347,7 +349,11 @@ func (s *GeneratorService) GeneratePolishDraftStream(ctx context.Context, title 
 	}()
 }
 
-// saveToDB persists the generated markdown to PostgreSQL.
+func taskOnlyPersistenceMode() bool {
+	return strings.EqualFold(os.Getenv("INKWORDS_TASK_PERSISTENCE_MODE"), "task_only")
+}
+
+// saveToDB persists the generated blog content to the database
 func (s *GeneratorService) saveToDB(ctx context.Context, userID uuid.UUID, sourceType string, content string) error {
 	if db.DB == nil {
 		return fmt.Errorf("persist generated blog: database not configured")

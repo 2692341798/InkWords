@@ -5,7 +5,8 @@ import (
 	"inkwords-backend/internal/service"
 )
 
-// StreamAPI adapts stream-related HTTP routes onto the stream domain handler.
+// Deprecated: llm-stream now owns its primary route registration in services/llm-stream.
+// StreamAPI remains as a transitional adapter while generation and decomposition use cases are being migrated.
 type StreamAPI struct {
 	generatorService     *service.GeneratorService
 	decompositionService *service.DecompositionService

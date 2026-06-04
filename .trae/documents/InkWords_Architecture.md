@@ -1,6 +1,9 @@
 # 墨言知识训练平台 (InkWords Trainer) - 架构设计与工程规范
 
 ## 0. 变更记录
+- 2026-06-04：Phase 2 执行 `core-api / llm-stream` 深层拆分第一轮。`core-api` 与 `llm-stream` 均新增服务自有 `app/bootstrap`、`transport/http/v1` 与 `cmd` 入口，`backend/Dockerfile` 也切换为从 `backend/services/core-api/cmd` 与 `backend/services/llm-stream/cmd` 构建；共享 `internal/transport/http/v1/routes.go` 与 `internal/transport/http/v1/api/stream_api.go` 被标记为过渡兼容层。与此同时，为后续停止 `llm-stream` 直写 `blogs / users`，仓库新增 `services/llm-stream/domain/generation` 骨架、`services/core-api/domain/task/ResultPersister` 抽象，并通过 `INKWORDS_TASK_PERSISTENCE_MODE=task_only` 开关开始收紧 legacy 生成链路写库边界。
+- 2026-06-04：Task 6 收尾同步文档并完成最终 Docker Compose 冒烟验证。确认 `parser-service`、`review-service`、`export-service` 的服务私有入口与装配均已分别收口到 `backend/services/<service>/`，对外入口仍保持 `http://localhost` 与既有 `/api/*` 路径不变；执行 `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build` 后，`core-api / llm-stream / parser-service / export-service / review-service / frontend` 均恢复 `healthy`，`curl -I http://localhost` 与 `curl http://localhost/api/v1/ping` 通过。
+- 2026-06-04：Task 4 完成 `export-service` 服务目录归属迁移。`export-service` 的 bootstrap、入口、导出适配器、私有路由、RabbitMQ consumer 与 artifact store 现统一归属到 `backend/services/export-service/`；本次不改变导出链路行为、对外 API、任务中心协议或数据库读写边界。
 - 2026-06-03：Task 4 补齐“服务写入归属矩阵”。明确 `core-api` 事实拥有 `users / oauth_tokens / user_prompt_settings / blogs / job_tasks / job_task_events`，`review-service` 事实拥有 `review_sessions / review_turns`；同时把当前允许的跨服务写入例外文档化为“仅通过显式 repository / task service 写 `job_tasks / job_task_events`”，并记录 `GeneratorService / DecompositionService` 仍直接使用全局 `db.DB` 写 `blogs / users` 的过渡性技术债。
 - 2026-06-03：Task 6 继续推进 `parser-service` 异步化。`core-api` 新增 `POST /api/v1/tasks/parse`，用于创建 `parse_file / parse_archive` 任务并发布到 RabbitMQ `parse.requested`；`parser-service` 新增 parse worker consumer，消费后把解析结果写回 `job_tasks.result_json`。前端当前让 `.zip` 课件包与 `50MB` 以上普通单文件默认走任务式解析，`50MB` 及以下普通单文件仍保留同步 `/api/v1/project/parse` 作为兼容路径。
 - 2026-06-03：Task 3 为 `core-api / llm-stream / parser-service / export-service / review-service` 补齐统一运行契约：各服务统一接入 `X-Request-ID` 中间件、结构化请求日志（`service / request_id / path / method / status / latency_ms`），并新增 `/health` 与 `/ready` 端点；Docker Compose 为 5 个后端服务与前端增加 healthcheck，前端启动依赖改为等待各后端 `healthy`，降低“容器已启动但接口未就绪”的误判。
@@ -66,6 +69,10 @@
 - **Web 框架**: Gin (`github.com/gin-gonic/gin`)
 - **依赖注入**: 后端通过明确的构造函数（如 `NewAuthAPI(authService)`）进行依赖注入，降低 `api` 层和 `service` 层、全局变量之间的耦合，便于单元测试。
 - **目录升级（渐进式垂直切片）**: 新增 `internal/domain/blog`、`internal/domain/user`、`internal/domain/auth`、`internal/domain/stream`、`internal/domain/project`、`internal/domain/review` 作为领域切片（repo/service/handler），并在 `cmd/server/main.go` 统一完成依赖组装（repo -> service -> handler -> api 适配）。
+- **服务自有入口收口（Phase 2 当前态）**：
+  - `core-api` 入口、bootstrap 与私有路由现位于 `backend/services/core-api/`。
+  - `llm-stream` 入口、bootstrap 与私有路由现位于 `backend/services/llm-stream/`。
+  - 共享 `internal/transport/http/v1/routes.go` 与 `internal/transport/http/v1/api/stream_api.go` 仅保留为过渡兼容层，不再承担这两个服务的主入口装配职责。
 - **数据库 ORM**: GORM (`gorm.io/gorm` + `gorm.io/driver/postgres`)
 - **认证与安全**: 
   - JWT Token (长短效签发) + GitHub OAuth (`golang.org/x/oauth2`)
@@ -108,6 +115,7 @@
 - **export-service 异步导出（Task 7 起步态）**：
   - `core-api` 新增 `/api/v1/tasks/export` 与 `/api/v1/tasks/:id/download`，负责创建导出任务并在完成后提供受控下载入口。
   - `export-service` 新增 export worker consumer，订阅 `export.requested`，复用现有 Chromium PDF 导出逻辑生成文件，再把 `file_token / filename / content_type / expires_at` 写回任务 `result_json`。
+  - `export-service` 当前已把启动入口、装配、私有路由、consumer 与 artifact store 收口到 `backend/services/export-service/`，与 `parser-service`、`review-service` 一样采用服务自有目录承载运行时边界。
   - `core-api` 与 `export-service` 通过共享卷 `EXPORT_ARTIFACTS_DIR` 交换导出产物；下载成功后由 `core-api` 删除文件，避免共享目录无限增长。
 - **正文净化层**：`internal/infra/llm` 在流式输出进入业务层前统一做开头段落清洗，剥离 `<think>` 标签、跳过 `reasoning_content`，并删除“收到你的需求 / 作为高级全栈架构师”等非正文前言；前端润色应用正文前再做一次兜底提取，避免污染 `blogs.content`。
 

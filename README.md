@@ -101,6 +101,12 @@ Task 9 已新增微服务冒烟 Runbook：[microservices-smoke-check.md](file://
 
 `export-service` 现已接入同一套任务中心：前端侧边栏导出 PDF 时，会先向 `core-api` 创建 `POST /api/v1/tasks/export`，随后订阅统一任务流，等待 `export-service` worker 消费 RabbitMQ `export.requested` 后生成 PDF，并通过 `GET /api/v1/tasks/:id/download` 走受控下载。当前导出产物落在共享卷 `EXPORT_ARTIFACTS_DIR`，下载成功后会立即删除文件；同步 `/api/v1/blogs/:id/export/pdf` 仍保留，作为紧急回滚路径。
 
+Task 4 已把 `export-service` 的启动装配、私有路由、RabbitMQ consumer 与 artifact store 收口到 `backend/services/export-service/` 服务自有目录，和 `parser-service`、`review-service` 保持一致的目录归属；本轮仅调整服务代码边界，不改变上述导出行为、对外 API、任务协议或数据库结构。
+
+Phase 1 当前可视为已完成服务目录归属收口：`parser-service`、`review-service`、`export-service` 的服务私有入口、bootstrap、私有路由与 worker 装配都以 `backend/services/<service>/` 为单一归属。后续如果改动这三个服务的 Docker 入口、路由或健康检查，请按 [microservices-smoke-check.md](file:///Users/huangqijun/Documents/墨言博客助手/InkWords/docs/runbooks/microservices-smoke-check.md) 重新执行整套 Compose 冒烟，而不是只验证单个容器。
+
+Phase 2 现已启动 `core-api / llm-stream` 深拆分第一轮：两者的主 HTTP 装配也已分别迁入 `backend/services/core-api/` 与 `backend/services/llm-stream/` 的服务自有 `bootstrap/routes/cmd`。对外 API 和单入口访问方式不变，但共享 `internal/transport/http/v1/routes.go` 与 `internal/transport/http/v1/api/stream_api.go` 已降级为过渡兼容层。与此同时，仓库新增 `INKWORDS_TASK_PERSISTENCE_MODE=task_only` 开关，用于在拆分阶段控制 legacy 生成链路不再由 `llm-stream` 直接把最终结果写入 `blogs / users`，为后续把业务事实统一回收到 `core-api` 做准备。
+
 如果你需要在 Docker 模式下使用 GitHub OAuth，Compose 现在会默认把回调地址固定为 `http://localhost/api/v1/auth/callback/github`，避免错误跳回 Vite 本地开发端口 `5173`。如果你需要在 Docker 下覆盖这个地址（例如远程域名调试），请显式设置 `DOCKER_GITHUB_REDIRECT_URL`。如果你运行的是 Vite 本地开发服务器，再继续使用 `backend/.env` 中的 `GITHUB_REDIRECT_URL=http://localhost:5173/api/v1/auth/callback/github`。
 
 `OBSIDIAN_VAULT_PATH` 不再提供任何机器私有的默认绝对路径。请显式把它设置为你的 Obsidian `wiki/` 根目录，否则容器启动前的 Compose 渲染会直接报错，避免静默挂载到错误位置。
