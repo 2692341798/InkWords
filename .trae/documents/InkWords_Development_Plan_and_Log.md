@@ -1,6 +1,20 @@
 # 墨言知识训练平台 (InkWords Trainer) - 开发计划与日志
 > **目标**：跟踪项目的核心开发模块、里程碑进度以及每日开发记录。
 
+### [2026-06-04] Chore - Task 6 文档同步与最终 Compose 冒烟收尾
+- **需求背景**：
+  1. 用户要求在不修改计划/设计文档的前提下，围绕 Phase 1 已完成的 `review-service`、`parser-service`、`export-service` 服务目录迁移，同步架构/日志/README/runbook 等交付文档。
+  2. 本轮不新增业务功能，也不改变 API、数据库结构或任务协议；重点是确认“服务目录归属迁移”已被文档化，并给出最终 Docker Compose 冒烟证据。
+- **本次完成**：
+  1. 审计 `README.md`、`InkWords_Architecture.md`、`InkWords_Development_Plan_and_Log.md`、`InkWords_Conversation_Log.md` 与 `docs/runbooks/microservices-smoke-check.md`，补充 Phase 1 当前基线：`parser-service`、`review-service`、`export-service` 的服务私有入口与装配均以 `backend/services/<service>/` 为单一归属。
+  2. 保持计划/设计文档只读，不把工作区内未跟踪的 `docs/superpowers/*design/plan` 文件纳入本次修改或提交范围。
+  3. 按 Docker-First 约束执行标准重启与网关检查，作为 Task 6 的最终收尾验证。
+- **验证记录**：
+  - `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build` 通过
+  - `docker compose --env-file backend/.env ps` 显示 `core-api / llm-stream / parser-service / export-service / review-service / frontend` 均为 `Up (healthy)`
+  - `curl -I http://localhost` 返回 `HTTP/1.1 200 OK`
+  - `curl -sS http://localhost/api/v1/ping` 返回 `{"code":200,"data":null,"message":"pong"}`
+
 ### [2026-06-04] Refactor - Task 4 export-service 服务自有目录迁移与提交同步
 - **需求背景**：
   1. `docs/superpowers/plans/2026-06-03-backend-real-service-split-phase1.md` 的 Task 4 要求把 `export-service` 的运行时装配从共享/骨架状态收口到 `backend/services/export-service/` 服务自有目录。

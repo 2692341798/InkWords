@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - 架构设计与工程规范
 
 ## 0. 变更记录
+- 2026-06-04：Task 6 收尾同步文档并完成最终 Docker Compose 冒烟验证。确认 `parser-service`、`review-service`、`export-service` 的服务私有入口与装配均已分别收口到 `backend/services/<service>/`，对外入口仍保持 `http://localhost` 与既有 `/api/*` 路径不变；执行 `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build` 后，`core-api / llm-stream / parser-service / export-service / review-service / frontend` 均恢复 `healthy`，`curl -I http://localhost` 与 `curl http://localhost/api/v1/ping` 通过。
 - 2026-06-04：Task 4 完成 `export-service` 服务目录归属迁移。`export-service` 的 bootstrap、入口、导出适配器、私有路由、RabbitMQ consumer 与 artifact store 现统一归属到 `backend/services/export-service/`；本次不改变导出链路行为、对外 API、任务中心协议或数据库读写边界。
 - 2026-06-03：Task 4 补齐“服务写入归属矩阵”。明确 `core-api` 事实拥有 `users / oauth_tokens / user_prompt_settings / blogs / job_tasks / job_task_events`，`review-service` 事实拥有 `review_sessions / review_turns`；同时把当前允许的跨服务写入例外文档化为“仅通过显式 repository / task service 写 `job_tasks / job_task_events`”，并记录 `GeneratorService / DecompositionService` 仍直接使用全局 `db.DB` 写 `blogs / users` 的过渡性技术债。
 - 2026-06-03：Task 6 继续推进 `parser-service` 异步化。`core-api` 新增 `POST /api/v1/tasks/parse`，用于创建 `parse_file / parse_archive` 任务并发布到 RabbitMQ `parse.requested`；`parser-service` 新增 parse worker consumer，消费后把解析结果写回 `job_tasks.result_json`。前端当前让 `.zip` 课件包与 `50MB` 以上普通单文件默认走任务式解析，`50MB` 及以下普通单文件仍保留同步 `/api/v1/project/parse` 作为兼容路径。

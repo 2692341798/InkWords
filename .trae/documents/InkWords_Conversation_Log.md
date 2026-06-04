@@ -1,6 +1,21 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 98：执行 Task 6 收尾，同步服务目录迁移文档并完成最终冒烟
+- **用户需求**：用户要求在 `/Users/huangqijun/Documents/墨言博客助手/InkWords` 执行计划 `Task6`，围绕 Phase 1 已完成的 `review-service`、`parser-service`、`export-service` 服务目录迁移，同步架构/日志/README/runbook 等文档，并完成最终 `docker compose` 冒烟验证；若产生改动则按仓库规则提交，但不得修改计划/设计文档。
+- **AI 动作**：
+  1. 先完成知识库 Query，回读 `[[InkWords 生产形态：多服务与聚合入口]]`、`[[export-service 异步导出与受控下载]]` 与 `[[微服务冒烟检查与 CI 前置]]`，确认当前任务属于“交付同步与验证收尾”，不是新的微服务范围扩张。
+  2. 只读审计 `README.md`、`InkWords_Architecture.md`、`InkWords_Development_Plan_and_Log.md`、`InkWords_Conversation_Log.md` 与 `docs/runbooks/microservices-smoke-check.md`，识别出仍需补一条明确基线：`parser-service`、`review-service`、`export-service` 的服务私有入口与装配均已收口到 `backend/services/<service>/`。
+  3. 明确排除工作区内未跟踪的 `docs/superpowers/*design/plan` 文件，不触碰计划/设计文档；随后补齐最小文档事实，并执行 `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build`、`docker compose ... ps`、`curl -I http://localhost`、`curl http://localhost/api/v1/ping`。
+- **决策/变更**：
+  - 本轮只同步“目录归属迁移已完成 + Compose 冒烟通过”的交付事实，不修改 API/数据库文档正文，因为对外契约与表结构没有新增变化。
+  - 冒烟结果以 `http://localhost` 为唯一外部入口进行判定，符合 Docker-First 与 Nginx 聚合入口约束。
+- **验证**：
+  - `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build` 通过
+  - `docker compose --env-file backend/.env ps` 显示 `core-api / llm-stream / parser-service / export-service / review-service / frontend` 均为 `healthy`
+  - `curl -I http://localhost` 返回 `HTTP/1.1 200 OK`
+  - `curl -sS http://localhost/api/v1/ping` 返回 `{"code":200,"data":null,"message":"pong"}`
+
 ### 对话 97：执行 Task 4 收尾，迁移 export-service 到服务自有目录并按仓库规则提交
 - **用户需求**：用户要求继续执行 `Task4`，把 `export-service` 迁到 `backend/services/export-service` 自有目录，迁移 export 相关业务实现、私有路由与 bootstrap/consumer/artifact store，保证相关测试通过；随后又明确授权按仓库规则同步 7 份项目文档并提交，仅限本任务相关改动。
 - **AI 动作**：

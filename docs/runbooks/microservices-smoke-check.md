@@ -19,6 +19,7 @@
   - `OBSIDIAN_VAULT_PATH`
 - 本地 Docker / Docker Compose 可用
 - 若要验证生成、解析、导出与 review 的完整业务链路，需准备一个可登录账号和一份可用的 Obsidian `wiki/`
+- Phase 1 当前基线：`parser-service`、`review-service`、`export-service` 的服务私有入口与装配应分别收口在 `backend/services/parser-service/`、`backend/services/review-service/`、`backend/services/export-service/`；如果你刚修改过这些目录，本 Runbook 应视为必跑项
 
 ## 3. 最小冒烟检查（CI 与本地共用）
 
