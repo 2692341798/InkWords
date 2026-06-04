@@ -21,7 +21,58 @@
 - 若要验证生成、解析、导出与 review 的完整业务链路，需准备一个可登录账号和一份可用的 Obsidian `wiki/`
 - Phase 1 当前基线：`parser-service`、`review-service`、`export-service` 的服务私有入口与装配应分别收口在 `backend/services/parser-service/`、`backend/services/review-service/`、`backend/services/export-service/`；如果你刚修改过这些目录，本 Runbook 应视为必跑项
 
-## 3. 最小冒烟检查（CI 与本地共用）
+## 2.5 P0 最小回归集
+
+每次改动以下任一文件后，至少执行本节 4 步，再决定是否进入更完整的冒烟流程：
+
+- `docker-compose.yml`
+- `frontend/nginx.conf`
+- `backend/services/*/cmd/main.go`
+- `.github/workflows/ci.yml`
+
+Why:
+- 这 4 步是现有 Runbook 中最容易回归、但也最能快速暴露编排与网关退化的最小集合。
+- 先把它们收敛成固定门槛，可以避免“容器能启动，但 parser worker 已被静默禁用”这类问题再次漏过。
+
+### P0-1 渲染 Compose
+
+```bash
+docker compose --env-file backend/.env config
+```
+
+预期结果：
+- Compose 渲染成功
+- `core-api / llm-stream / parser-service / export-service / review-service / frontend` 都在输出中出现
+
+### P0-2 检查健康状态
+
+```bash
+docker compose --env-file backend/.env ps
+```
+
+预期结果：
+- `core-api / llm-stream / parser-service / export-service / review-service / frontend` 均处于 `Up` 或 `healthy`
+
+### P0-3 检查网关
+
+```bash
+curl -I http://localhost
+curl --fail http://localhost/api/v1/ping
+```
+
+预期结果：
+- `http://localhost` 返回 `200 OK`
+- `/api/v1/ping` 返回成功响应，证明 Nginx 到 `core-api` 的代理仍然可用
+
+### P0-4 检查 parser 任务链路
+
+创建一条 `POST /api/v1/tasks/parse` 任务，并确认：
+
+- `parser-service` 日志中不再出现 `parse consumer disabled`
+- 任务最终能看到结果事件，或拿到成功快照
+- 若本轮只做 CI 最小门禁，至少检查 `parser-service` 日志里没有 worker 被静默禁用的标记
+
+
 
 ### 3.1 渲染 Compose
 
