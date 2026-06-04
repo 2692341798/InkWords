@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -130,6 +131,32 @@ func TestGenerateBlogStream_DoesNotPersistBlogDirectlyWhenTaskModeEnabled(t *tes
 	svc := NewGeneratorService(nil)
 	require.NotNil(t, svc)
 	require.True(t, taskOnlyPersistenceMode())
+}
+
+func TestGeneratorService_BuildGenerateSingleTaskResult_TaskOnlyModeDoesNotPersistAndReturnsTaskResult(t *testing.T) {
+	t.Setenv("INKWORDS_TASK_PERSISTENCE_MODE", "task_only")
+
+	fakeLLM := newGeneratorPersistTestLLMServer(t)
+	defer fakeLLM.Close()
+
+	persistence := &generatorPersistenceRecorder{}
+	svc := NewGeneratorServiceWithPersistence(nil, persistence)
+	svc.llmClient = &llm.DeepSeekClient{
+		APIKey: "test-key",
+		APIURL: fakeLLM.URL,
+		Client: fakeLLM.Client(),
+	}
+
+	result, err := svc.BuildGenerateSingleTaskResult(context.Background(), "file", "# 标题\n\n正文")
+	require.NoError(t, err)
+	require.Zero(t, persistence.calls)
+	require.NotEmpty(t, result.ResultJSON)
+
+	var decoded map[string]any
+	require.NoError(t, json.Unmarshal(result.ResultJSON, &decoded))
+	require.Equal(t, "generation", decoded["task_type"])
+	require.Equal(t, "generate_single", decoded["task_subtype"])
+	require.Equal(t, "task_only", decoded["persistence_mode"])
 }
 
 func TestBuildSingleGenerateMessages_UsesResolvedPromptProfileRole(t *testing.T) {

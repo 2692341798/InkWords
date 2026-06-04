@@ -1,6 +1,21 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 101：执行 generation task_only 的 Task 1，并先提交当前进度
+- **用户需求**：用户先确认采用 `Subagent-Driven` 方式继续推进“生成链路 task_only 持久化”，随后在执行到 `Task 2` 前要求“先提交，再继续改动”。
+- **AI 动作**：
+  1. 按计划先派子代理执行 `Task 1`，用 TDD 为单篇 `generate_single` 建立结构化 `generation result` contract，并把 `task_consumer` 的任务成功结果从固定 `{"done":true}` 升级为结构化 `job_tasks.result_json`。
+  2. 在 `GeneratorService` 中新增 `BuildGenerateSingleTaskResult()`，让 `INKWORDS_TASK_PERSISTENCE_MODE=task_only` 下的单篇生成仅产出结构化结果，不再触发业务表写入。
+  3. 在准备继续执行 `Task 2` 时，发现工作区里已有刚完成的 `Task 1` 改动且尚未提交，于是先停下并征求用户处理方式；用户明确要求“先提交，再继续改动”。
+  4. 回到主线程后先做 `git status` 与定向 `git diff`，确认只提交本次原子变更所需文件，并同步更新架构/API/数据库/PRD/README/开发日志。
+- **决策/变更**：
+  - 本次提交只覆盖 `Task 1`：单篇生成结构化结果 contract 与对应测试，不提前混入 `core-api` 结果持久化闭环。
+  - 继续保留 `task_only` 的渐进式推进策略：先让任务结果 contract 稳定，再让 `core-api` 真正消费并持久化业务事实。
+- **验证**：
+  - `cd backend && go test ./internal/domain/stream -run TestBuildGenerateSingleTaskResult_ProducesTaskOnlyContract -v` 先失败、补实现后通过
+  - `cd backend && go test ./internal/service ./internal/domain/stream -run 'BuildGenerateSingleTaskResult|HandleGenerationRequested_MarkSucceededWithStructuredResult|RunGenerateSingle_AppendsChunkAndCompletes' -v` 先失败、补实现后通过
+  - `cd backend && go test ./internal/domain/stream ./internal/service -run 'TaskResult|GenerateBlogStream|HandleGenerationRequested' -v` 通过
+
 ### 对话 100：执行 Task 3，收口 GeneratorService 的显式 persistence 接口
 - **用户需求**：用户要求直接按既定 `Task3` 执行，用测试先行把 `GeneratorService` 对 `blogs / users` 的直接写入抽成显式 persistence 接口；允许修改 `generator.go`、相关测试和新增 persistence 文件，并同步必要文档，但不得触碰未跟踪的 `docs/superpowers` 历史计划设计文件。
 - **AI 动作**：

@@ -1,6 +1,20 @@
 # 墨言知识训练平台 (InkWords Trainer) - 开发计划与日志
 > **目标**：跟踪项目的核心开发模块、里程碑进度以及每日开发记录。
 
+### [2026-06-04] Feat - Generation task_only Task 1 打通单篇结构化任务结果
+- **需求背景**：
+  1. 用户要求按 `Subagent-Driven` 方式继续推进微服务化，并在继续下一批改动前先把当前 `Task 1` 产出提交。
+  2. 本轮只允许完成计划中的 `Task 1`：为单篇生成建立结构化 `generation result` contract，并让 `task_only` 模式下的任务成功结果不再固定为 `{"done":true}`。
+- **本次完成**：
+  1. 新增 `backend/internal/domain/stream/generation_result.go` 与对应测试，锁定单篇 `generate_single` 任务结果 contract，包含 `result_version / task_type / task_subtype / persistence_mode / final_status / usage / payload`。
+  2. 调整 `backend/internal/domain/stream/task_consumer.go` 与测试：单篇生成成功后会基于最终正文写入结构化 `job_tasks.result_json`，不再固定写 `{"done":true}`。
+  3. 调整 `backend/internal/service/generator.go` 与测试：`GeneratorService` 新增 `BuildGenerateSingleTaskResult()`，在 `INKWORDS_TASK_PERSISTENCE_MODE=task_only` 下只产出结构化结果，不触发业务表写入。
+  4. 同步更新 README、架构/API/数据库/PRD/对话日志，明确本轮只完成单篇结果交接，`core-api` 最终业务落库闭环属于下一任务。
+- **验证记录**：
+  - `cd backend && go test ./internal/domain/stream -run TestBuildGenerateSingleTaskResult_ProducesTaskOnlyContract -v` 先失败（缺少 builder），补实现后通过
+  - `cd backend && go test ./internal/service ./internal/domain/stream -run 'BuildGenerateSingleTaskResult|HandleGenerationRequested_MarkSucceededWithStructuredResult|RunGenerateSingle_AppendsChunkAndCompletes' -v` 先失败、补实现后通过
+  - `cd backend && go test ./internal/domain/stream ./internal/service -run 'TaskResult|GenerateBlogStream|HandleGenerationRequested' -v` 通过
+
 ### [2026-06-04] Refactor - Task 3 收口 GeneratorService 的显式 persistence 边界
 - **需求背景**：
   1. 用户要求按既定 `Task3` 继续执行，用测试先行把 `GeneratorService` 对 `blogs / users` 的直接写入抽成显式 persistence 接口。

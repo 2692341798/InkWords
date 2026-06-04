@@ -22,6 +22,10 @@ func TestTaskConsumer_RunGenerateSingle_AppendsChunkAndCompletes(t *testing.T) {
 			close(chunkChan)
 			close(errChan)
 		},
+		buildGenerateSingleTaskResultFunc: func(ctx context.Context, req GenerateRequest, content string) ([]byte, error) {
+			require.Equal(t, "hello", content)
+			return []byte(`{"result_version":1,"task_type":"generation","task_subtype":"generate_single","persistence_mode":"task_only","final_status":"succeeded","usage":{"estimated_tokens":6},"payload":{"title":"A","content":"hello","source_type":"file","word_count":1,"tech_stacks":["Go"]}}`), nil
+		},
 	}
 
 	consumer := NewTaskConsumer(taskService, streamService)
@@ -42,7 +46,7 @@ func TestTaskConsumer_RunGenerateSingle_AppendsChunkAndCompletes(t *testing.T) {
 	require.Equal(t, model.JobTaskStatusSucceeded, taskService.lastStatus)
 	require.Len(t, taskService.appendedPayloads, 1)
 	require.Contains(t, string(taskService.appendedPayloads[0]), `"hello"`)
-	require.JSONEq(t, `{"done":true}`, string(taskService.lastResult))
+	require.JSONEq(t, `{"result_version":1,"task_type":"generation","task_subtype":"generate_single","persistence_mode":"task_only","final_status":"succeeded","usage":{"estimated_tokens":6},"payload":{"title":"A","content":"hello","source_type":"file","word_count":1,"tech_stacks":["Go"]}}`, string(taskService.lastResult))
 }
 
 func TestTaskConsumer_InvalidPayload_MarksTaskFailed(t *testing.T) {
@@ -120,6 +124,32 @@ func TestTaskConsumer_RunPolish_UsesLegacyPolishServiceBehindTaskEnvelope(t *tes
 	require.Contains(t, string(taskService.appendedPayloads[0]), `"润色片段"`)
 }
 
+func TestHandleGenerationRequested_MarkSucceededWithStructuredResult(t *testing.T) {
+	tasks := &fakeTaskService{}
+	streams := &fakeStreamService{
+		generateFunc: func(ctx context.Context, userID uuid.UUID, req GenerateRequest, chunkChan chan<- string, errChan chan<- error) {
+			chunkChan <- "B"
+			close(chunkChan)
+			close(errChan)
+		},
+		buildGenerateSingleTaskResultFunc: func(ctx context.Context, req GenerateRequest, content string) ([]byte, error) {
+			require.Equal(t, "file", req.SourceType)
+			require.Equal(t, "B", content)
+			return []byte(`{"result_version":1,"task_type":"generation","task_subtype":"generate_single","persistence_mode":"task_only","final_status":"succeeded","usage":{"estimated_tokens":6},"payload":{"title":"A","content":"B","source_type":"file","word_count":1,"tech_stacks":["Go"]}}`), nil
+		},
+	}
+	consumer := NewTaskConsumer(tasks, streams)
+
+	err := consumer.HandleGenerationRequested(context.Background(), mq.GenerationRequestedMessage{
+		TaskID:  uuid.MustParse("11111111-1111-1111-1111-111111111111"),
+		Kind:    "generate_single",
+		UserID:  uuid.MustParse("22222222-2222-2222-2222-222222222222"),
+		Payload: []byte(`{"source_type":"file","source_content":"hello"}`),
+	})
+	require.NoError(t, err)
+	require.JSONEq(t, `{"result_version":1,"task_type":"generation","task_subtype":"generate_single","persistence_mode":"task_only","final_status":"succeeded","usage":{"estimated_tokens":6},"payload":{"title":"A","content":"B","source_type":"file","word_count":1,"tech_stacks":["Go"]}}`, string(tasks.lastResult))
+}
+
 type fakeTaskService struct {
 	markRunningCalled bool
 	appendCalls       []taskdomain.AppendEventInput
@@ -160,9 +190,10 @@ func (f *fakeTaskService) IsCancelled(_ context.Context, _ uuid.UUID) (bool, err
 }
 
 type fakeStreamService struct {
-	generateFunc func(ctx context.Context, userID uuid.UUID, req GenerateRequest, chunkChan chan<- string, errChan chan<- error)
-	continueFunc func(ctx context.Context, userID uuid.UUID, blogID uuid.UUID, chunkChan chan<- string, errChan chan<- error)
-	polishFunc   func(ctx context.Context, req PolishRequest, chunkChan chan<- string, errChan chan<- error)
+	generateFunc                      func(ctx context.Context, userID uuid.UUID, req GenerateRequest, chunkChan chan<- string, errChan chan<- error)
+	continueFunc                      func(ctx context.Context, userID uuid.UUID, blogID uuid.UUID, chunkChan chan<- string, errChan chan<- error)
+	polishFunc                        func(ctx context.Context, req PolishRequest, chunkChan chan<- string, errChan chan<- error)
+	buildGenerateSingleTaskResultFunc func(ctx context.Context, req GenerateRequest, content string) ([]byte, error)
 }
 
 func (f *fakeStreamService) Generate(ctx context.Context, userID uuid.UUID, req GenerateRequest, chunkChan chan<- string, errChan chan<- error) {
@@ -190,4 +221,11 @@ func (f *fakeStreamService) Polish(ctx context.Context, req PolishRequest, chunk
 	}
 	close(chunkChan)
 	close(errChan)
+}
+
+func (f *fakeStreamService) BuildGenerateSingleTaskResult(ctx context.Context, req GenerateRequest, content string) ([]byte, error) {
+	if f.buildGenerateSingleTaskResultFunc != nil {
+		return f.buildGenerateSingleTaskResultFunc(ctx, req, content)
+	}
+	return nil, nil
 }

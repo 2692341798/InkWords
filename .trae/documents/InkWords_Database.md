@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - 数据库设计文档
 
 ## 0. 变更记录
+- 2026-06-04：Generation Task-Only Task 1 为 `generate_single` 任务增强 `job_tasks.result_json` 语义。在 `INKWORDS_TASK_PERSISTENCE_MODE=task_only` 下，单篇生成成功结果不再固定为 `{"done":true}`，而是保存结构化 JSON：外层含 `result_version / task_type / task_subtype / persistence_mode / final_status / usage`，`payload` 含单篇标题、正文、来源类型、字数与技术栈；本次不新增表、字段、索引或迁移。
 - 2026-06-04：Task 3 将 `GeneratorService` 的最终落库改为通过显式 `GeneratedBlogPersistence` 接口完成，默认 GORM 适配器仍在同一事务中创建 `blogs` 记录并累计 `users.tokens_used`。本次不新增表、字段、索引或迁移，但数据库写入边界从“service 直接拿全局 `db.DB`”收紧为“service 产出业务事实，再交给 persistence 适配器落库”。
 - 2026-06-04：Phase 2 执行 `core-api / llm-stream` 深层拆分第一轮。数据库表结构、索引与迁移保持不变，但服务写入边界进一步收紧：`core-api` 新增 `ResultPersister` 抽象，作为后续把任务结果落回 `blogs` 与累计 `users.tokens_used` 的服务自有承载点；同时新增 `INKWORDS_TASK_PERSISTENCE_MODE=task_only` 运行开关，让 legacy `generator / decomposition` 在显式开启时停止直接写 `blogs / users`，为最终把业务事实回收至 `core-api` 做过渡。
 - 2026-06-04：Task 4 将 `export-service` 的导出适配器、consumer、artifact store 与启动装配迁入 `backend/services/export-service/` 服务自有目录；本次不新增数据库表、字段、索引或迁移，`job_tasks / job_task_events` 的跨服务受控写入边界保持不变。

@@ -27,6 +27,7 @@ type taskService interface {
 
 type generationStreamService interface {
 	Generate(ctx context.Context, userID uuid.UUID, req GenerateRequest, chunkChan chan<- string, errChan chan<- error)
+	BuildGenerateSingleTaskResult(ctx context.Context, req GenerateRequest, content string) ([]byte, error)
 	Continue(ctx context.Context, userID uuid.UUID, blogID uuid.UUID, chunkChan chan<- string, errChan chan<- error)
 	Polish(ctx context.Context, req PolishRequest, chunkChan chan<- string, errChan chan<- error)
 }
@@ -79,6 +80,7 @@ func (c *TaskConsumer) HandleGenerationRequested(ctx context.Context, message mq
 	}
 
 	chunkOpen, errOpen := true, true
+	var fullContent strings.Builder
 	for chunkOpen || errOpen {
 		select {
 		case <-taskCtx.Done():
@@ -116,6 +118,7 @@ func (c *TaskConsumer) HandleGenerationRequested(ctx context.Context, message mq
 				chunkChan = nil
 				continue
 			}
+			fullContent.WriteString(chunk)
 			if err := c.tasks.AppendEvent(ctx, message.TaskID, taskdomain.AppendEventInput{
 				EventType: "chunk",
 				Status:    model.JobTaskStatusStreaming,
@@ -126,7 +129,12 @@ func (c *TaskConsumer) HandleGenerationRequested(ctx context.Context, message mq
 		}
 	}
 
-	return c.tasks.MarkSucceeded(ctx, message.TaskID, []byte(`{"done":true}`))
+	result, err := c.buildFinalTaskResult(ctx, message, fullContent.String())
+	if err != nil {
+		return c.tasks.MarkFailed(ctx, message.TaskID, err.Error())
+	}
+
+	return c.tasks.MarkSucceeded(ctx, message.TaskID, result)
 }
 
 func (c *TaskConsumer) watchCancellation(taskCtx context.Context, cancel context.CancelFunc, taskID uuid.UUID) {
@@ -156,6 +164,23 @@ func supportsGenerationKind(kind string) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+func (c *TaskConsumer) buildFinalTaskResult(
+	ctx context.Context,
+	message mq.GenerationRequestedMessage,
+	fullContent string,
+) ([]byte, error) {
+	switch strings.TrimSpace(message.Kind) {
+	case "generate_single":
+		var req GenerateRequest
+		if err := json.Unmarshal(message.Payload, &req); err != nil {
+			return nil, errors.New("invalid generation payload")
+		}
+		return c.streams.BuildGenerateSingleTaskResult(ctx, req, fullContent)
+	default:
+		return []byte(`{"done":true}`), nil
 	}
 }
 

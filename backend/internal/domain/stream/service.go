@@ -2,6 +2,7 @@ package stream
 
 import (
 	"context"
+	"errors"
 
 	"github.com/google/uuid"
 
@@ -86,6 +87,20 @@ func (s *Service) Generate(ctx context.Context, userID uuid.UUID, req GenerateRe
 		chunkChan,
 		errChan,
 	)
+}
+
+// BuildGenerateSingleTaskResult 基于单篇生成最终正文构造结构化任务结果。
+func (s *Service) BuildGenerateSingleTaskResult(ctx context.Context, req GenerateRequest, content string) ([]byte, error) {
+	if s == nil || s.generator == nil {
+		return nil, errors.New("generator service is not configured")
+	}
+
+	result, err := s.generator.BuildGenerateSingleTaskResult(ctx, req.SourceType, content)
+	if err != nil {
+		return nil, err
+	}
+
+	return result.ResultJSON, nil
 }
 
 func (s *Service) Continue(bgCtx context.Context, userID uuid.UUID, blogID uuid.UUID, chunkChan chan<- string, errChan chan<- error) {
