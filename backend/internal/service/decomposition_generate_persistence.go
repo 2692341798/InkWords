@@ -8,6 +8,8 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/datatypes"
+
+	blogcontracts "inkwords-backend/internal/domain/blog/contracts"
 )
 
 func (s *DecompositionService) ensureSeriesParentAndDrafts(
@@ -19,7 +21,7 @@ func (s *DecompositionService) ensureSeriesParentAndDrafts(
 	gitURL string,
 	outline []Chapter,
 ) ([]Chapter, error) {
-	return s.seriesPersistence.EnsureSeriesParentAndDrafts(ctx, SeriesDraftPreflightInput{
+	return s.seriesPersistence.EnsureSeriesParentAndDrafts(ctx, blogcontracts.SeriesDraftPreflightInput{
 		UserID:      userID,
 		ParentID:    parentID,
 		ParentTitle: parentTitle,
@@ -75,7 +77,7 @@ func (s *DecompositionService) handleSeriesChapterCompletion(
 		blogID = parsedID
 	}
 
-	return s.seriesPersistence.SaveSeriesChapter(ctx, SeriesChapterPersistenceInput{
+	return s.seriesPersistence.SaveSeriesChapter(ctx, blogcontracts.SeriesChapterPersistenceInput{
 		UserID:     userID,
 		ParentID:   parentID,
 		BlogID:     blogID,

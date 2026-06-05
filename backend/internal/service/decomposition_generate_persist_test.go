@@ -16,6 +16,7 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
+	blogcontracts "inkwords-backend/internal/domain/blog/contracts"
 	"inkwords-backend/internal/infra/db"
 	"inkwords-backend/internal/model"
 	"inkwords-backend/internal/prompt"
@@ -589,7 +590,7 @@ type seriesPersistenceRecorder struct {
 	updateSkippedMetaCalls int
 	preflightCalls int
 
-	savedChapter       SeriesChapterPersistenceInput
+	savedChapter       blogcontracts.SeriesChapterPersistenceInput
 	savedIntroParentID uuid.UUID
 	savedIntroContent  string
 	loadedOldContentBlogID uuid.UUID
@@ -598,11 +599,11 @@ type seriesPersistenceRecorder struct {
 	updatedSkippedMetaBlogID uuid.UUID
 	updatedSkippedMetaTitle string
 	updatedSkippedMetaSort int
-	preflightInput SeriesDraftPreflightInput
+	preflightInput blogcontracts.SeriesDraftPreflightInput
 	preflightResult []Chapter
 }
 
-func (r *seriesPersistenceRecorder) SaveSeriesChapter(_ context.Context, input SeriesChapterPersistenceInput) error {
+func (r *seriesPersistenceRecorder) SaveSeriesChapter(_ context.Context, input blogcontracts.SeriesChapterPersistenceInput) error {
 	r.saveChapterCalls++
 	r.savedChapter = input
 	return nil
@@ -638,7 +639,7 @@ func (r *seriesPersistenceRecorder) UpdateSkippedSeriesChapterMeta(_ context.Con
 	return nil
 }
 
-func (r *seriesPersistenceRecorder) EnsureSeriesParentAndDrafts(_ context.Context, input SeriesDraftPreflightInput) ([]Chapter, error) {
+func (r *seriesPersistenceRecorder) EnsureSeriesParentAndDrafts(_ context.Context, input blogcontracts.SeriesDraftPreflightInput) ([]Chapter, error) {
 	r.preflightCalls++
 	r.preflightInput = input
 	return append([]Chapter(nil), r.preflightResult...), nil

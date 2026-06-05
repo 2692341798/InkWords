@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - 数据库设计文档
 
 ## 0. 变更记录
+- 2026-06-05：继续推进 service 内部 series bridge 收口。本次删除 `decomposition_series_persistence.go`，相关 service 直接依赖 `domain/blog/contracts` 的 `SeriesPersistence / SeriesDraftPreflightInput / SeriesChapterPersistenceInput` 与 `domain/blog` 默认适配器；不涉及 PostgreSQL 表结构、字段、索引、迁移或写入语义变更。
 - 2026-06-05：继续推进 service 内部 blog bridge 收口。本次删除 `generator` 与 `continue` 两层仅用于内部装配的桥接文件，相关 service 直接依赖 `domain/blog/contracts` 与 `domain/blog` 默认适配器；不涉及 PostgreSQL 表结构、字段、索引、迁移或写入语义变更。
 - 2026-06-05：继续推进 blog contracts 收口。本次仅调整 `stream` 域内部类型依赖，确认非 `service` 包对 `GeneratedBlogPersistence / ContinuePersistence / SeriesPersistence / Chapter` 等兼容别名的显式引用已清零；不涉及 PostgreSQL 表结构、字段、索引、迁移或写入语义变更。
 - 2026-06-04：新增 `FRONTEND_PORT` 仅影响 Docker Compose 的前端宿主机端口映射，不涉及 PostgreSQL 表结构、字段、索引、迁移或任何数据库写入语义变更；本次仅用于在宿主机 `:80` 被占用时，将前端入口临时切到如 `http://localhost:8088` 完成运行验证。

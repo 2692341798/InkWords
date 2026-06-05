@@ -1,6 +1,19 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 116：继续推进，删除 series 的 service 类型桥接层
+- **用户需求**：用户继续要求“继续”，默认沿上一轮已提交的 bridge 收口主线继续推进。
+- **AI 动作**：
+  1. 先回读知识库并审计 `internal/service` 中剩余的 `SeriesPersistence / SeriesDraftPreflightInput / SeriesChapterPersistenceInput / Chapter` 兼容层使用面。
+  2. 选择 `series` 这一组作为更小的下一刀：让 `DecompositionService` 直接依赖 `blogcontracts.SeriesPersistence` 与 `blogdomain.NewSeriesPersistence(db.DB)`，并把 `decomposition_generate_persistence.go` 改为直接组装 `blogcontracts.SeriesDraftPreflightInput` 与 `blogcontracts.SeriesChapterPersistenceInput`。
+  3. 更新 `decomposition_generate_persist_test.go` 的 recorder 字段与方法签名后，删除 `decomposition_series_persistence.go`，把 `Chapter` 本地别名暂时留到下一轮单独处理。
+- **决策/变更**：
+  - 这一轮不强行把 `Chapter` 也一起删掉，因为它在 `service` 包内部扩散更广，单独拆出来更有利于保持原子提交与可回滚性。
+  - 本轮完成后，service 层剩余主要兼容债务已进一步收缩为 `Chapter` 本地别名。
+- **验证**：
+  - `cd backend && go test ./internal/service -run 'Test(NewDecompositionServiceWithPersistences_FillsMissingDefaultAdapters|DecompositionService_EnsureSeriesParentAndDrafts_UsesInjectedPersistence|HandleSeriesChapterCompletion_UsesInjectedPersistence|GenerateSeriesIntro_UsesInjectedPersistence|HandleSkippedSeriesChapter_UsesInjectedPersistence|ResolveSeriesOldContent_UsesInjectedPersistence)' -count=1` 通过
+  - `cd backend && go test ./internal/domain/stream ./internal/domain/blog ./internal/service ./services/core-api/... ./services/llm-stream/... ./services/export-service/... ./cmd/server -count=1` 通过
+
 ### 对话 115：继续推进，删除 generator 与 continue 的 service 桥接层
 - **用户需求**：用户继续要求“继续”，默认沿上一轮已提交的 contracts 收口主线继续推进。
 - **AI 动作**：

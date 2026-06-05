@@ -1,6 +1,19 @@
 # 墨言知识训练平台 (InkWords Trainer) - 开发计划与日志
 > **目标**：跟踪项目的核心开发模块、里程碑进度以及每日开发记录。
 
+### [2026-06-05] Refactor - 深拆 core-api / llm-stream 第十二轮：删除 series 的 service 类型桥接层
+- **需求背景**：
+  1. 在 `generator` 与 `continue` 两层最薄 bridge 已删除后，`internal/service` 剩余最集中的桥接债务已经收缩到 `SeriesPersistence / SeriesDraftPreflightInput / SeriesChapterPersistenceInput / Chapter`。
+  2. 其中 `SeriesPersistence` 这一组的扩散面仍明显小于 `Chapter` 本地别名，适合作为下一次原子收口切口，先让 service 内部直接依赖 blog contracts，再把 `Chapter` 留到后续单独处理。
+- **本次完成**：
+  1. `DecompositionService` 直接切到 `blogcontracts.SeriesPersistence` 与 `blogdomain.NewSeriesPersistence(db.DB)`，删除对 `NewGormSeriesPersistence` 的依赖。
+  2. `decomposition_generate_persistence.go` 改为直接组装 `blogcontracts.SeriesDraftPreflightInput` 与 `blogcontracts.SeriesChapterPersistenceInput`。
+  3. 更新 `decomposition_generate_persist_test.go` 的 recorder 字段与方法签名，并删除 `backend/internal/service/decomposition_series_persistence.go`。
+- **验证记录**：
+  - `cd backend && go test ./internal/service -run 'Test(NewDecompositionServiceWithPersistences_FillsMissingDefaultAdapters|DecompositionService_EnsureSeriesParentAndDrafts_UsesInjectedPersistence|HandleSeriesChapterCompletion_UsesInjectedPersistence|GenerateSeriesIntro_UsesInjectedPersistence|HandleSkippedSeriesChapter_UsesInjectedPersistence|ResolveSeriesOldContent_UsesInjectedPersistence)' -count=1` 通过
+  - `cd backend && go test ./internal/domain/stream ./internal/domain/blog ./internal/service ./services/core-api/... ./services/llm-stream/... ./services/export-service/... ./cmd/server -count=1` 通过
+  - `grep '(type\\s+(SeriesChapterPersistenceInput|SeriesDraftPreflightInput|SeriesPersistence)\\s*=|NewGormSeriesPersistence\\()' backend/internal/service/**/*.go` 无匹配
+
 ### [2026-06-05] Refactor - 深拆 core-api / llm-stream 第十一轮：删除 generator 与 continue 的 service 桥接层
 - **需求背景**：
   1. 在外层调用点已经开始直接依赖 `domain/blog/contracts` 后，`internal/service` 内部仍保留三组兼容桥接：`generator`、`continue`、`series/Chapter`。

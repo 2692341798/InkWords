@@ -72,7 +72,7 @@ type DecompositionService struct {
 	gitFetcher        *parser.GitFetcher
 	limiter           *rate.Limiter
 	promptReq         *PromptRequirementsService
-	seriesPersistence SeriesPersistence
+	seriesPersistence blogcontracts.SeriesPersistence
 	continuePersistence blogcontracts.ContinuePersistence
 
 	seriesTaskResultsMu sync.Mutex
@@ -83,25 +83,25 @@ type DecompositionService struct {
 func NewDecompositionService(promptReq *PromptRequirementsService) *DecompositionService {
 	return NewDecompositionServiceWithPersistences(
 		promptReq,
-		NewGormSeriesPersistence(db.DB),
+		blogdomain.NewSeriesPersistence(db.DB),
 		blogdomain.NewContinuePersistence(db.DB),
 	)
 }
 
 // NewDecompositionServiceWithSeriesPersistence creates a new decomposition service with explicit series persistence.
-func NewDecompositionServiceWithSeriesPersistence(promptReq *PromptRequirementsService, seriesPersistence SeriesPersistence) *DecompositionService {
+func NewDecompositionServiceWithSeriesPersistence(promptReq *PromptRequirementsService, seriesPersistence blogcontracts.SeriesPersistence) *DecompositionService {
 	return NewDecompositionServiceWithPersistences(promptReq, seriesPersistence, blogdomain.NewContinuePersistence(db.DB))
 }
 
 // NewDecompositionServiceWithPersistences creates a new decomposition service with explicit persistence dependencies.
 func NewDecompositionServiceWithPersistences(
 	promptReq *PromptRequirementsService,
-	seriesPersistence SeriesPersistence,
+	seriesPersistence blogcontracts.SeriesPersistence,
 	continuePersistence blogcontracts.ContinuePersistence,
 ) *DecompositionService {
 	apiKey := os.Getenv("DEEPSEEK_API_KEY")
 	if seriesPersistence == nil {
-		seriesPersistence = NewGormSeriesPersistence(db.DB)
+		seriesPersistence = blogdomain.NewSeriesPersistence(db.DB)
 	}
 	if continuePersistence == nil {
 		continuePersistence = blogdomain.NewContinuePersistence(db.DB)
