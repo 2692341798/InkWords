@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - 架构设计与工程规范
 
 ## 0. 变更记录
+- 2026-06-05：继续推进 `core-api / llm-stream` 深拆分第十三轮。`internal/service` 已删除最后的 `Chapter` 本地兼容别名，service 包内部相关生成、提示词、质量门禁与测试代码均改为直接依赖 `blogcontracts.Chapter`；至此 blog contracts 的 `GeneratedBlogPersistence / ContinuePersistence / SeriesPersistence / SeriesDraftPreflightInput / SeriesChapterPersistenceInput / Chapter` 在 service 层的兼容桥接已全部清空。
 - 2026-06-05：继续推进 `core-api / llm-stream` 深拆分第十二轮。`internal/service` 已删除 `decomposition_series_persistence.go`；`DecompositionService` 与其持久化辅助逻辑现在直接依赖 `blogcontracts.SeriesPersistence`、`blogcontracts.SeriesDraftPreflightInput`、`blogcontracts.SeriesChapterPersistenceInput` 以及 `blogdomain.NewSeriesPersistence(db.DB)`。service 层剩余主要兼容层已进一步收缩为 `Chapter` 本地别名。
 - 2026-06-05：继续推进 `core-api / llm-stream` 深拆分第十一轮。`internal/service` 已删除 `generator_persistence.go` 与 `decomposition_continue_persistence.go` 两层最薄的 blog bridge；`GeneratorService` 与 `DecompositionService` 现分别直接依赖 `blogcontracts.GeneratedBlogPersistence`、`blogcontracts.ContinuePersistence` 和 `blogdomain` 默认适配器，service 层剩余兼容桥接进一步收缩为 `series` 与 `Chapter` 相关类型。
 - 2026-06-05：继续推进 `core-api / llm-stream` 深拆分第十轮。`backend/internal/domain/stream/service.go` 已不再依赖 `internal/service.Chapter` 兼容别名，改为直接组装 `internal/domain/blog/contracts.Chapter`；当前非 `service` 包对 `GeneratedBlogPersistence / ContinuePersistence / SeriesPersistence / Chapter` 等 blog contracts 兼容别名的显式引用已清零，service 层进一步退化为内部兼容桥接层。

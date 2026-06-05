@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - API 接口文档
 
 ## 0. 变更记录
+- 2026-06-05：继续推进 service 内部 Chapter bridge 收口。本次删除 `decomposition_service.go` 中最后的 `Chapter` 本地别名，并让 service 包内部相关生成、提示词、质量门禁与测试代码统一直接依赖 `domain/blog/contracts.Chapter`；不新增也不修改任何对外 API 路由、请求字段或响应字段。
 - 2026-06-05：继续推进 service 内部 series bridge 收口。本次删除 `decomposition_series_persistence.go`，并让 `DecompositionService` 与相关持久化辅助逻辑直接依赖 `domain/blog/contracts` 的 `SeriesPersistence / SeriesDraftPreflightInput / SeriesChapterPersistenceInput` 以及 `domain/blog` 默认适配器；不新增也不修改任何对外 API 路由、请求字段或响应字段。
 - 2026-06-05：继续推进 service 内部 blog bridge 收口。本次删除 `generator` 与 `continue` 两层仅用于内部装配的桥接文件，改为 service 直接依赖 `domain/blog/contracts` 与 `domain/blog` 默认适配器；不新增也不修改任何对外 API 路由、请求字段或响应字段。
 - 2026-06-05：继续推进 blog contracts 收口。本次仅把 `backend/internal/domain/stream/service.go` 的内部依赖从 `internal/service.Chapter` 切到 `internal/domain/blog/contracts.Chapter`，不新增也不修改任何对外 API 路由、请求字段或响应字段。

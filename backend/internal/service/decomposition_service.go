@@ -48,13 +48,10 @@ func maxWorkersFromEnv(taskCount int) int {
 	return maxWorkers
 }
 
-// Chapter represents a single chapter in the generated outline.
-type Chapter = blogcontracts.Chapter
-
 // OutlineResult represents the overall generated outline result
 type OutlineResult struct {
 	SeriesTitle           string                       `json:"series_title"`
-	Chapters              []Chapter                    `json:"chapters"`
+	Chapters              []blogcontracts.Chapter      `json:"chapters"`
 	ParentID              string                       `json:"parent_id,omitempty"` // Existing parent ID
 	ResolvedPromptProfile prompt.ResolvedPromptProfile `json:"resolved_prompt_profile"`
 }
@@ -68,11 +65,11 @@ type ModuleCard struct {
 
 // DecompositionService handles the logic to evaluate project text and generate an outline
 type DecompositionService struct {
-	llmClient         *llm.DeepSeekClient
-	gitFetcher        *parser.GitFetcher
-	limiter           *rate.Limiter
-	promptReq         *PromptRequirementsService
-	seriesPersistence blogcontracts.SeriesPersistence
+	llmClient           *llm.DeepSeekClient
+	gitFetcher          *parser.GitFetcher
+	limiter             *rate.Limiter
+	promptReq           *PromptRequirementsService
+	seriesPersistence   blogcontracts.SeriesPersistence
 	continuePersistence blogcontracts.ContinuePersistence
 
 	seriesTaskResultsMu sync.Mutex
@@ -116,11 +113,11 @@ func NewDecompositionServiceWithPersistences(
 	limit := rate.Limit(float64(rpmLimit) / 60.0)
 
 	return &DecompositionService{
-		llmClient:         llm.NewDeepSeekClient(apiKey),
-		gitFetcher:        parser.NewGitFetcher(),
-		limiter:           rate.NewLimiter(limit, 1),
-		promptReq:         promptReq,
-		seriesPersistence: seriesPersistence,
+		llmClient:           llm.NewDeepSeekClient(apiKey),
+		gitFetcher:          parser.NewGitFetcher(),
+		limiter:             rate.NewLimiter(limit, 1),
+		promptReq:           promptReq,
+		seriesPersistence:   seriesPersistence,
 		continuePersistence: continuePersistence,
 
 		seriesTaskResults: make(map[string][]byte),

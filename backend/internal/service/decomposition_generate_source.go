@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	blogcontracts "inkwords-backend/internal/domain/blog/contracts"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -15,7 +16,7 @@ const (
 	seriesContentTruncatedSuffix = "\n\n... [Content Truncated due to length limits] ..."
 )
 
-func resolveSeriesChapterSourceContent(sourceType, cachePath, fallbackSourceContent string, chapter Chapter) string {
+func resolveSeriesChapterSourceContent(sourceType, cachePath, fallbackSourceContent string, chapter blogcontracts.Chapter) string {
 	if sourceType != "git" || cachePath == "" || len(chapter.Files) == 0 {
 		return truncateSeriesContent(fallbackSourceContent, seriesChapterSourceRuneLimit)
 	}

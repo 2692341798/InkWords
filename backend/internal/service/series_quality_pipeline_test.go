@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	blogcontracts "inkwords-backend/internal/domain/blog/contracts"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -59,12 +60,12 @@ func TestBuildSeriesSharedPromptPrefix_StableAcrossStages(t *testing.T) {
 	prefixA := buildSeriesSharedPromptPrefix(
 		"Go 源码解析系列",
 		"面向小白",
-		[]Chapter{{Sort: 1, Title: "入口"}, {Sort: 2, Title: "调度"}},
+		[]blogcontracts.Chapter{{Sort: 1, Title: "入口"}, {Sort: 2, Title: "调度"}},
 	)
 	prefixB := buildSeriesSharedPromptPrefix(
 		"Go 源码解析系列",
 		"面向小白",
-		[]Chapter{{Sort: 1, Title: "入口"}, {Sort: 2, Title: "调度"}},
+		[]blogcontracts.Chapter{{Sort: 1, Title: "入口"}, {Sort: 2, Title: "调度"}},
 	)
 
 	require.Equal(t, prefixA, prefixB)
@@ -159,8 +160,8 @@ func TestRunSeriesChapterQualityPipeline_FailsWhenReviewHasNoRevisionActions(t *
 	_, err := harness.service.runSeriesChapterQualityPipeline(context.Background(), seriesQualityPipelineInput{
 		SeriesTitle:          "Gin 原理系列",
 		ReaderProfile:        "零基础读者",
-		Outline:              []Chapter{{Sort: 1, Title: "Gin 路由", Summary: "请求如何到达 handler"}},
-		Chapter:              Chapter{Sort: 1, Title: "Gin 路由", Summary: "请求如何到达 handler"},
+		Outline:              []blogcontracts.Chapter{{Sort: 1, Title: "Gin 路由", Summary: "请求如何到达 handler"}},
+		Chapter:              blogcontracts.Chapter{Sort: 1, Title: "Gin 路由", Summary: "请求如何到达 handler"},
 		ChapterSourceContent: "router.GET(\"/ping\", handler)",
 		ProgressChan:         progressChan,
 	})
@@ -185,8 +186,8 @@ func TestRunSeriesChapterQualityPipeline_StreamsOnlyFinalStageAndPreservesStageO
 	result, err := harness.service.runSeriesChapterQualityPipeline(context.Background(), seriesQualityPipelineInput{
 		SeriesTitle:          "Gin 原理系列",
 		ReaderProfile:        "零基础读者",
-		Outline:              []Chapter{{Sort: 1, Title: "Gin 路由", Summary: "请求如何到达 handler"}},
-		Chapter:              Chapter{Sort: 1, Title: "Gin 路由", Summary: "请求如何到达 handler"},
+		Outline:              []blogcontracts.Chapter{{Sort: 1, Title: "Gin 路由", Summary: "请求如何到达 handler"}},
+		Chapter:              blogcontracts.Chapter{Sort: 1, Title: "Gin 路由", Summary: "请求如何到达 handler"},
 		ChapterSourceContent: "router.GET(\"/ping\", handler)",
 		ProgressChan:         progressChan,
 	})

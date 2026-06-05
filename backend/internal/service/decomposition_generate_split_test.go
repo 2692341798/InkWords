@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	blogcontracts "inkwords-backend/internal/domain/blog/contracts"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -18,7 +19,7 @@ import (
 )
 
 func TestBuildSeriesChapterExtraRequirements_IncludesGitURLAndNextPreview(t *testing.T) {
-	outline := []Chapter{
+	outline := []blogcontracts.Chapter{
 		{Title: "第一章", Sort: 1},
 		{Title: "第二章", Sort: 2},
 	}
@@ -32,7 +33,7 @@ func TestBuildSeriesChapterExtraRequirements_IncludesGitURLAndNextPreview(t *tes
 func TestResolveSeriesChapterSourceContent_TruncatesLongFallbackContent(t *testing.T) {
 	original := strings.Repeat("长", 1000001)
 
-	got := resolveSeriesChapterSourceContent("file", "", original, Chapter{
+	got := resolveSeriesChapterSourceContent("file", "", original, blogcontracts.Chapter{
 		Title: "始计第一",
 		Files: []string{"ignored.go"},
 	})
@@ -65,7 +66,7 @@ func TestStreamSeriesChapterContent_RetriesAndConcatenatesChunks(t *testing.T) {
 	content, err := svc.streamSeriesChapterContent(
 		context.Background(),
 		uuid.New(),
-		Chapter{Title: "第一章", Sort: 1},
+		blogcontracts.Chapter{Title: "第一章", Sort: 1},
 		[]llm.Message{{Role: "user", Content: "测试"}},
 		progressChan,
 	)
@@ -97,8 +98,8 @@ func TestBuildSeriesChapterMessages_UsesResolvedRequirementsAndOldContentReferen
 	)
 
 	userID := uuid.New()
-	chapter := Chapter{Title: "始计第一", Summary: "逐章精读", Sort: 1}
-	outline := []Chapter{
+	chapter := blogcontracts.Chapter{Title: "始计第一", Summary: "逐章精读", Sort: 1}
+	outline := []blogcontracts.Chapter{
 		chapter,
 		{Title: "作战第二", Summary: "承上启下", Sort: 2},
 	}

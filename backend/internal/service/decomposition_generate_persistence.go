@@ -19,8 +19,8 @@ func (s *DecompositionService) ensureSeriesParentAndDrafts(
 	parentTitle string,
 	sourceType string,
 	gitURL string,
-	outline []Chapter,
-) ([]Chapter, error) {
+	outline []blogcontracts.Chapter,
+) ([]blogcontracts.Chapter, error) {
 	return s.seriesPersistence.EnsureSeriesParentAndDrafts(ctx, blogcontracts.SeriesDraftPreflightInput{
 		UserID:      userID,
 		ParentID:    parentID,
@@ -31,7 +31,7 @@ func (s *DecompositionService) ensureSeriesParentAndDrafts(
 	})
 }
 
-func collectValidSeriesChildIDs(outline []Chapter) []uuid.UUID {
+func collectValidSeriesChildIDs(outline []blogcontracts.Chapter) []uuid.UUID {
 	validChildrenIDs := make([]uuid.UUID, 0, len(outline))
 	for _, chapter := range outline {
 		if chapter.ID == "" {
@@ -50,7 +50,7 @@ func (s *DecompositionService) handleSeriesChapterCompletion(
 	userID uuid.UUID,
 	parentID uuid.UUID,
 	sourceType string,
-	chapter Chapter,
+	chapter blogcontracts.Chapter,
 	content string,
 	wordCount int,
 	techStacks []string,
@@ -92,7 +92,7 @@ func (s *DecompositionService) handleSeriesChapterCompletion(
 func (s *DecompositionService) handleSeriesChapterFailure(
 	ctx context.Context,
 	userID uuid.UUID,
-	chapter Chapter,
+	chapter blogcontracts.Chapter,
 	streamErr error,
 	collector *seriesTaskResultCollector,
 ) {
@@ -113,7 +113,7 @@ func (s *DecompositionService) handleSeriesChapterFailure(
 	_ = s.seriesPersistence.MarkSeriesChapterFailed(ctx, userID, blogID)
 }
 
-func (s *DecompositionService) handleSkippedSeriesChapter(ctx context.Context, userID uuid.UUID, chapter Chapter) error {
+func (s *DecompositionService) handleSkippedSeriesChapter(ctx context.Context, userID uuid.UUID, chapter blogcontracts.Chapter) error {
 	if strings.TrimSpace(chapter.ID) == "" {
 		return nil
 	}

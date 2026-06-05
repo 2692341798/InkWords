@@ -1,6 +1,19 @@
 # 墨言知识训练平台 (InkWords Trainer) - 开发计划与日志
 > **目标**：跟踪项目的核心开发模块、里程碑进度以及每日开发记录。
 
+### [2026-06-05] Refactor - 深拆 core-api / llm-stream 第十三轮：删除 Chapter 的 service 本地别名
+- **需求背景**：
+  1. 在 `series` 类型桥接层删除后，`internal/service` 剩余的兼容债务已只剩 `type Chapter = blogcontracts.Chapter` 这一行本地别名，以及围绕它展开的内部引用。
+  2. 只要把 `service` 包内相关文件统一切到 `blogcontracts.Chapter`，blog contracts 在 service 层的最后一层兼容桥接就可以清零。
+- **本次完成**：
+  1. 删除 `decomposition_service.go` 中的 `Chapter` 本地别名定义。
+  2. 将 `decomposition_generate*.go`、`series_quality_pipeline*.go` 以及相关测试统一改为直接依赖 `blogcontracts.Chapter`。
+  3. 重新格式化变更文件，并确认 `service` 包内已不存在 `Chapter` 兼容别名或误替换残留。
+- **验证记录**：
+  - `cd backend && go test ./internal/service -count=1` 通过
+  - `cd backend && go test ./internal/domain/stream ./internal/domain/blog ./internal/service ./services/core-api/... ./services/llm-stream/... ./services/export-service/... ./cmd/server -count=1` 通过
+  - `grep 'type\\s+Chapter\\s*=|\\.blogcontracts\\.Chapter|\\bblogcontracts\\.Chapter\\s+blogcontracts\\.Chapter\\b|\\bblogcontracts\\.Chapter:' backend/internal/service/**/*.go` 无匹配
+
 ### [2026-06-05] Refactor - 深拆 core-api / llm-stream 第十二轮：删除 series 的 service 类型桥接层
 - **需求背景**：
   1. 在 `generator` 与 `continue` 两层最薄 bridge 已删除后，`internal/service` 剩余最集中的桥接债务已经收缩到 `SeriesPersistence / SeriesDraftPreflightInput / SeriesChapterPersistenceInput / Chapter`。

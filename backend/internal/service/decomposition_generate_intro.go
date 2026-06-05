@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	blogcontracts "inkwords-backend/internal/domain/blog/contracts"
 	"inkwords-backend/internal/infra/llm"
 	"inkwords-backend/internal/prompt"
 	"os"
@@ -19,7 +20,7 @@ func (s *DecompositionService) generateSeriesIntro(
 	userID uuid.UUID,
 	parentID uuid.UUID,
 	seriesTitle string,
-	outline []Chapter,
+	outline []blogcontracts.Chapter,
 	scenarioMode prompt.ScenarioMode,
 	style prompt.ArticleStyle,
 	profile prompt.PromptProfile,

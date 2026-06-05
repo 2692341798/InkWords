@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	blogcontracts "inkwords-backend/internal/domain/blog/contracts"
 	"os"
 	"strings"
 
@@ -12,7 +13,7 @@ import (
 	"inkwords-backend/internal/prompt"
 )
 
-func buildSeriesChapterExtraRequirements(gitURL string, outline []Chapter, chapterIndex int) string {
+func buildSeriesChapterExtraRequirements(gitURL string, outline []blogcontracts.Chapter, chapterIndex int) string {
 	extraRequirements := ""
 	reqIndex := 7
 	if gitURL != "" {
@@ -36,7 +37,7 @@ func buildSeriesReaderProfile(scenarioMode prompt.ScenarioMode) string {
 	}
 }
 
-func (s *DecompositionService) resolveSeriesOldContent(ctx context.Context, chapter Chapter) string {
+func (s *DecompositionService) resolveSeriesOldContent(ctx context.Context, chapter blogcontracts.Chapter) string {
 	if chapter.Action != "regenerate" || strings.TrimSpace(chapter.ID) == "" {
 		return ""
 	}
@@ -91,8 +92,8 @@ func normalizeResolvedPromptProfile(
 func (s *DecompositionService) buildSeriesChapterMessages(
 	ctx context.Context,
 	userID uuid.UUID,
-	chapter Chapter,
-	outline []Chapter,
+	chapter blogcontracts.Chapter,
+	outline []blogcontracts.Chapter,
 	chapterIndex int,
 	chapterSourceContent string,
 	sourceType string,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	blogcontracts "inkwords-backend/internal/domain/blog/contracts"
 	"inkwords-backend/internal/prompt"
 	"sort"
 	"sync"
@@ -40,7 +41,7 @@ func newSeriesTaskResultCollector(parentBlogID string, parentTitle string) *seri
 	}
 }
 
-func (c *seriesTaskResultCollector) AddChapterSuccess(chapter Chapter, content string, wordCount int, techStacks []string) {
+func (c *seriesTaskResultCollector) AddChapterSuccess(chapter blogcontracts.Chapter, content string, wordCount int, techStacks []string) {
 	if c == nil {
 		return
 	}
@@ -61,7 +62,7 @@ func (c *seriesTaskResultCollector) AddChapterSuccess(chapter Chapter, content s
 	c.EstimatedTokens += wordCount * 2
 }
 
-func (c *seriesTaskResultCollector) AddChapterFailure(chapter Chapter, errorMessage string) {
+func (c *seriesTaskResultCollector) AddChapterFailure(chapter blogcontracts.Chapter, errorMessage string) {
 	if c == nil {
 		return
 	}
@@ -136,7 +137,7 @@ func (s *DecompositionService) GenerateSeries(
 	userID uuid.UUID,
 	parentID uuid.UUID,
 	seriesTitle string,
-	outline []Chapter,
+	outline []blogcontracts.Chapter,
 	sourceContent string,
 	sourceType string,
 	gitURL string,
@@ -167,7 +168,7 @@ func (s *DecompositionService) GenerateSeriesWithProfile(
 	userID uuid.UUID,
 	parentID uuid.UUID,
 	seriesTitle string,
-	outline []Chapter,
+	outline []blogcontracts.Chapter,
 	sourceContent string,
 	sourceType string,
 	gitURL string,
@@ -265,7 +266,7 @@ func (s *DecompositionService) GenerateSeriesWithProfile(
 		}
 
 		wg.Add(1)
-		go func(i int, chapter Chapter) {
+		go func(i int, chapter blogcontracts.Chapter) {
 			defer sem.Release(1)
 			defer wg.Done()
 

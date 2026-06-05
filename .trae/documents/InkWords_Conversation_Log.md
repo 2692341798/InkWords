@@ -1,6 +1,19 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 117：继续推进，删除 Chapter 的 service 本地别名
+- **用户需求**：用户继续要求“继续”，默认沿刚完成的 `440f557` 之后继续把最后剩下的 `Chapter` 兼容层收口。
+- **AI 动作**：
+  1. 审计 `internal/service` 中所有 `Chapter` 使用点，确认别名只剩一处定义，但在包内扩散到生成、提示词、质量门禁和多组测试文件。
+  2. 先做一轮定向替换，把这些文件统一切到 `blogcontracts.Chapter`；期间识别并修复了批量替换误伤字段名/选择器名的问题。
+  3. 删除 `decomposition_service.go` 中最后的 `Chapter` 本地别名，并完成 `gofmt`、`service` 包测试与完整范围回归。
+- **决策/变更**：
+  - 这一轮完成后，service 层已经不再保留 blog contracts 的兼容别名；后续若继续推进，重点将从“删桥接层”转向是否继续细化 blog-domain 仓储职责或收紧 service 公开 API。
+  - 对误替换问题采用“先局部 grep 定位、再定向修补”的方式止损，没有扩大改动到业务逻辑之外。
+- **验证**：
+  - `cd backend && go test ./internal/service -count=1` 通过
+  - `cd backend && go test ./internal/domain/stream ./internal/domain/blog ./internal/service ./services/core-api/... ./services/llm-stream/... ./services/export-service/... ./cmd/server -count=1` 通过
+
 ### 对话 116：继续推进，删除 series 的 service 类型桥接层
 - **用户需求**：用户继续要求“继续”，默认沿上一轮已提交的 bridge 收口主线继续推进。
 - **AI 动作**：
