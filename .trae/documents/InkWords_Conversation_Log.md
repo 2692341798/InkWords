@@ -1,6 +1,19 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 114：继续推进，让外层调用点开始直接依赖 blog contracts
+- **用户需求**：用户继续要求“继续”，默认沿刚完成的 `fb5219f` 合同收口主线继续推进，并优先判断最新未提交改动是否足够整理为新的原子提交。
+- **AI 动作**：
+  1. 先回读知识库 `[[concepts/DecompositionService 系列持久化边界收口]]`、`wiki/hot.md` 与 `wiki/index.md`，确认当前下一步重点已经转向“删除外层对 service 兼容别名的依赖”。
+  2. 审计工作区后确认主线代码改动只剩 `backend/internal/domain/stream/service.go`，于是将其中系列大纲组装从 `service.Chapter` 改为直接依赖 `blogcontracts.Chapter`。
+  3. 重新执行范围测试，并全局扫描 `backend/**/*.go`，确认非 `service` 包已经没有 `GeneratedBlogPersistence / ContinuePersistence / SeriesPersistence / SeriesDraftPreflightInput / SeriesChapterPersistenceInput / Chapter` 等兼容别名的显式引用。
+- **决策/变更**：
+  - 这一轮先不直接删除 `internal/service` 中的兼容别名，而是先用一个最小外层调用点验证 contracts 已经能被外部直接使用，并以此作为后续删除桥接层的前置门槛。
+  - 由于 `README.md` 在工作区存在用户要求忽略的无关改动，本轮文档同步不触碰该文件，只补与主线直接相关的架构/日志/runbook 记录。
+- **验证**：
+  - `cd backend && go test ./internal/domain/stream ./internal/domain/blog ./internal/service ./services/core-api/... ./services/llm-stream/... ./services/export-service/... ./cmd/server -count=1` 通过
+  - `grep service\.(GeneratedBlogPersistence|GeneratedBlogPersistenceInput|ContinuePersistence|SeriesPersistence|SeriesDraftPreflightInput|SeriesChapterPersistenceInput|Chapter) backend/**/*.go` 无匹配
+
 ### 对话 109：继续推进，收口系列前置草稿准备事务边界
 - **用户需求**：用户继续要求“继续”，默认沿 `core-api / llm-stream` 深拆分主线持续推进，不切换任务主题。
 - **AI 动作**：

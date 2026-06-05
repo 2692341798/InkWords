@@ -57,6 +57,7 @@
 - 默认 `SeriesPersistence / ContinuePersistence / GeneratedBlogPersistence` 的缺省装配点现已统一收紧到 service 构造器；业务方法内的隐式 `nil -> GORM` fallback 已删除，后续迁移适配器归属时不必再逐个方法清理兜底逻辑。
 - 当前生产装配已进一步下沉：`GeneratedBlogPersistence`、`ContinuePersistence` 与 `SeriesPersistence` 的默认 GORM 适配器均已由 `internal/domain/blog` 提供，并在 `llm-stream`、`core-api` 与 `cmd/server` 中通过 bootstrap 显式注入；service 层当前主要保留接口定义与测试替身。
 - 当前中立契约也已开始抽离：`internal/domain/blog/contracts` 先承接共享错误与 persistence 输入/接口定义，`domain/blog` 已不再反向 import `internal/service`；service 层当前更多扮演兼容别名与构造器桥接层。
+- `backend/internal/domain/stream/service.go` 现已直接依赖 `internal/domain/blog/contracts.Chapter`；当前非 `service` 包对 `GeneratedBlogPersistence / ContinuePersistence / SeriesPersistence / SeriesDraftPreflightInput / SeriesChapterPersistenceInput / Chapter` 等兼容别名的显式引用已清零，为后续评估删除 service 层桥接类型创造了条件。
 
 ## 5. 收口优先级建议
 

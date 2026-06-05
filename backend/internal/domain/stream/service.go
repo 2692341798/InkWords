@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
+	blogcontracts "inkwords-backend/internal/domain/blog/contracts"
 	"inkwords-backend/internal/prompt"
 	"inkwords-backend/internal/service"
 )
@@ -37,9 +38,9 @@ func (s *Service) Generate(ctx context.Context, userID uuid.UUID, req GenerateRe
 	profile := prompt.ResolvePromptProfileKey(req.PromptProfileKey, scenarioMode)
 
 	if len(req.Outline) > 0 {
-		outline := make([]service.Chapter, 0, len(req.Outline))
+		outline := make([]blogcontracts.Chapter, 0, len(req.Outline))
 		for _, ch := range req.Outline {
-			outline = append(outline, service.Chapter{
+			outline = append(outline, blogcontracts.Chapter{
 				ID:      ch.ID,
 				Title:   ch.Title,
 				Summary: ch.Summary,

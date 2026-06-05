@@ -1,6 +1,18 @@
 # 墨言知识训练平台 (InkWords Trainer) - 开发计划与日志
 > **目标**：跟踪项目的核心开发模块、里程碑进度以及每日开发记录。
 
+### [2026-06-05] Refactor - 深拆 core-api / llm-stream 第十轮：外层调用点开始直接依赖 blog contracts
+- **需求背景**：
+  1. 在 `domain/blog/contracts` 已抽出后，外层调用点仍可能继续通过 `internal/service` 暴露的兼容别名引用 `Chapter` 与 persistence 输入类型，这会拖慢后续真正删除桥接层的节奏。
+  2. 因此需要先选择一个最小且可回滚的非 `service` 调用点，验证外层已经可以直接依赖 contracts，而不是继续透过 service 转发。
+- **本次完成**：
+  1. 将 `backend/internal/domain/stream/service.go` 中的系列大纲组装，从 `service.Chapter` 改为直接使用 `blogcontracts.Chapter`。
+  2. 全局扫描 `backend/**/*.go`，确认非 `service` 包已经没有 `GeneratedBlogPersistence / ContinuePersistence / SeriesPersistence / SeriesDraftPreflightInput / SeriesChapterPersistenceInput / Chapter` 等兼容别名的显式引用。
+  3. 同步更新架构文档、开发日志、对话日志与边界 runbook，记录“外层调用点开始直接依赖 contracts”的新基线。
+- **验证记录**：
+  - `cd backend && go test ./internal/domain/stream ./internal/domain/blog ./internal/service ./services/core-api/... ./services/llm-stream/... ./services/export-service/... ./cmd/server -count=1` 通过
+  - `grep service\.(GeneratedBlogPersistence|GeneratedBlogPersistenceInput|ContinuePersistence|SeriesPersistence|SeriesDraftPreflightInput|SeriesChapterPersistenceInput|Chapter) backend/**/*.go` 无匹配
+
 ### [2026-06-05] Refactor - 深拆 core-api / llm-stream 第五轮：系列前置草稿准备接口化
 - **需求背景**：
   1. 在 `continue`、旧正文读取和 `skip` 元信息更新完成接口化后，`DecompositionService` 剩余最厚的一段直连数据库逻辑只剩 `ensureSeriesParentAndDrafts()`：系列父稿创建、章节草稿预建、父稿来源更新与旧子稿清理。
