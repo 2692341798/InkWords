@@ -1,6 +1,20 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 119：继续推进，阻断跨用户旧正文读取
+- **用户需求**：用户继续要求“继续”，在补上系列父稿归属校验后，继续沿 `domain/blog` 默认适配器内部边界做下一步最小收口。
+- **AI 动作**：
+  1. 审计 `SeriesPersistence` 剩余读写边界，优先挑出扩散面最小但价值较高的切口：`LoadSeriesOldContent()` 仍只按 `blog_id` 读取旧正文。
+  2. 按 TDD 先新增 `TestSeriesPersistence_LoadSeriesOldContent_RejectsForeignBlog`，把“当前用户不能读取他人旧章节正文”写成红灯测试。
+  3. 将 `SeriesPersistence.LoadSeriesOldContent()` 契约收紧为显式接收 `userID`，并同步修改 `DecompositionService.resolveSeriesOldContent()` 与测试替身，确保 regenerate 调用链透传当前用户。
+- **决策/变更**：
+  - 这一轮只改旧正文读取路径，不顺手扩到 `SaveSeriesIntro / MarkSeriesIntroFailed`，保持提交范围足够小。
+  - 优先阻断跨用户内容读取，再决定后续是否继续补 intro 写路径的用户边界。
+- **验证**：
+  - `cd backend && go test ./internal/domain/blog -run 'TestSeriesPersistence_LoadSeriesOldContent_RejectsForeignBlog|TestSeriesPersistence_EnsureSeriesParentAndDrafts_RejectsForeignParent' -count=1` 通过
+  - `cd backend && go test ./internal/service -run 'TestDecompositionService_ResolveSeriesOldContent_UsesInjectedPersistence' -count=1` 通过
+  - `cd backend && go test ./internal/domain/blog ./internal/service ./services/core-api/... ./services/llm-stream/... ./cmd/server -count=1` 通过
+
 ### 对话 118：继续推进，修复跨用户系列父稿挂接风险
 - **用户需求**：用户继续要求“继续”，在 service 层 bridge 清零后，默认沿主线继续审计 `domain/blog` 适配器内部还能否继续收口。
 - **AI 动作**：

@@ -37,7 +37,7 @@ func buildSeriesReaderProfile(scenarioMode prompt.ScenarioMode) string {
 	}
 }
 
-func (s *DecompositionService) resolveSeriesOldContent(ctx context.Context, chapter blogcontracts.Chapter) string {
+func (s *DecompositionService) resolveSeriesOldContent(ctx context.Context, userID uuid.UUID, chapter blogcontracts.Chapter) string {
 	if chapter.Action != "regenerate" || strings.TrimSpace(chapter.ID) == "" {
 		return ""
 	}
@@ -47,7 +47,7 @@ func (s *DecompositionService) resolveSeriesOldContent(ctx context.Context, chap
 		return ""
 	}
 
-	oldContent, err := s.seriesPersistence.LoadSeriesOldContent(ctx, blogID)
+	oldContent, err := s.seriesPersistence.LoadSeriesOldContent(ctx, userID, blogID)
 	if err != nil {
 		return ""
 	}

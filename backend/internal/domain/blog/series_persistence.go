@@ -188,13 +188,13 @@ func (p *seriesPersistence) MarkSeriesIntroFailed(ctx context.Context, parentID 
 	}).Error
 }
 
-func (p *seriesPersistence) LoadSeriesOldContent(ctx context.Context, blogID uuid.UUID) (string, error) {
+func (p *seriesPersistence) LoadSeriesOldContent(ctx context.Context, userID uuid.UUID, blogID uuid.UUID) (string, error) {
 	if p.db == nil {
 		return "", fmt.Errorf("series persistence database is not initialized")
 	}
 
 	var blog model.Blog
-	if err := p.db.WithContext(ctx).Select("content").First(&blog, "id = ?", blogID).Error; err != nil {
+	if err := p.db.WithContext(ctx).Select("content").First(&blog, "id = ? AND user_id = ?", blogID, userID).Error; err != nil {
 		return "", err
 	}
 	return blog.Content, nil

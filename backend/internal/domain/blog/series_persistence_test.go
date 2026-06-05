@@ -179,3 +179,34 @@ func TestSeriesPersistence_EnsureSeriesParentAndDrafts_RejectsForeignParent(t *t
 		Count(&childCount).Error)
 	require.Zero(t, childCount)
 }
+
+func TestSeriesPersistence_LoadSeriesOldContent_RejectsForeignBlog(t *testing.T) {
+	testDB := openSeriesPersistenceTestDB(t)
+
+	ownerID := uuid.New()
+	attackerID := uuid.New()
+	blogID := uuid.New()
+	require.NoError(t, testDB.Create(&model.User{
+		ID:       ownerID,
+		Username: "owner",
+		Email:    "owner@example.com",
+	}).Error)
+	require.NoError(t, testDB.Create(&model.User{
+		ID:       attackerID,
+		Username: "attacker",
+		Email:    "attacker@example.com",
+	}).Error)
+	require.NoError(t, testDB.Create(&model.Blog{
+		ID:      blogID,
+		UserID:  ownerID,
+		Title:   "他人的旧章节",
+		Content: "敏感旧正文",
+		Status:  1,
+	}).Error)
+
+	persistence := NewSeriesPersistence(testDB)
+	content, err := persistence.LoadSeriesOldContent(context.Background(), attackerID, blogID)
+	require.Error(t, err)
+	require.Empty(t, content)
+	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
+}

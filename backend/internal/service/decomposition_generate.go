@@ -271,7 +271,7 @@ func (s *DecompositionService) GenerateSeriesWithProfile(
 			defer wg.Done()
 
 			chapterSourceContent := resolveSeriesChapterSourceContent(sourceType, cachePath, sourceContent, chapter)
-			oldContent := s.resolveSeriesOldContent(ctx, chapter)
+			oldContent := s.resolveSeriesOldContent(ctx, userID, chapter)
 			qualityResult, streamErr := s.runSeriesChapterQualityPipeline(ctx, seriesQualityPipelineInput{
 				SeriesTitle:          parentTitle,
 				ReaderProfile:        buildSeriesReaderProfile(scenarioMode),

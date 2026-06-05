@@ -1,6 +1,19 @@
 # 墨言知识训练平台 (InkWords Trainer) - 开发计划与日志
 > **目标**：跟踪项目的核心开发模块、里程碑进度以及每日开发记录。
 
+### [2026-06-05] Fix - 深拆 core-api / llm-stream 第十五轮：阻断跨用户旧正文读取
+- **需求背景**：
+  1. 在补上系列父稿归属校验后，继续审计 `internal/domain/blog` 默认适配器内部边界，发现 `SeriesPersistence.LoadSeriesOldContent()` 仍只按 `blog_id` 读取旧正文。
+  2. 这意味着 regenerate 场景下如果拿到他人的章节 `blog_id`，当前实现仍可能把旧正文内容带回到提示词构造链路中，形成跨用户内容读取风险。
+- **本次完成**：
+  1. 先补红灯测试 `TestSeriesPersistence_LoadSeriesOldContent_RejectsForeignBlog`，把“不得跨用户读取旧章节正文”的约束写实。
+  2. 将 `SeriesPersistence.LoadSeriesOldContent()` 契约改为显式接收 `userID`，默认 GORM 适配器按 `user_id + blog_id` 双重条件读取。
+  3. 同步更新 `DecompositionService.resolveSeriesOldContent()` 与相关测试替身，确保 regenerate 调用链透传当前用户。
+- **验证记录**：
+  - `cd backend && go test ./internal/domain/blog -run 'TestSeriesPersistence_LoadSeriesOldContent_RejectsForeignBlog|TestSeriesPersistence_EnsureSeriesParentAndDrafts_RejectsForeignParent' -count=1` 通过
+  - `cd backend && go test ./internal/service -run 'TestDecompositionService_ResolveSeriesOldContent_UsesInjectedPersistence' -count=1` 通过
+  - `cd backend && go test ./internal/domain/blog ./internal/service ./services/core-api/... ./services/llm-stream/... ./cmd/server -count=1` 通过
+
 ### [2026-06-05] Fix - 深拆 core-api / llm-stream 第十四轮：阻断跨用户系列父稿挂接
 - **需求背景**：
   1. 在 service 层 bridge 清零后，下一步开始回看 `domain/blog` 默认适配器内部边界，发现 `SeriesPersistence.EnsureSeriesParentAndDrafts()` 在按 `parent_id` 查询父稿时缺少 `user_id` 约束。

@@ -475,17 +475,19 @@ func TestDecompositionService_ResolveSeriesOldContent_UsesInjectedPersistence(t 
 	}()
 
 	blogID := uuid.New()
+	userID := uuid.New()
 	persistence := &seriesPersistenceRecorder{
 		loadedOldContent: strings.Repeat("旧内容", 10),
 	}
 	svc := NewDecompositionServiceWithSeriesPersistence(nil, persistence)
 
-	oldContent := svc.resolveSeriesOldContent(context.Background(), blogcontracts.Chapter{
+	oldContent := svc.resolveSeriesOldContent(context.Background(), userID, blogcontracts.Chapter{
 		ID:     blogID.String(),
 		Action: "regenerate",
 	})
 
 	require.Equal(t, 1, persistence.loadOldContentCalls)
+	require.Equal(t, userID, persistence.loadedOldContentUserID)
 	require.Equal(t, blogID, persistence.loadedOldContentBlogID)
 	require.Equal(t, strings.Repeat("旧内容", 10), oldContent)
 }
@@ -593,6 +595,7 @@ type seriesPersistenceRecorder struct {
 	savedChapter             blogcontracts.SeriesChapterPersistenceInput
 	savedIntroParentID       uuid.UUID
 	savedIntroContent        string
+	loadedOldContentUserID   uuid.UUID
 	loadedOldContentBlogID   uuid.UUID
 	loadedOldContent         string
 	updatedSkippedMetaUserID uuid.UUID
@@ -624,8 +627,9 @@ func (r *seriesPersistenceRecorder) MarkSeriesIntroFailed(context.Context, uuid.
 	return nil
 }
 
-func (r *seriesPersistenceRecorder) LoadSeriesOldContent(_ context.Context, blogID uuid.UUID) (string, error) {
+func (r *seriesPersistenceRecorder) LoadSeriesOldContent(_ context.Context, userID uuid.UUID, blogID uuid.UUID) (string, error) {
 	r.loadOldContentCalls++
+	r.loadedOldContentUserID = userID
 	r.loadedOldContentBlogID = blogID
 	return r.loadedOldContent, nil
 }

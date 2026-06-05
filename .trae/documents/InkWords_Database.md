@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - 数据库设计文档
 
 ## 0. 变更记录
+- 2026-06-05：继续推进 blog-domain 内部边界修复。本次将 `SeriesPersistence.LoadSeriesOldContent()` 改为按 `blog_id + user_id` 双重条件读取旧正文，阻断跨用户旧章节内容读取；不涉及 PostgreSQL 表结构、字段、索引、迁移变更，但收紧了 `blogs` 旧正文读取边界。
 - 2026-06-05：继续推进 blog-domain 内部边界修复。本次修正 `SeriesPersistence.EnsureSeriesParentAndDrafts()` 的父稿归属校验：若 `parent_id` 指向其它用户的系列父稿，将直接报错并拒绝创建当前用户的章节草稿；不涉及 PostgreSQL 表结构、字段、索引、迁移变更，但收紧了 `blogs` 系列父子树的跨用户写入边界。
 - 2026-06-05：继续推进 service 内部 Chapter bridge 收口。本次删除 `decomposition_service.go` 中最后的 `Chapter` 本地别名，service 包内相关代码统一直接依赖 `domain/blog/contracts.Chapter`；不涉及 PostgreSQL 表结构、字段、索引、迁移或写入语义变更。
 - 2026-06-05：继续推进 service 内部 series bridge 收口。本次删除 `decomposition_series_persistence.go`，相关 service 直接依赖 `domain/blog/contracts` 的 `SeriesPersistence / SeriesDraftPreflightInput / SeriesChapterPersistenceInput` 与 `domain/blog` 默认适配器；不涉及 PostgreSQL 表结构、字段、索引、迁移或写入语义变更。
