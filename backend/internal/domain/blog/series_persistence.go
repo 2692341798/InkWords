@@ -7,8 +7,8 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
+	blogcontracts "inkwords-backend/internal/domain/blog/contracts"
 	"inkwords-backend/internal/model"
-	"inkwords-backend/internal/service"
 )
 
 type seriesPersistence struct {
@@ -17,16 +17,16 @@ type seriesPersistence struct {
 
 // NewSeriesPersistence creates the blog-domain adapter for series generation
 // business facts that still belong to core-api owned blog tables.
-func NewSeriesPersistence(database *gorm.DB) service.SeriesPersistence {
+func NewSeriesPersistence(database *gorm.DB) blogcontracts.SeriesPersistence {
 	return &seriesPersistence{db: database}
 }
 
-func (p *seriesPersistence) EnsureSeriesParentAndDrafts(ctx context.Context, input service.SeriesDraftPreflightInput) ([]service.Chapter, error) {
+func (p *seriesPersistence) EnsureSeriesParentAndDrafts(ctx context.Context, input blogcontracts.SeriesDraftPreflightInput) ([]blogcontracts.Chapter, error) {
 	if p.db == nil {
 		return nil, fmt.Errorf("series persistence database is not initialized")
 	}
 
-	updatedOutline := append([]service.Chapter(nil), input.Outline...)
+	updatedOutline := append([]blogcontracts.Chapter(nil), input.Outline...)
 	if err := p.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var existingParent model.Blog
 		err := tx.First(&existingParent, "id = ?", input.ParentID).Error
@@ -94,7 +94,7 @@ func (p *seriesPersistence) EnsureSeriesParentAndDrafts(ctx context.Context, inp
 	return updatedOutline, nil
 }
 
-func (p *seriesPersistence) SaveSeriesChapter(ctx context.Context, input service.SeriesChapterPersistenceInput) error {
+func (p *seriesPersistence) SaveSeriesChapter(ctx context.Context, input blogcontracts.SeriesChapterPersistenceInput) error {
 	if p.db == nil {
 		return fmt.Errorf("series persistence database is not initialized")
 	}
@@ -194,7 +194,7 @@ func (p *seriesPersistence) LoadSeriesOldContent(ctx context.Context, blogID uui
 	return blog.Content, nil
 }
 
-func (p *seriesPersistence) UpdateSkippedSeriesChapterMeta(ctx context.Context, userID uuid.UUID, blogID uuid.UUID, chapter service.Chapter) error {
+func (p *seriesPersistence) UpdateSkippedSeriesChapterMeta(ctx context.Context, userID uuid.UUID, blogID uuid.UUID, chapter blogcontracts.Chapter) error {
 	if p.db == nil {
 		return fmt.Errorf("series persistence database is not initialized")
 	}
@@ -205,7 +205,7 @@ func (p *seriesPersistence) UpdateSkippedSeriesChapterMeta(ctx context.Context, 
 	}).Error
 }
 
-func collectValidSeriesChildIDs(outline []service.Chapter) []uuid.UUID {
+func collectValidSeriesChildIDs(outline []blogcontracts.Chapter) []uuid.UUID {
 	validChildrenIDs := make([]uuid.UUID, 0, len(outline))
 	for _, chapter := range outline {
 		if chapter.ID == "" {
@@ -217,4 +217,3 @@ func collectValidSeriesChildIDs(outline []service.Chapter) []uuid.UUID {
 	}
 	return validChildrenIDs
 }
-

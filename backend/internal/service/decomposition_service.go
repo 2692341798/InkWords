@@ -9,6 +9,7 @@ import (
 
 	"golang.org/x/time/rate"
 
+	blogcontracts "inkwords-backend/internal/domain/blog/contracts"
 	"inkwords-backend/internal/infra/db"
 	"inkwords-backend/internal/infra/llm"
 	"inkwords-backend/internal/infra/parser"
@@ -46,15 +47,8 @@ func maxWorkersFromEnv(taskCount int) int {
 	return maxWorkers
 }
 
-// Chapter represents a single chapter in the generated outline
-type Chapter struct {
-	ID      string   `json:"id,omitempty"` // Existing chapter ID
-	Title   string   `json:"title"`
-	Summary string   `json:"summary"`
-	Sort    int      `json:"sort"`
-	Files   []string `json:"files"`
-	Action  string   `json:"action,omitempty"` // "new", "regenerate", "skip"
-}
+// Chapter represents a single chapter in the generated outline.
+type Chapter = blogcontracts.Chapter
 
 // OutlineResult represents the overall generated outline result
 type OutlineResult struct {

@@ -10,8 +10,8 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
+	blogcontracts "inkwords-backend/internal/domain/blog/contracts"
 	"inkwords-backend/internal/model"
-	"inkwords-backend/internal/service"
 )
 
 func TestGeneratedBlogPersistence_SaveGeneratedBlog_PersistsBlogAndUpdatesTokens(t *testing.T) {
@@ -27,7 +27,7 @@ func TestGeneratedBlogPersistence_SaveGeneratedBlog_PersistsBlogAndUpdatesTokens
 	}).Error)
 
 	persistence := NewGeneratedBlogPersistence(testDB)
-	err = persistence.SaveGeneratedBlog(context.Background(), service.GeneratedBlogPersistenceInput{
+	err = persistence.SaveGeneratedBlog(context.Background(), blogcontracts.GeneratedBlogPersistenceInput{
 		UserID:     userID,
 		Title:      "文件解析生成的博客",
 		Content:    "hello",
@@ -48,4 +48,3 @@ func TestGeneratedBlogPersistence_SaveGeneratedBlog_PersistsBlogAndUpdatesTokens
 	require.NoError(t, testDB.First(&user, "id = ?", userID).Error)
 	require.Equal(t, 10, user.TokensUsed)
 }
-

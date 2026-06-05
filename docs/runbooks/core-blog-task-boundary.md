@@ -56,12 +56,13 @@
 - 当前这条深拆主线的剩余技术债已不再是“业务逻辑里还有散落的直连写库”，而是“默认 GORM persistence 适配器后续是否要继续并入 `domain/blog` 或服务私有 repository”。
 - 默认 `SeriesPersistence / ContinuePersistence / GeneratedBlogPersistence` 的缺省装配点现已统一收紧到 service 构造器；业务方法内的隐式 `nil -> GORM` fallback 已删除，后续迁移适配器归属时不必再逐个方法清理兜底逻辑。
 - 当前生产装配已进一步下沉：`GeneratedBlogPersistence`、`ContinuePersistence` 与 `SeriesPersistence` 的默认 GORM 适配器均已由 `internal/domain/blog` 提供，并在 `llm-stream`、`core-api` 与 `cmd/server` 中通过 bootstrap 显式注入；service 层当前主要保留接口定义与测试替身。
+- 当前中立契约也已开始抽离：`internal/domain/blog/contracts` 先承接共享错误与 persistence 输入/接口定义，`domain/blog` 已不再反向 import `internal/service`；service 层当前更多扮演兼容别名与构造器桥接层。
 
 ## 5. 收口优先级建议
 
 ### 第一优先级
 - 评估是否把默认 `SeriesPersistence / ContinuePersistence / GeneratedBlogPersistence` GORM 适配器继续并入 `domain/blog` 或服务私有 repository，减少 service 层对 legacy model/ORM 的感知。
-- Why: 当前 service 主逻辑的边界已经基本清晰，而且三类默认 blog 写入适配器都已迁入 blog-domain；后续优化重点转向是否继续把接口定义与更细粒度仓储能力也一起归并，而不是回头处理已清理的方法级 fallback。
+- Why: 当前 service 主逻辑的边界已经基本清晰，而且三类默认 blog 写入适配器与中立契约都已开始迁入 blog-domain；后续优化重点转向是否继续删除 service 侧兼容别名，并把更细粒度仓储能力也一起归并，而不是回头处理已清理的方法级 fallback。
 
 ### 第二优先级
 - 为 `SeriesPersistence` 增加更细粒度的边界测试或仓储级测试，覆盖父稿存在/不存在、旧子稿清理、草稿预建失败回滚等事务场景。

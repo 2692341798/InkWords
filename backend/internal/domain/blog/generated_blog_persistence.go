@@ -6,8 +6,8 @@ import (
 
 	"gorm.io/gorm"
 
+	blogcontracts "inkwords-backend/internal/domain/blog/contracts"
 	"inkwords-backend/internal/model"
-	"inkwords-backend/internal/service"
 )
 
 // generatedBlogPersistence keeps the default generated blog write path close to
@@ -18,11 +18,11 @@ type generatedBlogPersistence struct {
 
 // NewGeneratedBlogPersistence creates the default blog-domain adapter for
 // GeneratorService final blog writes.
-func NewGeneratedBlogPersistence(database *gorm.DB) service.GeneratedBlogPersistence {
+func NewGeneratedBlogPersistence(database *gorm.DB) blogcontracts.GeneratedBlogPersistence {
 	return &generatedBlogPersistence{db: database}
 }
 
-func (p *generatedBlogPersistence) SaveGeneratedBlog(ctx context.Context, input service.GeneratedBlogPersistenceInput) error {
+func (p *generatedBlogPersistence) SaveGeneratedBlog(ctx context.Context, input blogcontracts.GeneratedBlogPersistenceInput) error {
 	if p.db == nil {
 		return fmt.Errorf("database not configured")
 	}
@@ -59,4 +59,3 @@ func (p *generatedBlogPersistence) SaveGeneratedBlog(ctx context.Context, input 
 		return nil
 	})
 }
-

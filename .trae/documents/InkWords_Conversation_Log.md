@@ -57,6 +57,20 @@
   - `cd backend && go test ./internal/domain/blog -run 'TestSeriesPersistence_(EnsureSeriesParentAndDrafts_PreparesTree|SaveSeriesChapter_UpdatesBlogAndTokens)' -count=1` 先失败、补实现后通过
   - `cd backend && go test ./internal/domain/blog ./internal/service ./services/core-api/... ./services/llm-stream/... ./cmd/server -count=1` 通过
 
+### 对话 113：继续推进，抽出中立 blog contracts 并解除 domain/blog 对 service 的反向依赖
+- **用户需求**：用户继续要求“继续”，因此在完成默认生产适配器下沉后，继续推进下一步“契约收口”的前置工作。
+- **AI 动作**：
+  1. 先识别出当前阻碍 `service -> domain/blog` 更进一步收口的关键点，是 `domain/blog` 仍需通过导出错误判断与 persistence 适配器实现反向 import `internal/service`。
+  2. 按 TDD 在 `internal/domain/blog/handler_test.go` 增加导出 PDF 的 404 映射测试，锁定 `ErrSeriesNotFound` 行为，然后抽出中立契约包 `internal/domain/blog/contracts`。
+  3. 将 `ErrSeriesNotFound`、`Chapter`、三类 persistence 输入与接口定义迁入 contracts；`domain/blog` 改依赖 contracts，`internal/service` 改为保留类型别名与兼容构造器。
+- **决策/变更**：
+  - 这一轮没有直接删除 `internal/service` 中的 persistence 别名，而是先保留兼容层，避免一次性改动过大并波及更多调用点。
+  - 到本轮结束时，`domain/blog` 已不再反向依赖 `internal/service`，后续若继续收口 service 层契约定义，已经不存在包循环阻碍。
+- **验证**：
+  - `cd backend && go test ./internal/domain/blog -run 'Test(GeneratedBlogPersistence_SaveGeneratedBlog_PersistsBlogAndUpdatesTokens|SeriesPersistence_(EnsureSeriesParentAndDrafts_PreparesTree|SaveSeriesChapter_UpdatesBlogAndTokens)|Handler_ExportSeriesPDF_ReturnsNotFoundForSeriesMissing)' -count=1` 先失败、补实现后通过
+  - `cd backend && go test ./internal/domain/blog ./internal/service ./services/core-api/... ./services/llm-stream/... ./services/export-service/... ./cmd/server -count=1` 通过
+  - `grep internal/service backend/internal/domain/blog/**/*.go` 无匹配
+
 ### 对话 108：继续推进，收口系列旧正文读取与 skip 元信息更新
 - **用户需求**：用户只要求“继续”，默认沿当前 `core-api / llm-stream` 深拆分主线继续推进。
 - **AI 动作**：

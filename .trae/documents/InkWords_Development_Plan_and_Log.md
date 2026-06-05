@@ -54,6 +54,19 @@
   - `cd backend && go test ./internal/domain/blog -run 'TestSeriesPersistence_(EnsureSeriesParentAndDrafts_PreparesTree|SaveSeriesChapter_UpdatesBlogAndTokens)' -count=1` 先失败、补实现后通过
   - `cd backend && go test ./internal/domain/blog ./internal/service ./services/core-api/... ./services/llm-stream/... ./cmd/server -count=1` 通过
 
+### [2026-06-05] Refactor - 深拆 core-api / llm-stream 第九轮：抽出中立 blog contracts，解除 domain/blog 对 service 的反向依赖
+- **需求背景**：
+  1. 在三类默认生产适配器都迁入 `domain/blog` 之后，`domain/blog` 仍然通过适配器实现与导出错误判断反向依赖 `internal/service`，这会阻塞下一步把 persistence 契约本身继续收口。
+  2. 因此需要先抽出一个中立契约层，承接共享错误与 persistence 输入/接口定义，让 `domain/blog` 和 `service` 都依赖它，而不是互相依赖。
+- **本次完成**：
+  1. 按 TDD 在 `internal/domain/blog/handler_test.go` 增加 `TestHandler_ExportSeriesPDF_ReturnsNotFoundForSeriesMissing`，先锁定“系列不存在”错误仍必须映射为 404。
+  2. 新增 `backend/internal/domain/blog/contracts/`，先落入 `ErrSeriesNotFound`、`Chapter`、`GeneratedBlogPersistenceInput`、`SeriesDraftPreflightInput`、`SeriesChapterPersistenceInput` 以及三类 persistence 接口。
+  3. 让 `domain/blog` 适配器改为直接依赖 contracts；让 `internal/service` 退化为类型别名与兼容构造器，从而彻底移除 `domain/blog -> internal/service` 的反向 import。
+- **验证记录**：
+  - `cd backend && go test ./internal/domain/blog -run 'Test(GeneratedBlogPersistence_SaveGeneratedBlog_PersistsBlogAndUpdatesTokens|SeriesPersistence_(EnsureSeriesParentAndDrafts_PreparesTree|SaveSeriesChapter_UpdatesBlogAndTokens)|Handler_ExportSeriesPDF_ReturnsNotFoundForSeriesMissing)' -count=1` 先失败、补实现后通过
+  - `cd backend && go test ./internal/domain/blog ./internal/service ./services/core-api/... ./services/llm-stream/... ./services/export-service/... ./cmd/server -count=1` 通过
+  - `grep internal/service backend/internal/domain/blog/**/*.go` 无匹配，确认反向依赖已清零
+
 ### [2026-06-05] Refactor - 深拆 core-api / llm-stream 第四轮：系列旧正文读取与 skip 元信息接口化
 - **需求背景**：
   1. 在 `continue` 持久化接口化完成后，系列生成链路里仍散落两类轻量直连数据库行为：旧章节正文读取，以及 `skip` 章节的标题/排序更新。

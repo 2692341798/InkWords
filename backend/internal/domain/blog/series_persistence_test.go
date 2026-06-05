@@ -10,8 +10,8 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
+	blogcontracts "inkwords-backend/internal/domain/blog/contracts"
 	"inkwords-backend/internal/model"
-	"inkwords-backend/internal/service"
 )
 
 func openSeriesPersistenceTestDB(t *testing.T) *gorm.DB {
@@ -53,13 +53,13 @@ func TestSeriesPersistence_EnsureSeriesParentAndDrafts_PreparesTree(t *testing.T
 	}).Error)
 
 	persistence := NewSeriesPersistence(testDB)
-	outline, err := persistence.EnsureSeriesParentAndDrafts(context.Background(), service.SeriesDraftPreflightInput{
+	outline, err := persistence.EnsureSeriesParentAndDrafts(context.Background(), blogcontracts.SeriesDraftPreflightInput{
 		UserID:      userID,
 		ParentID:    parentID,
 		ParentTitle: "新系列",
 		SourceType:  "file",
 		GitURL:      "https://example.com/repo",
-		Outline: []service.Chapter{
+		Outline: []blogcontracts.Chapter{
 			{Title: "第一章", Summary: "摘要", Sort: 1},
 			{Title: "第二章", Summary: "摘要", Sort: 2},
 		},
@@ -111,11 +111,11 @@ func TestSeriesPersistence_SaveSeriesChapter_UpdatesBlogAndTokens(t *testing.T) 
 	}).Error)
 
 	persistence := NewSeriesPersistence(testDB)
-	err := persistence.SaveSeriesChapter(context.Background(), service.SeriesChapterPersistenceInput{
+	err := persistence.SaveSeriesChapter(context.Background(), blogcontracts.SeriesChapterPersistenceInput{
 		UserID:     userID,
 		ParentID:   parentID,
 		BlogID:     childID,
-		Chapter:    service.Chapter{Title: "新标题", Sort: 1},
+		Chapter:    blogcontracts.Chapter{Title: "新标题", Sort: 1},
 		SourceType: "file",
 		Content:    "章节终稿",
 		WordCount:  4,
@@ -133,4 +133,3 @@ func TestSeriesPersistence_SaveSeriesChapter_UpdatesBlogAndTokens(t *testing.T) 
 	require.NoError(t, testDB.First(&user, "id = ?", userID).Error)
 	require.Equal(t, len([]rune("章节终稿"))*2, user.TokensUsed)
 }
-

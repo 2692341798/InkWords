@@ -7,8 +7,8 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
+	blogcontracts "inkwords-backend/internal/domain/blog/contracts"
 	"inkwords-backend/internal/model"
-	"inkwords-backend/internal/service"
 )
 
 type continuePersistence struct {
@@ -17,7 +17,7 @@ type continuePersistence struct {
 
 // NewContinuePersistence creates the blog-domain adapter for continue reads
 // and final content updates.
-func NewContinuePersistence(database *gorm.DB) service.ContinuePersistence {
+func NewContinuePersistence(database *gorm.DB) blogcontracts.ContinuePersistence {
 	return &continuePersistence{db: database}
 }
 
@@ -40,4 +40,3 @@ func (p *continuePersistence) SaveContinuedBlog(ctx context.Context, blog model.
 
 	return p.db.WithContext(ctx).Model(&blog).Update("content", updatedContent).Error
 }
-
