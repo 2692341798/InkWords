@@ -78,8 +78,15 @@ func main() {
 	userService := service.NewUserService(db.DB)
 	blogService := service.NewBlogService()
 	promptReqService := service.NewPromptRequirementsService(db.DB)
-	generatorService := service.NewGeneratorService(promptReqService)
-	decompositionService := service.NewDecompositionService(promptReqService)
+	generatorService := service.NewGeneratorServiceWithPersistence(
+		promptReqService,
+		blogdomain.NewGeneratedBlogPersistence(db.DB),
+	)
+	decompositionService := service.NewDecompositionServiceWithPersistences(
+		promptReqService,
+		blogdomain.NewSeriesPersistence(db.DB),
+		blogdomain.NewContinuePersistence(db.DB),
+	)
 	gitFetcher := parser.NewGitFetcher()
 	docParser := parser.NewDocParser()
 

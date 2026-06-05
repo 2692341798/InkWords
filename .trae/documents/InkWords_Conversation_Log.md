@@ -31,6 +31,32 @@
   - `cd backend && go test ./internal/service -count=1` 通过
   - `cd backend && go test ./services/core-api/... ./services/llm-stream/... -count=1` 通过
 
+### 对话 111：先提交当前收口，再继续把默认生产适配器下沉到 domain/blog
+- **用户需求**：用户要求“先整理成原子提交,然后继续下沉到 domain/blog”。
+- **AI 动作**：
+  1. 先将“默认 persistence 装配边界收紧到构造器”的 12 个相关文件整理为一次新的原子提交，生成 commit `987975f refactor(service): centralize default persistence wiring`，继续忽略工作区中无关改动。
+  2. 提交完成后，选择最小且可回滚的继续下沉切口：优先把 `GeneratedBlogPersistence` 与 `ContinuePersistence` 的默认生产实现迁入 `internal/domain/blog`，而不是一次性连更重的 `SeriesPersistence` 一起搬迁。
+  3. 按 TDD 先在 `domain/blog` 新增适配器测试，再补 `generated_blog_persistence.go` 与 `continue_persistence.go`，最后把 `llm-stream`、`core-api` 与 `cmd/server` 的生产装配改为显式注入 blog-domain 适配器。
+- **决策/变更**：
+  - 本轮将“适配器是否迁入 domain/blog”的问题，收敛为一个明确的增量结果：`GeneratedBlogPersistence` 与 `ContinuePersistence` 已开始由 blog-domain 提供默认生产适配器。
+  - `SeriesPersistence` 暂未迁移，原因是它包含前置草稿准备、系列章节完成/失败与导读等更厚的事务语义，适合单独做下一轮。
+- **验证**：
+  - `cd backend && go test ./internal/domain/blog -run 'Test(GeneratedBlogPersistence_SaveGeneratedBlog_PersistsBlogAndUpdatesTokens|ContinuePersistence_LoadAndSaveContinueBlog)' -count=1` 先失败、补实现后通过
+  - `cd backend && go test ./internal/service ./services/core-api/... ./services/llm-stream/... ./cmd/server -count=1` 通过
+
+### 对话 112：继续推进，把默认 SeriesPersistence 也迁入 domain/blog
+- **用户需求**：用户继续要求“继续”，沿当前刚完成的 `domain/blog` 下沉主线往下推进。
+- **AI 动作**：
+  1. 识别出默认 blog 写入适配器中最重但也最值得继续迁移的一块是 `SeriesPersistence`，否则默认生产装配会长期分散在 `domain/blog` 与 `internal/service` 两处。
+  2. 按 TDD 先在 `domain/blog` 增加 `series_persistence_test.go`，锁定系列前置草稿准备事务与章节完成更新/记账两类核心行为。
+  3. 新增 `series_persistence.go`，在 blog-domain 中实现 `service.SeriesPersistence`，并将 `llm-stream`、`core-api`、`cmd/server` 的 `DecompositionService` 默认生产装配改为显式注入 `blogdomain.NewSeriesPersistence(...)`。
+- **决策/变更**：
+  - 这一轮完成后，`GeneratedBlogPersistence / ContinuePersistence / SeriesPersistence` 三类默认 blog 写入适配器已全部由 `domain/blog` 提供，service 层主要保留接口定义与测试替身。
+  - 这意味着下一阶段的重点不再是“默认适配器搬家”，而是是否继续把这些接口定义和更细粒度仓储能力也一起下沉或整合。
+- **验证**：
+  - `cd backend && go test ./internal/domain/blog -run 'TestSeriesPersistence_(EnsureSeriesParentAndDrafts_PreparesTree|SaveSeriesChapter_UpdatesBlogAndTokens)' -count=1` 先失败、补实现后通过
+  - `cd backend && go test ./internal/domain/blog ./internal/service ./services/core-api/... ./services/llm-stream/... ./cmd/server -count=1` 通过
+
 ### 对话 108：继续推进，收口系列旧正文读取与 skip 元信息更新
 - **用户需求**：用户只要求“继续”，默认沿当前 `core-api / llm-stream` 深拆分主线继续推进。
 - **AI 动作**：

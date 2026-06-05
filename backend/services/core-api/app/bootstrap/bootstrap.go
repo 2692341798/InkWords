@@ -59,7 +59,11 @@ func BuildRouter() (*gin.Engine, func(), error) {
 	userService := service.NewUserService(dbConn)
 	blogService := service.NewBlogService()
 	promptReqService := service.NewPromptRequirementsService(dbConn)
-	decompositionService := service.NewDecompositionService(promptReqService)
+	decompositionService := service.NewDecompositionServiceWithPersistences(
+		promptReqService,
+		blogdomain.NewSeriesPersistence(dbConn),
+		blogdomain.NewContinuePersistence(dbConn),
+	)
 	gitFetcher := parser.NewGitFetcher()
 	docParser := parser.NewDocParser()
 

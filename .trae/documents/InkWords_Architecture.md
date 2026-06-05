@@ -1,6 +1,8 @@
 # 墨言知识训练平台 (InkWords Trainer) - 架构设计与工程规范
 
 ## 0. 变更记录
+- 2026-06-05：继续推进 `core-api / llm-stream` 深拆分第八轮。`SeriesPersistence` 的默认生产适配器也已迁入 `internal/domain/blog`，并在 `llm-stream`、`core-api` 与聚合调试入口通过 bootstrap 显式注入；至此 `GeneratedBlogPersistence / ContinuePersistence / SeriesPersistence` 三类默认 blog 写入适配器已统一由 blog-domain 提供，service 层主要保留接口定义与测试替身。
+- 2026-06-05：继续推进 `core-api / llm-stream` 深拆分第七轮。默认生产适配器开始真正下沉到 `internal/domain/blog`：`GeneratedBlogPersistence` 与 `ContinuePersistence` 新增 blog-domain GORM 适配器，并在 `llm-stream`、`core-api` 与聚合调试入口通过 bootstrap 显式注入；当前仍留在 `internal/service` 的主要默认适配器只剩 `SeriesPersistence`。
 - 2026-06-05：继续推进 `core-api / llm-stream` 深拆分第六轮。`DecompositionService` 与 `GeneratorService` 的默认 GORM persistence 现在统一只在构造阶段补齐，业务方法内的隐式 `nil -> GORM` fallback 已删除；当前剩余技术债进一步收缩为“这些默认适配器是否继续并入 `domain/blog` 或服务私有 repository”，而不是继续在 service 方法里兜底装配。
 - 2026-06-05：继续推进 `core-api / llm-stream` 深拆分第五轮。`DecompositionService` 已把系列父稿创建、章节草稿预建与父稿来源更新也收口到 `SeriesPersistence`，至此该 service 主流程中的主要博客持久化读写都已改为经由显式 persistence 边界完成；当前生产代码中保留的 `db.DB` 只剩默认 GORM fallback 构造路径，不再承担业务主逻辑直写角色。
 - 2026-06-05：继续推进 `core-api / llm-stream` 深拆分第四轮。`DecompositionService` 进一步把系列重写中的旧正文读取与 `skip` 章节标题/排序更新收口到 `SeriesPersistence`；当前剩余待收口点进一步缩小为系列父稿创建、章节草稿预建与父稿来源更新。
@@ -158,7 +160,7 @@
 ### 当前已知技术债
 - `GeneratorService` 已通过 `GeneratedBlogPersistence` 完成单篇生成最终写入的显式接口化，但默认实现仍是 GORM 适配器，尚未进一步并入 `domain/blog` 仓储边界。
 - `DecompositionService` 已通过 `SeriesPersistence / ContinuePersistence` 收口系列前置草稿准备、章节完成/失败、导读完成/失败、旧正文读取、`skip` 元信息更新以及 `continue` 正文读取/最终更新；当前 service 主逻辑层面已基本不再直接承担博客事实的数据库读写。
-- 当前真正剩余的技术债从“主流程仍有直连数据库”切换为“默认 GORM persistence 适配器后续是否继续归并到 `domain/blog` 仓储边界”；同时，默认适配器的装配点已进一步收紧为 service 构造器，不再允许业务方法内自行隐式补齐。
+- 当前真正剩余的技术债从“主流程仍有直连数据库”切换为“默认 GORM persistence 适配器后续是否继续归并到 `domain/blog` 仓储边界”；同时，`GeneratedBlogPersistence / ContinuePersistence / SeriesPersistence` 的默认生产装配都已迁入 blog-domain，下一步更偏向是否继续把接口定义与更细粒度仓储能力也一起收口。
 
 ### 退化与拆分判断
 - 在 `blogs / job_tasks / job_task_events` 仍存在大量全局 `db.DB` 直接写之前，不推进真正的独立实例拆分。

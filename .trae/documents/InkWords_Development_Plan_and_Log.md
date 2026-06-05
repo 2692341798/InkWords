@@ -30,6 +30,30 @@
   - `cd backend && go test ./internal/service -count=1` 通过
   - `cd backend && go test ./services/core-api/... ./services/llm-stream/... -count=1` 通过
 
+### [2026-06-05] Refactor - 深拆 core-api / llm-stream 第七轮：将默认生产适配器开始迁入 domain/blog
+- **需求背景**：
+  1. 在默认 persistence 装配边界已经收紧到构造阶段后，下一步最自然的结构优化就是把默认生产适配器真正迁入 `domain/blog`，而不是继续停留在 `internal/service`。
+  2. 为保持最小改动，本轮优先下沉最轻量的两块：`GeneratedBlogPersistence` 与 `ContinuePersistence`；更重的 `SeriesPersistence` 暂留下一轮。
+- **本次完成**：
+  1. 按 TDD 在 `backend/internal/domain/blog/` 下新增 `generated_blog_persistence_test.go` 与 `continue_persistence_test.go`，先锁定 blog-domain 适配器必须能完成“生成博客落库 + token 记账”和“continue 正文读取/更新”。
+  2. 新增 `generated_blog_persistence.go` 与 `continue_persistence.go`，在 `domain/blog` 中提供 GORM 适配器实现，分别实现 `service.GeneratedBlogPersistence` 与 `service.ContinuePersistence`。
+  3. 调整 `services/llm-stream/app/bootstrap/bootstrap.go`、`services/core-api/app/bootstrap/bootstrap.go` 与 `cmd/server/main.go`，让生产装配改为显式注入 blog-domain 适配器；其中 `DecompositionService` 当前只先替换 `ContinuePersistence`，`SeriesPersistence` 仍沿用 service 层默认适配器。
+- **验证记录**：
+  - `cd backend && go test ./internal/domain/blog -run 'Test(GeneratedBlogPersistence_SaveGeneratedBlog_PersistsBlogAndUpdatesTokens|ContinuePersistence_LoadAndSaveContinueBlog)' -count=1` 先失败、补实现后通过
+  - `cd backend && go test ./internal/service ./services/core-api/... ./services/llm-stream/... ./cmd/server -count=1` 通过
+
+### [2026-06-05] Refactor - 深拆 core-api / llm-stream 第八轮：将默认 SeriesPersistence 迁入 domain/blog
+- **需求背景**：
+  1. 在 `GeneratedBlogPersistence` 与 `ContinuePersistence` 已开始由 `domain/blog` 提供默认生产适配器后，剩余最厚的 blog 写入默认适配器只剩 `SeriesPersistence`。
+  2. 若继续留着这块在 `internal/service`，则默认 blog 写入适配器会长期处于“两头分裂”状态，不利于后续继续向 blog-domain 仓储边界收口。
+- **本次完成**：
+  1. 按 TDD 在 `backend/internal/domain/blog/series_persistence_test.go` 增加失败测试，锁定 `SeriesPersistence` 的两类核心行为：系列前置草稿准备事务，以及章节完成时的正文/Token 更新。
+  2. 新增 `backend/internal/domain/blog/series_persistence.go`，在 blog-domain 中实现 `service.SeriesPersistence`，承接父稿创建、旧子稿清理、草稿预建、章节完成/失败、导读完成/失败、旧正文读取与 `skip` 元信息更新。
+  3. 调整 `services/llm-stream/app/bootstrap/bootstrap.go`、`services/core-api/app/bootstrap/bootstrap.go` 与 `cmd/server/main.go`，让 `DecompositionService` 的默认生产装配改为显式注入 `blogdomain.NewSeriesPersistence(...)`。
+- **验证记录**：
+  - `cd backend && go test ./internal/domain/blog -run 'TestSeriesPersistence_(EnsureSeriesParentAndDrafts_PreparesTree|SaveSeriesChapter_UpdatesBlogAndTokens)' -count=1` 先失败、补实现后通过
+  - `cd backend && go test ./internal/domain/blog ./internal/service ./services/core-api/... ./services/llm-stream/... ./cmd/server -count=1` 通过
+
 ### [2026-06-05] Refactor - 深拆 core-api / llm-stream 第四轮：系列旧正文读取与 skip 元信息接口化
 - **需求背景**：
   1. 在 `continue` 持久化接口化完成后，系列生成链路里仍散落两类轻量直连数据库行为：旧章节正文读取，以及 `skip` 章节的标题/排序更新。
