@@ -1,6 +1,20 @@
 # 墨言知识训练平台 (InkWords Trainer) - 开发计划与日志
 > **目标**：跟踪项目的核心开发模块、里程碑进度以及每日开发记录。
 
+### [2026-06-05] Refactor - 深拆 core-api / llm-stream 第二轮：DecompositionService 系列持久化接口化
+- **需求背景**：
+  1. 用户要求“继续推进项目微服务化”，并明确这轮优先深拆 `core-api / llm-stream`，直接落代码。
+  2. 结合知识库和当前 runbook，最值得继续收口的点是 `DecompositionService` 里仍散落在系列生成链路中的 `blogs/users` 写入，因为这些写点仍阻碍 `core-api` 事实边界进一步清晰化。
+- **本次完成**：
+  1. 按 TDD 先在 `backend/internal/service/decomposition_generate_persist_test.go` 增加失败测试，锁定“系列章节完成落库”和“系列导读落库”都必须通过注入的 persistence，而不是直接依赖全局 `db.DB`。
+  2. 新增 `backend/internal/service/decomposition_series_persistence.go`，定义 `SeriesPersistence` 与 `SeriesChapterPersistenceInput`，并提供默认 GORM 适配器，继续承接系列章节成功/失败与系列导读成功/失败的最终业务写入。
+  3. 调整 `DecompositionService`：新增 `seriesPersistence` 依赖与 `NewDecompositionServiceWithSeriesPersistence()` 构造方式，把 `handleSeriesChapterCompletion()`、`handleSeriesChapterFailure()`、`generateSeriesIntro()` 的落库路径切到显式接口。
+  4. 同步更新 `docs/runbooks/core-blog-task-boundary.md` 与 `InkWords_Architecture.md`，把“已收口”和“仍待收口”的系列写点重新标清。
+- **验证记录**：
+  - `cd backend && go test ./internal/service -run 'TestDecompositionService_(HandleSeriesChapterCompletion_UsesInjectedPersistence|GenerateSeriesIntro_UsesInjectedPersistence)|TestHandleSeriesChapterCompletion_TaskOnlyMode_CollectsChapterResultWithoutDirectPersistence' -count=1` 先失败（缺少显式 persistence API），补实现后通过
+  - `cd backend && go test ./internal/service -count=1` 通过
+  - `cd backend && go test ./services/core-api/... ./services/llm-stream/... -count=1` 通过
+
 ### [2026-06-04] Build - 增加 FRONTEND_PORT 以绕过宿主机 80 端口冲突
 - **需求背景**：
   1. 本轮微服务化代码与后端服务已完成，但 Docker Compose 冒烟阶段多次被宿主机 `:80` 端口占用阻塞，`frontend` 容器无法绑定默认入口。

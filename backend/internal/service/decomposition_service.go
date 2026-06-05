@@ -9,6 +9,7 @@ import (
 
 	"golang.org/x/time/rate"
 
+	"inkwords-backend/internal/infra/db"
 	"inkwords-backend/internal/infra/llm"
 	"inkwords-backend/internal/infra/parser"
 	"inkwords-backend/internal/prompt"
@@ -72,10 +73,11 @@ type ModuleCard struct {
 
 // DecompositionService handles the logic to evaluate project text and generate an outline
 type DecompositionService struct {
-	llmClient  *llm.DeepSeekClient
-	gitFetcher *parser.GitFetcher
-	limiter    *rate.Limiter
-	promptReq  *PromptRequirementsService
+	llmClient         *llm.DeepSeekClient
+	gitFetcher        *parser.GitFetcher
+	limiter           *rate.Limiter
+	promptReq         *PromptRequirementsService
+	seriesPersistence SeriesPersistence
 
 	seriesTaskResultsMu sync.Mutex
 	seriesTaskResults   map[string][]byte
@@ -83,6 +85,11 @@ type DecompositionService struct {
 
 // NewDecompositionService creates a new decomposition service
 func NewDecompositionService(promptReq *PromptRequirementsService) *DecompositionService {
+	return NewDecompositionServiceWithSeriesPersistence(promptReq, NewGormSeriesPersistence(db.DB))
+}
+
+// NewDecompositionServiceWithSeriesPersistence creates a new decomposition service with explicit series persistence.
+func NewDecompositionServiceWithSeriesPersistence(promptReq *PromptRequirementsService, seriesPersistence SeriesPersistence) *DecompositionService {
 	apiKey := os.Getenv("DEEPSEEK_API_KEY")
 
 	rpmLimit := 10000
@@ -94,10 +101,11 @@ func NewDecompositionService(promptReq *PromptRequirementsService) *Decompositio
 	limit := rate.Limit(float64(rpmLimit) / 60.0)
 
 	return &DecompositionService{
-		llmClient:  llm.NewDeepSeekClient(apiKey),
-		gitFetcher: parser.NewGitFetcher(),
-		limiter:    rate.NewLimiter(limit, 1),
-		promptReq:  promptReq,
+		llmClient:         llm.NewDeepSeekClient(apiKey),
+		gitFetcher:        parser.NewGitFetcher(),
+		limiter:           rate.NewLimiter(limit, 1),
+		promptReq:         promptReq,
+		seriesPersistence: seriesPersistence,
 
 		seriesTaskResults: make(map[string][]byte),
 	}

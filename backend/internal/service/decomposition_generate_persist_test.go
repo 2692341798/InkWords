@@ -335,8 +335,9 @@ func TestHandleSeriesChapterCompletion_TaskOnlyMode_CollectsChapterResultWithout
 		Status:      0,
 	}).Error)
 
+	svc := NewDecompositionService(nil)
 	collector := newSeriesTaskResultCollector(parentID.String(), "系列父稿")
-	err := handleSeriesChapterCompletion(
+	err := svc.handleSeriesChapterCompletion(
 		context.Background(),
 		userID,
 		parentID,
@@ -366,6 +367,91 @@ func TestHandleSeriesChapterCompletion_TaskOnlyMode_CollectsChapterResultWithout
 	require.Equal(t, 0, user.TokensUsed)
 }
 
+func TestDecompositionService_HandleSeriesChapterCompletion_UsesInjectedPersistence(t *testing.T) {
+	previousDB := db.DB
+	db.DB = nil
+	defer func() {
+		db.DB = previousDB
+	}()
+
+	persistence := &seriesPersistenceRecorder{}
+	svc := NewDecompositionServiceWithSeriesPersistence(nil, persistence)
+
+	userID := uuid.New()
+	parentID := uuid.New()
+	chapterID := uuid.New()
+	err := svc.handleSeriesChapterCompletion(
+		context.Background(),
+		userID,
+		parentID,
+		"file",
+		Chapter{
+			ID:    chapterID.String(),
+			Title: "第 1 章",
+			Sort:  1,
+		},
+		"章节终稿",
+		4,
+		[]string{"Go"},
+		nil,
+	)
+	require.NoError(t, err)
+	require.Equal(t, 1, persistence.saveChapterCalls)
+	require.Equal(t, userID, persistence.savedChapter.UserID)
+	require.Equal(t, parentID, persistence.savedChapter.ParentID)
+	require.Equal(t, chapterID, persistence.savedChapter.BlogID)
+	require.Equal(t, "章节终稿", persistence.savedChapter.Content)
+	require.JSONEq(t, `["Go"]`, string(persistence.savedChapter.TechStacks))
+}
+
+func TestDecompositionService_GenerateSeriesIntro_UsesInjectedPersistence(t *testing.T) {
+	previousDB := db.DB
+	db.DB = nil
+	defer func() {
+		db.DB = previousDB
+	}()
+
+	llmServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"系列导读正文\"},\"finish_reason\":null}]}\n\n")
+		_, _ = fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n")
+		_, _ = fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer llmServer.Close()
+
+	persistence := &seriesPersistenceRecorder{}
+	svc := NewDecompositionServiceWithSeriesPersistence(nil, persistence)
+	svc.llmClient.APIURL = llmServer.URL
+	svc.llmClient.Client = llmServer.Client()
+
+	progressChan := make(chan string, 32)
+	errChan := make(chan error, 4)
+	parentID := uuid.New()
+	userID := uuid.New()
+
+	svc.generateSeriesIntro(
+		context.Background(),
+		userID,
+		parentID,
+		"Go 入门系列",
+		[]Chapter{{Title: "第 1 章", Summary: "基础", Sort: 1}},
+		prompt.ScenarioModeEbookInterpretation,
+		prompt.ArticleStyleGeneral,
+		prompt.PromptProfile{},
+		nil,
+		progressChan,
+		errChan,
+	)
+
+	close(progressChan)
+	close(errChan)
+	require.Empty(t, drainSeriesErrors(errChan))
+	_ = collectSeriesProgressPayloads(t, progressChan)
+	require.Equal(t, 1, persistence.saveIntroCalls)
+	require.Equal(t, parentID, persistence.savedIntroParentID)
+	require.Equal(t, "系列导读正文", persistence.savedIntroContent)
+}
+
 func collectSeriesProgressPayloads(t *testing.T, progressChan <-chan string) []map[string]interface{} {
 	t.Helper()
 
@@ -392,4 +478,34 @@ func drainSeriesErrors(errChan <-chan error) []error {
 
 func seriesPersistTestDSN() string {
 	return fmt.Sprintf("file:%s?mode=memory&cache=shared", uuid.NewString())
+}
+
+type seriesPersistenceRecorder struct {
+	saveChapterCalls int
+	saveIntroCalls   int
+
+	savedChapter       SeriesChapterPersistenceInput
+	savedIntroParentID uuid.UUID
+	savedIntroContent  string
+}
+
+func (r *seriesPersistenceRecorder) SaveSeriesChapter(_ context.Context, input SeriesChapterPersistenceInput) error {
+	r.saveChapterCalls++
+	r.savedChapter = input
+	return nil
+}
+
+func (r *seriesPersistenceRecorder) MarkSeriesChapterFailed(context.Context, uuid.UUID, uuid.UUID) error {
+	return nil
+}
+
+func (r *seriesPersistenceRecorder) SaveSeriesIntro(_ context.Context, parentID uuid.UUID, content string) error {
+	r.saveIntroCalls++
+	r.savedIntroParentID = parentID
+	r.savedIntroContent = content
+	return nil
+}
+
+func (r *seriesPersistenceRecorder) MarkSeriesIntroFailed(context.Context, uuid.UUID) error {
+	return nil
 }

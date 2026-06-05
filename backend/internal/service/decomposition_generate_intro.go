@@ -4,9 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"inkwords-backend/internal/infra/db"
 	"inkwords-backend/internal/infra/llm"
-	"inkwords-backend/internal/model"
 	"inkwords-backend/internal/prompt"
 	"os"
 	"strings"
@@ -138,9 +136,7 @@ func (s *DecompositionService) generateSeriesIntro(
 			if ok && err != nil {
 				sendProgress("error", "", err.Error())
 				if !taskOnlyPersistenceMode() {
-					db.DB.WithContext(ctx).Model(&model.Blog{}).Where("id = ?", parentID).Updates(map[string]interface{}{
-						"status": 2,
-					})
+					_ = s.seriesPersistence.MarkSeriesIntroFailed(ctx, parentID)
 				}
 				return
 			}
@@ -152,10 +148,10 @@ func (s *DecompositionService) generateSeriesIntro(
 					sendProgress("completed", "", "")
 					return
 				}
-				db.DB.WithContext(ctx).Model(&model.Blog{}).Where("id = ?", parentID).Updates(map[string]interface{}{
-					"content": finalContent,
-					"status":  1,
-				})
+				if err := s.seriesPersistence.SaveSeriesIntro(ctx, parentID, finalContent); err != nil {
+					errChan <- fmt.Errorf("persist series intro: %w", err)
+					return
+				}
 				sendProgress("completed", "", "")
 				return
 			}

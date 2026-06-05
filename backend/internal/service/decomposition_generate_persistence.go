@@ -177,7 +177,7 @@ func persistSeriesChapterCompletion(
 	})
 }
 
-func handleSeriesChapterCompletion(
+func (s *DecompositionService) handleSeriesChapterCompletion(
 	ctx context.Context,
 	userID uuid.UUID,
 	parentID uuid.UUID,
@@ -200,19 +200,28 @@ func handleSeriesChapterCompletion(
 		return fmt.Errorf("marshal series chapter tech stacks: %w", err)
 	}
 
-	return persistSeriesChapterCompletion(
-		ctx,
-		userID,
-		parentID,
-		sourceType,
-		chapter,
-		content,
-		wordCount,
-		datatypes.JSON(techStacksJSON),
-	)
+	var blogID uuid.UUID
+	if chapter.ID != "" {
+		parsedID, err := uuid.Parse(chapter.ID)
+		if err != nil {
+			return fmt.Errorf("parse chapter blog id: %w", err)
+		}
+		blogID = parsedID
+	}
+
+	return s.seriesPersistence.SaveSeriesChapter(ctx, SeriesChapterPersistenceInput{
+		UserID:     userID,
+		ParentID:   parentID,
+		BlogID:     blogID,
+		Chapter:    chapter,
+		SourceType: sourceType,
+		Content:    content,
+		WordCount:  wordCount,
+		TechStacks: datatypes.JSON(techStacksJSON),
+	})
 }
 
-func handleSeriesChapterFailure(
+func (s *DecompositionService) handleSeriesChapterFailure(
 	ctx context.Context,
 	userID uuid.UUID,
 	chapter Chapter,
@@ -233,10 +242,7 @@ func handleSeriesChapterFailure(
 		return
 	}
 
-	db.DB.WithContext(ctx).Model(&model.Blog{}).Where("id = ? AND user_id = ?", blogID, userID).Updates(map[string]interface{}{
-		"status":  2,
-		"content": "章节生成失败，请重试。",
-	})
+	_ = s.seriesPersistence.MarkSeriesChapterFailed(ctx, userID, blogID)
 }
 
 func decodeTechStacksJSON(raw datatypes.JSON) []string {

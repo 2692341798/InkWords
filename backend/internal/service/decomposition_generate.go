@@ -291,7 +291,7 @@ func (s *DecompositionService) GenerateSeriesWithProfile(
 				ProgressChan:         progressChan,
 			})
 			if streamErr != nil {
-				handleSeriesChapterFailure(ctx, userID, chapter, streamErr, resultCollector)
+				s.handleSeriesChapterFailure(ctx, userID, chapter, streamErr, resultCollector)
 
 				errMsg := map[string]interface{}{
 					"status":       "error",
@@ -309,7 +309,7 @@ func (s *DecompositionService) GenerateSeriesWithProfile(
 			llmModel := "deepseek-v4-flash"
 			techStacks := decodeTechStacksJSON(s.extractSeriesChapterTechStacks(ctx, llmModel, content))
 
-			if err := handleSeriesChapterCompletion(
+			if err := s.handleSeriesChapterCompletion(
 				ctx,
 				userID,
 				parentID,

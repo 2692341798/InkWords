@@ -1,6 +1,21 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 106：继续推进微服务化，收口 DecompositionService 的系列持久化边界
+- **用户需求**：用户要求“继续推进我的项目微服务化”，并在澄清选项中选择“深拆 core/stream”且“直接改代码”。
+- **AI 动作**：
+  1. 先执行知识库 Query，回读 `[[concepts/InkWords 生产形态：多服务与聚合入口]]`、`[[concepts/core-api 与 llm-stream 深拆分第一轮]]` 与 `[[concepts/微服务冒烟检查与 CI 前置]]`，确认当前项目已处于“多服务已落地，继续收口边界”的阶段。
+  2. 审计仓库与 runbook，识别出 `DecompositionService` 仍有多处系列生成写点直接触达全局 `db.DB`，适合作为本轮最小可验证的收口对象。
+  3. 按 TDD 先新增失败测试，锁定“系列章节完成落库”和“系列导读落库”必须通过注入的 persistence；再新增 `SeriesPersistence` 默认 GORM 适配器，并把 `DecompositionService` 的相关落库路径切到显式依赖。
+  4. 最后同步架构文档、开发日志与边界 runbook，修正过时的技术债描述。
+- **决策/变更**：
+  - 本轮没有继续扩容新容器，也没有碰 `parser/export/review`，而是把 `core-api / llm-stream` 深拆分推进到“业务事实写入边界继续接口化”的层级。
+  - `DecompositionService` 这轮只先收口“系列章节完成/失败 + 系列导读完成/失败”的最终持久化；系列父稿预建、旧内容读取、`skip` 元信息与 `continue` 正文读写仍保留为下一轮收口对象，避免一次性改太大。
+- **验证**：
+  - `cd backend && go test ./internal/service -run 'TestDecompositionService_(HandleSeriesChapterCompletion_UsesInjectedPersistence|GenerateSeriesIntro_UsesInjectedPersistence)|TestHandleSeriesChapterCompletion_TaskOnlyMode_CollectsChapterResultWithoutDirectPersistence' -count=1` 先失败、补实现后通过
+  - `cd backend && go test ./internal/service -count=1` 通过
+  - `cd backend && go test ./services/core-api/... ./services/llm-stream/... -count=1` 通过
+
 ### 对话 105：提交 FRONTEND_PORT 端口兼容改动
 - **用户需求**：在确认 `http://localhost:8088` 冒烟成功后，用户要求“提交端口改动”。
 - **AI 动作**：
