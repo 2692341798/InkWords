@@ -210,3 +210,74 @@ func TestSeriesPersistence_LoadSeriesOldContent_RejectsForeignBlog(t *testing.T)
 	require.Empty(t, content)
 	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
 }
+
+func TestSeriesPersistence_SaveSeriesIntro_RejectsForeignParent(t *testing.T) {
+	testDB := openSeriesPersistenceTestDB(t)
+
+	ownerID := uuid.New()
+	attackerID := uuid.New()
+	parentID := uuid.New()
+	require.NoError(t, testDB.Create(&model.User{
+		ID:       ownerID,
+		Username: "owner",
+		Email:    "owner@example.com",
+	}).Error)
+	require.NoError(t, testDB.Create(&model.User{
+		ID:       attackerID,
+		Username: "attacker",
+		Email:    "attacker@example.com",
+	}).Error)
+	require.NoError(t, testDB.Create(&model.Blog{
+		ID:       parentID,
+		UserID:   ownerID,
+		Title:    "他人的系列导读",
+		Content:  "原始导读",
+		IsSeries: true,
+		Status:   0,
+	}).Error)
+
+	persistence := NewSeriesPersistence(testDB)
+	err := persistence.SaveSeriesIntro(context.Background(), attackerID, parentID, "越权改写")
+	require.Error(t, err)
+	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
+
+	var parent model.Blog
+	require.NoError(t, testDB.First(&parent, "id = ?", parentID).Error)
+	require.Equal(t, "原始导读", parent.Content)
+	require.EqualValues(t, 0, parent.Status)
+}
+
+func TestSeriesPersistence_MarkSeriesIntroFailed_RejectsForeignParent(t *testing.T) {
+	testDB := openSeriesPersistenceTestDB(t)
+
+	ownerID := uuid.New()
+	attackerID := uuid.New()
+	parentID := uuid.New()
+	require.NoError(t, testDB.Create(&model.User{
+		ID:       ownerID,
+		Username: "owner",
+		Email:    "owner@example.com",
+	}).Error)
+	require.NoError(t, testDB.Create(&model.User{
+		ID:       attackerID,
+		Username: "attacker",
+		Email:    "attacker@example.com",
+	}).Error)
+	require.NoError(t, testDB.Create(&model.Blog{
+		ID:       parentID,
+		UserID:   ownerID,
+		Title:    "他人的系列导读",
+		Content:  "原始导读",
+		IsSeries: true,
+		Status:   1,
+	}).Error)
+
+	persistence := NewSeriesPersistence(testDB)
+	err := persistence.MarkSeriesIntroFailed(context.Background(), attackerID, parentID)
+	require.Error(t, err)
+	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
+
+	var parent model.Blog
+	require.NoError(t, testDB.First(&parent, "id = ?", parentID).Error)
+	require.EqualValues(t, 1, parent.Status)
+}

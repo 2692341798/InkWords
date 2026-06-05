@@ -72,8 +72,8 @@ type SeriesPersistence interface {
 	EnsureSeriesParentAndDrafts(ctx context.Context, input SeriesDraftPreflightInput) ([]Chapter, error)
 	SaveSeriesChapter(ctx context.Context, input SeriesChapterPersistenceInput) error
 	MarkSeriesChapterFailed(ctx context.Context, userID uuid.UUID, blogID uuid.UUID) error
-	SaveSeriesIntro(ctx context.Context, parentID uuid.UUID, content string) error
-	MarkSeriesIntroFailed(ctx context.Context, parentID uuid.UUID) error
+	SaveSeriesIntro(ctx context.Context, userID uuid.UUID, parentID uuid.UUID, content string) error
+	MarkSeriesIntroFailed(ctx context.Context, userID uuid.UUID, parentID uuid.UUID) error
 	LoadSeriesOldContent(ctx context.Context, userID uuid.UUID, blogID uuid.UUID) (string, error)
 	UpdateSkippedSeriesChapterMeta(ctx context.Context, userID uuid.UUID, blogID uuid.UUID, chapter Chapter) error
 }

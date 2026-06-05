@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - 产品需求文档 (PRD)
 
 ## 0. 变更记录
+- 2026-06-05：继续推进 `core-api / llm-stream` 深拆分后续的 blog-domain 边界修复。本次不新增用户可见功能，也不改变 `http://localhost` 单入口、SSE 或页面交互；仅要求系列导读生成成功/失败回写父稿时必须校验当前用户归属，避免跨用户改写他人的系列导读内容或状态。
 - 2026-06-05：继续推进 `core-api / llm-stream` 深拆分后续的 blog-domain 边界修复。本次不新增用户可见功能，也不改变 `http://localhost` 单入口、SSE 或页面交互；仅要求系列 regenerate 场景读取旧正文时必须校验当前用户归属，避免跨用户读取他人的历史章节内容。
 - 2026-06-05：继续推进 `core-api / llm-stream` 深拆分后续的 blog-domain 边界修复。本次不新增用户可见功能，也不改变 `http://localhost` 单入口、SSE 或页面交互；仅要求系列父稿预建逻辑拒绝跨用户复用他人父稿，避免把当前用户的章节草稿挂到他人的系列树下。
 - 2026-06-05：继续推进 `core-api / llm-stream` 深拆分的内部 Chapter bridge 收口。本次不新增用户可见功能，也不改变 `http://localhost` 单入口、SSE 或页面交互；仅要求 service 包内部删除最后的 `Chapter` 本地兼容别名并统一直连 `domain/blog/contracts.Chapter`，完成 blog contracts 在 service 层的桥接清零。

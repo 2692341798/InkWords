@@ -167,25 +167,39 @@ func (p *seriesPersistence) MarkSeriesChapterFailed(ctx context.Context, userID 
 	}).Error
 }
 
-func (p *seriesPersistence) SaveSeriesIntro(ctx context.Context, parentID uuid.UUID, content string) error {
+func (p *seriesPersistence) SaveSeriesIntro(ctx context.Context, userID uuid.UUID, parentID uuid.UUID, content string) error {
 	if p.db == nil {
 		return fmt.Errorf("series persistence database is not initialized")
 	}
 
-	return p.db.WithContext(ctx).Model(&model.Blog{}).Where("id = ?", parentID).Updates(map[string]any{
+	updateResult := p.db.WithContext(ctx).Model(&model.Blog{}).Where("id = ? AND user_id = ?", parentID, userID).Updates(map[string]any{
 		"content": content,
 		"status":  1,
-	}).Error
+	})
+	if updateResult.Error != nil {
+		return updateResult.Error
+	}
+	if updateResult.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
-func (p *seriesPersistence) MarkSeriesIntroFailed(ctx context.Context, parentID uuid.UUID) error {
+func (p *seriesPersistence) MarkSeriesIntroFailed(ctx context.Context, userID uuid.UUID, parentID uuid.UUID) error {
 	if p.db == nil {
 		return fmt.Errorf("series persistence database is not initialized")
 	}
 
-	return p.db.WithContext(ctx).Model(&model.Blog{}).Where("id = ?", parentID).Updates(map[string]any{
+	updateResult := p.db.WithContext(ctx).Model(&model.Blog{}).Where("id = ? AND user_id = ?", parentID, userID).Updates(map[string]any{
 		"status": 2,
-	}).Error
+	})
+	if updateResult.Error != nil {
+		return updateResult.Error
+	}
+	if updateResult.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
 func (p *seriesPersistence) LoadSeriesOldContent(ctx context.Context, userID uuid.UUID, blogID uuid.UUID) (string, error) {

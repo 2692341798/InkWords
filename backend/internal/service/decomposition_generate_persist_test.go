@@ -463,6 +463,7 @@ func TestDecompositionService_GenerateSeriesIntro_UsesInjectedPersistence(t *tes
 	require.Empty(t, drainSeriesErrors(errChan))
 	_ = collectSeriesProgressPayloads(t, progressChan)
 	require.Equal(t, 1, persistence.saveIntroCalls)
+	require.Equal(t, userID, persistence.savedIntroUserID)
 	require.Equal(t, parentID, persistence.savedIntroParentID)
 	require.Equal(t, "系列导读正文", persistence.savedIntroContent)
 }
@@ -593,6 +594,7 @@ type seriesPersistenceRecorder struct {
 	preflightCalls         int
 
 	savedChapter             blogcontracts.SeriesChapterPersistenceInput
+	savedIntroUserID         uuid.UUID
 	savedIntroParentID       uuid.UUID
 	savedIntroContent        string
 	loadedOldContentUserID   uuid.UUID
@@ -616,14 +618,15 @@ func (r *seriesPersistenceRecorder) MarkSeriesChapterFailed(context.Context, uui
 	return nil
 }
 
-func (r *seriesPersistenceRecorder) SaveSeriesIntro(_ context.Context, parentID uuid.UUID, content string) error {
+func (r *seriesPersistenceRecorder) SaveSeriesIntro(_ context.Context, userID uuid.UUID, parentID uuid.UUID, content string) error {
 	r.saveIntroCalls++
+	r.savedIntroUserID = userID
 	r.savedIntroParentID = parentID
 	r.savedIntroContent = content
 	return nil
 }
 
-func (r *seriesPersistenceRecorder) MarkSeriesIntroFailed(context.Context, uuid.UUID) error {
+func (r *seriesPersistenceRecorder) MarkSeriesIntroFailed(context.Context, uuid.UUID, uuid.UUID) error {
 	return nil
 }
 

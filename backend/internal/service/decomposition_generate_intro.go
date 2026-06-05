@@ -137,7 +137,7 @@ func (s *DecompositionService) generateSeriesIntro(
 			if ok && err != nil {
 				sendProgress("error", "", err.Error())
 				if !taskOnlyPersistenceMode() {
-					_ = s.seriesPersistence.MarkSeriesIntroFailed(ctx, parentID)
+					_ = s.seriesPersistence.MarkSeriesIntroFailed(ctx, userID, parentID)
 				}
 				return
 			}
@@ -149,7 +149,7 @@ func (s *DecompositionService) generateSeriesIntro(
 					sendProgress("completed", "", "")
 					return
 				}
-				if err := s.seriesPersistence.SaveSeriesIntro(ctx, parentID, finalContent); err != nil {
+				if err := s.seriesPersistence.SaveSeriesIntro(ctx, userID, parentID, finalContent); err != nil {
 					errChan <- fmt.Errorf("persist series intro: %w", err)
 					return
 				}

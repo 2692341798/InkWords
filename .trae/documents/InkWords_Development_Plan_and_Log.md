@@ -1,6 +1,19 @@
 # 墨言知识训练平台 (InkWords Trainer) - 开发计划与日志
 > **目标**：跟踪项目的核心开发模块、里程碑进度以及每日开发记录。
 
+### [2026-06-05] Fix - 深拆 core-api / llm-stream 第十六轮：阻断跨用户系列导读写入
+- **需求背景**：
+  1. 在把旧正文读取改为 `user_id + blog_id` 双重约束后，继续沿 `SeriesPersistence` 审计发现 `SaveSeriesIntro()` 与 `MarkSeriesIntroFailed()` 仍只按 `parent_id` 写父稿。
+  2. 这意味着如果导读生成链路拿到他人的 `parent_id`，当前实现仍可能越权覆盖对方的系列导读正文或失败状态。
+- **本次完成**：
+  1. 先补红灯测试 `TestSeriesPersistence_SaveSeriesIntro_RejectsForeignParent` 与 `TestSeriesPersistence_MarkSeriesIntroFailed_RejectsForeignParent`，锁定“不得跨用户改写系列父稿”的行为。
+  2. 将 `SeriesPersistence.SaveSeriesIntro()`、`SeriesPersistence.MarkSeriesIntroFailed()` 契约改为显式接收 `userID`，默认 GORM 适配器按 `user_id + parent_id` 双重条件更新，并在 `RowsAffected == 0` 时返回 `gorm.ErrRecordNotFound`。
+  3. 同步更新 `DecompositionService.generateSeriesIntro()` 与测试替身，确保导读生成成功/失败路径都透传当前用户。
+- **验证记录**：
+  - `cd backend && go test ./internal/domain/blog -run 'TestSeriesPersistence_SaveSeriesIntro_RejectsForeignParent|TestSeriesPersistence_MarkSeriesIntroFailed_RejectsForeignParent|TestSeriesPersistence_LoadSeriesOldContent_RejectsForeignBlog' -count=1` 通过
+  - `cd backend && go test ./internal/service -run 'TestGenerateSeriesIntro_UsesInjectedPersistence|TestDecompositionService_ResolveSeriesOldContent_UsesInjectedPersistence' -count=1` 通过
+  - `cd backend && go test ./internal/domain/blog ./internal/service ./services/core-api/... ./services/llm-stream/... ./cmd/server -count=1` 通过
+
 ### [2026-06-05] Fix - 深拆 core-api / llm-stream 第十五轮：阻断跨用户旧正文读取
 - **需求背景**：
   1. 在补上系列父稿归属校验后，继续审计 `internal/domain/blog` 默认适配器内部边界，发现 `SeriesPersistence.LoadSeriesOldContent()` 仍只按 `blog_id` 读取旧正文。

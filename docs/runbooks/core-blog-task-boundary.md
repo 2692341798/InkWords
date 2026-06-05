@@ -61,6 +61,7 @@
 - `backend/internal/service/generator_persistence.go`、`backend/internal/service/decomposition_continue_persistence.go` 与 `backend/internal/service/decomposition_series_persistence.go` 已删除；`GeneratorService` 与 `DecompositionService` 当前分别直接依赖 `blogcontracts.GeneratedBlogPersistence`、`blogcontracts.ContinuePersistence`、`blogcontracts.SeriesPersistence` 以及 `blogdomain` 默认适配器。同时 `Chapter` 本地兼容别名也已删除，service 包内部相关代码统一直接依赖 `blogcontracts.Chapter`；至此 blog contracts 在 service 层的兼容桥接已清零。
 - `internal/domain/blog/series_persistence.go` 现已在预建系列父稿/子稿前显式校验父稿归属用户；若 `parent_id` 指向其它用户的系列父稿，将立即返回错误并拒绝继续创建当前用户的章节草稿，避免跨用户系列树挂接。
 - `internal/domain/blog/series_persistence.go` 现已在 `LoadSeriesOldContent()` 中按 `user_id + blog_id` 双重条件读取旧正文；`DecompositionService.resolveSeriesOldContent()` 也会显式透传当前用户，避免 regenerate 场景跨用户读取他人历史章节内容。
+- `internal/domain/blog/series_persistence.go` 现已在 `SaveSeriesIntro()` 与 `MarkSeriesIntroFailed()` 中按 `user_id + parent_id` 双重条件更新系列父稿；`DecompositionService.generateSeriesIntro()` 也会显式透传当前用户，避免跨用户改写他人的导读正文或失败状态。
 
 ## 5. 收口优先级建议
 

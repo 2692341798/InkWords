@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - API 接口文档
 
 ## 0. 变更记录
+- 2026-06-05：继续推进 blog-domain 内部边界修复。本次将 `SeriesPersistence.SaveSeriesIntro()` 与 `SeriesPersistence.MarkSeriesIntroFailed()` 收紧为必须同时校验 `user_id + parent_id`，并让 service 导读生成调用链显式透传当前用户；不新增也不修改任何对外 API 路由、请求字段或响应字段。
 - 2026-06-05：继续推进 blog-domain 内部边界修复。本次将 `SeriesPersistence.LoadSeriesOldContent()` 收紧为必须同时按 `user_id + blog_id` 读取旧正文，并让 service 调用链显式透传当前用户；不新增也不修改任何对外 API 路由、请求字段或响应字段。
 - 2026-06-05：继续推进 blog-domain 内部边界修复。本次仅修正 `SeriesPersistence.EnsureSeriesParentAndDrafts()` 的父稿归属校验：如果 `parent_id` 指向其它用户的系列父稿，将返回错误并拒绝继续预建章节草稿；不新增也不修改任何对外 API 路由、请求字段或响应字段。
 - 2026-06-05：继续推进 service 内部 Chapter bridge 收口。本次删除 `decomposition_service.go` 中最后的 `Chapter` 本地别名，并让 service 包内部相关生成、提示词、质量门禁与测试代码统一直接依赖 `domain/blog/contracts.Chapter`；不新增也不修改任何对外 API 路由、请求字段或响应字段。

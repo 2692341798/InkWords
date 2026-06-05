@@ -1,6 +1,20 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 120：继续推进，阻断跨用户系列导读写入
+- **用户需求**：用户继续要求“继续”，在收紧旧正文读取边界后，继续沿同一条 `SeriesPersistence` 边界线往前推进。
+- **AI 动作**：
+  1. 审计发现 `SaveSeriesIntro()` 与 `MarkSeriesIntroFailed()` 仍只按 `parent_id` 写系列父稿，仍存在跨用户改写他人导读正文或状态的风险。
+  2. 按 TDD 先新增 `TestSeriesPersistence_SaveSeriesIntro_RejectsForeignParent` 与 `TestSeriesPersistence_MarkSeriesIntroFailed_RejectsForeignParent`，让接口缺口先以红灯暴露。
+  3. 将两条契约都改为显式接收 `userID`，默认适配器按 `user_id + parent_id` 更新；`DecompositionService.generateSeriesIntro()` 与测试替身同步透传当前用户。
+- **决策/变更**：
+  - 继续保持“一次只收一条边界线”的节奏，把 `SeriesPersistence` 的跨用户读取与写入边界分成连续几个原子提交。
+  - 对 intro 写路径采用 `RowsAffected == 0 -> gorm.ErrRecordNotFound` 的返回策略，使“未找到/不属于当前用户”都能被上层显式识别。
+- **验证**：
+  - `cd backend && go test ./internal/domain/blog -run 'TestSeriesPersistence_SaveSeriesIntro_RejectsForeignParent|TestSeriesPersistence_MarkSeriesIntroFailed_RejectsForeignParent|TestSeriesPersistence_LoadSeriesOldContent_RejectsForeignBlog' -count=1` 通过
+  - `cd backend && go test ./internal/service -run 'TestGenerateSeriesIntro_UsesInjectedPersistence|TestDecompositionService_ResolveSeriesOldContent_UsesInjectedPersistence' -count=1` 通过
+  - `cd backend && go test ./internal/domain/blog ./internal/service ./services/core-api/... ./services/llm-stream/... ./cmd/server -count=1` 通过
+
 ### 对话 119：继续推进，阻断跨用户旧正文读取
 - **用户需求**：用户继续要求“继续”，在补上系列父稿归属校验后，继续沿 `domain/blog` 默认适配器内部边界做下一步最小收口。
 - **AI 动作**：

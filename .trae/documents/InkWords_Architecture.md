@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - 架构设计与工程规范
 
 ## 0. 变更记录
+- 2026-06-05：继续推进 `core-api / llm-stream` 深拆分第十六轮。`internal/domain/blog/series_persistence.go` 现在在 `SaveSeriesIntro()` 与 `MarkSeriesIntroFailed()` 中显式按 `user_id + parent_id` 更新系列父稿；`DecompositionService.generateSeriesIntro()` 也同步透传当前用户，避免跨用户改写他人的系列导读正文或失败状态。
 - 2026-06-05：继续推进 `core-api / llm-stream` 深拆分第十五轮。`internal/domain/blog/series_persistence.go` 现在在 `LoadSeriesOldContent()` 中显式按 `user_id + blog_id` 读取旧正文；`DecompositionService` 的 regenerate 路径也同步透传当前用户，避免跨用户读取他人的历史章节内容。
 - 2026-06-05：继续推进 `core-api / llm-stream` 深拆分第十四轮。`internal/domain/blog/series_persistence.go` 现在在 `EnsureSeriesParentAndDrafts()` 中显式校验父稿归属用户；若传入的 `parent_id` 指向其它用户的系列父稿，将直接返回错误而不是继续在其下创建当前用户的章节草稿，避免跨用户系列树挂接。
 - 2026-06-05：继续推进 `core-api / llm-stream` 深拆分第十三轮。`internal/service` 已删除最后的 `Chapter` 本地兼容别名，service 包内部相关生成、提示词、质量门禁与测试代码均改为直接依赖 `blogcontracts.Chapter`；至此 blog contracts 的 `GeneratedBlogPersistence / ContinuePersistence / SeriesPersistence / SeriesDraftPreflightInput / SeriesChapterPersistenceInput / Chapter` 在 service 层的兼容桥接已全部清空。
