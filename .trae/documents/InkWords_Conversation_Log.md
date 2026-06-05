@@ -1,6 +1,19 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 118：继续推进，修复跨用户系列父稿挂接风险
+- **用户需求**：用户继续要求“继续”，在 service 层 bridge 清零后，默认沿主线继续审计 `domain/blog` 适配器内部还能否继续收口。
+- **AI 动作**：
+  1. 回读知识库与 runbook 后，把下一步范围聚焦到 `internal/domain/blog` 默认适配器内部，发现 `SeriesPersistence.EnsureSeriesParentAndDrafts()` 查询父稿时只按 `id`，未按 `user_id` 约束。
+  2. 按 TDD 先新增 `TestSeriesPersistence_EnsureSeriesParentAndDrafts_RejectsForeignParent`，证明当前实现会错误地接受跨用户父稿复用。
+  3. 在 `series_persistence.go` 中补上所有权校验：若父稿存在但不属于当前用户，则直接报错并拒绝创建任何章节草稿。
+- **决策/变更**：
+  - 这一轮优先修 correctness/security 边界问题，而不是先做纯粹的适配器内部抽象整理，因为它更具业务价值且改动更小。
+  - 修复策略保持最小：不改公开 contracts，不改正常父稿新建/复用行为，只阻断跨用户挂接路径。
+- **验证**：
+  - `cd backend && go test ./internal/domain/blog -run TestSeriesPersistence_EnsureSeriesParentAndDrafts_RejectsForeignParent -count=1` 先失败后通过
+  - `cd backend && go test ./internal/domain/blog ./internal/service ./services/core-api/... ./services/llm-stream/... ./cmd/server -count=1` 通过
+
 ### 对话 117：继续推进，删除 Chapter 的 service 本地别名
 - **用户需求**：用户继续要求“继续”，默认沿刚完成的 `440f557` 之后继续把最后剩下的 `Chapter` 兼容层收口。
 - **AI 动作**：

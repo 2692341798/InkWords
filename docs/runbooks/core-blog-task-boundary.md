@@ -59,6 +59,7 @@
 - 当前中立契约也已开始抽离：`internal/domain/blog/contracts` 先承接共享错误与 persistence 输入/接口定义，`domain/blog` 已不再反向 import `internal/service`；service 层当前更多扮演兼容别名与构造器桥接层。
 - `backend/internal/domain/stream/service.go` 现已直接依赖 `internal/domain/blog/contracts.Chapter`；当前非 `service` 包对 `GeneratedBlogPersistence / ContinuePersistence / SeriesPersistence / SeriesDraftPreflightInput / SeriesChapterPersistenceInput / Chapter` 等兼容别名的显式引用已清零，为后续评估删除 service 层桥接类型创造了条件。
 - `backend/internal/service/generator_persistence.go`、`backend/internal/service/decomposition_continue_persistence.go` 与 `backend/internal/service/decomposition_series_persistence.go` 已删除；`GeneratorService` 与 `DecompositionService` 当前分别直接依赖 `blogcontracts.GeneratedBlogPersistence`、`blogcontracts.ContinuePersistence`、`blogcontracts.SeriesPersistence` 以及 `blogdomain` 默认适配器。同时 `Chapter` 本地兼容别名也已删除，service 包内部相关代码统一直接依赖 `blogcontracts.Chapter`；至此 blog contracts 在 service 层的兼容桥接已清零。
+- `internal/domain/blog/series_persistence.go` 现已在预建系列父稿/子稿前显式校验父稿归属用户；若 `parent_id` 指向其它用户的系列父稿，将立即返回错误并拒绝继续创建当前用户的章节草稿，避免跨用户系列树挂接。
 
 ## 5. 收口优先级建议
 

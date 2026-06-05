@@ -2,6 +2,7 @@ package blog
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -29,9 +30,9 @@ func (p *seriesPersistence) EnsureSeriesParentAndDrafts(ctx context.Context, inp
 	updatedOutline := append([]blogcontracts.Chapter(nil), input.Outline...)
 	if err := p.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var existingParent model.Blog
-		err := tx.First(&existingParent, "id = ?", input.ParentID).Error
+		err := tx.Select("id", "user_id", "source_url").First(&existingParent, "id = ?", input.ParentID).Error
 		if err != nil {
-			if err != gorm.ErrRecordNotFound {
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
 				return fmt.Errorf("query parent blog: %w", err)
 			}
 
@@ -48,7 +49,12 @@ func (p *seriesPersistence) EnsureSeriesParentAndDrafts(ctx context.Context, inp
 			if err := tx.Create(parentBlog).Error; err != nil {
 				return fmt.Errorf("create parent blog: %w", err)
 			}
-		} else if existingParent.SourceURL == "" && input.GitURL != "" {
+		} else {
+			if existingParent.UserID != input.UserID {
+				return fmt.Errorf("parent blog does not belong to user")
+			}
+		}
+		if err == nil && existingParent.SourceURL == "" && input.GitURL != "" {
 			if err := tx.Model(&existingParent).Update("source_url", input.GitURL).Error; err != nil {
 				return fmt.Errorf("update parent source url: %w", err)
 			}

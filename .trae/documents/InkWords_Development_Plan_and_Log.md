@@ -1,6 +1,19 @@
 # 墨言知识训练平台 (InkWords Trainer) - 开发计划与日志
 > **目标**：跟踪项目的核心开发模块、里程碑进度以及每日开发记录。
 
+### [2026-06-05] Fix - 深拆 core-api / llm-stream 第十四轮：阻断跨用户系列父稿挂接
+- **需求背景**：
+  1. 在 service 层 bridge 清零后，下一步开始回看 `domain/blog` 默认适配器内部边界，发现 `SeriesPersistence.EnsureSeriesParentAndDrafts()` 在按 `parent_id` 查询父稿时缺少 `user_id` 约束。
+  2. 这意味着如果传入的 `parent_id` 指向其它用户的系列父稿，当前实现会继续在其下为当前用户创建章节草稿，形成跨用户系列树挂接风险。
+- **本次完成**：
+  1. 先补红灯测试 `TestSeriesPersistence_EnsureSeriesParentAndDrafts_RejectsForeignParent`，锁定“外部用户不得复用他人父稿”的行为。
+  2. 在 `internal/domain/blog/series_persistence.go` 中补上父稿归属校验：若 `parent_id` 已存在但 `user_id` 不匹配，立即返回 `parent blog does not belong to user`。
+  3. 保持合法父稿复用、父稿新建和后续草稿预建逻辑不变，仅封住跨用户边界漏洞。
+- **验证记录**：
+  - `cd backend && go test ./internal/domain/blog -run TestSeriesPersistence_EnsureSeriesParentAndDrafts_RejectsForeignParent -count=1` 先失败后通过
+  - `cd backend && go test ./internal/domain/blog -count=1` 通过
+  - `cd backend && go test ./internal/domain/blog ./internal/service ./services/core-api/... ./services/llm-stream/... ./cmd/server -count=1` 通过
+
 ### [2026-06-05] Refactor - 深拆 core-api / llm-stream 第十三轮：删除 Chapter 的 service 本地别名
 - **需求背景**：
   1. 在 `series` 类型桥接层删除后，`internal/service` 剩余的兼容债务已只剩 `type Chapter = blogcontracts.Chapter` 这一行本地别名，以及围绕它展开的内部引用。

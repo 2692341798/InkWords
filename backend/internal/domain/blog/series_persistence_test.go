@@ -133,3 +133,49 @@ func TestSeriesPersistence_SaveSeriesChapter_UpdatesBlogAndTokens(t *testing.T) 
 	require.NoError(t, testDB.First(&user, "id = ?", userID).Error)
 	require.Equal(t, len([]rune("章节终稿"))*2, user.TokensUsed)
 }
+
+func TestSeriesPersistence_EnsureSeriesParentAndDrafts_RejectsForeignParent(t *testing.T) {
+	testDB := openSeriesPersistenceTestDB(t)
+
+	ownerID := uuid.New()
+	attackerID := uuid.New()
+	parentID := uuid.New()
+	require.NoError(t, testDB.Create(&model.User{
+		ID:       ownerID,
+		Username: "owner",
+		Email:    "owner@example.com",
+	}).Error)
+	require.NoError(t, testDB.Create(&model.User{
+		ID:       attackerID,
+		Username: "attacker",
+		Email:    "attacker@example.com",
+	}).Error)
+	require.NoError(t, testDB.Create(&model.Blog{
+		ID:       parentID,
+		UserID:   ownerID,
+		Title:    "他人的系列",
+		Content:  "导读",
+		IsSeries: true,
+		Status:   1,
+	}).Error)
+
+	persistence := NewSeriesPersistence(testDB)
+	outline, err := persistence.EnsureSeriesParentAndDrafts(context.Background(), blogcontracts.SeriesDraftPreflightInput{
+		UserID:      attackerID,
+		ParentID:    parentID,
+		ParentTitle: "尝试劫持的系列",
+		SourceType:  "file",
+		Outline: []blogcontracts.Chapter{
+			{Title: "第 1 章", Summary: "不应创建", Sort: 1},
+		},
+	})
+	require.Error(t, err)
+	require.ErrorContains(t, err, "parent blog does not belong to user")
+	require.Nil(t, outline)
+
+	var childCount int64
+	require.NoError(t, testDB.Model(&model.Blog{}).
+		Where("parent_id = ? AND user_id = ?", parentID, attackerID).
+		Count(&childCount).Error)
+	require.Zero(t, childCount)
+}
