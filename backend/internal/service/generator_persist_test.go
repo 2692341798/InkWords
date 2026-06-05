@@ -12,6 +12,7 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
+	blogcontracts "inkwords-backend/internal/domain/blog/contracts"
 	"inkwords-backend/internal/infra/db"
 	"inkwords-backend/internal/infra/llm"
 	"inkwords-backend/internal/model"
@@ -198,11 +199,11 @@ func newGeneratorPersistTestLLMServer(t *testing.T) *httptest.Server {
 
 type generatorPersistenceRecorder struct {
 	calls int
-	saved GeneratedBlogPersistenceInput
+	saved blogcontracts.GeneratedBlogPersistenceInput
 	err   error
 }
 
-func (r *generatorPersistenceRecorder) SaveGeneratedBlog(_ context.Context, input GeneratedBlogPersistenceInput) error {
+func (r *generatorPersistenceRecorder) SaveGeneratedBlog(_ context.Context, input blogcontracts.GeneratedBlogPersistenceInput) error {
 	r.calls++
 	r.saved = input
 	return r.err

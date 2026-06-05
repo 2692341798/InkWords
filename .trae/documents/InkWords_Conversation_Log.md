@@ -1,6 +1,19 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 115：继续推进，删除 generator 与 continue 的 service 桥接层
+- **用户需求**：用户继续要求“继续”，默认沿上一轮已提交的 contracts 收口主线继续推进。
+- **AI 动作**：
+  1. 先回读知识库与代码审计，确认 `internal/service` 剩余桥接中最薄、最值的一组是 `generator_persistence.go` 与 `decomposition_continue_persistence.go`。
+  2. 将 `GeneratorService` 直接切到 `blogcontracts.GeneratedBlogPersistence` 与 `blogdomain.NewGeneratedBlogPersistence(db.DB)`，并同步更新 `generator_persist_test.go` 的测试替身。
+  3. 将 `DecompositionService` 直接切到 `blogcontracts.ContinuePersistence` 与 `blogdomain.NewContinuePersistence(db.DB)`，随后删除 `generator_persistence.go` 与 `decomposition_continue_persistence.go` 两个桥接文件。
+- **决策/变更**：
+  - 这一轮仍然不直接动 `series` 与 `Chapter` 相关桥接，因为那一组在 `service` 包内部的扩散面更大，适合单独做下一步原子改动。
+  - 本轮目标是把“最薄的桥接层先删掉”，让 `service` 内真正保留的兼容债务进一步缩小，避免一次性改动过大。
+- **验证**：
+  - `cd backend && go test ./internal/service -run 'Test(NewGeneratorServiceWithPersistence_FillsDefaultPersistence|GeneratorService_saveToDB_UsesInjectedPersistence|GeneratorService_saveToDB_(RollsBackWhenUserTokenUpdateFails|PersistsBlogAndUpdatesTokens)|GeneratorService_BuildGenerateSingleTaskResult_TaskOnlyModeDoesNotPersistAndReturnsTaskResult)' -count=1` 通过
+  - `cd backend && go test ./internal/service -run 'Test(NewDecompositionServiceWithPersistences_FillsMissingDefaultAdapters|ContinueGeneration_UsesInjectedPersistence|BuildContinueTaskResult_UsesInjectedPersistence|ContinueGeneration_TaskOnlyMode_DoesNotUpdateBlogDirectly|DecompositionService_EnsureSeriesParentAndDrafts_UsesInjectedPersistence)' -count=1` 通过
+
 ### 对话 114：继续推进，让外层调用点开始直接依赖 blog contracts
 - **用户需求**：用户继续要求“继续”，默认沿刚完成的 `fb5219f` 合同收口主线继续推进，并优先判断最新未提交改动是否足够整理为新的原子提交。
 - **AI 动作**：

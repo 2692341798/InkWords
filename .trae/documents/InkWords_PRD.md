@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - 产品需求文档 (PRD)
 
 ## 0. 变更记录
+- 2026-06-05：继续推进 `core-api / llm-stream` 深拆分的内部 bridge 收口。本次不新增用户可见功能，也不改变 `http://localhost` 单入口、SSE 或页面交互；仅要求 service 内部优先删除已经没有外部调用价值的 `generator` 与 `continue` 桥接层，为后续继续收口 `series / Chapter` 兼容层做准备。
 - 2026-06-05：继续推进 `core-api / llm-stream` 深拆分的内部契约收口。本次不新增用户可见功能，也不改变 `http://localhost` 单入口、SSE 或任何页面交互；仅要求非 `service` 域逐步绕过兼容别名，直接依赖 `domain/blog/contracts`，为后续删除 service 兼容桥接层做准备。
 - 2026-06-04：新增 `FRONTEND_PORT` 作为本地 Docker Compose 前端端口覆盖能力。本次不新增用户可见功能，也不改变默认产品入口 `http://localhost`；仅允许在宿主机 `:80` 被其它进程占用时，将前端入口临时切到如 `http://localhost:8088`，以便继续完成本地验证与演示。
 - 2026-06-04：Generation Task-Only Task 4 打通 `generate_series` 的后台持久化闭环。本次不新增用户可见功能，也不改变系列生成入口、SSE 或页面交互；仅要求系统在 `generate_series` 任务成功后，由 `core-api` 自动消费结构化 `result_json` 并把系列父博客导读与章节终态/正文落回业务表，同时继续记录 token 记账。

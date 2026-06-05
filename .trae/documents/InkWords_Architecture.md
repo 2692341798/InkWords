@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - 架构设计与工程规范
 
 ## 0. 变更记录
+- 2026-06-05：继续推进 `core-api / llm-stream` 深拆分第十一轮。`internal/service` 已删除 `generator_persistence.go` 与 `decomposition_continue_persistence.go` 两层最薄的 blog bridge；`GeneratorService` 与 `DecompositionService` 现分别直接依赖 `blogcontracts.GeneratedBlogPersistence`、`blogcontracts.ContinuePersistence` 和 `blogdomain` 默认适配器，service 层剩余兼容桥接进一步收缩为 `series` 与 `Chapter` 相关类型。
 - 2026-06-05：继续推进 `core-api / llm-stream` 深拆分第十轮。`backend/internal/domain/stream/service.go` 已不再依赖 `internal/service.Chapter` 兼容别名，改为直接组装 `internal/domain/blog/contracts.Chapter`；当前非 `service` 包对 `GeneratedBlogPersistence / ContinuePersistence / SeriesPersistence / Chapter` 等 blog contracts 兼容别名的显式引用已清零，service 层进一步退化为内部兼容桥接层。
 - 2026-06-05：继续推进 `core-api / llm-stream` 深拆分第九轮。新增中立契约包 `internal/domain/blog/contracts`，先承接 `ErrSeriesNotFound` 与 blog persistence 的输入/接口定义；`domain/blog` 适配器现已直接依赖契约包而不再 import `internal/service`，service 层退化为类型别名与兼容构造器。
 - 2026-06-05：继续推进 `core-api / llm-stream` 深拆分第八轮。`SeriesPersistence` 的默认生产适配器也已迁入 `internal/domain/blog`，并在 `llm-stream`、`core-api` 与聚合调试入口通过 bootstrap 显式注入；至此 `GeneratedBlogPersistence / ContinuePersistence / SeriesPersistence` 三类默认 blog 写入适配器已统一由 blog-domain 提供，service 层主要保留接口定义与测试替身。

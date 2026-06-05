@@ -9,6 +9,7 @@ import (
 
 	"golang.org/x/time/rate"
 
+	blogdomain "inkwords-backend/internal/domain/blog"
 	blogcontracts "inkwords-backend/internal/domain/blog/contracts"
 	"inkwords-backend/internal/infra/db"
 	"inkwords-backend/internal/infra/llm"
@@ -72,7 +73,7 @@ type DecompositionService struct {
 	limiter           *rate.Limiter
 	promptReq         *PromptRequirementsService
 	seriesPersistence SeriesPersistence
-	continuePersistence ContinuePersistence
+	continuePersistence blogcontracts.ContinuePersistence
 
 	seriesTaskResultsMu sync.Mutex
 	seriesTaskResults   map[string][]byte
@@ -83,27 +84,27 @@ func NewDecompositionService(promptReq *PromptRequirementsService) *Decompositio
 	return NewDecompositionServiceWithPersistences(
 		promptReq,
 		NewGormSeriesPersistence(db.DB),
-		NewGormContinuePersistence(db.DB),
+		blogdomain.NewContinuePersistence(db.DB),
 	)
 }
 
 // NewDecompositionServiceWithSeriesPersistence creates a new decomposition service with explicit series persistence.
 func NewDecompositionServiceWithSeriesPersistence(promptReq *PromptRequirementsService, seriesPersistence SeriesPersistence) *DecompositionService {
-	return NewDecompositionServiceWithPersistences(promptReq, seriesPersistence, NewGormContinuePersistence(db.DB))
+	return NewDecompositionServiceWithPersistences(promptReq, seriesPersistence, blogdomain.NewContinuePersistence(db.DB))
 }
 
 // NewDecompositionServiceWithPersistences creates a new decomposition service with explicit persistence dependencies.
 func NewDecompositionServiceWithPersistences(
 	promptReq *PromptRequirementsService,
 	seriesPersistence SeriesPersistence,
-	continuePersistence ContinuePersistence,
+	continuePersistence blogcontracts.ContinuePersistence,
 ) *DecompositionService {
 	apiKey := os.Getenv("DEEPSEEK_API_KEY")
 	if seriesPersistence == nil {
 		seriesPersistence = NewGormSeriesPersistence(db.DB)
 	}
 	if continuePersistence == nil {
-		continuePersistence = NewGormContinuePersistence(db.DB)
+		continuePersistence = blogdomain.NewContinuePersistence(db.DB)
 	}
 
 	rpmLimit := 10000

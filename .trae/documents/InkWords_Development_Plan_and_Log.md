@@ -1,6 +1,19 @@
 # 墨言知识训练平台 (InkWords Trainer) - 开发计划与日志
 > **目标**：跟踪项目的核心开发模块、里程碑进度以及每日开发记录。
 
+### [2026-06-05] Refactor - 深拆 core-api / llm-stream 第十一轮：删除 generator 与 continue 的 service 桥接层
+- **需求背景**：
+  1. 在外层调用点已经开始直接依赖 `domain/blog/contracts` 后，`internal/service` 内部仍保留三组兼容桥接：`generator`、`continue`、`series/Chapter`。
+  2. 其中 `generator` 与 `continue` 的桥接最薄，且实际调用面已收缩到 service 包内部，适合作为下一次最小收口切口。
+- **本次完成**：
+  1. `GeneratorService` 直接切到 `blogcontracts.GeneratedBlogPersistence` 与 `blogdomain.NewGeneratedBlogPersistence(db.DB)`，并删除 `backend/internal/service/generator_persistence.go`。
+  2. `DecompositionService` 直接切到 `blogcontracts.ContinuePersistence` 与 `blogdomain.NewContinuePersistence(db.DB)`，并删除 `backend/internal/service/decomposition_continue_persistence.go`。
+  3. 同步更新 `generator` 相关测试替身与架构/日志/runbook，记录当前 service 层剩余桥接已进一步收缩为 `series` 与 `Chapter` 相关类型。
+- **验证记录**：
+  - `cd backend && go test ./internal/service -run 'Test(NewGeneratorServiceWithPersistence_FillsDefaultPersistence|GeneratorService_saveToDB_UsesInjectedPersistence|GeneratorService_saveToDB_(RollsBackWhenUserTokenUpdateFails|PersistsBlogAndUpdatesTokens)|GeneratorService_BuildGenerateSingleTaskResult_TaskOnlyModeDoesNotPersistAndReturnsTaskResult)' -count=1` 通过
+  - `cd backend && go test ./internal/service -run 'Test(NewDecompositionServiceWithPersistences_FillsMissingDefaultAdapters|ContinueGeneration_UsesInjectedPersistence|BuildContinueTaskResult_UsesInjectedPersistence|ContinueGeneration_TaskOnlyMode_DoesNotUpdateBlogDirectly|DecompositionService_EnsureSeriesParentAndDrafts_UsesInjectedPersistence)' -count=1` 通过
+  - `grep '\b(ContinuePersistence|NewGormContinuePersistence)\b' backend/internal/service/**/*.go` 仅剩 `decomposition_service.go` 内对 `blogcontracts.ContinuePersistence` 的直连引用
+
 ### [2026-06-05] Refactor - 深拆 core-api / llm-stream 第十轮：外层调用点开始直接依赖 blog contracts
 - **需求背景**：
   1. 在 `domain/blog/contracts` 已抽出后，外层调用点仍可能继续通过 `internal/service` 暴露的兼容别名引用 `Chapter` 与 persistence 输入类型，这会拖慢后续真正删除桥接层的节奏。
