@@ -1,6 +1,53 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 109：继续推进，收口系列前置草稿准备事务边界
+- **用户需求**：用户继续要求“继续”，默认沿 `core-api / llm-stream` 深拆分主线持续推进，不切换任务主题。
+- **AI 动作**：
+  1. 识别出 `DecompositionService` 剩余最厚的一段直连数据库逻辑是 `ensureSeriesParentAndDrafts()`，其内部包含系列父稿创建、父稿来源更新、旧子稿清理与章节草稿预建，且这些行为天然属于同一事务边界。
+  2. 按 TDD 先新增失败测试，锁定“前置草稿准备”也必须可由注入的 `SeriesPersistence` 完整替换，而不依赖全局 `db.DB`。
+  3. 新增 `SeriesDraftPreflightInput` 与 `SeriesPersistence.EnsureSeriesParentAndDrafts()`，将上述事务整体下沉到默认 GORM 适配器；同时把 `GenerateSeries()` 中的调用替换为 `DecompositionService.ensureSeriesParentAndDrafts()`。
+  4. 删除已被显式 persistence 完整替代的 legacy helper `persistSeriesChapterCompletion()`，并重新扫描 `decomposition_generate*.go`，确认生产代码中剩余的 `db.DB` 只用于默认适配器 fallback，不再承担主业务逻辑直写职责。
+- **决策/变更**：
+  - 这一轮完成后，`DecompositionService` 主流程层面对博客相关持久化的深拆目标基本达成；后续若继续推进，更偏向“默认 GORM 适配器是否并入 `domain/blog` 仓储边界”的结构优化，而不是继续找 service 里的散落写点。
+  - 保持 `nil -> GORM` 的默认回退不变，确保旧测试、旧构造方式和现有 DI 组装不被这次接口化打断。
+- **验证**：
+  - `cd backend && go test ./internal/service -run 'TestDecompositionService_EnsureSeriesParentAndDrafts_UsesInjectedPersistence' -count=1` 先失败、补实现后通过
+  - `cd backend && go test ./internal/service -count=1` 通过
+  - `cd backend && go test ./services/core-api/... ./services/llm-stream/... -count=1` 通过
+  - `grep db.DB backend/internal/service/decomposition_generate*.go` 仅剩默认 GORM fallback 构造路径
+
+### 对话 108：继续推进，收口系列旧正文读取与 skip 元信息更新
+- **用户需求**：用户只要求“继续”，默认沿当前 `core-api / llm-stream` 深拆分主线继续推进。
+- **AI 动作**：
+  1. 基于当前代码状态判断，先选择与既有 `SeriesPersistence / ContinuePersistence` 模式最贴近的剩余轻量技术债：系列旧正文读取与 `skip` 章节标题/排序更新。
+  2. 按 TDD 先补失败测试，证明这两类行为都必须能通过注入的 `SeriesPersistence` 替换，而不再依赖全局 `db.DB`。
+  3. 扩展 `SeriesPersistence` 默认 GORM 适配器，新增 `LoadSeriesOldContent()` 和 `UpdateSkippedSeriesChapterMeta()`；同时把 `resolveSeriesOldContent()` 改为 `DecompositionService` 方法，并新增 `handleSkippedSeriesChapter()` service helper。
+  4. 通过范围测试确认 `internal/service` 与 `core-api / llm-stream` 仍全部通过，再同步边界 runbook 与架构日志。
+- **决策/变更**：
+  - 本轮没有直接攻入“系列父稿与章节草稿预建”，因为那一块涉及一组创建语义与父子稿关联，边界更厚，适合下一轮单独做原子收口。
+  - 通过这轮收口后，`DecompositionService` 剩余直连数据库点已经明显压缩到前置草稿准备与父稿来源更新，后续拆分路径更清晰。
+- **验证**：
+  - `cd backend && go test ./internal/service -run 'TestDecompositionService_ResolveSeriesOldContent_UsesInjectedPersistence' -count=1` 先失败、补实现后通过
+  - `cd backend && go test ./internal/service -run 'TestDecompositionService_HandleSkippedSeriesChapter_UsesInjectedPersistence' -count=1` 先失败、补实现后通过
+  - `cd backend && go test ./internal/service -count=1` 通过
+  - `cd backend && go test ./services/core-api/... ./services/llm-stream/... -count=1` 通过
+
+### 对话 107：提交后继续推进，收口 continue 续写正文读写边界
+- **用户需求**：用户要求“先提交，创建对应分支，暂不推送远端，然后再继续”。
+- **AI 动作**：
+  1. 先使用专门分支 `agent/20260605-series-persistence-boundary` 承接上一轮系列持久化边界收口，按原子提交原则只暂存本轮相关文件，并创建 commit `b2328d4 refactor(service): extract series persistence boundary`，保留其它无关工作区改动不入提交。
+  2. 提交完成后继续沿同一条微服务深拆主线前进，识别出 `continue` 链路仍直接读取与更新 `blogs.content`，适合作为下一步最小边界收口对象。
+  3. 按 TDD 先新增红灯测试，锁定“续写旧正文读取”和“最终正文更新”必须可由显式 persistence 替换；随后新增 `ContinuePersistence` 默认 GORM 适配器，并把 `ContinueGeneration()` 与 `BuildContinueTaskResult()` 切到显式依赖。
+  4. 为避免现有测试与旧构造方式回归，又补上 `nil -> GORM` 的兼容回退，并同步更新架构文档与边界 runbook。
+- **决策/变更**：
+  - 提交与继续开发被分成两个清晰阶段：先保证上一轮边界收口有独立提交，再继续下一轮 `continue` 收口，避免把两轮技术债治理混进同一个 commit。
+  - `continue` 本轮只收口“正文读取 + 最终更新”，不顺手扩展到前置草稿准备、`skip` 元信息或旧内容读取，以保持这轮改动最小可回滚。
+- **验证**：
+  - `cd backend && go test ./internal/service -run 'Test(ContinueGeneration_UsesInjectedPersistence|BuildContinueTaskResult_UsesInjectedPersistence|ContinueGeneration_TaskOnlyMode_DoesNotUpdateBlogDirectly)' -count=1` 先失败、补实现后通过
+  - `cd backend && go test ./internal/service -count=1` 通过
+  - `cd backend && go test ./services/core-api/... ./services/llm-stream/... -count=1` 通过
+
 ### 对话 106：继续推进微服务化，收口 DecompositionService 的系列持久化边界
 - **用户需求**：用户要求“继续推进我的项目微服务化”，并在澄清选项中选择“深拆 core/stream”且“直接改代码”。
 - **AI 动作**：

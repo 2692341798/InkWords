@@ -10,7 +10,6 @@ import (
 
 	"inkwords-backend/internal/infra/db"
 	"inkwords-backend/internal/infra/llm"
-	"inkwords-backend/internal/model"
 	"inkwords-backend/internal/prompt"
 )
 
@@ -38,7 +37,7 @@ func buildSeriesReaderProfile(scenarioMode prompt.ScenarioMode) string {
 	}
 }
 
-func resolveSeriesOldContent(ctx context.Context, chapter Chapter) string {
+func (s *DecompositionService) resolveSeriesOldContent(ctx context.Context, chapter Chapter) string {
 	if chapter.Action != "regenerate" || strings.TrimSpace(chapter.ID) == "" {
 		return ""
 	}
@@ -48,12 +47,17 @@ func resolveSeriesOldContent(ctx context.Context, chapter Chapter) string {
 		return ""
 	}
 
-	var oldBlog model.Blog
-	if err := db.DB.WithContext(ctx).Select("content").First(&oldBlog, "id = ?", blogID).Error; err != nil {
+	seriesPersistence := s.seriesPersistence
+	if seriesPersistence == nil {
+		seriesPersistence = NewGormSeriesPersistence(db.DB)
+	}
+
+	oldContent, err := seriesPersistence.LoadSeriesOldContent(ctx, blogID)
+	if err != nil {
 		return ""
 	}
 
-	return truncateSeriesContent(oldBlog.Content, seriesOldContentRuneLimit)
+	return truncateSeriesContent(oldContent, seriesOldContentRuneLimit)
 }
 
 func normalizePromptProfile(profile prompt.PromptProfile, scenarioMode prompt.ScenarioMode) prompt.PromptProfile {

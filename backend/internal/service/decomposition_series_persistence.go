@@ -23,12 +23,25 @@ type SeriesChapterPersistenceInput struct {
 	TechStacks datatypes.JSON
 }
 
+// SeriesDraftPreflightInput 描述系列生成前置草稿准备阶段需要的上下文。
+type SeriesDraftPreflightInput struct {
+	UserID      uuid.UUID
+	ParentID    uuid.UUID
+	ParentTitle string
+	SourceType  string
+	GitURL      string
+	Outline     []Chapter
+}
+
 // SeriesPersistence 收口系列生成阶段仍归 core-api 持有的业务表写入。
 type SeriesPersistence interface {
+	EnsureSeriesParentAndDrafts(ctx context.Context, input SeriesDraftPreflightInput) ([]Chapter, error)
 	SaveSeriesChapter(ctx context.Context, input SeriesChapterPersistenceInput) error
 	MarkSeriesChapterFailed(ctx context.Context, userID uuid.UUID, blogID uuid.UUID) error
 	SaveSeriesIntro(ctx context.Context, parentID uuid.UUID, content string) error
 	MarkSeriesIntroFailed(ctx context.Context, parentID uuid.UUID) error
+	LoadSeriesOldContent(ctx context.Context, blogID uuid.UUID) (string, error)
+	UpdateSkippedSeriesChapterMeta(ctx context.Context, userID uuid.UUID, blogID uuid.UUID, chapter Chapter) error
 }
 
 type gormSeriesPersistence struct {
@@ -38,6 +51,79 @@ type gormSeriesPersistence struct {
 // NewGormSeriesPersistence creates the default GORM-backed series persistence adapter.
 func NewGormSeriesPersistence(database *gorm.DB) SeriesPersistence {
 	return &gormSeriesPersistence{db: database}
+}
+
+func (p *gormSeriesPersistence) EnsureSeriesParentAndDrafts(ctx context.Context, input SeriesDraftPreflightInput) ([]Chapter, error) {
+	if p.db == nil {
+		return nil, fmt.Errorf("series persistence database is not initialized")
+	}
+
+	updatedOutline := append([]Chapter(nil), input.Outline...)
+	if err := p.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var existingParent model.Blog
+		err := tx.First(&existingParent, "id = ?", input.ParentID).Error
+		if err != nil {
+			if err != gorm.ErrRecordNotFound {
+				return fmt.Errorf("query parent blog: %w", err)
+			}
+
+			parentBlog := &model.Blog{
+				ID:         input.ParentID,
+				UserID:     input.UserID,
+				Title:      input.ParentTitle,
+				Content:    "正在生成系列导读...",
+				SourceType: input.SourceType,
+				SourceURL:  input.GitURL,
+				IsSeries:   true,
+				Status:     0,
+			}
+			if err := tx.Create(parentBlog).Error; err != nil {
+				return fmt.Errorf("create parent blog: %w", err)
+			}
+		} else if existingParent.SourceURL == "" && input.GitURL != "" {
+			if err := tx.Model(&existingParent).Update("source_url", input.GitURL).Error; err != nil {
+				return fmt.Errorf("update parent source url: %w", err)
+			}
+		}
+
+		validChildrenIDs := collectValidSeriesChildIDs(updatedOutline)
+		deleteQuery := tx.Where("parent_id = ? AND user_id = ?", input.ParentID, input.UserID)
+		if len(validChildrenIDs) > 0 {
+			deleteQuery = deleteQuery.Where("id NOT IN ?", validChildrenIDs)
+		}
+		if err := deleteQuery.Delete(&model.Blog{}).Error; err != nil {
+			return fmt.Errorf("delete obsolete child blogs: %w", err)
+		}
+
+		// Why: 草稿创建与旧子节点清理必须在同一事务中完成，避免出现树已删空但新草稿没建好的半成品状态。
+		for i := range updatedOutline {
+			chapter := updatedOutline[i]
+			if chapter.ID != "" || chapter.Action == "skip" {
+				continue
+			}
+
+			draftBlog := &model.Blog{
+				UserID:      input.UserID,
+				ParentID:    &input.ParentID,
+				ChapterSort: chapter.Sort,
+				Title:       chapter.Title,
+				Content:     "正在生成章节内容...",
+				SourceType:  input.SourceType,
+				Status:      0,
+			}
+			if err := tx.Create(draftBlog).Error; err != nil {
+				return fmt.Errorf("create chapter draft %d: %w", chapter.Sort, err)
+			}
+
+			updatedOutline[i].ID = draftBlog.ID.String()
+		}
+
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return updatedOutline, nil
 }
 
 func (p *gormSeriesPersistence) SaveSeriesChapter(ctx context.Context, input SeriesChapterPersistenceInput) error {
@@ -125,5 +211,28 @@ func (p *gormSeriesPersistence) MarkSeriesIntroFailed(ctx context.Context, paren
 
 	return p.db.WithContext(ctx).Model(&model.Blog{}).Where("id = ?", parentID).Updates(map[string]any{
 		"status": 2,
+	}).Error
+}
+
+func (p *gormSeriesPersistence) LoadSeriesOldContent(ctx context.Context, blogID uuid.UUID) (string, error) {
+	if p.db == nil {
+		return "", fmt.Errorf("series persistence database is not initialized")
+	}
+
+	var blog model.Blog
+	if err := p.db.WithContext(ctx).Select("content").First(&blog, "id = ?", blogID).Error; err != nil {
+		return "", err
+	}
+	return blog.Content, nil
+}
+
+func (p *gormSeriesPersistence) UpdateSkippedSeriesChapterMeta(ctx context.Context, userID uuid.UUID, blogID uuid.UUID, chapter Chapter) error {
+	if p.db == nil {
+		return fmt.Errorf("series persistence database is not initialized")
+	}
+
+	return p.db.WithContext(ctx).Model(&model.Blog{}).Where("id = ? AND user_id = ?", blogID, userID).Updates(map[string]any{
+		"chapter_sort": chapter.Sort,
+		"title":        chapter.Title,
 	}).Error
 }

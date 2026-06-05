@@ -452,6 +452,94 @@ func TestDecompositionService_GenerateSeriesIntro_UsesInjectedPersistence(t *tes
 	require.Equal(t, "系列导读正文", persistence.savedIntroContent)
 }
 
+func TestDecompositionService_ResolveSeriesOldContent_UsesInjectedPersistence(t *testing.T) {
+	previousDB := db.DB
+	db.DB = nil
+	defer func() {
+		db.DB = previousDB
+	}()
+
+	blogID := uuid.New()
+	persistence := &seriesPersistenceRecorder{
+		loadedOldContent: strings.Repeat("旧内容", 10),
+	}
+	svc := NewDecompositionServiceWithSeriesPersistence(nil, persistence)
+
+	oldContent := svc.resolveSeriesOldContent(context.Background(), Chapter{
+		ID:     blogID.String(),
+		Action: "regenerate",
+	})
+
+	require.Equal(t, 1, persistence.loadOldContentCalls)
+	require.Equal(t, blogID, persistence.loadedOldContentBlogID)
+	require.Equal(t, strings.Repeat("旧内容", 10), oldContent)
+}
+
+func TestDecompositionService_HandleSkippedSeriesChapter_UsesInjectedPersistence(t *testing.T) {
+	previousDB := db.DB
+	db.DB = nil
+	defer func() {
+		db.DB = previousDB
+	}()
+
+	userID := uuid.New()
+	blogID := uuid.New()
+	persistence := &seriesPersistenceRecorder{}
+	svc := NewDecompositionServiceWithSeriesPersistence(nil, persistence)
+
+	err := svc.handleSkippedSeriesChapter(context.Background(), userID, Chapter{
+		ID:    blogID.String(),
+		Title: "跳过章节",
+		Sort:  3,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, 1, persistence.updateSkippedMetaCalls)
+	require.Equal(t, userID, persistence.updatedSkippedMetaUserID)
+	require.Equal(t, blogID, persistence.updatedSkippedMetaBlogID)
+	require.Equal(t, "跳过章节", persistence.updatedSkippedMetaTitle)
+	require.Equal(t, 3, persistence.updatedSkippedMetaSort)
+}
+
+func TestDecompositionService_EnsureSeriesParentAndDrafts_UsesInjectedPersistence(t *testing.T) {
+	previousDB := db.DB
+	db.DB = nil
+	defer func() {
+		db.DB = previousDB
+	}()
+
+	userID := uuid.New()
+	parentID := uuid.New()
+	persistence := &seriesPersistenceRecorder{
+		preflightResult: []Chapter{
+			{ID: uuid.NewString(), Title: "第 1 章", Sort: 1},
+		},
+	}
+	svc := NewDecompositionServiceWithSeriesPersistence(nil, persistence)
+
+	updatedOutline, err := svc.ensureSeriesParentAndDrafts(
+		context.Background(),
+		userID,
+		parentID,
+		"系列标题",
+		"file",
+		"https://github.com/example/repo",
+		[]Chapter{{Title: "第 1 章", Sort: 1}},
+	)
+
+	require.NoError(t, err)
+	require.Len(t, updatedOutline, 1)
+	require.Equal(t, persistence.preflightResult[0].ID, updatedOutline[0].ID)
+	require.Equal(t, 1, persistence.preflightCalls)
+	require.Equal(t, userID, persistence.preflightInput.UserID)
+	require.Equal(t, parentID, persistence.preflightInput.ParentID)
+	require.Equal(t, "系列标题", persistence.preflightInput.ParentTitle)
+	require.Equal(t, "file", persistence.preflightInput.SourceType)
+	require.Equal(t, "https://github.com/example/repo", persistence.preflightInput.GitURL)
+	require.Len(t, persistence.preflightInput.Outline, 1)
+	require.Equal(t, "第 1 章", persistence.preflightInput.Outline[0].Title)
+}
+
 func collectSeriesProgressPayloads(t *testing.T, progressChan <-chan string) []map[string]interface{} {
 	t.Helper()
 
@@ -483,10 +571,21 @@ func seriesPersistTestDSN() string {
 type seriesPersistenceRecorder struct {
 	saveChapterCalls int
 	saveIntroCalls   int
+	loadOldContentCalls int
+	updateSkippedMetaCalls int
+	preflightCalls int
 
 	savedChapter       SeriesChapterPersistenceInput
 	savedIntroParentID uuid.UUID
 	savedIntroContent  string
+	loadedOldContentBlogID uuid.UUID
+	loadedOldContent string
+	updatedSkippedMetaUserID uuid.UUID
+	updatedSkippedMetaBlogID uuid.UUID
+	updatedSkippedMetaTitle string
+	updatedSkippedMetaSort int
+	preflightInput SeriesDraftPreflightInput
+	preflightResult []Chapter
 }
 
 func (r *seriesPersistenceRecorder) SaveSeriesChapter(_ context.Context, input SeriesChapterPersistenceInput) error {
@@ -508,4 +607,25 @@ func (r *seriesPersistenceRecorder) SaveSeriesIntro(_ context.Context, parentID 
 
 func (r *seriesPersistenceRecorder) MarkSeriesIntroFailed(context.Context, uuid.UUID) error {
 	return nil
+}
+
+func (r *seriesPersistenceRecorder) LoadSeriesOldContent(_ context.Context, blogID uuid.UUID) (string, error) {
+	r.loadOldContentCalls++
+	r.loadedOldContentBlogID = blogID
+	return r.loadedOldContent, nil
+}
+
+func (r *seriesPersistenceRecorder) UpdateSkippedSeriesChapterMeta(_ context.Context, userID uuid.UUID, blogID uuid.UUID, chapter Chapter) error {
+	r.updateSkippedMetaCalls++
+	r.updatedSkippedMetaUserID = userID
+	r.updatedSkippedMetaBlogID = blogID
+	r.updatedSkippedMetaTitle = chapter.Title
+	r.updatedSkippedMetaSort = chapter.Sort
+	return nil
+}
+
+func (r *seriesPersistenceRecorder) EnsureSeriesParentAndDrafts(_ context.Context, input SeriesDraftPreflightInput) ([]Chapter, error) {
+	r.preflightCalls++
+	r.preflightInput = input
+	return append([]Chapter(nil), r.preflightResult...), nil
 }

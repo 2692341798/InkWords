@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"inkwords-backend/internal/infra/db"
 	"inkwords-backend/internal/infra/llm"
-	"inkwords-backend/internal/model"
 	"os"
 	"strings"
 	"sync"
@@ -27,8 +26,13 @@ func (s *DecompositionService) ContinueGeneration(ctx context.Context, userID uu
 	defer close(chunkChan)
 	defer close(errChan)
 
-	var blog model.Blog
-	if err := db.DB.WithContext(ctx).First(&blog, "id = ? AND user_id = ?", blogID, userID).Error; err != nil {
+	continuePersistence := s.continuePersistence
+	if continuePersistence == nil {
+		continuePersistence = NewGormContinuePersistence(db.DB)
+	}
+
+	blog, err := continuePersistence.LoadContinueBlog(ctx, userID, blogID)
+	if err != nil {
 		errChan <- fmt.Errorf("blog not found: %w", err)
 		return
 	}
@@ -124,7 +128,7 @@ func (s *DecompositionService) ContinueGeneration(ctx context.Context, userID uu
 				finalNewContent := newContentBuilder.String()
 				if finalNewContent != "" && !taskOnlyPersistenceMode() {
 					updatedContent := blog.Content + finalNewContent
-					if err := db.DB.WithContext(ctx).Model(&blog).Update("content", updatedContent).Error; err != nil {
+					if err := continuePersistence.SaveContinuedBlog(ctx, blog, updatedContent); err != nil {
 						fmt.Printf("Failed to update blog content: %v\n", err)
 					}
 				}
@@ -152,8 +156,13 @@ func (s *DecompositionService) BuildContinueTaskResult(
 	blogID uuid.UUID,
 	appendedContent string,
 ) (ContinueTaskResultSnapshot, error) {
-	var blog model.Blog
-	if err := db.DB.WithContext(ctx).Select("id", "content").First(&blog, "id = ? AND user_id = ?", blogID, userID).Error; err != nil {
+	continuePersistence := s.continuePersistence
+	if continuePersistence == nil {
+		continuePersistence = NewGormContinuePersistence(db.DB)
+	}
+
+	blog, err := continuePersistence.LoadContinueBlog(ctx, userID, blogID)
+	if err != nil {
 		return ContinueTaskResultSnapshot{}, fmt.Errorf("load continue blog for task result: %w", err)
 	}
 

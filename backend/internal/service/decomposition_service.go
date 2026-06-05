@@ -78,6 +78,7 @@ type DecompositionService struct {
 	limiter           *rate.Limiter
 	promptReq         *PromptRequirementsService
 	seriesPersistence SeriesPersistence
+	continuePersistence ContinuePersistence
 
 	seriesTaskResultsMu sync.Mutex
 	seriesTaskResults   map[string][]byte
@@ -85,11 +86,24 @@ type DecompositionService struct {
 
 // NewDecompositionService creates a new decomposition service
 func NewDecompositionService(promptReq *PromptRequirementsService) *DecompositionService {
-	return NewDecompositionServiceWithSeriesPersistence(promptReq, NewGormSeriesPersistence(db.DB))
+	return NewDecompositionServiceWithPersistences(
+		promptReq,
+		NewGormSeriesPersistence(db.DB),
+		NewGormContinuePersistence(db.DB),
+	)
 }
 
 // NewDecompositionServiceWithSeriesPersistence creates a new decomposition service with explicit series persistence.
 func NewDecompositionServiceWithSeriesPersistence(promptReq *PromptRequirementsService, seriesPersistence SeriesPersistence) *DecompositionService {
+	return NewDecompositionServiceWithPersistences(promptReq, seriesPersistence, NewGormContinuePersistence(db.DB))
+}
+
+// NewDecompositionServiceWithPersistences creates a new decomposition service with explicit persistence dependencies.
+func NewDecompositionServiceWithPersistences(
+	promptReq *PromptRequirementsService,
+	seriesPersistence SeriesPersistence,
+	continuePersistence ContinuePersistence,
+) *DecompositionService {
 	apiKey := os.Getenv("DEEPSEEK_API_KEY")
 
 	rpmLimit := 10000
@@ -106,6 +120,7 @@ func NewDecompositionServiceWithSeriesPersistence(promptReq *PromptRequirementsS
 		limiter:           rate.NewLimiter(limit, 1),
 		promptReq:         promptReq,
 		seriesPersistence: seriesPersistence,
+		continuePersistence: continuePersistence,
 
 		seriesTaskResults: make(map[string][]byte),
 	}

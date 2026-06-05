@@ -1,6 +1,51 @@
 # 墨言知识训练平台 (InkWords Trainer) - 开发计划与日志
 > **目标**：跟踪项目的核心开发模块、里程碑进度以及每日开发记录。
 
+### [2026-06-05] Refactor - 深拆 core-api / llm-stream 第五轮：系列前置草稿准备接口化
+- **需求背景**：
+  1. 在 `continue`、旧正文读取和 `skip` 元信息更新完成接口化后，`DecompositionService` 剩余最厚的一段直连数据库逻辑只剩 `ensureSeriesParentAndDrafts()`：系列父稿创建、章节草稿预建、父稿来源更新与旧子稿清理。
+  2. 这段逻辑本身已经具备清晰的事务边界，非常适合整体收进 `SeriesPersistence`，从而完成该 service 主流程层面对博客持久化读写的最后一轮收口。
+- **本次完成**：
+  1. 按 TDD 先在 `backend/internal/service/decomposition_generate_persist_test.go` 增加失败测试，锁定“前置草稿准备”必须可通过注入的 `SeriesPersistence` 完整替换。
+  2. 在 `backend/internal/service/decomposition_series_persistence.go` 新增 `SeriesDraftPreflightInput` 与 `EnsureSeriesParentAndDrafts()`，默认 GORM 适配器接管父稿创建、父稿来源更新、旧子稿清理和新草稿预建。
+  3. 把 `ensureSeriesParentAndDrafts()` 从裸函数改为 `DecompositionService` 方法，并在 `GenerateSeries()` 主流程中改为显式走 `SeriesPersistence`。
+  4. 删除已经被 `SeriesPersistence` 完整替代的 legacy helper `persistSeriesChapterCompletion()`，减少历史残留实现继续影响编译与阅读。
+  5. 再次跑范围测试并扫描 `decomposition_generate*.go`，确认生产代码中剩下的 `db.DB` 只用于默认 GORM fallback 构造器，而非业务主逻辑直写。
+- **验证记录**：
+  - `cd backend && go test ./internal/service -run 'TestDecompositionService_EnsureSeriesParentAndDrafts_UsesInjectedPersistence' -count=1` 先失败（缺少 service method / preflight input / persistence API），补实现后通过
+  - `cd backend && go test ./internal/service -count=1` 通过
+  - `cd backend && go test ./services/core-api/... ./services/llm-stream/... -count=1` 通过
+  - `grep db.DB backend/internal/service/decomposition_generate*.go` 仅剩默认 GORM fallback 构造路径
+
+### [2026-06-05] Refactor - 深拆 core-api / llm-stream 第四轮：系列旧正文读取与 skip 元信息接口化
+- **需求背景**：
+  1. 在 `continue` 持久化接口化完成后，系列生成链路里仍散落两类轻量直连数据库行为：旧章节正文读取，以及 `skip` 章节的标题/排序更新。
+  2. 这两类行为都属于 `DecompositionService` 的“围绕现有博客做轻量读写”的尾部技术债，适合作为同一轮最小收口继续拿下。
+- **本次完成**：
+  1. 按 TDD 先在 `backend/internal/service/decomposition_generate_persist_test.go` 增加失败测试，锁定旧正文读取与 `skip` 元信息更新都必须通过注入的 `SeriesPersistence` 完成。
+  2. 扩展 `SeriesPersistence`：新增 `LoadSeriesOldContent()` 与 `UpdateSkippedSeriesChapterMeta()`，默认 GORM 适配器接管这两类数据库访问。
+  3. 把 `resolveSeriesOldContent()` 改为 `DecompositionService` 方法，并在系列生成主流程里改为走显式 persistence；同时新增 `handleSkippedSeriesChapter()`，把 `skip` 分支的标题/排序更新从 `decomposition_generate.go` 主逻辑中剥离出去。
+  4. 同步更新架构文档与边界 runbook，把剩余待收口范围压缩到“系列父稿创建、章节草稿预建、父稿来源更新”。
+- **验证记录**：
+  - `cd backend && go test ./internal/service -run 'TestDecompositionService_ResolveSeriesOldContent_UsesInjectedPersistence' -count=1` 先失败（缺少 service method / persistence API），补实现后通过
+  - `cd backend && go test ./internal/service -run 'TestDecompositionService_HandleSkippedSeriesChapter_UsesInjectedPersistence' -count=1` 先失败（缺少 service method），补实现后通过
+  - `cd backend && go test ./internal/service -count=1` 通过
+  - `cd backend && go test ./services/core-api/... ./services/llm-stream/... -count=1` 通过
+
+### [2026-06-05] Refactor - 深拆 core-api / llm-stream 第三轮：ContinueGeneration 续写持久化接口化
+- **需求背景**：
+  1. 用户要求在上一条系列持久化边界提交完成后“继续”，沿同一条微服务深拆主线往下推进。
+  2. 当前 `DecompositionService` 剩余最直接的边界债之一是 `continue` 链路仍直接读取并更新 `blogs.content`，这会继续模糊 `core-api` 对业务事实写入的控制面。
+- **本次完成**：
+  1. 按 TDD 先在 `backend/internal/service/decomposition_generate_continue_test.go` 增加失败测试，锁定“续写旧正文读取”和“最终正文更新”都必须能通过注入的 persistence 替换。
+  2. 新增 `backend/internal/service/decomposition_continue_persistence.go`，定义 `ContinuePersistence` 与默认 GORM 适配器，承接 `continue` 链路的博客正文读取与最终更新。
+  3. 调整 `DecompositionService`：新增 `continuePersistence` 依赖与 `NewDecompositionServiceWithPersistences()`，把 `ContinueGeneration()` 与 `BuildContinueTaskResult()` 改为依赖显式 persistence；同时保留 `nil -> GORM` 的兼容回退，避免旧测试和旧构造方式被打断。
+  4. 同步更新架构文档与边界 runbook，把“继续收口后的剩余技术债”改写为前置草稿准备、`skip` 元信息与旧内容读取。
+- **验证记录**：
+  - `cd backend && go test ./internal/service -run 'Test(ContinueGeneration_UsesInjectedPersistence|BuildContinueTaskResult_UsesInjectedPersistence|ContinueGeneration_TaskOnlyMode_DoesNotUpdateBlogDirectly)' -count=1` 先失败（缺少显式 persistence API），补实现后通过
+  - `cd backend && go test ./internal/service -count=1` 通过
+  - `cd backend && go test ./services/core-api/... ./services/llm-stream/... -count=1` 通过
+
 ### [2026-06-05] Refactor - 深拆 core-api / llm-stream 第二轮：DecompositionService 系列持久化接口化
 - **需求背景**：
   1. 用户要求“继续推进项目微服务化”，并明确这轮优先深拆 `core-api / llm-stream`，直接落代码。

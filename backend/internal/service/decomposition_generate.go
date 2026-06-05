@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"inkwords-backend/internal/infra/db"
-	"inkwords-backend/internal/model"
 	"inkwords-backend/internal/prompt"
 	"sort"
 	"sync"
@@ -218,7 +216,7 @@ func (s *DecompositionService) GenerateSeriesWithProfile(
 		parentTitle = seriesTitle
 	}
 
-	updatedOutline, err := ensureSeriesParentAndDrafts(
+	updatedOutline, err := s.ensureSeriesParentAndDrafts(
 		ctx,
 		userID,
 		parentID,
@@ -250,13 +248,7 @@ func (s *DecompositionService) GenerateSeriesWithProfile(
 		}
 
 		if chapter.Action == "skip" && chapter.ID != "" {
-			if blogID, err := uuid.Parse(chapter.ID); err == nil {
-				// Update sort and title for existing skipped chapter
-				db.DB.WithContext(ctx).Model(&model.Blog{}).Where("id = ? AND user_id = ?", blogID, userID).Updates(map[string]interface{}{
-					"chapter_sort": chapter.Sort,
-					"title":        chapter.Title,
-				})
-			}
+			_ = s.handleSkippedSeriesChapter(ctx, userID, chapter)
 			endMsg := map[string]interface{}{
 				"status":       "completed",
 				"chapter_sort": chapter.Sort,
@@ -278,7 +270,7 @@ func (s *DecompositionService) GenerateSeriesWithProfile(
 			defer wg.Done()
 
 			chapterSourceContent := resolveSeriesChapterSourceContent(sourceType, cachePath, sourceContent, chapter)
-			oldContent := resolveSeriesOldContent(ctx, chapter)
+			oldContent := s.resolveSeriesOldContent(ctx, chapter)
 			qualityResult, streamErr := s.runSeriesChapterQualityPipeline(ctx, seriesQualityPipelineInput{
 				SeriesTitle:          parentTitle,
 				ReaderProfile:        buildSeriesReaderProfile(scenarioMode),

@@ -40,31 +40,30 @@
 
 ### 4.1 已确认的直接全局 `db.DB` 写点
 - `backend/internal/service/decomposition_generate.go`
-  - `skip` 章节分支仍直接更新章节标题、排序
+  - `skip` 章节标题/排序更新已收口到 `SeriesPersistence`
 - `backend/internal/service/decomposition_generate_intro.go`
   - 导读成功/失败落库已收口到 `SeriesPersistence`
 - `backend/internal/service/decomposition_generate_continue.go`
-  - 直接更新续写后的博客正文
+  - 续写正文读取与最终更新已收口到 `ContinuePersistence`
 - `backend/internal/service/decomposition_generate_persistence.go`
-  - 系列章节成功/失败落库已收口到 `SeriesPersistence`
-  - 仍直接创建系列父博客、章节草稿，并更新父博客来源
+  - 系列父稿创建、章节草稿预建、父稿来源更新、系列章节成功/失败落库均已收口到 `SeriesPersistence`
 - `backend/internal/service/decomposition_generate_prompt_helpers.go`
-  - 旧章节正文读取仍直接访问全局 `db.DB`
+  - 旧章节正文读取已收口到 `SeriesPersistence`
 
 ### 4.2 当前判断
 - 以上写点都仍属于 `core-api` 自有业务边界，没有跨服务越权。
-- `GeneratorService` 已完成显式 `GeneratedBlogPersistence` 收口；`DecompositionService` 也已新增 `SeriesPersistence`，先把“系列章节完成/失败 + 系列导读完成/失败”这批最终业务事实写入从 service 主逻辑里剥离出来。
-- 当前剩余技术债主要集中在 `DecompositionService` 的前置草稿准备、`skip` 章节元信息更新、旧内容读取与 `continue` 正文读写；在这些写点继续收口前，仍不适合推进 `blogs` 相关表的真正独立实例拆分。
+- `GeneratorService` 已完成显式 `GeneratedBlogPersistence` 收口；`DecompositionService` 也已通过 `SeriesPersistence / ContinuePersistence` 把系列前置草稿准备、导读、章节成功/失败、旧正文读取、`skip` 元信息以及 `continue` 正文读写全部从 service 主逻辑里抽离出来。
+- 当前这条深拆主线的剩余技术债已不再是“业务逻辑里还有散落的直连写库”，而是“默认 GORM persistence 适配器后续是否要继续并入 `domain/blog` 或服务私有 repository”。
 
 ## 5. 收口优先级建议
 
 ### 第一优先级
-- 继续沿着 `DecompositionService -> SeriesPersistence` 模板，把“前置草稿准备 / skip 元信息 / 旧内容读取 / continue 正文读写”继续从全局 `db.DB` 收口到显式 persistence / repository 实现。
-- Why: 系列章节完成/失败与导读落库已经完成第一轮接口化，下一步最值得继续追的就是剩余散落写点。
+- 评估是否把默认 `SeriesPersistence / ContinuePersistence / GeneratedBlogPersistence` GORM 适配器继续并入 `domain/blog` 或服务私有 repository，减少 service 层对 legacy model/ORM 的感知。
+- Why: 当前 service 主逻辑的边界已经基本清晰，后续优化重点转向“适配器归属”而不是“主流程是否仍有直连写库”。
 
 ### 第二优先级
-- 把 `DecompositionService` 对系列父博客、章节草稿、旧内容读取与续写正文的数据库访问进一步收口到 `domain/blog` 或专用 persistence interface。
-- Why: 当前系列链路剩余写点仍分散，是后续拆分 `blogs` 相关边界的主要阻力。
+- 为 `SeriesPersistence` 增加更细粒度的边界测试或仓储级测试，覆盖父稿存在/不存在、旧子稿清理、草稿预建失败回滚等事务场景。
+- Why: 现在 preflight 逻辑已经被抽到显式接口，最有价值的下一步是巩固行为契约，而不是再重复做接口外壳。
 
 ### 第三优先级
 - 保持 `task` 领域继续作为唯一允许的跨服务共享写入控制面，不新增第二套“谁都能写”的共享表模式。
