@@ -8,8 +8,6 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/datatypes"
-
-	"inkwords-backend/internal/infra/db"
 )
 
 func (s *DecompositionService) ensureSeriesParentAndDrafts(
@@ -21,12 +19,7 @@ func (s *DecompositionService) ensureSeriesParentAndDrafts(
 	gitURL string,
 	outline []Chapter,
 ) ([]Chapter, error) {
-	seriesPersistence := s.seriesPersistence
-	if seriesPersistence == nil {
-		seriesPersistence = NewGormSeriesPersistence(db.DB)
-	}
-
-	return seriesPersistence.EnsureSeriesParentAndDrafts(ctx, SeriesDraftPreflightInput{
+	return s.seriesPersistence.EnsureSeriesParentAndDrafts(ctx, SeriesDraftPreflightInput{
 		UserID:      userID,
 		ParentID:    parentID,
 		ParentTitle: parentTitle,
@@ -128,12 +121,7 @@ func (s *DecompositionService) handleSkippedSeriesChapter(ctx context.Context, u
 		return nil
 	}
 
-	seriesPersistence := s.seriesPersistence
-	if seriesPersistence == nil {
-		seriesPersistence = NewGormSeriesPersistence(db.DB)
-	}
-
-	return seriesPersistence.UpdateSkippedSeriesChapterMeta(ctx, userID, blogID, chapter)
+	return s.seriesPersistence.UpdateSkippedSeriesChapterMeta(ctx, userID, blogID, chapter)
 }
 
 func decodeTechStacksJSON(raw datatypes.JSON) []string {

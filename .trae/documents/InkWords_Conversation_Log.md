@@ -17,6 +17,20 @@
   - `cd backend && go test ./services/core-api/... ./services/llm-stream/... -count=1` 通过
   - `grep db.DB backend/internal/service/decomposition_generate*.go` 仅剩默认 GORM fallback 构造路径
 
+### 对话 110：继续推进，收紧默认 persistence 适配器的装配边界
+- **用户需求**：用户继续要求“继续”，并在澄清选项中明确选择优先推进“下沉默认适配器（推荐）”。
+- **AI 动作**：
+  1. 先回读知识库 `[[concepts/DecompositionService 系列持久化边界收口]]` 与 `[[concepts/core-api 与 llm-stream 深拆分第一轮]]`，确认当前主线剩余技术债已经从“service 仍有散落写库”收敛为“默认 GORM persistence 的归属与装配位置”。
+  2. 按 TDD 先补 `TestNewDecompositionServiceWithPersistences_FillsMissingDefaultAdapters`，锁定 `SeriesPersistence / ContinuePersistence` 的缺省装配必须在构造阶段完成；随后删除 `DecompositionService` 多个业务方法中的隐式 `nil -> GORM` fallback。
+  3. 同步收紧 `GeneratorService.saveToDB()`，要求默认 `GeneratedBlogPersistence` 只由构造器注入，并把仍依赖字面量 service 构造的测试切到正式构造器。
+- **决策/变更**：
+  - 这一轮没有直接把默认适配器彻底并入 `domain/blog`，而是先做最小且可回滚的一步：把默认适配器的装配边界统一到构造阶段，消除方法级隐式 fallback。
+  - 经过这轮后，后续若要继续把适配器并入 `domain/blog` 或服务私有 repository，将只需移动装配归属，而不用再逐个业务方法清理兜底逻辑。
+- **验证**：
+  - `cd backend && go test ./internal/service -run 'Test(NewDecompositionServiceWithPersistences_FillsMissingDefaultAdapters|NewGeneratorServiceWithPersistence_FillsDefaultPersistence|GeneratorService_saveToDB_(RollsBackWhenUserTokenUpdateFails|PersistsBlogAndUpdatesTokens))' -count=1` 先失败、补实现后通过
+  - `cd backend && go test ./internal/service -count=1` 通过
+  - `cd backend && go test ./services/core-api/... ./services/llm-stream/... -count=1` 通过
+
 ### 对话 108：继续推进，收口系列旧正文读取与 skip 元信息更新
 - **用户需求**：用户只要求“继续”，默认沿当前 `core-api / llm-stream` 深拆分主线继续推进。
 - **AI 动作**：

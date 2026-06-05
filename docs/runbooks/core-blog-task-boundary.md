@@ -54,12 +54,13 @@
 - 以上写点都仍属于 `core-api` 自有业务边界，没有跨服务越权。
 - `GeneratorService` 已完成显式 `GeneratedBlogPersistence` 收口；`DecompositionService` 也已通过 `SeriesPersistence / ContinuePersistence` 把系列前置草稿准备、导读、章节成功/失败、旧正文读取、`skip` 元信息以及 `continue` 正文读写全部从 service 主逻辑里抽离出来。
 - 当前这条深拆主线的剩余技术债已不再是“业务逻辑里还有散落的直连写库”，而是“默认 GORM persistence 适配器后续是否要继续并入 `domain/blog` 或服务私有 repository”。
+- 默认 `SeriesPersistence / ContinuePersistence / GeneratedBlogPersistence` 的缺省装配点现已统一收紧到 service 构造器；业务方法内的隐式 `nil -> GORM` fallback 已删除，后续迁移适配器归属时不必再逐个方法清理兜底逻辑。
 
 ## 5. 收口优先级建议
 
 ### 第一优先级
 - 评估是否把默认 `SeriesPersistence / ContinuePersistence / GeneratedBlogPersistence` GORM 适配器继续并入 `domain/blog` 或服务私有 repository，减少 service 层对 legacy model/ORM 的感知。
-- Why: 当前 service 主逻辑的边界已经基本清晰，后续优化重点转向“适配器归属”而不是“主流程是否仍有直连写库”。
+- Why: 当前 service 主逻辑的边界已经基本清晰，而且默认适配器装配点也已收紧到构造阶段；后续优化重点转向“适配器归属”而不是“主流程是否仍有直连写库”。
 
 ### 第二优先级
 - 为 `SeriesPersistence` 增加更细粒度的边界测试或仓储级测试，覆盖父稿存在/不存在、旧子稿清理、草稿预建失败回滚等事务场景。

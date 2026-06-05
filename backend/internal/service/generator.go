@@ -409,11 +409,6 @@ func (s *GeneratorService) saveToDB(ctx context.Context, userID uuid.UUID, sourc
 		return fmt.Errorf("marshal tech stacks: %w", err)
 	}
 
-	persistence := s.persistence
-	if persistence == nil {
-		persistence = newDatabaseGeneratedBlogPersistence(db.DB)
-	}
-
 	input := GeneratedBlogPersistenceInput{
 		UserID:     userID,
 		Title:      facts.Title,
@@ -423,7 +418,7 @@ func (s *GeneratorService) saveToDB(ctx context.Context, userID uuid.UUID, sourc
 		TechStacks: datatypes.JSON(techStacksJSON),
 	}
 
-	if err := persistence.SaveGeneratedBlog(ctx, input); err != nil {
+	if err := s.persistence.SaveGeneratedBlog(ctx, input); err != nil {
 		return fmt.Errorf("persist generated blog: %w", err)
 	}
 

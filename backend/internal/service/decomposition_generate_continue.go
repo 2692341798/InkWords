@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"inkwords-backend/internal/infra/db"
 	"inkwords-backend/internal/infra/llm"
 	"os"
 	"strings"
@@ -26,12 +25,7 @@ func (s *DecompositionService) ContinueGeneration(ctx context.Context, userID uu
 	defer close(chunkChan)
 	defer close(errChan)
 
-	continuePersistence := s.continuePersistence
-	if continuePersistence == nil {
-		continuePersistence = NewGormContinuePersistence(db.DB)
-	}
-
-	blog, err := continuePersistence.LoadContinueBlog(ctx, userID, blogID)
+	blog, err := s.continuePersistence.LoadContinueBlog(ctx, userID, blogID)
 	if err != nil {
 		errChan <- fmt.Errorf("blog not found: %w", err)
 		return
@@ -128,7 +122,7 @@ func (s *DecompositionService) ContinueGeneration(ctx context.Context, userID uu
 				finalNewContent := newContentBuilder.String()
 				if finalNewContent != "" && !taskOnlyPersistenceMode() {
 					updatedContent := blog.Content + finalNewContent
-					if err := continuePersistence.SaveContinuedBlog(ctx, blog, updatedContent); err != nil {
+					if err := s.continuePersistence.SaveContinuedBlog(ctx, blog, updatedContent); err != nil {
 						fmt.Printf("Failed to update blog content: %v\n", err)
 					}
 				}
@@ -156,12 +150,7 @@ func (s *DecompositionService) BuildContinueTaskResult(
 	blogID uuid.UUID,
 	appendedContent string,
 ) (ContinueTaskResultSnapshot, error) {
-	continuePersistence := s.continuePersistence
-	if continuePersistence == nil {
-		continuePersistence = NewGormContinuePersistence(db.DB)
-	}
-
-	blog, err := continuePersistence.LoadContinueBlog(ctx, userID, blogID)
+	blog, err := s.continuePersistence.LoadContinueBlog(ctx, userID, blogID)
 	if err != nil {
 		return ContinueTaskResultSnapshot{}, fmt.Errorf("load continue blog for task result: %w", err)
 	}

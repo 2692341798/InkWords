@@ -65,12 +65,11 @@ func TestGeneratorService_saveToDB_RollsBackWhenUserTokenUpdateFails(t *testing.
 	fakeLLM := newGeneratorPersistTestLLMServer(t)
 	defer fakeLLM.Close()
 
-	service := &GeneratorService{
-		llmClient: &llm.DeepSeekClient{
-			APIKey: "test-key",
-			APIURL: fakeLLM.URL,
-			Client: fakeLLM.Client(),
-		},
+	service := NewGeneratorService(nil)
+	service.llmClient = &llm.DeepSeekClient{
+		APIKey: "test-key",
+		APIURL: fakeLLM.URL,
+		Client: fakeLLM.Client(),
 	}
 
 	err = service.saveToDB(context.Background(), uuid.New(), "file", "hello world")
@@ -103,12 +102,11 @@ func TestGeneratorService_saveToDB_PersistsBlogAndUpdatesTokens(t *testing.T) {
 	fakeLLM := newGeneratorPersistTestLLMServer(t)
 	defer fakeLLM.Close()
 
-	service := &GeneratorService{
-		llmClient: &llm.DeepSeekClient{
-			APIKey: "test-key",
-			APIURL: fakeLLM.URL,
-			Client: fakeLLM.Client(),
-		},
+	service := NewGeneratorService(nil)
+	service.llmClient = &llm.DeepSeekClient{
+		APIKey: "test-key",
+		APIURL: fakeLLM.URL,
+		Client: fakeLLM.Client(),
 	}
 
 	require.NoError(t, service.saveToDB(context.Background(), userID, "file", "hello"))
@@ -131,6 +129,20 @@ func TestGenerateBlogStream_DoesNotPersistBlogDirectlyWhenTaskModeEnabled(t *tes
 	svc := NewGeneratorService(nil)
 	require.NotNil(t, svc)
 	require.True(t, taskOnlyPersistenceMode())
+}
+
+func TestNewGeneratorServiceWithPersistence_FillsDefaultPersistence(t *testing.T) {
+	testDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+
+	previousDB := db.DB
+	db.DB = testDB
+	defer func() {
+		db.DB = previousDB
+	}()
+
+	svc := NewGeneratorServiceWithPersistence(nil, nil)
+	require.NotNil(t, svc.persistence)
 }
 
 func TestGeneratorService_BuildGenerateSingleTaskResult_TaskOnlyModeDoesNotPersistAndReturnsTaskResult(t *testing.T) {

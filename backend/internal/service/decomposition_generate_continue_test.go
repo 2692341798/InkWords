@@ -49,12 +49,11 @@ func TestContinueGeneration_TaskOnlyMode_DoesNotUpdateBlogDirectly(t *testing.T)
 	fakeLLM := newContinueGenerationStreamServer(t, "追加内容")
 	defer fakeLLM.Close()
 
-	service := &DecompositionService{
-		llmClient: &llm.DeepSeekClient{
-			APIKey: "test-key",
-			APIURL: fakeLLM.URL,
-			Client: fakeLLM.Client(),
-		},
+	service := NewDecompositionService(nil)
+	service.llmClient = &llm.DeepSeekClient{
+		APIKey: "test-key",
+		APIURL: fakeLLM.URL,
+		Client: fakeLLM.Client(),
 	}
 
 	chunkChan := make(chan string, 8)

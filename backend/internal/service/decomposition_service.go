@@ -105,6 +105,12 @@ func NewDecompositionServiceWithPersistences(
 	continuePersistence ContinuePersistence,
 ) *DecompositionService {
 	apiKey := os.Getenv("DEEPSEEK_API_KEY")
+	if seriesPersistence == nil {
+		seriesPersistence = NewGormSeriesPersistence(db.DB)
+	}
+	if continuePersistence == nil {
+		continuePersistence = NewGormContinuePersistence(db.DB)
+	}
 
 	rpmLimit := 10000
 	if v := os.Getenv("LLM_API_RPM_LIMIT"); v != "" {

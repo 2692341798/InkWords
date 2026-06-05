@@ -17,6 +17,19 @@
   - `cd backend && go test ./services/core-api/... ./services/llm-stream/... -count=1` 通过
   - `grep db.DB backend/internal/service/decomposition_generate*.go` 仅剩默认 GORM fallback 构造路径
 
+### [2026-06-05] Refactor - 深拆 core-api / llm-stream 第六轮：默认 persistence 适配器收紧到构造阶段
+- **需求背景**：
+  1. 在 `DecompositionService` 的系列与续写持久化边界全部接口化后，剩余的结构性技术债已经不再是“主流程直写库”，而是默认 GORM 适配器仍分散在多个 service 方法里作为隐式 fallback。
+  2. 这会继续模糊依赖装配边界，也让后续把默认适配器继续并入 `domain/blog` 或服务私有 repository 时，仍需在方法级别清理隐式兜底。
+- **本次完成**：
+  1. 按 TDD 先新增 `TestNewDecompositionServiceWithPersistences_FillsMissingDefaultAdapters`，锁定 `DecompositionService` 的缺省 `SeriesPersistence / ContinuePersistence` 必须在构造阶段一次性补齐。
+  2. 调整 `NewDecompositionServiceWithPersistences()`，把默认 `nil -> GORM` 装配集中到构造器；随后删除 `ensureSeriesParentAndDrafts()`、`handleSkippedSeriesChapter()`、`resolveSeriesOldContent()`、`ContinueGeneration()`、`BuildContinueTaskResult()` 中的隐式 fallback。
+  3. 同步收紧 `GeneratorService.saveToDB()`，要求默认 `GeneratedBlogPersistence` 也只通过 `NewGeneratorServiceWithPersistence()` 注入；并把相关测试从字面量构造 service 改为走正式构造器，避免继续依赖方法级兜底。
+- **验证记录**：
+  - `cd backend && go test ./internal/service -run 'Test(NewDecompositionServiceWithPersistences_FillsMissingDefaultAdapters|NewGeneratorServiceWithPersistence_FillsDefaultPersistence|GeneratorService_saveToDB_(RollsBackWhenUserTokenUpdateFails|PersistsBlogAndUpdatesTokens))' -count=1` 先失败、补实现后通过
+  - `cd backend && go test ./internal/service -count=1` 通过
+  - `cd backend && go test ./services/core-api/... ./services/llm-stream/... -count=1` 通过
+
 ### [2026-06-05] Refactor - 深拆 core-api / llm-stream 第四轮：系列旧正文读取与 skip 元信息接口化
 - **需求背景**：
   1. 在 `continue` 持久化接口化完成后，系列生成链路里仍散落两类轻量直连数据库行为：旧章节正文读取，以及 `skip` 章节的标题/排序更新。

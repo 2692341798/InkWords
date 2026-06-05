@@ -404,6 +404,20 @@ func TestDecompositionService_HandleSeriesChapterCompletion_UsesInjectedPersiste
 	require.JSONEq(t, `["Go"]`, string(persistence.savedChapter.TechStacks))
 }
 
+func TestNewDecompositionServiceWithPersistences_FillsMissingDefaultAdapters(t *testing.T) {
+	testDB := openDecompositionPersistTestDB(t)
+
+	previousDB := db.DB
+	db.DB = testDB
+	defer func() {
+		db.DB = previousDB
+	}()
+
+	svc := NewDecompositionServiceWithPersistences(nil, nil, nil)
+	require.NotNil(t, svc.seriesPersistence)
+	require.NotNil(t, svc.continuePersistence)
+}
+
 func TestDecompositionService_GenerateSeriesIntro_UsesInjectedPersistence(t *testing.T) {
 	previousDB := db.DB
 	db.DB = nil

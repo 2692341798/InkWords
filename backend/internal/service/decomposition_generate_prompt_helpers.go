@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"inkwords-backend/internal/infra/db"
 	"inkwords-backend/internal/infra/llm"
 	"inkwords-backend/internal/prompt"
 )
@@ -47,12 +46,7 @@ func (s *DecompositionService) resolveSeriesOldContent(ctx context.Context, chap
 		return ""
 	}
 
-	seriesPersistence := s.seriesPersistence
-	if seriesPersistence == nil {
-		seriesPersistence = NewGormSeriesPersistence(db.DB)
-	}
-
-	oldContent, err := seriesPersistence.LoadSeriesOldContent(ctx, blogID)
+	oldContent, err := s.seriesPersistence.LoadSeriesOldContent(ctx, blogID)
 	if err != nil {
 		return ""
 	}
