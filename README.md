@@ -2,252 +2,279 @@
 
 把资料变成知识，把知识变成能力。
 
-## 1. 项目简介 (About)
-**墨言知识训练平台 (InkWords Trainer)** 是一款面向个人知识沉淀与复习的本地知识工作台：把你的源码仓库/技术文档/课件包快速整理成可持续增长的 Obsidian 知识库（LLM Wiki Pattern），并提供“知识漫游复习”工作台帮助你把知识真正记住、用起来。
+## 项目定位
+InkWords Trainer 是一个面向个人知识沉淀、知识复习与可选内容输出的本地知识工作台。
 
-它依然支持将资料进一步生成小白友好、可复现的系列技术博客，但 README 的主叙事将更聚焦在“知识沉淀 → 复习闭环 → 可选的对外输出（博客/导出）”。
+它的主链路不再只是“把资料生成博客”，而是：
 
-最近一次前端构建收尾中，`KnowledgeReview` 相关测试夹具已与当前 `ReviewSessionResponse.session_outline` 模型对齐，同时清理了 `reviewStore` 中重复的状态声明，确保 `npm run build` 与 Docker 重建链路不再被现有 TypeScript 错误阻塞。
+`资料摄入 -> 知识整理 -> Obsidian 沉淀 -> 知识漫游复习 -> 可选输出为博客 / PDF / Obsidian`
 
-仓库治理约定：本地协作辅助文件（例如 `CONTRIBUTING.md`）不作为产品交付物进入版本库，应继续通过 `.gitignore` 保持本地化，避免把个人流程说明误纳入公开仓库历史。
+当前项目的主叙事是“知识训练平台”：
+- 你可以导入 Git 仓库、技术文档、PDF、ZIP 课件包。
+- 系统会把资料整理成适合长期维护的知识卡片与结构化内容。
+- 你可以在“知识漫游复习”工作台里反复训练这些内容。
+- 如果需要，再把整理后的内容生成系列博客、导出 PDF，或直通 Obsidian Vault。
 
-## 2. 核心特性 (Features)
-- **一键知识摄入（Ingest）**：支持解析 Git 仓库、本地文档（PDF/DOCX/Markdown/TXT）与 ZIP 课件包，自动生成符合 Karpathy LLM Wiki Pattern 的 `sources/`、`concepts/`、`entities/` 卡片与双向链接。
-- **动态提示词类型锁定**：文件 Analyze 阶段会先自动识别内容类型，并锁定最匹配的提示词 profile；例如心理学/沟通类书籍会显示“心理学经典解读”，技术手册会显示“技术资料讲解”，后续正文生成会沿用同一个 profile，避免大纲和正文语义漂移。
-- **系列章节质量门禁基础**：后端已为系列章节四段式流水线补齐 `理解 -> 草稿 -> 审稿 -> 终稿` 的结构化类型基础，并对“机制解释、案例、复现、修订动作”增加硬门禁校验，防止不完整章节结果直接流入后续补强阶段。
-- **系列级稳定前缀与章节质量主链路**：后端已抽出 `buildSeriesSharedPromptPrefix()` 固定系列标题、读者画像、总大纲和统一质量门禁，并把系列章节主链路切换为 `理解 -> 草稿 -> 审稿 -> 定向补强` 四段式；只有终稿补强阶段才会向前端持续流式输出正文，避免中间态草稿污染用户阅读体验。
-- **DeepSeek usage / 缓存命中可视化**：系列章节终稿补强完成后，前端进度卡会直接显示当前章节的 “缓存命中 / 未命中” 摘要，底层数据来自后端追加的 `usage` 事件（`prompt_tokens / completion_tokens / prompt_cache_hit_tokens / prompt_cache_miss_tokens`）。
-- **中文 PDF 兼容回退**：PDF 默认先走 Go 原生提取；若检测到严重乱码，会自动回退到 `pdftotext` 恢复文本，减少中文嵌入字体 PDF 直接解析失败的概率。
-- **知识库“热缓存 + 索引 + 日志”自动维护**：自动更新 `wiki/index.md`、`wiki/hot.md` 与 `wiki/log.md`，避免知识孤岛，让知识库可持续演进。
-- **知识漫游复习工作台（核心主链路）**：支持“随机抽一篇 / 手动选文”两种入口；推荐卡支持 `用这篇开始 / 提问开始 / 再抽一篇`，并提供 `light_recall / detailed_qa` 两种训练模式。会话会基于文章内容进行结构化追问，回答后明确给出“本轮目标 / 答到的点 / 漏掉的点 / 下一步建议”，帮助判断是否真正讲对重点。
-- **流程型入口与单步聚焦体验**：默认入口 `HomeEntry` 帮你在“知识复习 / 内容生成”之间选择路径，页面同一时间只聚焦一个主步骤，减少平铺与注意力分散。
-- **生成器三步流与步内进度**：博客生成工作台固定为“选择来源 → 配置解析 → 确认大纲”三步；解析/分析进度展示在“配置解析”内部，正文生成进度展示在“确认大纲”内部，不再跳入独立进度页。
-- **章节失败原因直显**：系列生成若出现章节失败，进度面板与侧边栏会直接展示中文失败原因，而不是只显示笼统的 `Error`；重新生成或重试后会自动清理旧错误提示。
-- **全链路流式体验（SSE）**：从解析、分析到生成与润色，全链路使用 SSE 推送进度与内容，让过程可见、可中断、可续写。
-- **单篇生成任务结果结构化**：在 `INKWORDS_TASK_PERSISTENCE_MODE=task_only` 下，单篇 `generate_single` 任务成功后会把标题、正文、来源类型、字数、技术栈与 token 估算写入结构化 `job_tasks.result_json`，不再固定保存 `{"done":true}`，为后续由 `core-api` 接管最终业务落库打基础。
-- **core-api 单篇结果回收**：当前 `core-api` 已能在 generation 任务成功路径中消费单篇 `generate_single` 的结构化 `result_json`，把正文写回 `blogs` 并累计 `users.tokens_used`；`continue`、`generate_series` 仍按后续任务逐步收口。
-- **continue 续写结果回收**：当前 `continue` 任务也已进入同一条 `task_only` 闭环，续写成功后会把 `blog_id / appended_content / final_content` 写入结构化 `job_tasks.result_json`，再由 `core-api` 按 `final_content` 更新博客正文并累计 token。
-- **generate_series 系列结果回收**：当前 `generate_series` 任务也已进入同一条 `task_only` 闭环，系列完成后会把父博客导读和章节数组写入结构化 `job_tasks.result_json`，再由 `core-api` 事务性更新系列父博客与章节草稿。
-- **前端端口可覆盖**：`docker-compose.yml` 中 `frontend` 宿主机端口现支持通过 `FRONTEND_PORT` 覆盖，默认仍是 `80`；当本机 `:80` 被其它进程占用时，可临时使用 `FRONTEND_PORT=8088 docker compose --env-file backend/.env up -d --build frontend` 并通过 `http://localhost:8088` 进行本地验证。
-- **系列章节质量阶段可视化**：系列章节生成进度卡会直接显示 `理解章节 / 生成草稿 / 技术审稿 / 定向补强 / 输出终稿` 等中文阶段标签，帮助用户理解当前流水线停留在哪一步。
-- **阅后即焚的安全策略**：解析源文件只在内存中处理，任务完成后立即清理临时产物；对用户可见正文做净化，剥离 `<think>` 与对话式前言。
-- **可选的对外输出：博客生成与导出**：在知识沉淀基础上，支持生成可复现的系列技术博客、导读串联，以及批量导出为 Markdown ZIP 或直通 Obsidian Vault。
-- **超大规模资料处理**：对超长文本/大型仓库支持 Map-Reduce 分块并发分析，降低上下文遗忘并提升稳定性。
+## 核心能力
+- **知识摄入**：支持 Git 仓库、本地文档（PDF / DOCX / Markdown / TXT）和 ZIP 课件包解析，并生成适合知识沉淀的结构化内容。
+- **知识库沉淀**：围绕 Obsidian LLM Wiki Pattern 组织 `sources/`、`concepts/`、`entities/`、索引页与热缓存页。
+- **知识漫游复习**：提供独立的复习工作台，支持随机抽题、手动选文、轻提示复述与细致问答。
+- **动态提示词锁定**：文件 Analyze 会自动识别内容类型并锁定提示词 profile，避免大纲和正文语义漂移。
+- **任务式生成链路**：生成主链路已经切到“创建任务 -> 队列消费 -> SSE 回放”的后台任务模式。
+- **任务式解析与导出**：大文件 / ZIP 解析、系列 PDF 导出已开始接入统一任务中心。
+- **系列生成质量流水线**：章节生成过程支持 `理解 -> 草稿 -> 审稿 -> 定向补强 -> 输出终稿` 的分阶段可视化。
+- **可选内容输出**：支持生成系列博客、续写、润色、导出 Markdown / PDF、导出到 Obsidian。
 
-## 3. 技术栈与架构 (Tech Stack)
-本项目采用前后端完全分离的 **Monorepo** 结构。
+## 当前阶段
+项目最近一轮变化的重点，不是新增一个零散功能，而是整体运行形态和主链路的升级：
 
-- **前端 (`frontend/`)**：
-  - React + Vite + Tailwind CSS v4 + Shadcn UI
-  - Zustand (全局状态管理，接管 SSE 长连接保活)
-  - 目录边界：`src/pages`（页面级）/ `src/components`（组件）/ `src/hooks`（编排）/ `src/services`（请求层）/ `src/store`（全局状态）
-  - 自定义 Rehype/Remark 插件 (AST 行号注入与图表拦截)
-- **后端 (`backend/`)**：
-  - Go + Gin 框架 (依赖注入分层架构)
-  - 目录边界：`internal/domain/*`（领域切片）/ `internal/transport/http`（HTTP 适配）/ `internal/infra/*`（基础设施能力）
-  - Map-Reduce 并发调度引擎 (`x/sync/semaphore`)
-  - SSE (Server-Sent Events) 打字机流式推送与空闲超时打断机制
-  - GORM + PostgreSQL 14+
-  - DeepSeek V4 API 原生前缀缓存 (Prompt Caching)
-  - JWT & OAuth2.0 无状态鉴权
-- **运维与测试**：
-  - Docker & Docker Compose (多阶段构建)
-  - Nginx (代理路由与流式防缓冲优化)
-  - Playwright (全链路端到端 E2E 测试)
+- **产品定位升级**：从“博客助手”升级为“知识训练平台”。
+- **生产形态升级**：从单体后端演进为 Docker Compose 多服务架构。
+- **任务中心升级**：生成、解析、导出逐步统一到 `job_tasks + RabbitMQ + SSE` 模型。
+- **复习链路升级**：知识漫游复习从固定模板问答升级为文章驱动的结构化追问。
+- **代码边界升级**：`parser-service`、`review-service`、`export-service` 已完成服务目录归属；`core-api` 与 `llm-stream` 正在做深拆分。
 
-## 5. 快速开始 (Quick Start)
+## 系统架构
+项目采用前后端分离的 Monorepo 结构：
 
-### 5.1 推荐：Docker 一键部署
-项目已提供完整的容器化支持。Docker Compose 运行时通过 CLI `--env-file` 注入环境变量，再拉起前端网关、后端多服务、PostgreSQL、Redis 与 RabbitMQ：
+- `frontend/`：React 18 + Vite + Tailwind CSS + shadcn/ui + Zustand
+- `backend/`：Go + Gin + PostgreSQL + RabbitMQ + Redis
+- `docker-compose.yml`：当前唯一的容器化编排入口
+
+### 生产形态
+当前标准运行形态是“前端单入口 + 后端多服务”：
+
+- `frontend`：Nginx 静态站点与统一网关
+- `core-api`：核心业务 API、任务创建 / 查询 / SSE 回放、用户 / 博客主事实写入
+- `llm-stream`：流式生成执行与 generation worker
+- `parser-service`：文件 / ZIP 解析与 parse worker
+- `export-service`：PDF 导出与 export worker
+- `review-service`：知识漫游复习服务
+- `db`：PostgreSQL
+- `redis`：缓存与状态辅助
+- `rabbitmq`：任务队列
+- `obsidian-bridge`：容器访问宿主机 Obsidian Local REST API 的桥接服务
+
+### 对外入口
+- 默认公开入口始终是 `http://localhost`
+- 所有页面访问都应走前端网关，而不是直接访问后端端口
+- 在宿主机 `:80` 冲突时，可临时用 `FRONTEND_PORT=8088` 覆盖为 `http://localhost:8088`
+
+### 网关分流
+前端 Nginx 会按路径把请求分发到不同服务：
+
+- `/api/v1/stream/*` -> `llm-stream`
+- `/api/v1/project/parse` -> `parser-service`
+- `/api/v1/review/*` -> `review-service`
+- `/api/v1/blogs/:id/export*` -> `export-service`
+- 其余 `/api/*` -> `core-api`
+
+## 关键工作流
+### 1. 资料摄入
+- Git 仓库：扫描目录结构、识别核心模块、按需做大纲分析
+- 文件上传：支持 PDF / DOCX / Markdown / TXT
+- ZIP 课件包：支持安全解压、白名单筛选、文本聚合与解析摘要
+- 大文件保护：超长文本走 Map-Reduce 分块分析
+
+### 2. 提示词与场景控制
+- 创作场景支持：
+  - `电子书解读`
+  - `开卷复习`
+  - `小白教程`
+- 文件 Analyze 会额外锁定 `prompt_profile`
+- 大纲生成后，场景与提示词类型都会以只读标签形式展示
+
+### 3. 任务中心
+- **生成任务**：前端先创建 generation task，再订阅 `/api/v1/tasks/:id/stream`
+- **解析任务**：ZIP 与 `50MB` 以上普通单文件默认走 parse task
+- **导出任务**：系列 PDF 默认走 export task，完成后通过受控下载接口取回文件
+
+### 4. 知识漫游复习
+- 提供独立入口，不再和生成器混成一个工作流
+- 支持“随机抽一篇 / 手动选文”
+- 支持 `light_recall` 和 `detailed_qa`
+- 回答后会返回“本轮目标 / 答到的点 / 漏掉的点 / 下一步建议”
+
+### 5. 内容输出
+- 系列博客生成
+- 单篇续写与润色
+- Markdown / ZIP 导出
+- PDF 异步导出
+- 导出到 Obsidian Vault
+
+## 快速开始
+### 1. 准备环境变量
+先复制环境文件：
+
 ```bash
-# 首次启动：先准备配置文件
 cp backend/.env.example backend/.env
+```
 
-# 标准启动命令
+至少需要确认以下变量：
+- `DEEPSEEK_API_KEY`
+- `JWT_SECRET`
+- `OBSIDIAN_REST_API_KEY`
+- `OBSIDIAN_VAULT_PATH`
+
+常用默认值已在 `backend/.env.example` 中提供，例如：
+- `POSTGRES_USER`
+- `POSTGRES_PASSWORD`
+- `POSTGRES_DB`
+- `RABBITMQ_URL`
+- `RABBITMQ_EXCHANGE`
+- `RABBITMQ_GENERATION_QUEUE`
+- `RABBITMQ_PARSE_QUEUE`
+- `RABBITMQ_EXPORT_QUEUE`
+
+### 2. 启动整套服务
+
+```bash
 docker compose --env-file backend/.env up -d --build
 ```
 
-如需仅对“流式生成服务”独立扩容（推荐在大规模生成、并发多章节时使用），可执行：
+如需完整重启：
+
+```bash
+docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build
+```
+
+如需只扩容流式生成服务：
 
 ```bash
 docker compose --env-file backend/.env up -d --build --scale llm-stream=3
 ```
-如需应用新代码或完整重启，请使用：
-```bash
-# 标准重启命令
-docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build
-```
 
-启动前请先在 `backend/.env` 中配置必要环境变量：
-- **必须配置**：`DEEPSEEK_API_KEY`、`JWT_SECRET`、`OBSIDIAN_REST_API_KEY`、`OBSIDIAN_VAULT_PATH`
-- **Docker 运行时建议显式维护**：`POSTGRES_USER`、`POSTGRES_PASSWORD`、`POSTGRES_DB`
-- **按需覆盖**：`FRONTEND_URL`、`REDIS_URL`、`RABBITMQ_URL`、`RABBITMQ_EXCHANGE`、`RABBITMQ_GENERATION_QUEUE`、`RABBITMQ_PARSE_QUEUE`、`RABBITMQ_EXPORT_QUEUE`、`EXPORT_ARTIFACTS_DIR`、`OBSIDIAN_REST_API_BASE_URL`、`OBSIDIAN_WIKI_DIR`
-
-当前 Docker 默认仅暴露前端入口 `http://localhost`；`core-api`、`llm-stream`、`parser-service`、`export-service`、`review-service`、`db`、`redis`、`rabbitmq` 仅在 Docker 内部网络 `inkwords-network` 中互通，不再默认暴露宿主机端口。当前 Docker 本地开发仍默认通过 `backend/.env` 中的 `OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY=true` 访问 Obsidian Local REST API，避免把宿主机错误文件挂载成证书；如需启用严格证书校验，请显式配置 `OBSIDIAN_REST_API_CERT_PATH` 指向真实插件证书，并将 `OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY=false`。
-
-Task 3 已为 `core-api / llm-stream / parser-service / export-service / review-service / frontend` 增加 Compose healthcheck。标准重启后可用以下命令确认运行契约已经生效：
+### 3. 验证运行状态
 
 ```bash
-docker compose --env-file backend/.env ps
-```
-
-预期结果：前端与五个后端服务均显示 `Up (healthy)`。其中后端容器内部统一暴露：
-- `GET /api/v1/ping`：兼容历史探针
-- `GET /health`：进程存活探针
-- `GET /ready`：依赖就绪探针
-
-所有后端请求现已统一透传或生成 `X-Request-ID`，并输出带 `service / request_id / path / method / status / latency_ms` 字段的结构化访问日志，便于跨服务排障。
-
-Task 9 已新增微服务冒烟 Runbook：[microservices-smoke-check.md](file:///Users/huangqijun/Documents/墨言博客助手/InkWords/docs/runbooks/microservices-smoke-check.md)。当你修改了 Compose、Nginx 代理、任务中心、健康检查或服务入口后，请优先按这份清单执行“服务启动 -> 网关访问 -> 任务创建 -> 任务 SSE -> review / parser / export 基础通路”验证，而不是只看单个容器是否启动。
-
-生成链路当前默认走“任务式 SSE”：前端统一先向 `core-api` 创建生成任务，再订阅 `/api/v1/tasks/:id/stream`；任务消息经 RabbitMQ 投递给 `llm-stream` worker，再由 `core-api` 基于数据库中的任务事件表对外继续输出 SSE。这样可以在保持前端入口与 `/api/*` 路径不变的前提下，把长耗时生成从同步长请求收敛为可排队、可查询、可取消的后台任务。旧 `/api/v1/stream/*`、`/api/v1/blogs/:id/continue`、`/api/v1/blogs/:id/polish` 仍保留，作为紧急回滚兼容路径。
-
-`parser-service` 也已开始接入同一套任务中心：`core-api` 新增 `POST /api/v1/tasks/parse`，把 `parse_file / parse_archive` 任务投递到 RabbitMQ `parse.requested`，再由 `parser-service` worker 异步消费并把结果写回任务表。当前前端默认让 `.zip` 课件包和 `50MB` 以上的普通单文件走这条任务式解析链路；`50MB` 及以下的普通单文件仍保留 `/api/v1/project/parse` 作为同步兼容路径。
-
-`export-service` 现已接入同一套任务中心：前端侧边栏导出 PDF 时，会先向 `core-api` 创建 `POST /api/v1/tasks/export`，随后订阅统一任务流，等待 `export-service` worker 消费 RabbitMQ `export.requested` 后生成 PDF，并通过 `GET /api/v1/tasks/:id/download` 走受控下载。当前导出产物落在共享卷 `EXPORT_ARTIFACTS_DIR`，下载成功后会立即删除文件；同步 `/api/v1/blogs/:id/export/pdf` 仍保留，作为紧急回滚路径。
-
-Task 4 已把 `export-service` 的启动装配、私有路由、RabbitMQ consumer 与 artifact store 收口到 `backend/services/export-service/` 服务自有目录，和 `parser-service`、`review-service` 保持一致的目录归属；本轮仅调整服务代码边界，不改变上述导出行为、对外 API、任务协议或数据库结构。
-
-Phase 1 当前可视为已完成服务目录归属收口：`parser-service`、`review-service`、`export-service` 的服务私有入口、bootstrap、私有路由与 worker 装配都以 `backend/services/<service>/` 为单一归属。后续如果改动这三个服务的 Docker 入口、路由或健康检查，请按 [microservices-smoke-check.md](file:///Users/huangqijun/Documents/墨言博客助手/InkWords/docs/runbooks/microservices-smoke-check.md) 重新执行整套 Compose 冒烟，而不是只验证单个容器。
-
-Phase 2 现已启动 `core-api / llm-stream` 深拆分第一轮：两者的主 HTTP 装配也已分别迁入 `backend/services/core-api/` 与 `backend/services/llm-stream/` 的服务自有 `bootstrap/routes/cmd`。对外 API 和单入口访问方式不变，但共享 `internal/transport/http/v1/routes.go` 与 `internal/transport/http/v1/api/stream_api.go` 已降级为过渡兼容层。与此同时，`GeneratorService` 已把最终落库收口到显式 `GeneratedBlogPersistence` 接口，默认仍由 GORM 适配 legacy 写入；仓库继续保留 `INKWORDS_TASK_PERSISTENCE_MODE=task_only` 开关，用于在拆分阶段控制 legacy 生成链路不再由 `llm-stream` 直接把最终结果写入 `blogs / users`，为后续把业务事实统一回收到 `core-api` 做准备。
-
-如果你需要在 Docker 模式下使用 GitHub OAuth，Compose 现在会默认把回调地址固定为 `http://localhost/api/v1/auth/callback/github`，避免错误跳回 Vite 本地开发端口 `5173`。如果你需要在 Docker 下覆盖这个地址（例如远程域名调试），请显式设置 `DOCKER_GITHUB_REDIRECT_URL`。如果你运行的是 Vite 本地开发服务器，再继续使用 `backend/.env` 中的 `GITHUB_REDIRECT_URL=http://localhost:5173/api/v1/auth/callback/github`。
-
-`OBSIDIAN_VAULT_PATH` 不再提供任何机器私有的默认绝对路径。请显式把它设置为你的 Obsidian `wiki/` 根目录，否则容器启动前的 Compose 渲染会直接报错，避免静默挂载到错误位置。
-如遇导出到 Obsidian 提示“无法解析 Obsidian 目录列表响应”，请确认后端版本已兼容 Obsidian Local REST API 目录列表 `{ "files": [...] }` 返回格式。
-如遇上传 PDF/DOCX/Markdown/TXT/ZIP 后仍提示 `git_url is required for git source type`，请先执行标准重启命令并强制刷新浏览器，以确保前端静态资源与后端兼容逻辑同步生效。
-
-### 5.1.1 ZIP 课件包上传说明
-- 支持上传 `.zip` 课件包，后端会自动扫描其中的受支持文档与代码文本文件。
-- 当前支持的文档类包括：`.pdf`、`.docx`、`.md`、`.markdown`、`.txt`。
-- `.pdf` 当前采用“主提取 + 回退恢复”双通道策略：若主提取结果出现严重乱码，后端会自动尝试 `pdftotext`；若仍无法可靠恢复，则返回稳定中文提示，建议改用可复制文本的 PDF、DOCX 或 Markdown。
-- 当前支持的代码/文本类包括：`.go`、`.js`、`.ts`、`.tsx`、`.jsx`、`.py`、`.java`、`.cpp`、`.c`、`.h`、`.hpp`、`.rs`、`.sql`、`.sh`、`.json`、`.yaml`、`.yml`。
-- 当前不支持 `.doc`、`rar/7z/tar.gz`、图片 OCR 与音视频转写。
-- 上传成功后，前端会显示 ZIP 解析摘要，例如保留、去重、忽略与失败数量。
-- 当前 `.zip` 课件包与 `50MB` 以上的普通单文件会先创建解析任务，再订阅 `/api/v1/tasks/:id/stream` 等待后台完成；`50MB` 及以下的普通文件仍保留同步解析接口作为兼容与回滚路径。
-
-### 5.1.2 创作场景说明
-- **电子书解读**：适合经典著作、长文档、概念材料，输出更偏向篇章结构、观点提炼和白话解读。
-- **开卷复习**：适合课件、实验指导、考试范围资料，输出更偏向考点清单、步骤模板、易错点和速查结构。
-- **小白教程**：适合 Git 仓库、项目教程、官方文档，输出更偏向环境准备、目录结构、主链路和排错说明。
-- **默认推荐**：
-  - Git 仓库默认推荐 `beginner_walkthrough`
-  - 文件上传默认推荐 `ebook_interpretation`
-- **交互约束**：
-  - 只能在生成大纲前切换创作场景。
-  - 大纲生成后会隐藏场景选择区，并在大纲头部显示当前场景的只读标签。
-- **动态提示词类型**：
-  - 当来源是文件上传时，Analyze 会自动识别当前资料的内容类型，并返回一个已锁定的提示词 profile。
-  - 大纲生成后，页面除了显示“当前创作场景”，还会显示“当前提示词类型”只读标签，例如“心理学经典解读”“开卷复习材料”“技术资料讲解”。
-  - 后续单篇生成、系列章节生成与系列导读都会沿用这个已锁定的 profile，不需要用户再次选择。
-- **兼容策略**：旧前端即便未显式发送 `scenario_mode`，后端也会按 `source_type` 自动兜底，避免现有链路回归。
-- **分类失败兜底**：如果内容类型识别失败或返回非法值，系统会按当前创作场景自动回退到默认提示词，并把回退原因展示在 Analyze 结果里。
-
-### 5.1.3 知识漫游复习说明
-- 侧边栏新增“知识漫游复习”入口，登录后可直接进入独立工作台。
-- 当前支持两种进入方式：
-  - 随机抽一篇
-  - 选择文章复习
-- 推荐题卡默认暴露三种动作：
-  - `用这篇开始`
-  - `提问开始`
-  - `再抽一篇`
-- 当前支持两种训练模式：
-  - `light_recall`：轻提示复述
-  - `detailed_qa`：细致问答
-- 若当前题卡 `available_modes` 不包含 `detailed_qa`，则 `提问开始` 会保持禁用态，避免前端发起后端不支持的模式。
-- 首页“继续上次任务”只会恢复未完成的复习会话；已完成会话会回退到最近博客任务或默认入口，不再显示为“会话仍可继续”。
-- 运行依赖：
-  - 后端需要能访问 Obsidian `wiki/` 目录（由 `OBSIDIAN_WIKI_DIR` 指定，默认 `wiki`）。
-  - PostgreSQL 会持久化 `review_sessions` 与 `review_turns`，用于保存会话状态与轮次记录。
-- 若进入页面后提示无法获取复习题卡，请优先检查：
-  - 本地 Obsidian 知识库是否已存在可复习的 `wiki` 页面
-  - `backend/.env` 中 Obsidian 相关变量是否已配置
-  - 是否已执行 `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build` 让前后端与迁移保持一致
-
-### 5.1.4 流程型入口说明
-- 当用户未打开具体博客编辑器时，应用默认先进入 `HomeEntry`，而不是直接落到生成器表单。
-- 首页会提供两条主路径：
-  - `生成博客`
-  - `知识复习`
-- 首页底部保留继续上次任务与最近记录，方便从流程入口回到真实工作内容。
-- 进入 `Generator` 或 `KnowledgeReview` 后，主区一次只展示当前步骤；其余步骤通过共享 `StepStrip` 以预览或进度态呈现。
-
-### 5.1.5 系列章节质量流水线验证
-- 章节生成链路当前已升级为 `understanding -> drafting -> reviewing -> revising -> streaming -> usage -> completed/error`。
-- 前端进度卡会把这些状态展示为中文“质量阶段”，并在收到 `usage` 后展示“缓存命中 / 未命中”摘要。
-- 推荐验证命令：
-
-```bash
-cd backend
-go test ./...
-```
-
-```bash
-cd frontend
-npm run test -- --run
-```
-
-```bash
-docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build
 docker compose --env-file backend/.env ps
 curl -I http://localhost
+curl --fail http://localhost/api/v1/ping
 ```
 
-- 推荐始终使用 `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build`；这样 Compose 会显式加载 `backend/.env`，避免因 `OBSIDIAN_VAULT_PATH` 未注入而在解析 bind mount 时直接报错。
+预期结果：
+- `frontend / core-api / llm-stream / parser-service / export-service / review-service` 为 `Up (healthy)` 或等价健康状态
+- `http://localhost` 可访问
+- `/api/v1/ping` 可返回成功响应
 
-由于后端仅提供 API 接口，前端服务由独立的 Nginx 容器代理。项目启动后：
-1. **必须通过前端入口**访问：`http://localhost` (映射于宿主机 80 端口)。
+### 4. 端口冲突处理
+当宿主机 `:80` 被占用时，可临时覆盖前端端口：
 
-### 5.2 本地开发环境运行
-如果您需要进行二次开发，请确保本地已安装 Node.js 18+、Go 1.25+ 和 PostgreSQL 14+。
+```bash
+FRONTEND_PORT=8088 docker compose --env-file backend/.env up -d --build frontend
+```
 
-**启动后端：**
+然后通过 `http://localhost:8088` 访问。
+
+## 本地开发
+### 后端本地开发
+本地开发 / 集成调试仍保留聚合入口：
+
 ```bash
 cd backend
 cp .env.example .env
 go mod tidy
 go run ./cmd/server/main.go
 ```
-*后端服务默认运行在 `http://localhost:8080`*
 
 说明：
-- Docker Compose 的生产形态为多服务（`core-api/llm-stream/parser-service/export-service/review-service`），通过前端 Nginx 统一对外提供服务（入口 `http://localhost`）。
-- `cmd/server` 是聚合入口，用于本地开发/集成调试；Docker 镜像默认不再隐式启动该入口。
+- 本地聚合入口默认运行在 `http://localhost:8080`
+- `cmd/server` 主要用于本地开发和集成调试
+- Docker 生产形态默认不再使用这个聚合入口
 
-### 5.2.1 服务写入归属矩阵（Task 4）
-- `core-api` 事实拥有并负责写入：`users`、`oauth_tokens`、`user_prompt_settings`、`blogs`、`job_tasks`、`job_task_events`
-- `review-service` 事实拥有并负责写入：`review_sessions`、`review_turns`
-- 当前唯一允许的跨服务写入例外：`llm-stream`、`parser-service`、`export-service` 可通过 `internal/domain/task` 的显式仓储接口写 `job_tasks / job_task_events`
-- 当前明确待收口的技术债：`backend/internal/service/generator.go` 已先收口为显式 `GeneratedBlogPersistence` 接口，但默认适配器仍由 legacy GORM 实现承接；`backend/internal/service/decomposition_generate*.go` 仍直接使用全局 `db.DB` 写 `blogs / users`，是下一批需要继续收口的对象
-- 详细边界规则与后续收口步骤见 [core-blog-task-boundary.md](file:///Users/huangqijun/Documents/墨言博客助手/InkWords/docs/runbooks/core-blog-task-boundary.md)
+### 前端本地开发
 
-**启动前端：**
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-*前端页面默认运行在 `http://localhost:5173`*
 
-### 5.3 仓库文件整理与大文件策略
-- 本仓库不追踪构建产物/大文件：`backend/server`、`backend/inkwords-server`、`backend/bin/*`、`pdf/*.pdf`、`dogfood-output/` 等均应保持为本地产物或通过脚本/CI 生成。
-- `dogfood-output/` 可能包含本地调试截图与浏览器存储（含 token），只允许本地存在，禁止提交进 Git。
+前端开发服务器默认运行在 `http://localhost:5173`。
 
-## 6. 文档索引与 AI 协作指南 (AI Collaboration)
-本项目深度拥抱 **Vibe Coding**（AI 辅助编程）理念。在项目根目录下，我们维护了 `.trae/rules` 作为全栈开发的核心护栏。
+## 目录结构
+```text
+InkWords/
+├── frontend/                    # React 前端
+├── backend/                     # Go 后端
+│   ├── cmd/server/              # 本地聚合入口
+│   ├── internal/                # 共享领域 / transport / infra
+│   ├── services/
+│   │   ├── core-api/            # 核心 API 服务
+│   │   ├── llm-stream/          # 流式生成服务
+│   │   ├── parser-service/      # 解析服务
+│   │   ├── export-service/      # 导出服务
+│   │   └── review-service/      # 复习服务
+│   └── shared/                  # 服务间共享基础层
+├── docs/runbooks/               # 运行与排障手册
+├── .trae/documents/             # 项目基准文档
+└── docker-compose.yml           # 多服务编排入口
+```
 
-⚠️ **【重要提示给 AI 助手与开发者】**
-在着手开发任何新功能、修改现有逻辑之前，**必须**先阅读 `.trae/documents/` 目录下的核心基准文档。严禁脱离文档上下文“闭门造车”。项目基准文档索引如下：
+## 技术栈
+### 前端
+- React 18
+- Vite
+- Tailwind CSS
+- shadcn/ui
+- Zustand
+- `@microsoft/fetch-event-source`
 
-- 📖 [1. 产品需求文档 (PRD)](.trae/documents/InkWords_PRD.md)
-- 🏗️ [2. 项目架构文档 (Architecture)](.trae/documents/InkWords_Architecture.md)
-- 💾 [3. 数据库设计文档 (Database)](.trae/documents/InkWords_Database.md)
-- 🔌 [4. API 接口设计文档 (API)](.trae/documents/InkWords_API.md)
-- 📅 [5. 开发计划与日志 (Plan & Log)](.trae/documents/InkWords_Development_Plan_and_Log.md)
-- 💬 [6. AI 对话与决策摘要 (Conversation Log)](.trae/documents/InkWords_Conversation_Log.md)
-- 🧪 [7. 微服务冒烟检查 Runbook](docs/runbooks/microservices-smoke-check.md)
+### 后端
+- Go 1.25+
+- Gin
+- GORM
+- PostgreSQL 14+
+- RabbitMQ
+- Redis
+- DeepSeek API
 
-**Documentation as Code (代码与文档强同步)**：
-当业务逻辑、表结构或接口路由发生变更时，AI 助手**必须在修改代码的同一个执行上下文中**同步更新上述基准文档，并在日志中记录变动。
+### 基础设施
+- Docker
+- Docker Compose
+- Nginx
+- Obsidian Local REST API
+
+## 当前微服务化进度
+当前可以把项目理解为“多服务已落地，核心双服务仍在深拆”：
+
+- 已完成：
+  - `parser-service`、`review-service`、`export-service` 的服务自有入口与装配收口
+  - Docker Compose 多服务生产形态
+  - Nginx 单入口网关分流
+  - 生成 / 解析 / 导出任务中心基础链路
+- 进行中：
+  - `core-api / llm-stream` 深拆分第一轮
+  - 生成结果由 `core-api` 逐步回收最终业务落库
+  - legacy 共享 transport 和共享写入边界的进一步收口
+
+## 运行与验证建议
+当你修改了以下内容之一时，建议优先跑微服务冒烟检查：
+- `docker-compose.yml`
+- `frontend/nginx.conf`
+- `backend/services/*/cmd/main.go`
+- 任务中心、健康检查、服务入口、网关路由相关逻辑
+
+推荐参考：
+- [微服务冒烟检查 Runbook](docs/runbooks/microservices-smoke-check.md)
+- [core-blog-task-boundary.md](docs/runbooks/core-blog-task-boundary.md)
+- [review-db-migration.md](docs/runbooks/review-db-migration.md)
+
+## 文档索引
+项目采用 Docs-as-Code，以下文档与代码需保持同步：
+
+- [产品需求文档 PRD](.trae/documents/InkWords_PRD.md)
+- [项目架构文档 Architecture](.trae/documents/InkWords_Architecture.md)
+- [数据库设计文档 Database](.trae/documents/InkWords_Database.md)
+- [API 接口文档 API](.trae/documents/InkWords_API.md)
+- [开发计划与日志 Plan & Log](.trae/documents/InkWords_Development_Plan_and_Log.md)
+- [对话与决策摘要 Conversation Log](.trae/documents/InkWords_Conversation_Log.md)
+
+## 开发约束
+- 修改业务逻辑、接口或表结构时，需要同步更新上述文档
+- 默认通过 Docker Compose 验证完整运行形态
+- 前端界面文本以中文为准
+- 生成 / 解析源文件遵循“阅后即焚”，不持久化原始文件实体
+
+## 说明
+如果你希望把它当作“博客生成平台”来用，也完全可以；只是当前项目的长期定位已经从“生成一篇文章”升级为“围绕资料沉淀、知识复习与可选输出的知识训练闭环”。

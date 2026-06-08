@@ -1,6 +1,20 @@
 # 墨言知识训练平台 (InkWords Trainer) - 开发计划与日志
 > **目标**：跟踪项目的核心开发模块、里程碑进度以及每日开发记录。
 
+### [2026-06-08] Docs - 仓库文档与治理资产同步
+- **需求背景**：
+  1. 用户要求把当前工作区提交到远端并创建 PR；在检查后确认当前改动主体并非新的功能代码，而是 `README.md` 重写、仓库治理文件删除和一组 `docs/superpowers/*` 设计/计划文档新增。
+  2. 仓库规则要求在提交前同步 `.trae/documents/*` 与 `README.md`，并明确本次改动不会把本地敏感配置带入 Git 历史。
+- **本次完成**：
+  1. 确认本轮按“Docs PR，不打标签”处理，并将当前现有改动统一纳入同一次文档整理提交范围。
+  2. 补充 `.trae/documents/InkWords_API.md`、`InkWords_Architecture.md`、`InkWords_Database.md`、`InkWords_PRD.md`、`InkWords_Conversation_Log.md`、`InkWords_Development_Plan_and_Log.md` 的同步记录，声明本轮仅为文档与仓库治理调整，不改变运行时行为。
+  3. 保持 `backend/.env` 这类本地运行配置不进入提交范围，避免敏感信息泄漏。
+- **验证记录**：
+  - `git status --short` 已检查当前文件范围
+  - `git diff --stat` 已检查本轮差异量级
+  - `git branch -vv` 与 `git ls-remote --heads origin agent/20260605-series-persistence-boundary` 已检查当前分支与远端状态
+  - `git tag --sort=-v:refname | head -n 20` 已检查现有标签基线
+
 ### [2026-06-05] Fix - 深拆 core-api / llm-stream 第十六轮：阻断跨用户系列导读写入
 - **需求背景**：
   1. 在把旧正文读取改为 `user_id + blog_id` 双重约束后，继续沿 `SeriesPersistence` 审计发现 `SaveSeriesIntro()` 与 `MarkSeriesIntroFailed()` 仍只按 `parent_id` 写父稿。

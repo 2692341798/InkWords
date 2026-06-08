@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - 产品需求文档 (PRD)
 
 ## 0. 变更记录
+- 2026-06-08：执行一次文档与仓库治理同步：刷新 `README.md`、补充 `docs/superpowers/*` 设计/计划文档，并移除仓库内旧的 `CODE_OF_CONDUCT.md` 与 `skills/llm-wiki-ingest/*` 文档资产；本次不新增用户可见功能，也不改变默认产品入口、页面交互或发布链路。
 - 2026-06-05：继续推进 `core-api / llm-stream` 深拆分后续的 blog-domain 边界修复。本次不新增用户可见功能，也不改变 `http://localhost` 单入口、SSE 或页面交互；仅要求系列导读生成成功/失败回写父稿时必须校验当前用户归属，避免跨用户改写他人的系列导读内容或状态。
 - 2026-06-05：继续推进 `core-api / llm-stream` 深拆分后续的 blog-domain 边界修复。本次不新增用户可见功能，也不改变 `http://localhost` 单入口、SSE 或页面交互；仅要求系列 regenerate 场景读取旧正文时必须校验当前用户归属，避免跨用户读取他人的历史章节内容。
 - 2026-06-05：继续推进 `core-api / llm-stream` 深拆分后续的 blog-domain 边界修复。本次不新增用户可见功能，也不改变 `http://localhost` 单入口、SSE 或页面交互；仅要求系列父稿预建逻辑拒绝跨用户复用他人父稿，避免把当前用户的章节草稿挂到他人的系列树下。

@@ -1,6 +1,18 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 121：整理当前仓库文档资产并按 Docs PR 推送
+- **用户需求**：用户要求“提交到远端，创建对应 pr，打上对应标签”；在检查当前工作区后，又确认本轮按“Docs PR，不打标签”处理，并要求把当前全部现有改动纳入提交范围。
+- **AI 动作**：
+  1. 先按仓库规则检查当前分支、远端、标签与工作区状态，确认当前分支 `agent/20260605-series-persistence-boundary` 还未推送到远端，且本轮改动主体为 `README.md` 重写、删除 `CODE_OF_CONDUCT.md`、删除 `skills/llm-wiki-ingest/*`，以及新增一组 `docs/superpowers/*` 计划/设计文档。
+  2. 明确本轮不提交本地运行态 `backend/.env`，避免把敏感信息和仅用于本机 Docker 调试的配置带入仓库历史。
+  3. 在提交前对 `.trae/documents/*` 做最小同步，补充“本次为文档与仓库治理同步、无 API/DB/架构/产品行为变化”的记录，以满足 Docs-as-Code 与发布前文档同步约束。
+- **决策/变更**：
+  - 本轮按文档/仓库治理整理处理，不创建发布标签。
+  - 删除 `CODE_OF_CONDUCT.md` 与 `skills/llm-wiki-ingest/*` 视为本轮提交的一部分，但不把它解释为产品功能发布。
+- **验证**：
+  - `git status --short`、`git diff --stat`、`git branch -vv`、`git tag --sort=-v:refname | head -n 20` 已执行，用于确认提交范围、分支状态与标签基线。
+
 ### 对话 120：继续推进，阻断跨用户系列导读写入
 - **用户需求**：用户继续要求“继续”，在收紧旧正文读取边界后，继续沿同一条 `SeriesPersistence` 边界线往前推进。
 - **AI 动作**：
