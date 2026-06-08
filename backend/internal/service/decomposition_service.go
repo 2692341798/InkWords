@@ -9,6 +9,9 @@ import (
 
 	"golang.org/x/time/rate"
 
+	blogdomain "inkwords-backend/internal/domain/blog"
+	blogcontracts "inkwords-backend/internal/domain/blog/contracts"
+	"inkwords-backend/internal/infra/db"
 	"inkwords-backend/internal/infra/llm"
 	"inkwords-backend/internal/infra/parser"
 	"inkwords-backend/internal/prompt"
@@ -45,20 +48,10 @@ func maxWorkersFromEnv(taskCount int) int {
 	return maxWorkers
 }
 
-// Chapter represents a single chapter in the generated outline
-type Chapter struct {
-	ID      string   `json:"id,omitempty"` // Existing chapter ID
-	Title   string   `json:"title"`
-	Summary string   `json:"summary"`
-	Sort    int      `json:"sort"`
-	Files   []string `json:"files"`
-	Action  string   `json:"action,omitempty"` // "new", "regenerate", "skip"
-}
-
 // OutlineResult represents the overall generated outline result
 type OutlineResult struct {
 	SeriesTitle           string                       `json:"series_title"`
-	Chapters              []Chapter                    `json:"chapters"`
+	Chapters              []blogcontracts.Chapter      `json:"chapters"`
 	ParentID              string                       `json:"parent_id,omitempty"` // Existing parent ID
 	ResolvedPromptProfile prompt.ResolvedPromptProfile `json:"resolved_prompt_profile"`
 }
@@ -72,10 +65,12 @@ type ModuleCard struct {
 
 // DecompositionService handles the logic to evaluate project text and generate an outline
 type DecompositionService struct {
-	llmClient  *llm.DeepSeekClient
-	gitFetcher *parser.GitFetcher
-	limiter    *rate.Limiter
-	promptReq  *PromptRequirementsService
+	llmClient           *llm.DeepSeekClient
+	gitFetcher          *parser.GitFetcher
+	limiter             *rate.Limiter
+	promptReq           *PromptRequirementsService
+	seriesPersistence   blogcontracts.SeriesPersistence
+	continuePersistence blogcontracts.ContinuePersistence
 
 	seriesTaskResultsMu sync.Mutex
 	seriesTaskResults   map[string][]byte
@@ -83,7 +78,31 @@ type DecompositionService struct {
 
 // NewDecompositionService creates a new decomposition service
 func NewDecompositionService(promptReq *PromptRequirementsService) *DecompositionService {
+	return NewDecompositionServiceWithPersistences(
+		promptReq,
+		blogdomain.NewSeriesPersistence(db.DB),
+		blogdomain.NewContinuePersistence(db.DB),
+	)
+}
+
+// NewDecompositionServiceWithSeriesPersistence creates a new decomposition service with explicit series persistence.
+func NewDecompositionServiceWithSeriesPersistence(promptReq *PromptRequirementsService, seriesPersistence blogcontracts.SeriesPersistence) *DecompositionService {
+	return NewDecompositionServiceWithPersistences(promptReq, seriesPersistence, blogdomain.NewContinuePersistence(db.DB))
+}
+
+// NewDecompositionServiceWithPersistences creates a new decomposition service with explicit persistence dependencies.
+func NewDecompositionServiceWithPersistences(
+	promptReq *PromptRequirementsService,
+	seriesPersistence blogcontracts.SeriesPersistence,
+	continuePersistence blogcontracts.ContinuePersistence,
+) *DecompositionService {
 	apiKey := os.Getenv("DEEPSEEK_API_KEY")
+	if seriesPersistence == nil {
+		seriesPersistence = blogdomain.NewSeriesPersistence(db.DB)
+	}
+	if continuePersistence == nil {
+		continuePersistence = blogdomain.NewContinuePersistence(db.DB)
+	}
 
 	rpmLimit := 10000
 	if v := os.Getenv("LLM_API_RPM_LIMIT"); v != "" {
@@ -94,10 +113,12 @@ func NewDecompositionService(promptReq *PromptRequirementsService) *Decompositio
 	limit := rate.Limit(float64(rpmLimit) / 60.0)
 
 	return &DecompositionService{
-		llmClient:  llm.NewDeepSeekClient(apiKey),
-		gitFetcher: parser.NewGitFetcher(),
-		limiter:    rate.NewLimiter(limit, 1),
-		promptReq:  promptReq,
+		llmClient:           llm.NewDeepSeekClient(apiKey),
+		gitFetcher:          parser.NewGitFetcher(),
+		limiter:             rate.NewLimiter(limit, 1),
+		promptReq:           promptReq,
+		seriesPersistence:   seriesPersistence,
+		continuePersistence: continuePersistence,
 
 		seriesTaskResults: make(map[string][]byte),
 	}

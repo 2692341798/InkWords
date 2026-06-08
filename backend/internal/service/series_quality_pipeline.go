@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	blogcontracts "inkwords-backend/internal/domain/blog/contracts"
 	"strings"
 
 	"inkwords-backend/internal/infra/llm"
@@ -12,9 +13,9 @@ import (
 type seriesQualityPipelineInput struct {
 	SeriesTitle          string
 	ReaderProfile        string
-	Outline              []Chapter
+	Outline              []blogcontracts.Chapter
 	ChapterIndex         int
-	Chapter              Chapter
+	Chapter              blogcontracts.Chapter
 	ChapterSourceContent string
 	GitURL               string
 	OldContent           string
@@ -22,7 +23,7 @@ type seriesQualityPipelineInput struct {
 }
 
 // buildSeriesSharedPromptPrefix 固定系列级规则前缀，尽量让同一系列不同阶段复用相同提示词前缀。
-func buildSeriesSharedPromptPrefix(seriesTitle string, readerProfile string, outline []Chapter) string {
+func buildSeriesSharedPromptPrefix(seriesTitle string, readerProfile string, outline []blogcontracts.Chapter) string {
 	var builder strings.Builder
 	builder.WriteString("你正在为一个系列博客生成其中一篇高质量章节。\n")
 	builder.WriteString(fmt.Sprintf("系列标题：%s\n", strings.TrimSpace(seriesTitle)))
@@ -54,7 +55,7 @@ func (s *DecompositionService) generateSeriesChapterUnderstanding(
 	ctx context.Context,
 	llmModel string,
 	seriesPrefix string,
-	chapter Chapter,
+	chapter blogcontracts.Chapter,
 	chapterSourceContent string,
 ) (SeriesChapterUnderstanding, error) {
 	messages := []llm.Message{
@@ -130,7 +131,7 @@ func buildSeriesDraftPrompt(
 }
 
 func buildSeriesReviewPrompt(
-	chapter Chapter,
+	chapter blogcontracts.Chapter,
 	understanding SeriesChapterUnderstanding,
 	draft SeriesChapterDraft,
 ) string {
@@ -192,7 +193,7 @@ func (s *DecompositionService) reviewSeriesChapterDraft(
 	ctx context.Context,
 	llmModel string,
 	seriesPrefix string,
-	chapter Chapter,
+	chapter blogcontracts.Chapter,
 	understanding SeriesChapterUnderstanding,
 	draft SeriesChapterDraft,
 ) (SeriesChapterReview, error) {

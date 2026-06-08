@@ -39,32 +39,39 @@
 ## 4. 扫描结果与当前技术债
 
 ### 4.1 已确认的直接全局 `db.DB` 写点
-- `backend/internal/service/generator.go`
-  - 已收口为显式 `GeneratedBlogPersistence` 接口
-  - 默认 GORM 适配器仍在事务内写 `blogs` 并更新 `users.tokens_used`
 - `backend/internal/service/decomposition_generate.go`
-  - 直接更新章节标题、排序、失败状态
+  - `skip` 章节标题/排序更新已收口到 `SeriesPersistence`
 - `backend/internal/service/decomposition_generate_intro.go`
-  - 直接更新系列父博客导读内容与失败状态
+  - 导读成功/失败落库已收口到 `SeriesPersistence`
 - `backend/internal/service/decomposition_generate_continue.go`
-  - 直接更新续写后的博客正文
+  - 续写正文读取与最终更新已收口到 `ContinuePersistence`
 - `backend/internal/service/decomposition_generate_persistence.go`
-  - 直接创建系列父博客、章节草稿，并更新父博客来源
+  - 系列父稿创建、章节草稿预建、父稿来源更新、系列章节成功/失败落库均已收口到 `SeriesPersistence`
+- `backend/internal/service/decomposition_generate_prompt_helpers.go`
+  - 旧章节正文读取已收口到 `SeriesPersistence`
 
 ### 4.2 当前判断
 - 以上写点都仍属于 `core-api` 自有业务边界，没有跨服务越权。
-- `GeneratorService` 已完成第一步边界收口，但默认 persistence 适配器仍是 legacy GORM 实现；其余写点仍绕过 `domain/blog` 的显式仓储边界，属于共享数据库阶段最需要继续收口的技术债。
-- 在这些写点没有被接口化之前，不适合推进 `blogs` 或 `job_tasks` 相关表的真正独立实例拆分。
+- `GeneratorService` 已完成显式 `GeneratedBlogPersistence` 收口；`DecompositionService` 也已通过 `SeriesPersistence / ContinuePersistence` 把系列前置草稿准备、导读、章节成功/失败、旧正文读取、`skip` 元信息以及 `continue` 正文读写全部从 service 主逻辑里抽离出来。
+- 当前这条深拆主线的剩余技术债已不再是“业务逻辑里还有散落的直连写库”，而是“默认 GORM persistence 适配器后续是否要继续并入 `domain/blog` 或服务私有 repository”。
+- 默认 `SeriesPersistence / ContinuePersistence / GeneratedBlogPersistence` 的缺省装配点现已统一收紧到 service 构造器；业务方法内的隐式 `nil -> GORM` fallback 已删除，后续迁移适配器归属时不必再逐个方法清理兜底逻辑。
+- 当前生产装配已进一步下沉：`GeneratedBlogPersistence`、`ContinuePersistence` 与 `SeriesPersistence` 的默认 GORM 适配器均已由 `internal/domain/blog` 提供，并在 `llm-stream`、`core-api` 与 `cmd/server` 中通过 bootstrap 显式注入；service 层当前主要保留接口定义与测试替身。
+- 当前中立契约也已开始抽离：`internal/domain/blog/contracts` 先承接共享错误与 persistence 输入/接口定义，`domain/blog` 已不再反向 import `internal/service`；service 层当前更多扮演兼容别名与构造器桥接层。
+- `backend/internal/domain/stream/service.go` 现已直接依赖 `internal/domain/blog/contracts.Chapter`；当前非 `service` 包对 `GeneratedBlogPersistence / ContinuePersistence / SeriesPersistence / SeriesDraftPreflightInput / SeriesChapterPersistenceInput / Chapter` 等兼容别名的显式引用已清零，为后续评估删除 service 层桥接类型创造了条件。
+- `backend/internal/service/generator_persistence.go`、`backend/internal/service/decomposition_continue_persistence.go` 与 `backend/internal/service/decomposition_series_persistence.go` 已删除；`GeneratorService` 与 `DecompositionService` 当前分别直接依赖 `blogcontracts.GeneratedBlogPersistence`、`blogcontracts.ContinuePersistence`、`blogcontracts.SeriesPersistence` 以及 `blogdomain` 默认适配器。同时 `Chapter` 本地兼容别名也已删除，service 包内部相关代码统一直接依赖 `blogcontracts.Chapter`；至此 blog contracts 在 service 层的兼容桥接已清零。
+- `internal/domain/blog/series_persistence.go` 现已在预建系列父稿/子稿前显式校验父稿归属用户；若 `parent_id` 指向其它用户的系列父稿，将立即返回错误并拒绝继续创建当前用户的章节草稿，避免跨用户系列树挂接。
+- `internal/domain/blog/series_persistence.go` 现已在 `LoadSeriesOldContent()` 中按 `user_id + blog_id` 双重条件读取旧正文；`DecompositionService.resolveSeriesOldContent()` 也会显式透传当前用户，避免 regenerate 场景跨用户读取他人历史章节内容。
+- `internal/domain/blog/series_persistence.go` 现已在 `SaveSeriesIntro()` 与 `MarkSeriesIntroFailed()` 中按 `user_id + parent_id` 双重条件更新系列父稿；`DecompositionService.generateSeriesIntro()` 也会显式透传当前用户，避免跨用户改写他人的导读正文或失败状态。
 
 ## 5. 收口优先级建议
 
 ### 第一优先级
-- 继续沿着 `GeneratorService -> GeneratedBlogPersistence` 模板，把默认 GORM 适配器替换为更贴近 `core-api` 归属边界的 persistence / repository 实现。
-- Why: 单篇生成主链路已经接口化，下一步重点是让具体实现也逐步摆脱 legacy service 直连数据库的形态。
+- 评估是否把默认 `SeriesPersistence / ContinuePersistence / GeneratedBlogPersistence` GORM 适配器继续并入 `domain/blog` 或服务私有 repository，减少 service 层对 legacy model/ORM 的感知。
+- Why: 当前 service 主逻辑的边界已经基本清晰，而且三类默认 blog 写入适配器与中立契约都已开始迁入 blog-domain；后续优化重点转向是否继续删除 service 侧兼容别名，并把更细粒度仓储能力也一起归并，而不是回头处理已清理的方法级 fallback。
 
 ### 第二优先级
-- 把 `DecompositionService` 对系列父博客、章节草稿、失败状态和续写正文的写入从全局 `db.DB` 收口到 `domain/blog` 或专用 persistence interface。
-- Why: 当前系列链路写点分散，是后续拆分 `blogs` 相关边界的主要阻力。
+- 为 `SeriesPersistence` 增加更细粒度的边界测试或仓储级测试，覆盖父稿存在/不存在、旧子稿清理、草稿预建失败回滚等事务场景。
+- Why: 现在 preflight 逻辑已经被抽到显式接口，最有价值的下一步是巩固行为契约，而不是再重复做接口外壳。
 
 ### 第三优先级
 - 保持 `task` 领域继续作为唯一允许的跨服务共享写入控制面，不新增第二套“谁都能写”的共享表模式。

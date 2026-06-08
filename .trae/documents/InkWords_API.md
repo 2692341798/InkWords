@@ -1,6 +1,13 @@
 # 墨言知识训练平台 (InkWords Trainer) - API 接口文档
 
 ## 0. 变更记录
+- 2026-06-05：继续推进 blog-domain 内部边界修复。本次将 `SeriesPersistence.SaveSeriesIntro()` 与 `SeriesPersistence.MarkSeriesIntroFailed()` 收紧为必须同时校验 `user_id + parent_id`，并让 service 导读生成调用链显式透传当前用户；不新增也不修改任何对外 API 路由、请求字段或响应字段。
+- 2026-06-05：继续推进 blog-domain 内部边界修复。本次将 `SeriesPersistence.LoadSeriesOldContent()` 收紧为必须同时按 `user_id + blog_id` 读取旧正文，并让 service 调用链显式透传当前用户；不新增也不修改任何对外 API 路由、请求字段或响应字段。
+- 2026-06-05：继续推进 blog-domain 内部边界修复。本次仅修正 `SeriesPersistence.EnsureSeriesParentAndDrafts()` 的父稿归属校验：如果 `parent_id` 指向其它用户的系列父稿，将返回错误并拒绝继续预建章节草稿；不新增也不修改任何对外 API 路由、请求字段或响应字段。
+- 2026-06-05：继续推进 service 内部 Chapter bridge 收口。本次删除 `decomposition_service.go` 中最后的 `Chapter` 本地别名，并让 service 包内部相关生成、提示词、质量门禁与测试代码统一直接依赖 `domain/blog/contracts.Chapter`；不新增也不修改任何对外 API 路由、请求字段或响应字段。
+- 2026-06-05：继续推进 service 内部 series bridge 收口。本次删除 `decomposition_series_persistence.go`，并让 `DecompositionService` 与相关持久化辅助逻辑直接依赖 `domain/blog/contracts` 的 `SeriesPersistence / SeriesDraftPreflightInput / SeriesChapterPersistenceInput` 以及 `domain/blog` 默认适配器；不新增也不修改任何对外 API 路由、请求字段或响应字段。
+- 2026-06-05：继续推进 service 内部 blog bridge 收口。本次删除 `generator` 与 `continue` 两层仅用于内部装配的桥接文件，改为 service 直接依赖 `domain/blog/contracts` 与 `domain/blog` 默认适配器；不新增也不修改任何对外 API 路由、请求字段或响应字段。
+- 2026-06-05：继续推进 blog contracts 收口。本次仅把 `backend/internal/domain/stream/service.go` 的内部依赖从 `internal/service.Chapter` 切到 `internal/domain/blog/contracts.Chapter`，不新增也不修改任何对外 API 路由、请求字段或响应字段。
 - 2026-06-04：新增 `FRONTEND_PORT` 作为 Docker Compose 前端宿主机端口覆盖变量。本次不新增也不修改任何 API 路由、请求字段或响应字段；仅补充运行约定：默认仍通过 `http://localhost` 访问，当宿主机 `:80` 被占用时，可临时用 `FRONTEND_PORT=8088` 将前端入口切到 `http://localhost:8088`，其 `/api/*` 代理语义保持不变。
 - 2026-06-04：Generation Task-Only Task 4 继续扩展 generation 任务成功路径的内部语义，不新增也不修改任何对外 API 路由、请求字段或响应字段；当 `generate_series` 任务成功时，系统会把结构化 `result_json` 中的 `parent_blog` 与 `chapters[]` 交给 `core-api` 消费，并由 `core-api` 完成系列父博客与章节草稿的最终持久化。
 - 2026-06-04：Generation Task-Only Task 3 继续扩展 generation 任务成功路径的内部语义，不新增也不修改任何对外 API 路由、请求字段或响应字段；当 `continue` 任务成功时，系统会把结构化 `result_json` 中的 `blog_id / appended_content / final_content` 交给 `core-api` 消费，并以 `final_content` 完成正文更新。

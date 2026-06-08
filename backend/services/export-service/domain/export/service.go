@@ -6,11 +6,12 @@ import (
 
 	"github.com/google/uuid"
 
+	blogcontracts "inkwords-backend/internal/domain/blog/contracts"
 	legacyservice "inkwords-backend/internal/service"
 )
 
-// ErrSeriesNotFound re-exports the legacy export error so callers can stay scoped to export-service.
-var ErrSeriesNotFound = legacyservice.ErrSeriesNotFound
+// ErrSeriesNotFound re-exports the shared blog export error so callers can stay scoped to export-service.
+var ErrSeriesNotFound = blogcontracts.ErrSeriesNotFound
 
 // Service wraps the legacy blog export implementation behind a service-owned boundary.
 type Service struct {

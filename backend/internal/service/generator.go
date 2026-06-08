@@ -12,6 +12,8 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/datatypes"
 
+	blogdomain "inkwords-backend/internal/domain/blog"
+	blogcontracts "inkwords-backend/internal/domain/blog/contracts"
 	"inkwords-backend/internal/infra/db"
 	"inkwords-backend/internal/infra/llm"
 	"inkwords-backend/internal/prompt"
@@ -21,7 +23,7 @@ import (
 type GeneratorService struct {
 	llmClient   *llm.DeepSeekClient
 	promptReq   *PromptRequirementsService
-	persistence GeneratedBlogPersistence
+	persistence blogcontracts.GeneratedBlogPersistence
 }
 
 // GenerateBlogTaskResult 表示单篇生成完成后可交给任务层的结构化结果。
@@ -38,11 +40,11 @@ func NewGeneratorService(promptReq *PromptRequirementsService) *GeneratorService
 // explicit persistence dependency for final generated blog writes.
 func NewGeneratorServiceWithPersistence(
 	promptReq *PromptRequirementsService,
-	persistence GeneratedBlogPersistence,
+	persistence blogcontracts.GeneratedBlogPersistence,
 ) *GeneratorService {
 	apiKey := os.Getenv("DEEPSEEK_API_KEY")
 	if persistence == nil {
-		persistence = newDatabaseGeneratedBlogPersistence(db.DB)
+		persistence = blogdomain.NewGeneratedBlogPersistence(db.DB)
 	}
 	return &GeneratorService{
 		llmClient:   llm.NewDeepSeekClient(apiKey),
@@ -409,12 +411,7 @@ func (s *GeneratorService) saveToDB(ctx context.Context, userID uuid.UUID, sourc
 		return fmt.Errorf("marshal tech stacks: %w", err)
 	}
 
-	persistence := s.persistence
-	if persistence == nil {
-		persistence = newDatabaseGeneratedBlogPersistence(db.DB)
-	}
-
-	input := GeneratedBlogPersistenceInput{
+	input := blogcontracts.GeneratedBlogPersistenceInput{
 		UserID:     userID,
 		Title:      facts.Title,
 		Content:    facts.Content,
@@ -423,7 +420,7 @@ func (s *GeneratorService) saveToDB(ctx context.Context, userID uuid.UUID, sourc
 		TechStacks: datatypes.JSON(techStacksJSON),
 	}
 
-	if err := persistence.SaveGeneratedBlog(ctx, input); err != nil {
+	if err := s.persistence.SaveGeneratedBlog(ctx, input); err != nil {
 		return fmt.Errorf("persist generated blog: %w", err)
 	}
 

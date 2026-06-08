@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	blogcontracts "inkwords-backend/internal/domain/blog/contracts"
 	"os"
 	"strings"
 	"sync"
@@ -85,7 +86,7 @@ func (s *DecompositionService) finalizeSeriesChapterDraft(
 func (s *DecompositionService) streamSeriesChapterContent(
 	ctx context.Context,
 	parentID uuid.UUID,
-	chapter Chapter,
+	chapter blogcontracts.Chapter,
 	messages []llm.Message,
 	progressChan chan<- string,
 ) (string, error) {

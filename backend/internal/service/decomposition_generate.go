@@ -4,8 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"inkwords-backend/internal/infra/db"
-	"inkwords-backend/internal/model"
+	blogcontracts "inkwords-backend/internal/domain/blog/contracts"
 	"inkwords-backend/internal/prompt"
 	"sort"
 	"sync"
@@ -42,7 +41,7 @@ func newSeriesTaskResultCollector(parentBlogID string, parentTitle string) *seri
 	}
 }
 
-func (c *seriesTaskResultCollector) AddChapterSuccess(chapter Chapter, content string, wordCount int, techStacks []string) {
+func (c *seriesTaskResultCollector) AddChapterSuccess(chapter blogcontracts.Chapter, content string, wordCount int, techStacks []string) {
 	if c == nil {
 		return
 	}
@@ -63,7 +62,7 @@ func (c *seriesTaskResultCollector) AddChapterSuccess(chapter Chapter, content s
 	c.EstimatedTokens += wordCount * 2
 }
 
-func (c *seriesTaskResultCollector) AddChapterFailure(chapter Chapter, errorMessage string) {
+func (c *seriesTaskResultCollector) AddChapterFailure(chapter blogcontracts.Chapter, errorMessage string) {
 	if c == nil {
 		return
 	}
@@ -138,7 +137,7 @@ func (s *DecompositionService) GenerateSeries(
 	userID uuid.UUID,
 	parentID uuid.UUID,
 	seriesTitle string,
-	outline []Chapter,
+	outline []blogcontracts.Chapter,
 	sourceContent string,
 	sourceType string,
 	gitURL string,
@@ -169,7 +168,7 @@ func (s *DecompositionService) GenerateSeriesWithProfile(
 	userID uuid.UUID,
 	parentID uuid.UUID,
 	seriesTitle string,
-	outline []Chapter,
+	outline []blogcontracts.Chapter,
 	sourceContent string,
 	sourceType string,
 	gitURL string,
@@ -218,7 +217,7 @@ func (s *DecompositionService) GenerateSeriesWithProfile(
 		parentTitle = seriesTitle
 	}
 
-	updatedOutline, err := ensureSeriesParentAndDrafts(
+	updatedOutline, err := s.ensureSeriesParentAndDrafts(
 		ctx,
 		userID,
 		parentID,
@@ -250,13 +249,7 @@ func (s *DecompositionService) GenerateSeriesWithProfile(
 		}
 
 		if chapter.Action == "skip" && chapter.ID != "" {
-			if blogID, err := uuid.Parse(chapter.ID); err == nil {
-				// Update sort and title for existing skipped chapter
-				db.DB.WithContext(ctx).Model(&model.Blog{}).Where("id = ? AND user_id = ?", blogID, userID).Updates(map[string]interface{}{
-					"chapter_sort": chapter.Sort,
-					"title":        chapter.Title,
-				})
-			}
+			_ = s.handleSkippedSeriesChapter(ctx, userID, chapter)
 			endMsg := map[string]interface{}{
 				"status":       "completed",
 				"chapter_sort": chapter.Sort,
@@ -273,12 +266,12 @@ func (s *DecompositionService) GenerateSeriesWithProfile(
 		}
 
 		wg.Add(1)
-		go func(i int, chapter Chapter) {
+		go func(i int, chapter blogcontracts.Chapter) {
 			defer sem.Release(1)
 			defer wg.Done()
 
 			chapterSourceContent := resolveSeriesChapterSourceContent(sourceType, cachePath, sourceContent, chapter)
-			oldContent := resolveSeriesOldContent(ctx, chapter)
+			oldContent := s.resolveSeriesOldContent(ctx, userID, chapter)
 			qualityResult, streamErr := s.runSeriesChapterQualityPipeline(ctx, seriesQualityPipelineInput{
 				SeriesTitle:          parentTitle,
 				ReaderProfile:        buildSeriesReaderProfile(scenarioMode),
@@ -291,7 +284,7 @@ func (s *DecompositionService) GenerateSeriesWithProfile(
 				ProgressChan:         progressChan,
 			})
 			if streamErr != nil {
-				handleSeriesChapterFailure(ctx, userID, chapter, streamErr, resultCollector)
+				s.handleSeriesChapterFailure(ctx, userID, chapter, streamErr, resultCollector)
 
 				errMsg := map[string]interface{}{
 					"status":       "error",
@@ -309,7 +302,7 @@ func (s *DecompositionService) GenerateSeriesWithProfile(
 			llmModel := "deepseek-v4-flash"
 			techStacks := decodeTechStacksJSON(s.extractSeriesChapterTechStacks(ctx, llmModel, content))
 
-			if err := handleSeriesChapterCompletion(
+			if err := s.handleSeriesChapterCompletion(
 				ctx,
 				userID,
 				parentID,

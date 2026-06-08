@@ -3,18 +3,17 @@ package service
 import (
 	"context"
 	"fmt"
+	blogcontracts "inkwords-backend/internal/domain/blog/contracts"
 	"os"
 	"strings"
 
 	"github.com/google/uuid"
 
-	"inkwords-backend/internal/infra/db"
 	"inkwords-backend/internal/infra/llm"
-	"inkwords-backend/internal/model"
 	"inkwords-backend/internal/prompt"
 )
 
-func buildSeriesChapterExtraRequirements(gitURL string, outline []Chapter, chapterIndex int) string {
+func buildSeriesChapterExtraRequirements(gitURL string, outline []blogcontracts.Chapter, chapterIndex int) string {
 	extraRequirements := ""
 	reqIndex := 7
 	if gitURL != "" {
@@ -38,7 +37,7 @@ func buildSeriesReaderProfile(scenarioMode prompt.ScenarioMode) string {
 	}
 }
 
-func resolveSeriesOldContent(ctx context.Context, chapter Chapter) string {
+func (s *DecompositionService) resolveSeriesOldContent(ctx context.Context, userID uuid.UUID, chapter blogcontracts.Chapter) string {
 	if chapter.Action != "regenerate" || strings.TrimSpace(chapter.ID) == "" {
 		return ""
 	}
@@ -48,12 +47,12 @@ func resolveSeriesOldContent(ctx context.Context, chapter Chapter) string {
 		return ""
 	}
 
-	var oldBlog model.Blog
-	if err := db.DB.WithContext(ctx).Select("content").First(&oldBlog, "id = ?", blogID).Error; err != nil {
+	oldContent, err := s.seriesPersistence.LoadSeriesOldContent(ctx, userID, blogID)
+	if err != nil {
 		return ""
 	}
 
-	return truncateSeriesContent(oldBlog.Content, seriesOldContentRuneLimit)
+	return truncateSeriesContent(oldContent, seriesOldContentRuneLimit)
 }
 
 func normalizePromptProfile(profile prompt.PromptProfile, scenarioMode prompt.ScenarioMode) prompt.PromptProfile {
@@ -93,8 +92,8 @@ func normalizeResolvedPromptProfile(
 func (s *DecompositionService) buildSeriesChapterMessages(
 	ctx context.Context,
 	userID uuid.UUID,
-	chapter Chapter,
-	outline []Chapter,
+	chapter blogcontracts.Chapter,
+	outline []blogcontracts.Chapter,
 	chapterIndex int,
 	chapterSourceContent string,
 	sourceType string,

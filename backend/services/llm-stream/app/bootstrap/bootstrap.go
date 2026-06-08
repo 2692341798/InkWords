@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	blogdomain "inkwords-backend/internal/domain/blog"
 	streamdomain "inkwords-backend/internal/domain/stream"
 	taskdomain "inkwords-backend/internal/domain/task"
 	"inkwords-backend/internal/infra/cache"
@@ -41,8 +42,15 @@ func BuildRouter() (*gin.Engine, *taskdomain.Service, *streamdomain.Service, err
 
 	userService := service.NewUserService(dbConn)
 	promptReqService := service.NewPromptRequirementsService(dbConn)
-	generatorService := service.NewGeneratorService(promptReqService)
-	decompositionService := service.NewDecompositionService(promptReqService)
+	generatorService := service.NewGeneratorServiceWithPersistence(
+		promptReqService,
+		blogdomain.NewGeneratedBlogPersistence(dbConn),
+	)
+	decompositionService := service.NewDecompositionServiceWithPersistences(
+		promptReqService,
+		blogdomain.NewSeriesPersistence(dbConn),
+		blogdomain.NewContinuePersistence(dbConn),
+	)
 	generationService := generation.NewService(nil, nil)
 
 	streamDomainService := streamdomain.NewService(generatorService, decompositionService, userService)

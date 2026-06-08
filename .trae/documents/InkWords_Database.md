@@ -1,6 +1,13 @@
 # 墨言知识训练平台 (InkWords Trainer) - 数据库设计文档
 
 ## 0. 变更记录
+- 2026-06-05：继续推进 blog-domain 内部边界修复。本次将 `SeriesPersistence.SaveSeriesIntro()` 与 `SeriesPersistence.MarkSeriesIntroFailed()` 改为按 `parent_id + user_id` 双重条件更新系列父稿，阻断跨用户导读正文/状态写入；不涉及 PostgreSQL 表结构、字段、索引、迁移变更，但进一步收紧了 `blogs` 系列父稿写入边界。
+- 2026-06-05：继续推进 blog-domain 内部边界修复。本次将 `SeriesPersistence.LoadSeriesOldContent()` 改为按 `blog_id + user_id` 双重条件读取旧正文，阻断跨用户旧章节内容读取；不涉及 PostgreSQL 表结构、字段、索引、迁移变更，但收紧了 `blogs` 旧正文读取边界。
+- 2026-06-05：继续推进 blog-domain 内部边界修复。本次修正 `SeriesPersistence.EnsureSeriesParentAndDrafts()` 的父稿归属校验：若 `parent_id` 指向其它用户的系列父稿，将直接报错并拒绝创建当前用户的章节草稿；不涉及 PostgreSQL 表结构、字段、索引、迁移变更，但收紧了 `blogs` 系列父子树的跨用户写入边界。
+- 2026-06-05：继续推进 service 内部 Chapter bridge 收口。本次删除 `decomposition_service.go` 中最后的 `Chapter` 本地别名，service 包内相关代码统一直接依赖 `domain/blog/contracts.Chapter`；不涉及 PostgreSQL 表结构、字段、索引、迁移或写入语义变更。
+- 2026-06-05：继续推进 service 内部 series bridge 收口。本次删除 `decomposition_series_persistence.go`，相关 service 直接依赖 `domain/blog/contracts` 的 `SeriesPersistence / SeriesDraftPreflightInput / SeriesChapterPersistenceInput` 与 `domain/blog` 默认适配器；不涉及 PostgreSQL 表结构、字段、索引、迁移或写入语义变更。
+- 2026-06-05：继续推进 service 内部 blog bridge 收口。本次删除 `generator` 与 `continue` 两层仅用于内部装配的桥接文件，相关 service 直接依赖 `domain/blog/contracts` 与 `domain/blog` 默认适配器；不涉及 PostgreSQL 表结构、字段、索引、迁移或写入语义变更。
+- 2026-06-05：继续推进 blog contracts 收口。本次仅调整 `stream` 域内部类型依赖，确认非 `service` 包对 `GeneratedBlogPersistence / ContinuePersistence / SeriesPersistence / Chapter` 等兼容别名的显式引用已清零；不涉及 PostgreSQL 表结构、字段、索引、迁移或写入语义变更。
 - 2026-06-04：新增 `FRONTEND_PORT` 仅影响 Docker Compose 的前端宿主机端口映射，不涉及 PostgreSQL 表结构、字段、索引、迁移或任何数据库写入语义变更；本次仅用于在宿主机 `:80` 被占用时，将前端入口临时切到如 `http://localhost:8088` 完成运行验证。
 - 2026-06-04：Generation Task-Only Task 4 为 `generate_series` 任务增强 `job_tasks.result_json` 语义并打通最终业务写入。系列成功结果现在保存 `parent_blog` 与 `chapters[]`：父博客包含系列标题与导读正文，章节包含 `blog_id / chapter_sort / title / content / word_count / tech_stacks / status / error_message`；`core-api` 会基于该结果事务性更新 `blogs` 中的父子记录，并继续使用 `usage.estimated_tokens` 累计 `users.tokens_used`。本次不新增表、字段、索引或迁移。
 - 2026-06-04：Generation Task-Only Task 3 为 `continue` 任务增强 `job_tasks.result_json` 语义并打通最终业务写入。续写成功结果现在保存 `blog_id / appended_content / final_content`，`core-api` 会基于 `payload.final_content` 更新 `blogs.content`，并继续使用 `usage.estimated_tokens` 累计 `users.tokens_used`。本次不新增表、字段、索引或迁移。

@@ -16,6 +16,7 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
+	blogcontracts "inkwords-backend/internal/domain/blog/contracts"
 	"inkwords-backend/internal/infra/db"
 	"inkwords-backend/internal/model"
 	"inkwords-backend/internal/prompt"
@@ -92,7 +93,7 @@ func TestDecompositionService_GenerateSeries_PersistsChildDraftBeforeStreaming(t
 		userID,
 		parentID,
 		"《孙子兵法》- 原典逐章精读系列",
-		[]Chapter{
+		[]blogcontracts.Chapter{
 			{Title: "始计第一", Summary: "逐章精读", Sort: 1},
 		},
 		"兵者，国之大事。",
@@ -174,7 +175,7 @@ func TestDecompositionService_GenerateSeries_RollsBackPreflightWhenDraftCreation
 		userID,
 		parentID,
 		"新系列",
-		[]Chapter{
+		[]blogcontracts.Chapter{
 			{Title: "新章节", Summary: "新摘要", Sort: 1},
 		},
 		"新内容",
@@ -258,7 +259,7 @@ func TestDecompositionService_GenerateSeries_ReportsTokenUpdateFailureAndKeepsDr
 		nonexistentUserID,
 		parentID,
 		"《孙子兵法》- 原典逐章精读系列",
-		[]Chapter{
+		[]blogcontracts.Chapter{
 			{Title: "始计第一", Summary: "逐章精读", Sort: 1},
 		},
 		"兵者，国之大事。",
@@ -335,13 +336,14 @@ func TestHandleSeriesChapterCompletion_TaskOnlyMode_CollectsChapterResultWithout
 		Status:      0,
 	}).Error)
 
+	svc := NewDecompositionService(nil)
 	collector := newSeriesTaskResultCollector(parentID.String(), "系列父稿")
-	err := handleSeriesChapterCompletion(
+	err := svc.handleSeriesChapterCompletion(
 		context.Background(),
 		userID,
 		parentID,
 		"file",
-		Chapter{
+		blogcontracts.Chapter{
 			ID:    childID.String(),
 			Title: "第 1 章",
 			Sort:  1,
@@ -364,6 +366,196 @@ func TestHandleSeriesChapterCompletion_TaskOnlyMode_CollectsChapterResultWithout
 	var user model.User
 	require.NoError(t, testDB.First(&user, "id = ?", userID).Error)
 	require.Equal(t, 0, user.TokensUsed)
+}
+
+func TestDecompositionService_HandleSeriesChapterCompletion_UsesInjectedPersistence(t *testing.T) {
+	previousDB := db.DB
+	db.DB = nil
+	defer func() {
+		db.DB = previousDB
+	}()
+
+	persistence := &seriesPersistenceRecorder{}
+	svc := NewDecompositionServiceWithSeriesPersistence(nil, persistence)
+
+	userID := uuid.New()
+	parentID := uuid.New()
+	chapterID := uuid.New()
+	err := svc.handleSeriesChapterCompletion(
+		context.Background(),
+		userID,
+		parentID,
+		"file",
+		blogcontracts.Chapter{
+			ID:    chapterID.String(),
+			Title: "第 1 章",
+			Sort:  1,
+		},
+		"章节终稿",
+		4,
+		[]string{"Go"},
+		nil,
+	)
+	require.NoError(t, err)
+	require.Equal(t, 1, persistence.saveChapterCalls)
+	require.Equal(t, userID, persistence.savedChapter.UserID)
+	require.Equal(t, parentID, persistence.savedChapter.ParentID)
+	require.Equal(t, chapterID, persistence.savedChapter.BlogID)
+	require.Equal(t, "章节终稿", persistence.savedChapter.Content)
+	require.JSONEq(t, `["Go"]`, string(persistence.savedChapter.TechStacks))
+}
+
+func TestNewDecompositionServiceWithPersistences_FillsMissingDefaultAdapters(t *testing.T) {
+	testDB := openDecompositionPersistTestDB(t)
+
+	previousDB := db.DB
+	db.DB = testDB
+	defer func() {
+		db.DB = previousDB
+	}()
+
+	svc := NewDecompositionServiceWithPersistences(nil, nil, nil)
+	require.NotNil(t, svc.seriesPersistence)
+	require.NotNil(t, svc.continuePersistence)
+}
+
+func TestDecompositionService_GenerateSeriesIntro_UsesInjectedPersistence(t *testing.T) {
+	previousDB := db.DB
+	db.DB = nil
+	defer func() {
+		db.DB = previousDB
+	}()
+
+	llmServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"系列导读正文\"},\"finish_reason\":null}]}\n\n")
+		_, _ = fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n")
+		_, _ = fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer llmServer.Close()
+
+	persistence := &seriesPersistenceRecorder{}
+	svc := NewDecompositionServiceWithSeriesPersistence(nil, persistence)
+	svc.llmClient.APIURL = llmServer.URL
+	svc.llmClient.Client = llmServer.Client()
+
+	progressChan := make(chan string, 32)
+	errChan := make(chan error, 4)
+	parentID := uuid.New()
+	userID := uuid.New()
+
+	svc.generateSeriesIntro(
+		context.Background(),
+		userID,
+		parentID,
+		"Go 入门系列",
+		[]blogcontracts.Chapter{{Title: "第 1 章", Summary: "基础", Sort: 1}},
+		prompt.ScenarioModeEbookInterpretation,
+		prompt.ArticleStyleGeneral,
+		prompt.PromptProfile{},
+		nil,
+		progressChan,
+		errChan,
+	)
+
+	close(progressChan)
+	close(errChan)
+	require.Empty(t, drainSeriesErrors(errChan))
+	_ = collectSeriesProgressPayloads(t, progressChan)
+	require.Equal(t, 1, persistence.saveIntroCalls)
+	require.Equal(t, userID, persistence.savedIntroUserID)
+	require.Equal(t, parentID, persistence.savedIntroParentID)
+	require.Equal(t, "系列导读正文", persistence.savedIntroContent)
+}
+
+func TestDecompositionService_ResolveSeriesOldContent_UsesInjectedPersistence(t *testing.T) {
+	previousDB := db.DB
+	db.DB = nil
+	defer func() {
+		db.DB = previousDB
+	}()
+
+	blogID := uuid.New()
+	userID := uuid.New()
+	persistence := &seriesPersistenceRecorder{
+		loadedOldContent: strings.Repeat("旧内容", 10),
+	}
+	svc := NewDecompositionServiceWithSeriesPersistence(nil, persistence)
+
+	oldContent := svc.resolveSeriesOldContent(context.Background(), userID, blogcontracts.Chapter{
+		ID:     blogID.String(),
+		Action: "regenerate",
+	})
+
+	require.Equal(t, 1, persistence.loadOldContentCalls)
+	require.Equal(t, userID, persistence.loadedOldContentUserID)
+	require.Equal(t, blogID, persistence.loadedOldContentBlogID)
+	require.Equal(t, strings.Repeat("旧内容", 10), oldContent)
+}
+
+func TestDecompositionService_HandleSkippedSeriesChapter_UsesInjectedPersistence(t *testing.T) {
+	previousDB := db.DB
+	db.DB = nil
+	defer func() {
+		db.DB = previousDB
+	}()
+
+	userID := uuid.New()
+	blogID := uuid.New()
+	persistence := &seriesPersistenceRecorder{}
+	svc := NewDecompositionServiceWithSeriesPersistence(nil, persistence)
+
+	err := svc.handleSkippedSeriesChapter(context.Background(), userID, blogcontracts.Chapter{
+		ID:    blogID.String(),
+		Title: "跳过章节",
+		Sort:  3,
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, 1, persistence.updateSkippedMetaCalls)
+	require.Equal(t, userID, persistence.updatedSkippedMetaUserID)
+	require.Equal(t, blogID, persistence.updatedSkippedMetaBlogID)
+	require.Equal(t, "跳过章节", persistence.updatedSkippedMetaTitle)
+	require.Equal(t, 3, persistence.updatedSkippedMetaSort)
+}
+
+func TestDecompositionService_EnsureSeriesParentAndDrafts_UsesInjectedPersistence(t *testing.T) {
+	previousDB := db.DB
+	db.DB = nil
+	defer func() {
+		db.DB = previousDB
+	}()
+
+	userID := uuid.New()
+	parentID := uuid.New()
+	persistence := &seriesPersistenceRecorder{
+		preflightResult: []blogcontracts.Chapter{
+			{ID: uuid.NewString(), Title: "第 1 章", Sort: 1},
+		},
+	}
+	svc := NewDecompositionServiceWithSeriesPersistence(nil, persistence)
+
+	updatedOutline, err := svc.ensureSeriesParentAndDrafts(
+		context.Background(),
+		userID,
+		parentID,
+		"系列标题",
+		"file",
+		"https://github.com/example/repo",
+		[]blogcontracts.Chapter{{Title: "第 1 章", Sort: 1}},
+	)
+
+	require.NoError(t, err)
+	require.Len(t, updatedOutline, 1)
+	require.Equal(t, persistence.preflightResult[0].ID, updatedOutline[0].ID)
+	require.Equal(t, 1, persistence.preflightCalls)
+	require.Equal(t, userID, persistence.preflightInput.UserID)
+	require.Equal(t, parentID, persistence.preflightInput.ParentID)
+	require.Equal(t, "系列标题", persistence.preflightInput.ParentTitle)
+	require.Equal(t, "file", persistence.preflightInput.SourceType)
+	require.Equal(t, "https://github.com/example/repo", persistence.preflightInput.GitURL)
+	require.Len(t, persistence.preflightInput.Outline, 1)
+	require.Equal(t, "第 1 章", persistence.preflightInput.Outline[0].Title)
 }
 
 func collectSeriesProgressPayloads(t *testing.T, progressChan <-chan string) []map[string]interface{} {
@@ -392,4 +584,70 @@ func drainSeriesErrors(errChan <-chan error) []error {
 
 func seriesPersistTestDSN() string {
 	return fmt.Sprintf("file:%s?mode=memory&cache=shared", uuid.NewString())
+}
+
+type seriesPersistenceRecorder struct {
+	saveChapterCalls       int
+	saveIntroCalls         int
+	loadOldContentCalls    int
+	updateSkippedMetaCalls int
+	preflightCalls         int
+
+	savedChapter             blogcontracts.SeriesChapterPersistenceInput
+	savedIntroUserID         uuid.UUID
+	savedIntroParentID       uuid.UUID
+	savedIntroContent        string
+	loadedOldContentUserID   uuid.UUID
+	loadedOldContentBlogID   uuid.UUID
+	loadedOldContent         string
+	updatedSkippedMetaUserID uuid.UUID
+	updatedSkippedMetaBlogID uuid.UUID
+	updatedSkippedMetaTitle  string
+	updatedSkippedMetaSort   int
+	preflightInput           blogcontracts.SeriesDraftPreflightInput
+	preflightResult          []blogcontracts.Chapter
+}
+
+func (r *seriesPersistenceRecorder) SaveSeriesChapter(_ context.Context, input blogcontracts.SeriesChapterPersistenceInput) error {
+	r.saveChapterCalls++
+	r.savedChapter = input
+	return nil
+}
+
+func (r *seriesPersistenceRecorder) MarkSeriesChapterFailed(context.Context, uuid.UUID, uuid.UUID) error {
+	return nil
+}
+
+func (r *seriesPersistenceRecorder) SaveSeriesIntro(_ context.Context, userID uuid.UUID, parentID uuid.UUID, content string) error {
+	r.saveIntroCalls++
+	r.savedIntroUserID = userID
+	r.savedIntroParentID = parentID
+	r.savedIntroContent = content
+	return nil
+}
+
+func (r *seriesPersistenceRecorder) MarkSeriesIntroFailed(context.Context, uuid.UUID, uuid.UUID) error {
+	return nil
+}
+
+func (r *seriesPersistenceRecorder) LoadSeriesOldContent(_ context.Context, userID uuid.UUID, blogID uuid.UUID) (string, error) {
+	r.loadOldContentCalls++
+	r.loadedOldContentUserID = userID
+	r.loadedOldContentBlogID = blogID
+	return r.loadedOldContent, nil
+}
+
+func (r *seriesPersistenceRecorder) UpdateSkippedSeriesChapterMeta(_ context.Context, userID uuid.UUID, blogID uuid.UUID, chapter blogcontracts.Chapter) error {
+	r.updateSkippedMetaCalls++
+	r.updatedSkippedMetaUserID = userID
+	r.updatedSkippedMetaBlogID = blogID
+	r.updatedSkippedMetaTitle = chapter.Title
+	r.updatedSkippedMetaSort = chapter.Sort
+	return nil
+}
+
+func (r *seriesPersistenceRecorder) EnsureSeriesParentAndDrafts(_ context.Context, input blogcontracts.SeriesDraftPreflightInput) ([]blogcontracts.Chapter, error) {
+	r.preflightCalls++
+	r.preflightInput = input
+	return append([]blogcontracts.Chapter(nil), r.preflightResult...), nil
 }

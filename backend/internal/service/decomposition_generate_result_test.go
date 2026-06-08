@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/json"
+	blogcontracts "inkwords-backend/internal/domain/blog/contracts"
 	"testing"
 
 	"github.com/google/uuid"
@@ -14,12 +15,12 @@ func TestSeriesTaskResultCollector_BuildTaskResultIncludesParentAndChapters(t *t
 		"Go 源码解析系列",
 	)
 	collector.SetParentContent("导读正文")
-	collector.AddChapterSuccess(Chapter{
+	collector.AddChapterSuccess(blogcontracts.Chapter{
 		ID:    "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
 		Title: "第 1 章",
 		Sort:  1,
 	}, "正文", 2, []string{"Go"})
-	collector.AddChapterFailure(Chapter{
+	collector.AddChapterFailure(blogcontracts.Chapter{
 		ID:    "cccccccc-cccc-cccc-cccc-cccccccccccc",
 		Title: "第 2 章",
 		Sort:  2,

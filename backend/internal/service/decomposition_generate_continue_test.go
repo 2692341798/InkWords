@@ -49,12 +49,11 @@ func TestContinueGeneration_TaskOnlyMode_DoesNotUpdateBlogDirectly(t *testing.T)
 	fakeLLM := newContinueGenerationStreamServer(t, "追加内容")
 	defer fakeLLM.Close()
 
-	service := &DecompositionService{
-		llmClient: &llm.DeepSeekClient{
-			APIKey: "test-key",
-			APIURL: fakeLLM.URL,
-			Client: fakeLLM.Client(),
-		},
+	service := NewDecompositionService(nil)
+	service.llmClient = &llm.DeepSeekClient{
+		APIKey: "test-key",
+		APIURL: fakeLLM.URL,
+		Client: fakeLLM.Client(),
 	}
 
 	chunkChan := make(chan string, 8)
@@ -81,6 +80,73 @@ func TestContinueGeneration_TaskOnlyMode_DoesNotUpdateBlogDirectly(t *testing.T)
 	require.Equal(t, len([]rune("追加内容"))*2, result.EstimatedTokens)
 }
 
+func TestContinueGeneration_UsesInjectedPersistence(t *testing.T) {
+	previousDB := db.DB
+	db.DB = nil
+	defer func() {
+		db.DB = previousDB
+	}()
+
+	fakeLLM := newContinueGenerationStreamServer(t, "追加内容")
+	defer fakeLLM.Close()
+
+	persistence := &continuePersistenceRecorder{
+		blog: model.Blog{
+			ID:      uuid.MustParse("11111111-1111-1111-1111-111111111111"),
+			UserID:  uuid.MustParse("22222222-2222-2222-2222-222222222222"),
+			Content: "旧内容",
+		},
+	}
+
+	service := NewDecompositionServiceWithPersistences(nil, &seriesPersistenceRecorder{}, persistence)
+	service.llmClient = &llm.DeepSeekClient{
+		APIKey: "test-key",
+		APIURL: fakeLLM.URL,
+		Client: fakeLLM.Client(),
+	}
+
+	chunkChan := make(chan string, 8)
+	errChan := make(chan error, 1)
+	service.ContinueGeneration(context.Background(), persistence.blog.UserID, persistence.blog.ID, chunkChan, errChan)
+
+	var appendedContent string
+	for chunk := range chunkChan {
+		appendedContent += chunk
+	}
+	for err := range errChan {
+		require.NoError(t, err)
+	}
+
+	require.Equal(t, "追加内容", appendedContent)
+	require.Equal(t, 1, persistence.loadCalls)
+	require.Equal(t, 1, persistence.saveCalls)
+	require.Equal(t, "旧内容追加内容", persistence.savedContent)
+}
+
+func TestBuildContinueTaskResult_UsesInjectedPersistence(t *testing.T) {
+	previousDB := db.DB
+	db.DB = nil
+	defer func() {
+		db.DB = previousDB
+	}()
+
+	persistence := &continuePersistenceRecorder{
+		blog: model.Blog{
+			ID:      uuid.MustParse("11111111-1111-1111-1111-111111111111"),
+			UserID:  uuid.MustParse("22222222-2222-2222-2222-222222222222"),
+			Content: "旧内容",
+		},
+	}
+
+	service := NewDecompositionServiceWithPersistences(nil, &seriesPersistenceRecorder{}, persistence)
+	result, err := service.BuildContinueTaskResult(context.Background(), persistence.blog.UserID, persistence.blog.ID, "追加内容")
+	require.NoError(t, err)
+	require.Equal(t, persistence.blog.ID.String(), result.BlogID)
+	require.Equal(t, "追加内容", result.AppendedContent)
+	require.Equal(t, "旧内容追加内容", result.FinalContent)
+	require.Equal(t, 1, persistence.loadCalls)
+}
+
 func newContinueGenerationStreamServer(t *testing.T, appendedContent string) *httptest.Server {
 	t.Helper()
 
@@ -92,4 +158,22 @@ func newContinueGenerationStreamServer(t *testing.T, appendedContent string) *ht
 		_, _ = fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n")
 		_, _ = fmt.Fprint(w, "data: [DONE]\n\n")
 	}))
+}
+
+type continuePersistenceRecorder struct {
+	blog        model.Blog
+	loadCalls   int
+	saveCalls   int
+	savedContent string
+}
+
+func (r *continuePersistenceRecorder) LoadContinueBlog(context.Context, uuid.UUID, uuid.UUID) (model.Blog, error) {
+	r.loadCalls++
+	return r.blog, nil
+}
+
+func (r *continuePersistenceRecorder) SaveContinuedBlog(_ context.Context, _ model.Blog, updatedContent string) error {
+	r.saveCalls++
+	r.savedContent = updatedContent
+	return nil
 }

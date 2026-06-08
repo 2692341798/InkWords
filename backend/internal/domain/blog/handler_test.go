@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"inkwords-backend/internal/domain/blog"
+	blogcontracts "inkwords-backend/internal/domain/blog/contracts"
 	"inkwords-backend/internal/model"
 )
 
@@ -26,6 +28,25 @@ type stubRepo struct {
 	deleteErr         error
 	updateRows        int64
 	forceUpdateResult bool
+}
+
+type stubLegacyExporter struct {
+	exportSeriesPDFErr error
+}
+
+func (s *stubLegacyExporter) ExportSeriesToObsidian(ctx context.Context, blogID uuid.UUID, userID uuid.UUID) error {
+	return nil
+}
+
+func (s *stubLegacyExporter) ExportToObsidian(ctx context.Context, blogID uuid.UUID, userID uuid.UUID) error {
+	return nil
+}
+
+func (s *stubLegacyExporter) ExportSeriesToPDF(ctx context.Context, blogID uuid.UUID, userID uuid.UUID) (string, string, error) {
+	if s.exportSeriesPDFErr != nil {
+		return "", "", s.exportSeriesPDFErr
+	}
+	return "", "series.pdf", nil
 }
 
 func (s *stubRepo) ListTopLevelBlogs(ctx context.Context, userID uuid.UUID, page int, size int) ([]model.Blog, error) {
@@ -308,4 +329,35 @@ func TestHandler_UpdateBlog_ReturnsNotFoundForMissingBlog(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	require.Equal(t, http.StatusNotFound, resp.Code)
 	require.Equal(t, "blog not found", resp.Message)
+}
+
+func TestHandler_ExportSeriesPDF_ReturnsNotFoundForSeriesMissing(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+
+	userID := uuid.New()
+	svc := blog.NewService(&stubRepo{})
+	exporter := &stubLegacyExporter{
+		exportSeriesPDFErr: errors.Join(errors.New("export failed"), blogcontracts.ErrSeriesNotFound),
+	}
+	h := blog.NewHandlerWithLegacy(svc, exporter)
+
+	r.GET("/blogs/:id/export/pdf", func(c *gin.Context) {
+		c.Set("user_id", userID)
+		h.ExportSeriesPDF(c)
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/blogs/"+uuid.New().String()+"/export/pdf", nil)
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusNotFound, w.Code)
+
+	var resp struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.Equal(t, http.StatusNotFound, resp.Code)
+	require.Equal(t, "找不到该系列博客", resp.Message)
 }

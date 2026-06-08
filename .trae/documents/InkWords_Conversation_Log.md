@@ -1,6 +1,215 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 120：继续推进，阻断跨用户系列导读写入
+- **用户需求**：用户继续要求“继续”，在收紧旧正文读取边界后，继续沿同一条 `SeriesPersistence` 边界线往前推进。
+- **AI 动作**：
+  1. 审计发现 `SaveSeriesIntro()` 与 `MarkSeriesIntroFailed()` 仍只按 `parent_id` 写系列父稿，仍存在跨用户改写他人导读正文或状态的风险。
+  2. 按 TDD 先新增 `TestSeriesPersistence_SaveSeriesIntro_RejectsForeignParent` 与 `TestSeriesPersistence_MarkSeriesIntroFailed_RejectsForeignParent`，让接口缺口先以红灯暴露。
+  3. 将两条契约都改为显式接收 `userID`，默认适配器按 `user_id + parent_id` 更新；`DecompositionService.generateSeriesIntro()` 与测试替身同步透传当前用户。
+- **决策/变更**：
+  - 继续保持“一次只收一条边界线”的节奏，把 `SeriesPersistence` 的跨用户读取与写入边界分成连续几个原子提交。
+  - 对 intro 写路径采用 `RowsAffected == 0 -> gorm.ErrRecordNotFound` 的返回策略，使“未找到/不属于当前用户”都能被上层显式识别。
+- **验证**：
+  - `cd backend && go test ./internal/domain/blog -run 'TestSeriesPersistence_SaveSeriesIntro_RejectsForeignParent|TestSeriesPersistence_MarkSeriesIntroFailed_RejectsForeignParent|TestSeriesPersistence_LoadSeriesOldContent_RejectsForeignBlog' -count=1` 通过
+  - `cd backend && go test ./internal/service -run 'TestGenerateSeriesIntro_UsesInjectedPersistence|TestDecompositionService_ResolveSeriesOldContent_UsesInjectedPersistence' -count=1` 通过
+  - `cd backend && go test ./internal/domain/blog ./internal/service ./services/core-api/... ./services/llm-stream/... ./cmd/server -count=1` 通过
+
+### 对话 119：继续推进，阻断跨用户旧正文读取
+- **用户需求**：用户继续要求“继续”，在补上系列父稿归属校验后，继续沿 `domain/blog` 默认适配器内部边界做下一步最小收口。
+- **AI 动作**：
+  1. 审计 `SeriesPersistence` 剩余读写边界，优先挑出扩散面最小但价值较高的切口：`LoadSeriesOldContent()` 仍只按 `blog_id` 读取旧正文。
+  2. 按 TDD 先新增 `TestSeriesPersistence_LoadSeriesOldContent_RejectsForeignBlog`，把“当前用户不能读取他人旧章节正文”写成红灯测试。
+  3. 将 `SeriesPersistence.LoadSeriesOldContent()` 契约收紧为显式接收 `userID`，并同步修改 `DecompositionService.resolveSeriesOldContent()` 与测试替身，确保 regenerate 调用链透传当前用户。
+- **决策/变更**：
+  - 这一轮只改旧正文读取路径，不顺手扩到 `SaveSeriesIntro / MarkSeriesIntroFailed`，保持提交范围足够小。
+  - 优先阻断跨用户内容读取，再决定后续是否继续补 intro 写路径的用户边界。
+- **验证**：
+  - `cd backend && go test ./internal/domain/blog -run 'TestSeriesPersistence_LoadSeriesOldContent_RejectsForeignBlog|TestSeriesPersistence_EnsureSeriesParentAndDrafts_RejectsForeignParent' -count=1` 通过
+  - `cd backend && go test ./internal/service -run 'TestDecompositionService_ResolveSeriesOldContent_UsesInjectedPersistence' -count=1` 通过
+  - `cd backend && go test ./internal/domain/blog ./internal/service ./services/core-api/... ./services/llm-stream/... ./cmd/server -count=1` 通过
+
+### 对话 118：继续推进，修复跨用户系列父稿挂接风险
+- **用户需求**：用户继续要求“继续”，在 service 层 bridge 清零后，默认沿主线继续审计 `domain/blog` 适配器内部还能否继续收口。
+- **AI 动作**：
+  1. 回读知识库与 runbook 后，把下一步范围聚焦到 `internal/domain/blog` 默认适配器内部，发现 `SeriesPersistence.EnsureSeriesParentAndDrafts()` 查询父稿时只按 `id`，未按 `user_id` 约束。
+  2. 按 TDD 先新增 `TestSeriesPersistence_EnsureSeriesParentAndDrafts_RejectsForeignParent`，证明当前实现会错误地接受跨用户父稿复用。
+  3. 在 `series_persistence.go` 中补上所有权校验：若父稿存在但不属于当前用户，则直接报错并拒绝创建任何章节草稿。
+- **决策/变更**：
+  - 这一轮优先修 correctness/security 边界问题，而不是先做纯粹的适配器内部抽象整理，因为它更具业务价值且改动更小。
+  - 修复策略保持最小：不改公开 contracts，不改正常父稿新建/复用行为，只阻断跨用户挂接路径。
+- **验证**：
+  - `cd backend && go test ./internal/domain/blog -run TestSeriesPersistence_EnsureSeriesParentAndDrafts_RejectsForeignParent -count=1` 先失败后通过
+  - `cd backend && go test ./internal/domain/blog ./internal/service ./services/core-api/... ./services/llm-stream/... ./cmd/server -count=1` 通过
+
+### 对话 117：继续推进，删除 Chapter 的 service 本地别名
+- **用户需求**：用户继续要求“继续”，默认沿刚完成的 `440f557` 之后继续把最后剩下的 `Chapter` 兼容层收口。
+- **AI 动作**：
+  1. 审计 `internal/service` 中所有 `Chapter` 使用点，确认别名只剩一处定义，但在包内扩散到生成、提示词、质量门禁和多组测试文件。
+  2. 先做一轮定向替换，把这些文件统一切到 `blogcontracts.Chapter`；期间识别并修复了批量替换误伤字段名/选择器名的问题。
+  3. 删除 `decomposition_service.go` 中最后的 `Chapter` 本地别名，并完成 `gofmt`、`service` 包测试与完整范围回归。
+- **决策/变更**：
+  - 这一轮完成后，service 层已经不再保留 blog contracts 的兼容别名；后续若继续推进，重点将从“删桥接层”转向是否继续细化 blog-domain 仓储职责或收紧 service 公开 API。
+  - 对误替换问题采用“先局部 grep 定位、再定向修补”的方式止损，没有扩大改动到业务逻辑之外。
+- **验证**：
+  - `cd backend && go test ./internal/service -count=1` 通过
+  - `cd backend && go test ./internal/domain/stream ./internal/domain/blog ./internal/service ./services/core-api/... ./services/llm-stream/... ./services/export-service/... ./cmd/server -count=1` 通过
+
+### 对话 116：继续推进，删除 series 的 service 类型桥接层
+- **用户需求**：用户继续要求“继续”，默认沿上一轮已提交的 bridge 收口主线继续推进。
+- **AI 动作**：
+  1. 先回读知识库并审计 `internal/service` 中剩余的 `SeriesPersistence / SeriesDraftPreflightInput / SeriesChapterPersistenceInput / Chapter` 兼容层使用面。
+  2. 选择 `series` 这一组作为更小的下一刀：让 `DecompositionService` 直接依赖 `blogcontracts.SeriesPersistence` 与 `blogdomain.NewSeriesPersistence(db.DB)`，并把 `decomposition_generate_persistence.go` 改为直接组装 `blogcontracts.SeriesDraftPreflightInput` 与 `blogcontracts.SeriesChapterPersistenceInput`。
+  3. 更新 `decomposition_generate_persist_test.go` 的 recorder 字段与方法签名后，删除 `decomposition_series_persistence.go`，把 `Chapter` 本地别名暂时留到下一轮单独处理。
+- **决策/变更**：
+  - 这一轮不强行把 `Chapter` 也一起删掉，因为它在 `service` 包内部扩散更广，单独拆出来更有利于保持原子提交与可回滚性。
+  - 本轮完成后，service 层剩余主要兼容债务已进一步收缩为 `Chapter` 本地别名。
+- **验证**：
+  - `cd backend && go test ./internal/service -run 'Test(NewDecompositionServiceWithPersistences_FillsMissingDefaultAdapters|DecompositionService_EnsureSeriesParentAndDrafts_UsesInjectedPersistence|HandleSeriesChapterCompletion_UsesInjectedPersistence|GenerateSeriesIntro_UsesInjectedPersistence|HandleSkippedSeriesChapter_UsesInjectedPersistence|ResolveSeriesOldContent_UsesInjectedPersistence)' -count=1` 通过
+  - `cd backend && go test ./internal/domain/stream ./internal/domain/blog ./internal/service ./services/core-api/... ./services/llm-stream/... ./services/export-service/... ./cmd/server -count=1` 通过
+
+### 对话 115：继续推进，删除 generator 与 continue 的 service 桥接层
+- **用户需求**：用户继续要求“继续”，默认沿上一轮已提交的 contracts 收口主线继续推进。
+- **AI 动作**：
+  1. 先回读知识库与代码审计，确认 `internal/service` 剩余桥接中最薄、最值的一组是 `generator_persistence.go` 与 `decomposition_continue_persistence.go`。
+  2. 将 `GeneratorService` 直接切到 `blogcontracts.GeneratedBlogPersistence` 与 `blogdomain.NewGeneratedBlogPersistence(db.DB)`，并同步更新 `generator_persist_test.go` 的测试替身。
+  3. 将 `DecompositionService` 直接切到 `blogcontracts.ContinuePersistence` 与 `blogdomain.NewContinuePersistence(db.DB)`，随后删除 `generator_persistence.go` 与 `decomposition_continue_persistence.go` 两个桥接文件。
+- **决策/变更**：
+  - 这一轮仍然不直接动 `series` 与 `Chapter` 相关桥接，因为那一组在 `service` 包内部的扩散面更大，适合单独做下一步原子改动。
+  - 本轮目标是把“最薄的桥接层先删掉”，让 `service` 内真正保留的兼容债务进一步缩小，避免一次性改动过大。
+- **验证**：
+  - `cd backend && go test ./internal/service -run 'Test(NewGeneratorServiceWithPersistence_FillsDefaultPersistence|GeneratorService_saveToDB_UsesInjectedPersistence|GeneratorService_saveToDB_(RollsBackWhenUserTokenUpdateFails|PersistsBlogAndUpdatesTokens)|GeneratorService_BuildGenerateSingleTaskResult_TaskOnlyModeDoesNotPersistAndReturnsTaskResult)' -count=1` 通过
+  - `cd backend && go test ./internal/service -run 'Test(NewDecompositionServiceWithPersistences_FillsMissingDefaultAdapters|ContinueGeneration_UsesInjectedPersistence|BuildContinueTaskResult_UsesInjectedPersistence|ContinueGeneration_TaskOnlyMode_DoesNotUpdateBlogDirectly|DecompositionService_EnsureSeriesParentAndDrafts_UsesInjectedPersistence)' -count=1` 通过
+
+### 对话 114：继续推进，让外层调用点开始直接依赖 blog contracts
+- **用户需求**：用户继续要求“继续”，默认沿刚完成的 `fb5219f` 合同收口主线继续推进，并优先判断最新未提交改动是否足够整理为新的原子提交。
+- **AI 动作**：
+  1. 先回读知识库 `[[concepts/DecompositionService 系列持久化边界收口]]`、`wiki/hot.md` 与 `wiki/index.md`，确认当前下一步重点已经转向“删除外层对 service 兼容别名的依赖”。
+  2. 审计工作区后确认主线代码改动只剩 `backend/internal/domain/stream/service.go`，于是将其中系列大纲组装从 `service.Chapter` 改为直接依赖 `blogcontracts.Chapter`。
+  3. 重新执行范围测试，并全局扫描 `backend/**/*.go`，确认非 `service` 包已经没有 `GeneratedBlogPersistence / ContinuePersistence / SeriesPersistence / SeriesDraftPreflightInput / SeriesChapterPersistenceInput / Chapter` 等兼容别名的显式引用。
+- **决策/变更**：
+  - 这一轮先不直接删除 `internal/service` 中的兼容别名，而是先用一个最小外层调用点验证 contracts 已经能被外部直接使用，并以此作为后续删除桥接层的前置门槛。
+  - 由于 `README.md` 在工作区存在用户要求忽略的无关改动，本轮文档同步不触碰该文件，只补与主线直接相关的架构/日志/runbook 记录。
+- **验证**：
+  - `cd backend && go test ./internal/domain/stream ./internal/domain/blog ./internal/service ./services/core-api/... ./services/llm-stream/... ./services/export-service/... ./cmd/server -count=1` 通过
+  - `grep service\.(GeneratedBlogPersistence|GeneratedBlogPersistenceInput|ContinuePersistence|SeriesPersistence|SeriesDraftPreflightInput|SeriesChapterPersistenceInput|Chapter) backend/**/*.go` 无匹配
+
+### 对话 109：继续推进，收口系列前置草稿准备事务边界
+- **用户需求**：用户继续要求“继续”，默认沿 `core-api / llm-stream` 深拆分主线持续推进，不切换任务主题。
+- **AI 动作**：
+  1. 识别出 `DecompositionService` 剩余最厚的一段直连数据库逻辑是 `ensureSeriesParentAndDrafts()`，其内部包含系列父稿创建、父稿来源更新、旧子稿清理与章节草稿预建，且这些行为天然属于同一事务边界。
+  2. 按 TDD 先新增失败测试，锁定“前置草稿准备”也必须可由注入的 `SeriesPersistence` 完整替换，而不依赖全局 `db.DB`。
+  3. 新增 `SeriesDraftPreflightInput` 与 `SeriesPersistence.EnsureSeriesParentAndDrafts()`，将上述事务整体下沉到默认 GORM 适配器；同时把 `GenerateSeries()` 中的调用替换为 `DecompositionService.ensureSeriesParentAndDrafts()`。
+  4. 删除已被显式 persistence 完整替代的 legacy helper `persistSeriesChapterCompletion()`，并重新扫描 `decomposition_generate*.go`，确认生产代码中剩余的 `db.DB` 只用于默认适配器 fallback，不再承担主业务逻辑直写职责。
+- **决策/变更**：
+  - 这一轮完成后，`DecompositionService` 主流程层面对博客相关持久化的深拆目标基本达成；后续若继续推进，更偏向“默认 GORM 适配器是否并入 `domain/blog` 仓储边界”的结构优化，而不是继续找 service 里的散落写点。
+  - 保持 `nil -> GORM` 的默认回退不变，确保旧测试、旧构造方式和现有 DI 组装不被这次接口化打断。
+- **验证**：
+  - `cd backend && go test ./internal/service -run 'TestDecompositionService_EnsureSeriesParentAndDrafts_UsesInjectedPersistence' -count=1` 先失败、补实现后通过
+  - `cd backend && go test ./internal/service -count=1` 通过
+  - `cd backend && go test ./services/core-api/... ./services/llm-stream/... -count=1` 通过
+  - `grep db.DB backend/internal/service/decomposition_generate*.go` 仅剩默认 GORM fallback 构造路径
+
+### 对话 110：继续推进，收紧默认 persistence 适配器的装配边界
+- **用户需求**：用户继续要求“继续”，并在澄清选项中明确选择优先推进“下沉默认适配器（推荐）”。
+- **AI 动作**：
+  1. 先回读知识库 `[[concepts/DecompositionService 系列持久化边界收口]]` 与 `[[concepts/core-api 与 llm-stream 深拆分第一轮]]`，确认当前主线剩余技术债已经从“service 仍有散落写库”收敛为“默认 GORM persistence 的归属与装配位置”。
+  2. 按 TDD 先补 `TestNewDecompositionServiceWithPersistences_FillsMissingDefaultAdapters`，锁定 `SeriesPersistence / ContinuePersistence` 的缺省装配必须在构造阶段完成；随后删除 `DecompositionService` 多个业务方法中的隐式 `nil -> GORM` fallback。
+  3. 同步收紧 `GeneratorService.saveToDB()`，要求默认 `GeneratedBlogPersistence` 只由构造器注入，并把仍依赖字面量 service 构造的测试切到正式构造器。
+- **决策/变更**：
+  - 这一轮没有直接把默认适配器彻底并入 `domain/blog`，而是先做最小且可回滚的一步：把默认适配器的装配边界统一到构造阶段，消除方法级隐式 fallback。
+  - 经过这轮后，后续若要继续把适配器并入 `domain/blog` 或服务私有 repository，将只需移动装配归属，而不用再逐个业务方法清理兜底逻辑。
+- **验证**：
+  - `cd backend && go test ./internal/service -run 'Test(NewDecompositionServiceWithPersistences_FillsMissingDefaultAdapters|NewGeneratorServiceWithPersistence_FillsDefaultPersistence|GeneratorService_saveToDB_(RollsBackWhenUserTokenUpdateFails|PersistsBlogAndUpdatesTokens))' -count=1` 先失败、补实现后通过
+  - `cd backend && go test ./internal/service -count=1` 通过
+  - `cd backend && go test ./services/core-api/... ./services/llm-stream/... -count=1` 通过
+
+### 对话 111：先提交当前收口，再继续把默认生产适配器下沉到 domain/blog
+- **用户需求**：用户要求“先整理成原子提交,然后继续下沉到 domain/blog”。
+- **AI 动作**：
+  1. 先将“默认 persistence 装配边界收紧到构造器”的 12 个相关文件整理为一次新的原子提交，生成 commit `987975f refactor(service): centralize default persistence wiring`，继续忽略工作区中无关改动。
+  2. 提交完成后，选择最小且可回滚的继续下沉切口：优先把 `GeneratedBlogPersistence` 与 `ContinuePersistence` 的默认生产实现迁入 `internal/domain/blog`，而不是一次性连更重的 `SeriesPersistence` 一起搬迁。
+  3. 按 TDD 先在 `domain/blog` 新增适配器测试，再补 `generated_blog_persistence.go` 与 `continue_persistence.go`，最后把 `llm-stream`、`core-api` 与 `cmd/server` 的生产装配改为显式注入 blog-domain 适配器。
+- **决策/变更**：
+  - 本轮将“适配器是否迁入 domain/blog”的问题，收敛为一个明确的增量结果：`GeneratedBlogPersistence` 与 `ContinuePersistence` 已开始由 blog-domain 提供默认生产适配器。
+  - `SeriesPersistence` 暂未迁移，原因是它包含前置草稿准备、系列章节完成/失败与导读等更厚的事务语义，适合单独做下一轮。
+- **验证**：
+  - `cd backend && go test ./internal/domain/blog -run 'Test(GeneratedBlogPersistence_SaveGeneratedBlog_PersistsBlogAndUpdatesTokens|ContinuePersistence_LoadAndSaveContinueBlog)' -count=1` 先失败、补实现后通过
+  - `cd backend && go test ./internal/service ./services/core-api/... ./services/llm-stream/... ./cmd/server -count=1` 通过
+
+### 对话 112：继续推进，把默认 SeriesPersistence 也迁入 domain/blog
+- **用户需求**：用户继续要求“继续”，沿当前刚完成的 `domain/blog` 下沉主线往下推进。
+- **AI 动作**：
+  1. 识别出默认 blog 写入适配器中最重但也最值得继续迁移的一块是 `SeriesPersistence`，否则默认生产装配会长期分散在 `domain/blog` 与 `internal/service` 两处。
+  2. 按 TDD 先在 `domain/blog` 增加 `series_persistence_test.go`，锁定系列前置草稿准备事务与章节完成更新/记账两类核心行为。
+  3. 新增 `series_persistence.go`，在 blog-domain 中实现 `service.SeriesPersistence`，并将 `llm-stream`、`core-api`、`cmd/server` 的 `DecompositionService` 默认生产装配改为显式注入 `blogdomain.NewSeriesPersistence(...)`。
+- **决策/变更**：
+  - 这一轮完成后，`GeneratedBlogPersistence / ContinuePersistence / SeriesPersistence` 三类默认 blog 写入适配器已全部由 `domain/blog` 提供，service 层主要保留接口定义与测试替身。
+  - 这意味着下一阶段的重点不再是“默认适配器搬家”，而是是否继续把这些接口定义和更细粒度仓储能力也一起下沉或整合。
+- **验证**：
+  - `cd backend && go test ./internal/domain/blog -run 'TestSeriesPersistence_(EnsureSeriesParentAndDrafts_PreparesTree|SaveSeriesChapter_UpdatesBlogAndTokens)' -count=1` 先失败、补实现后通过
+  - `cd backend && go test ./internal/domain/blog ./internal/service ./services/core-api/... ./services/llm-stream/... ./cmd/server -count=1` 通过
+
+### 对话 113：继续推进，抽出中立 blog contracts 并解除 domain/blog 对 service 的反向依赖
+- **用户需求**：用户继续要求“继续”，因此在完成默认生产适配器下沉后，继续推进下一步“契约收口”的前置工作。
+- **AI 动作**：
+  1. 先识别出当前阻碍 `service -> domain/blog` 更进一步收口的关键点，是 `domain/blog` 仍需通过导出错误判断与 persistence 适配器实现反向 import `internal/service`。
+  2. 按 TDD 在 `internal/domain/blog/handler_test.go` 增加导出 PDF 的 404 映射测试，锁定 `ErrSeriesNotFound` 行为，然后抽出中立契约包 `internal/domain/blog/contracts`。
+  3. 将 `ErrSeriesNotFound`、`Chapter`、三类 persistence 输入与接口定义迁入 contracts；`domain/blog` 改依赖 contracts，`internal/service` 改为保留类型别名与兼容构造器。
+- **决策/变更**：
+  - 这一轮没有直接删除 `internal/service` 中的 persistence 别名，而是先保留兼容层，避免一次性改动过大并波及更多调用点。
+  - 到本轮结束时，`domain/blog` 已不再反向依赖 `internal/service`，后续若继续收口 service 层契约定义，已经不存在包循环阻碍。
+- **验证**：
+  - `cd backend && go test ./internal/domain/blog -run 'Test(GeneratedBlogPersistence_SaveGeneratedBlog_PersistsBlogAndUpdatesTokens|SeriesPersistence_(EnsureSeriesParentAndDrafts_PreparesTree|SaveSeriesChapter_UpdatesBlogAndTokens)|Handler_ExportSeriesPDF_ReturnsNotFoundForSeriesMissing)' -count=1` 先失败、补实现后通过
+  - `cd backend && go test ./internal/domain/blog ./internal/service ./services/core-api/... ./services/llm-stream/... ./services/export-service/... ./cmd/server -count=1` 通过
+  - `grep internal/service backend/internal/domain/blog/**/*.go` 无匹配
+
+### 对话 108：继续推进，收口系列旧正文读取与 skip 元信息更新
+- **用户需求**：用户只要求“继续”，默认沿当前 `core-api / llm-stream` 深拆分主线继续推进。
+- **AI 动作**：
+  1. 基于当前代码状态判断，先选择与既有 `SeriesPersistence / ContinuePersistence` 模式最贴近的剩余轻量技术债：系列旧正文读取与 `skip` 章节标题/排序更新。
+  2. 按 TDD 先补失败测试，证明这两类行为都必须能通过注入的 `SeriesPersistence` 替换，而不再依赖全局 `db.DB`。
+  3. 扩展 `SeriesPersistence` 默认 GORM 适配器，新增 `LoadSeriesOldContent()` 和 `UpdateSkippedSeriesChapterMeta()`；同时把 `resolveSeriesOldContent()` 改为 `DecompositionService` 方法，并新增 `handleSkippedSeriesChapter()` service helper。
+  4. 通过范围测试确认 `internal/service` 与 `core-api / llm-stream` 仍全部通过，再同步边界 runbook 与架构日志。
+- **决策/变更**：
+  - 本轮没有直接攻入“系列父稿与章节草稿预建”，因为那一块涉及一组创建语义与父子稿关联，边界更厚，适合下一轮单独做原子收口。
+  - 通过这轮收口后，`DecompositionService` 剩余直连数据库点已经明显压缩到前置草稿准备与父稿来源更新，后续拆分路径更清晰。
+- **验证**：
+  - `cd backend && go test ./internal/service -run 'TestDecompositionService_ResolveSeriesOldContent_UsesInjectedPersistence' -count=1` 先失败、补实现后通过
+  - `cd backend && go test ./internal/service -run 'TestDecompositionService_HandleSkippedSeriesChapter_UsesInjectedPersistence' -count=1` 先失败、补实现后通过
+  - `cd backend && go test ./internal/service -count=1` 通过
+  - `cd backend && go test ./services/core-api/... ./services/llm-stream/... -count=1` 通过
+
+### 对话 107：提交后继续推进，收口 continue 续写正文读写边界
+- **用户需求**：用户要求“先提交，创建对应分支，暂不推送远端，然后再继续”。
+- **AI 动作**：
+  1. 先使用专门分支 `agent/20260605-series-persistence-boundary` 承接上一轮系列持久化边界收口，按原子提交原则只暂存本轮相关文件，并创建 commit `b2328d4 refactor(service): extract series persistence boundary`，保留其它无关工作区改动不入提交。
+  2. 提交完成后继续沿同一条微服务深拆主线前进，识别出 `continue` 链路仍直接读取与更新 `blogs.content`，适合作为下一步最小边界收口对象。
+  3. 按 TDD 先新增红灯测试，锁定“续写旧正文读取”和“最终正文更新”必须可由显式 persistence 替换；随后新增 `ContinuePersistence` 默认 GORM 适配器，并把 `ContinueGeneration()` 与 `BuildContinueTaskResult()` 切到显式依赖。
+  4. 为避免现有测试与旧构造方式回归，又补上 `nil -> GORM` 的兼容回退，并同步更新架构文档与边界 runbook。
+- **决策/变更**：
+  - 提交与继续开发被分成两个清晰阶段：先保证上一轮边界收口有独立提交，再继续下一轮 `continue` 收口，避免把两轮技术债治理混进同一个 commit。
+  - `continue` 本轮只收口“正文读取 + 最终更新”，不顺手扩展到前置草稿准备、`skip` 元信息或旧内容读取，以保持这轮改动最小可回滚。
+- **验证**：
+  - `cd backend && go test ./internal/service -run 'Test(ContinueGeneration_UsesInjectedPersistence|BuildContinueTaskResult_UsesInjectedPersistence|ContinueGeneration_TaskOnlyMode_DoesNotUpdateBlogDirectly)' -count=1` 先失败、补实现后通过
+  - `cd backend && go test ./internal/service -count=1` 通过
+  - `cd backend && go test ./services/core-api/... ./services/llm-stream/... -count=1` 通过
+
+### 对话 106：继续推进微服务化，收口 DecompositionService 的系列持久化边界
+- **用户需求**：用户要求“继续推进我的项目微服务化”，并在澄清选项中选择“深拆 core/stream”且“直接改代码”。
+- **AI 动作**：
+  1. 先执行知识库 Query，回读 `[[concepts/InkWords 生产形态：多服务与聚合入口]]`、`[[concepts/core-api 与 llm-stream 深拆分第一轮]]` 与 `[[concepts/微服务冒烟检查与 CI 前置]]`，确认当前项目已处于“多服务已落地，继续收口边界”的阶段。
+  2. 审计仓库与 runbook，识别出 `DecompositionService` 仍有多处系列生成写点直接触达全局 `db.DB`，适合作为本轮最小可验证的收口对象。
+  3. 按 TDD 先新增失败测试，锁定“系列章节完成落库”和“系列导读落库”必须通过注入的 persistence；再新增 `SeriesPersistence` 默认 GORM 适配器，并把 `DecompositionService` 的相关落库路径切到显式依赖。
+  4. 最后同步架构文档、开发日志与边界 runbook，修正过时的技术债描述。
+- **决策/变更**：
+  - 本轮没有继续扩容新容器，也没有碰 `parser/export/review`，而是把 `core-api / llm-stream` 深拆分推进到“业务事实写入边界继续接口化”的层级。
+  - `DecompositionService` 这轮只先收口“系列章节完成/失败 + 系列导读完成/失败”的最终持久化；系列父稿预建、旧内容读取、`skip` 元信息与 `continue` 正文读写仍保留为下一轮收口对象，避免一次性改太大。
+- **验证**：
+  - `cd backend && go test ./internal/service -run 'TestDecompositionService_(HandleSeriesChapterCompletion_UsesInjectedPersistence|GenerateSeriesIntro_UsesInjectedPersistence)|TestHandleSeriesChapterCompletion_TaskOnlyMode_CollectsChapterResultWithoutDirectPersistence' -count=1` 先失败、补实现后通过
+  - `cd backend && go test ./internal/service -count=1` 通过
+  - `cd backend && go test ./services/core-api/... ./services/llm-stream/... -count=1` 通过
+
 ### 对话 105：提交 FRONTEND_PORT 端口兼容改动
 - **用户需求**：在确认 `http://localhost:8088` 冒烟成功后，用户要求“提交端口改动”。
 - **AI 动作**：

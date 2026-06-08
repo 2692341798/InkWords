@@ -11,7 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"inkwords-backend/internal/service"
+	blogcontracts "inkwords-backend/internal/domain/blog/contracts"
 )
 
 func (h *Handler) ExportSeriesToObsidian(c *gin.Context) {
@@ -142,7 +142,7 @@ func (h *Handler) ExportSeriesPDF(c *gin.Context) {
 
 	pdfPath, filename, err := h.legacyExporter.ExportSeriesToPDF(c.Request.Context(), blogID, uid)
 	if err != nil {
-		if errors.Is(err, service.ErrSeriesNotFound) {
+		if errors.Is(err, blogcontracts.ErrSeriesNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"code": http.StatusNotFound, "message": "找不到该系列博客", "data": nil})
 			return
 		}
@@ -197,4 +197,3 @@ func (h *Handler) ExportToObsidian(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"code": http.StatusOK, "message": "success", "data": nil})
 }
-

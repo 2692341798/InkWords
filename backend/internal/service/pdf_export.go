@@ -17,6 +17,7 @@ import (
 	"github.com/yuin/goldmark/extension"
 	"gorm.io/gorm"
 
+	blogcontracts "inkwords-backend/internal/domain/blog/contracts"
 	"inkwords-backend/internal/model"
 )
 
@@ -24,7 +25,7 @@ var seriesPDFMarkdown = goldmark.New(
 	goldmark.WithExtensions(extension.GFM),
 )
 
-var ErrSeriesNotFound = errors.New("series not found")
+var ErrSeriesNotFound = blogcontracts.ErrSeriesNotFound
 
 func buildSeriesPDFHTML(seriesTitle string, now time.Time, blogs []model.Blog) (string, string, error) {
 	safeTitle := strings.TrimSpace(seriesTitle)

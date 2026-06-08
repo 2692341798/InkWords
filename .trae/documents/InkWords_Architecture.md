@@ -1,6 +1,21 @@
 # 墨言知识训练平台 (InkWords Trainer) - 架构设计与工程规范
 
 ## 0. 变更记录
+- 2026-06-05：继续推进 `core-api / llm-stream` 深拆分第十六轮。`internal/domain/blog/series_persistence.go` 现在在 `SaveSeriesIntro()` 与 `MarkSeriesIntroFailed()` 中显式按 `user_id + parent_id` 更新系列父稿；`DecompositionService.generateSeriesIntro()` 也同步透传当前用户，避免跨用户改写他人的系列导读正文或失败状态。
+- 2026-06-05：继续推进 `core-api / llm-stream` 深拆分第十五轮。`internal/domain/blog/series_persistence.go` 现在在 `LoadSeriesOldContent()` 中显式按 `user_id + blog_id` 读取旧正文；`DecompositionService` 的 regenerate 路径也同步透传当前用户，避免跨用户读取他人的历史章节内容。
+- 2026-06-05：继续推进 `core-api / llm-stream` 深拆分第十四轮。`internal/domain/blog/series_persistence.go` 现在在 `EnsureSeriesParentAndDrafts()` 中显式校验父稿归属用户；若传入的 `parent_id` 指向其它用户的系列父稿，将直接返回错误而不是继续在其下创建当前用户的章节草稿，避免跨用户系列树挂接。
+- 2026-06-05：继续推进 `core-api / llm-stream` 深拆分第十三轮。`internal/service` 已删除最后的 `Chapter` 本地兼容别名，service 包内部相关生成、提示词、质量门禁与测试代码均改为直接依赖 `blogcontracts.Chapter`；至此 blog contracts 的 `GeneratedBlogPersistence / ContinuePersistence / SeriesPersistence / SeriesDraftPreflightInput / SeriesChapterPersistenceInput / Chapter` 在 service 层的兼容桥接已全部清空。
+- 2026-06-05：继续推进 `core-api / llm-stream` 深拆分第十二轮。`internal/service` 已删除 `decomposition_series_persistence.go`；`DecompositionService` 与其持久化辅助逻辑现在直接依赖 `blogcontracts.SeriesPersistence`、`blogcontracts.SeriesDraftPreflightInput`、`blogcontracts.SeriesChapterPersistenceInput` 以及 `blogdomain.NewSeriesPersistence(db.DB)`。service 层剩余主要兼容层已进一步收缩为 `Chapter` 本地别名。
+- 2026-06-05：继续推进 `core-api / llm-stream` 深拆分第十一轮。`internal/service` 已删除 `generator_persistence.go` 与 `decomposition_continue_persistence.go` 两层最薄的 blog bridge；`GeneratorService` 与 `DecompositionService` 现分别直接依赖 `blogcontracts.GeneratedBlogPersistence`、`blogcontracts.ContinuePersistence` 和 `blogdomain` 默认适配器，service 层剩余兼容桥接进一步收缩为 `series` 与 `Chapter` 相关类型。
+- 2026-06-05：继续推进 `core-api / llm-stream` 深拆分第十轮。`backend/internal/domain/stream/service.go` 已不再依赖 `internal/service.Chapter` 兼容别名，改为直接组装 `internal/domain/blog/contracts.Chapter`；当前非 `service` 包对 `GeneratedBlogPersistence / ContinuePersistence / SeriesPersistence / Chapter` 等 blog contracts 兼容别名的显式引用已清零，service 层进一步退化为内部兼容桥接层。
+- 2026-06-05：继续推进 `core-api / llm-stream` 深拆分第九轮。新增中立契约包 `internal/domain/blog/contracts`，先承接 `ErrSeriesNotFound` 与 blog persistence 的输入/接口定义；`domain/blog` 适配器现已直接依赖契约包而不再 import `internal/service`，service 层退化为类型别名与兼容构造器。
+- 2026-06-05：继续推进 `core-api / llm-stream` 深拆分第八轮。`SeriesPersistence` 的默认生产适配器也已迁入 `internal/domain/blog`，并在 `llm-stream`、`core-api` 与聚合调试入口通过 bootstrap 显式注入；至此 `GeneratedBlogPersistence / ContinuePersistence / SeriesPersistence` 三类默认 blog 写入适配器已统一由 blog-domain 提供，service 层主要保留接口定义与测试替身。
+- 2026-06-05：继续推进 `core-api / llm-stream` 深拆分第七轮。默认生产适配器开始真正下沉到 `internal/domain/blog`：`GeneratedBlogPersistence` 与 `ContinuePersistence` 新增 blog-domain GORM 适配器，并在 `llm-stream`、`core-api` 与聚合调试入口通过 bootstrap 显式注入；当前仍留在 `internal/service` 的主要默认适配器只剩 `SeriesPersistence`。
+- 2026-06-05：继续推进 `core-api / llm-stream` 深拆分第六轮。`DecompositionService` 与 `GeneratorService` 的默认 GORM persistence 现在统一只在构造阶段补齐，业务方法内的隐式 `nil -> GORM` fallback 已删除；当前剩余技术债进一步收缩为“这些默认适配器是否继续并入 `domain/blog` 或服务私有 repository”，而不是继续在 service 方法里兜底装配。
+- 2026-06-05：继续推进 `core-api / llm-stream` 深拆分第五轮。`DecompositionService` 已把系列父稿创建、章节草稿预建与父稿来源更新也收口到 `SeriesPersistence`，至此该 service 主流程中的主要博客持久化读写都已改为经由显式 persistence 边界完成；当前生产代码中保留的 `db.DB` 只剩默认 GORM fallback 构造路径，不再承担业务主逻辑直写角色。
+- 2026-06-05：继续推进 `core-api / llm-stream` 深拆分第四轮。`DecompositionService` 进一步把系列重写中的旧正文读取与 `skip` 章节标题/排序更新收口到 `SeriesPersistence`；当前剩余待收口点进一步缩小为系列父稿创建、章节草稿预建与父稿来源更新。
+- 2026-06-05：继续推进 `core-api / llm-stream` 深拆分第三轮。`DecompositionService` 新增显式 `ContinuePersistence` 边界，把 `continue` 链路中的旧正文读取与最终正文更新从主 service 逻辑里抽离到默认 GORM 适配器；当前剩余待收口点收缩为系列父稿/章节草稿前置准备、`skip` 元信息更新与旧内容读取。
+- 2026-06-05：继续推进 `core-api / llm-stream` 深拆分第二轮。`DecompositionService` 新增显式 `SeriesPersistence` 边界，先把“系列章节完成/失败 + 系列导读完成/失败”这批最终业务事实写入从主 service 逻辑里抽离到默认 GORM 适配器；现阶段仍保留前置草稿准备、旧内容读取、`skip` 章节元信息与 `continue` 正文读写的直连数据库路径，作为下一轮收口对象。
 - 2026-06-04：为本地环境端口冲突增加 `FRONTEND_PORT` 端口覆盖能力。`docker-compose.yml` 中 `frontend` 端口映射由固定 `80:80` 调整为 `${FRONTEND_PORT:-80}:80`，默认生产/标准本地入口仍是 `http://localhost`；当宿主机 `:80` 被其它进程占用时，可临时以 `FRONTEND_PORT=8088` 方式在 `http://localhost:8088` 验证前端 Nginx 与 `/api/v1/ping`。
 - 2026-06-04：Generation Task-Only Task 4 打通 `generate_series` 系列链路的结果收集、任务结果交接与父子博客持久化。`llm-stream` 现会在系列生成完成后把父博客导读、章节成功/失败状态、章节正文与技术栈汇总为结构化 `job_tasks.result_json`；`core-api` 在 generation 成功路径中消费该结果，并以事务方式更新系列父博客与章节草稿。
 - 2026-06-04：Generation Task-Only Task 3 打通 `continue` 续写链路的结果交接与最终持久化。`llm-stream` 现会在续写成功后输出带 `blog_id / appended_content / final_content` 的结构化 `job_tasks.result_json`；`core-api` 在 generation 成功路径中消费该结果，依据 `final_content` 更新目标博客正文，并统一累计 `users.tokens_used`。
@@ -151,9 +166,9 @@
 - `review-service` 使用独立 `REVIEW_DATABASE_URL` 后，不再允许其它服务绕过 review repository 写 `review_sessions / review_turns`。
 
 ### 当前已知技术债
-- `backend/internal/service/generator.go` 仍直接使用全局 `db.DB` 在事务中写 `blogs` 与 `users.tokens_used`。
-- `backend/internal/service/decomposition_generate*.go` 仍直接使用全局 `db.DB` 写系列父博客、章节草稿、续写正文和失败状态。
-- 这些写入虽然仍属于 `core-api` 自有边界，没有跨服务越权，但它们绕过了 `domain/blog` 的显式仓储边界，属于 Task 4 识别出的下一步收口对象。
+- `GeneratorService` 已通过 `GeneratedBlogPersistence` 完成单篇生成最终写入的显式接口化，但默认实现仍是 GORM 适配器，尚未进一步并入 `domain/blog` 仓储边界。
+- `DecompositionService` 已通过 `SeriesPersistence / ContinuePersistence` 收口系列前置草稿准备、章节完成/失败、导读完成/失败、旧正文读取、`skip` 元信息更新以及 `continue` 正文读取/最终更新；当前 service 主逻辑层面已基本不再直接承担博客事实的数据库读写。
+- 当前真正剩余的技术债从“主流程仍有直连数据库”切换为“默认 GORM persistence 适配器后续是否继续归并到 `domain/blog` 仓储边界”；同时，默认生产装配与中立契约都已开始迁入 blog-domain，下一步更偏向是否继续把 service 层遗留的兼容别名与更细粒度仓储能力也一起收口。
 
 ### 退化与拆分判断
 - 在 `blogs / job_tasks / job_task_events` 仍存在大量全局 `db.DB` 直接写之前，不推进真正的独立实例拆分。
