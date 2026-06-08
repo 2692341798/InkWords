@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - 架构设计与工程规范
 
 ## 0. 变更记录
+- 2026-06-08：执行全仓安全清理首轮。删除 `backend/services/llm-stream/domain/generation/` 下未接入的占位/空桥接包，`services/llm-stream/app/bootstrap` 不再创建后立刻丢弃空 `generation.Service`；同时将过渡层 `internal/transport/http/v1/api/StreamAPI` 收窄为只依赖真实使用的 `streamDomainHandler`，前端删除 `GeneratorProgressStage` 兼容壳并同步清理两处 store 中未消费状态。
 - 2026-06-05：继续推进 `core-api / llm-stream` 深拆分第十六轮。`internal/domain/blog/series_persistence.go` 现在在 `SaveSeriesIntro()` 与 `MarkSeriesIntroFailed()` 中显式按 `user_id + parent_id` 更新系列父稿；`DecompositionService.generateSeriesIntro()` 也同步透传当前用户，避免跨用户改写他人的系列导读正文或失败状态。
 - 2026-06-05：继续推进 `core-api / llm-stream` 深拆分第十五轮。`internal/domain/blog/series_persistence.go` 现在在 `LoadSeriesOldContent()` 中显式按 `user_id + blog_id` 读取旧正文；`DecompositionService` 的 regenerate 路径也同步透传当前用户，避免跨用户读取他人的历史章节内容。
 - 2026-06-05：继续推进 `core-api / llm-stream` 深拆分第十四轮。`internal/domain/blog/series_persistence.go` 现在在 `EnsureSeriesParentAndDrafts()` 中显式校验父稿归属用户；若传入的 `parent_id` 指向其它用户的系列父稿，将直接返回错误而不是继续在其下创建当前用户的章节草稿，避免跨用户系列树挂接。

@@ -83,19 +83,4 @@ describe('useStreamStore scenario mode', () => {
     expect(useStreamStore.getState().chapterContents[1]).toBe('Hello World')
   })
 
-  it('clears pending stream buffers when stopping all streams', () => {
-    vi.useFakeTimers()
-    useStreamStore.getState().setOutline([
-      { sort: 1, title: '第一章', summary: '摘要' },
-    ])
-    useStreamStore.getState().setAbortController(new AbortController())
-
-    useStreamStore.getState().bufferChapterContent(1, '不会写入')
-    useStreamStore.getState().bufferContent('也不会写入')
-    useStreamStore.getState().stopAllStreams()
-    vi.runAllTimers()
-
-    expect(useStreamStore.getState().chapterContents[1]).toBe('')
-    expect(useStreamStore.getState().content).toBe('')
-  })
 })

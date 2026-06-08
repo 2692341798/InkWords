@@ -1,6 +1,20 @@
 # 墨言知识训练平台 (InkWords Trainer) - 开发计划与日志
 > **目标**：跟踪项目的核心开发模块、里程碑进度以及每日开发记录。
 
+### [2026-06-08] Refactor - 全仓安全清理首轮：删除未接入占位代码与历史兼容残留
+- **需求背景**：
+  1. 用户要求“检查源码，清理掉多余或者无用的代码”，并优先采用全仓低风险、安全可验证的清理方式。
+  2. 结合知识库里近期对 bridge/兼容层持续收口的方向，本轮重点放在“未接入占位包、只剩测试引用的兼容壳组件、以及长期未消费的 store 状态/动作”。
+- **本次完成**：
+  1. 删除 `backend/services/llm-stream/domain/generation/` 下整组未接入的占位/空桥接文件，并同步去掉 `llm-stream` bootstrap 中那次仅创建后立刻丢弃的空 `generation.Service` 初始化。
+  2. 收窄 `internal/transport/http/v1/api/StreamAPI` 的依赖面，删除未被实际使用的 `generatorService / decompositionService / userService` 字段，让构造器只保留真实使用的 `streamDomainHandler`。
+  3. 删除前端 `GeneratorProgressStage` 兼容壳组件，并把对应测试改为直接验证实际在用的 `GeneratorStatus`。
+  4. 清理 `reviewStore` 中未被消费的 `notesPagination`，以及 `streamStore` 中长期未被读取的 `generatedContent / mapReduceProgress / workers` 与对应未使用动作，减少状态面和维护噪音。
+- **验证记录**：
+  - `cd backend && go test ./services/llm-stream/... ./internal/transport/http/v1/... ./cmd/server -count=1` 通过
+  - `cd frontend && npm run test -- --run` 通过
+  - `cd frontend && npm run build` 通过
+
 ### [2026-06-05] Fix - 深拆 core-api / llm-stream 第十六轮：阻断跨用户系列导读写入
 - **需求背景**：
   1. 在把旧正文读取改为 `user_id + blog_id` 双重约束后，继续沿 `SeriesPersistence` 审计发现 `SaveSeriesIntro()` 与 `MarkSeriesIntroFailed()` 仍只按 `parent_id` 写父稿。

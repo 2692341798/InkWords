@@ -8,7 +8,6 @@ import { GeneratorSourceStage } from './GeneratorSourceStage'
 import { GeneratorConfigureStage } from './GeneratorConfigureStage'
 import { GeneratorOutlineStage } from './GeneratorOutlineStage'
 import { GeneratorStatus } from './GeneratorStatus'
-import { GeneratorProgressStage } from './GeneratorProgressStage'
 import { Generator } from '@/pages/Generator'
 
 const mockStreamState = {
@@ -270,23 +269,16 @@ describe('Generator stage views', () => {
     expect(html).toContain('DeepSeek 请求超时，请稍后重试')
   })
 
-  it('retires the dedicated progress stage shell and keeps only the inline status panel', () => {
+  it('keeps only the inline status panel for progress feedback', () => {
     mockStreamState.isAnalyzing = true
     mockStreamState.analysisMessage = '正在分析仓库结构'
     mockStreamState.analysisStep = 1
     mockStreamState.analysisHistory = [{ id: 1, message: '已完成仓库克隆', status: 'done' }]
 
-    const html = renderToStaticMarkup(
-      <GeneratorProgressStage
-        title="正在处理当前步骤"
-        description="处理中时，页面会切换为专注的进度内容。"
-      />,
-    )
+    const html = renderToStaticMarkup(<GeneratorStatus />)
 
     expect(html).toContain('解析进度')
     expect(html).toContain('已完成仓库克隆')
     expect(html).toContain('overflow-hidden rounded-3xl')
-    expect(html).not.toContain('正在处理当前步骤')
-    expect(html).not.toContain('处理中时，页面会切换为专注的进度内容。')
   })
 })
