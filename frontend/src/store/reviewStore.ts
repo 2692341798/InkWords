@@ -3,7 +3,6 @@ import {
   type FinalFeedback,
   type ReviewHistoryItem,
   reviewService,
-  type ListNotesResponse,
   type ReviewCardResponse,
   type ReviewMode,
   type ReviewNoteOption,
@@ -13,7 +12,6 @@ import {
 interface ReviewState {
   recommendationCard: ReviewCardResponse | null
   noteOptions: ReviewNoteOption[]
-  notesPagination: Omit<ListNotesResponse, 'items'>
   currentSession: ReviewSessionResponse | null
   shouldResumeSessionOnOpen: boolean
   historyItems: ReviewHistoryItem[]
@@ -38,17 +36,10 @@ interface ReviewState {
   reset: () => void
 }
 
-const initialPagination = {
-  total: 0,
-  page: 1,
-  page_size: 20,
-}
-
 // Why: 复习入口会在多个页面和交互阶段之间共享，单独 store 可以避免把 review 状态塞进 blog/generator 现有链路里。
 export const useReviewStore = create<ReviewState>((set, get) => ({
   recommendationCard: null,
   noteOptions: [],
-  notesPagination: initialPagination,
   currentSession: null,
   shouldResumeSessionOnOpen: false,
   historyItems: [],
@@ -96,14 +87,7 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
     set({ isLoadingNotes: true })
     try {
       const response = await reviewService.listNotes({ query })
-      set({
-        noteOptions: response.items,
-        notesPagination: {
-          total: response.total,
-          page: response.page,
-          page_size: response.page_size,
-        },
-      })
+      set({ noteOptions: response.items })
     } finally {
       set({ isLoadingNotes: false })
     }
@@ -144,7 +128,6 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
     set({
       recommendationCard: null,
       noteOptions: [],
-      notesPagination: initialPagination,
       currentSession: null,
       shouldResumeSessionOnOpen: false,
       historyItems: [],

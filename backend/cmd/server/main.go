@@ -115,7 +115,7 @@ func main() {
 
 	authAPI := api.NewAuthAPIWithDeps(authDomainHandler)
 	userAPI := api.NewUserAPIWithDeps(userService, userDomainHandler)
-	streamAPI := api.NewStreamAPIWithDeps(generatorService, decompositionService, userService, streamDomainHandler)
+	streamAPI := api.NewStreamAPIWithDeps(streamDomainHandler)
 	projectAPI := api.NewProjectAPIWithDeps(decompositionService, gitFetcher, docParser, userService, projectDomainHandler)
 	blogAPI := api.NewBlogAPIWithDeps(blogService, blogDomainHandler)
 

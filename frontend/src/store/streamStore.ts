@@ -17,15 +17,6 @@ export interface Chapter {
   action?: 'new' | 'regenerate' | 'skip' | string
 }
 
-export interface MapReduceProgress {
-  status: 'chunk_analyzing' | 'chunk_done' | 'chunk_failed' | 'chunk_failed_final' | ''
-  dir: string
-  index: number
-  total: number
-  attempt?: number
-  worker_id?: number
-}
-
 export interface ModuleCard {
   path: string
   name: string
@@ -69,13 +60,10 @@ interface StreamState {
   chapterPhases: Record<number, ChapterPhase>
   chapterErrors: Record<number, string>
   chapterUsage: Record<number, ChapterUsage>
-  generatedContent: string
   chapterContents: Record<number, string>
   isScanning: boolean
   isAnalyzing: boolean
   isGenerating: boolean
-  mapReduceProgress: MapReduceProgress | null
-  workers: Record<number, MapReduceProgress>
   analysisStep: number
   analysisMessage: string
   analysisHistory: { id: number; message: string; status?: string }[]
@@ -101,18 +89,13 @@ interface StreamState {
   setChapterUsage: (sort: number, usage: ChapterUsage) => void
   setChapterError: (sort: number, message: string) => void
   clearChapterError: (sort: number) => void
-  appendGeneratedContent: (chunk: string) => void
   appendChapterContent: (sort: number, content: string) => void
-  appendChapterContents: (updates: Record<number, string>) => void
   bufferChapterContent: (sort: number, content: string) => void
   flushBufferedChapterContents: () => void
   clearBufferedChapterContents: () => void
-  clearGeneratedContent: () => void
-  clearChapterContent: (sort: number) => void
   setScanning: (status: boolean) => void
   setGenerating: (status: boolean) => void
   setAnalyzing: (status: boolean) => void
-  setMapReduceProgress: (progress: MapReduceProgress | null) => void
   setAnalysisStep: (step: number) => void
   setAnalysisMessage: (msg: string) => void
   appendAnalysisHistory: (item: { message: string; status?: string }) => void
@@ -135,7 +118,6 @@ interface StreamState {
   setScenarioMode: (mode: ScenarioMode) => void
   setModules: (modules: ModuleCard[] | null) => void
   setSelectedModules: (paths: string[]) => void
-  stopAllStreams: () => void
   reset: () => void
 }
 
@@ -168,13 +150,10 @@ export const useStreamStore = create<StreamState>((set, get) => {
     chapterPhases: {},
     chapterErrors: {},
     chapterUsage: {},
-    generatedContent: '',
     chapterContents: {},
     isScanning: false,
     isAnalyzing: false,
     isGenerating: false,
-    mapReduceProgress: null,
-    workers: {},
     analysisStep: -1,
     analysisMessage: '',
     analysisHistory: [],
@@ -294,7 +273,6 @@ export const useStreamStore = create<StreamState>((set, get) => {
       delete nextErrors[sort]
       return { chapterErrors: nextErrors }
     }),
-  appendGeneratedContent: (chunk) => set((state) => ({ generatedContent: state.generatedContent + chunk })),
   appendChapterContent: (sort, chunk) =>
     set((state) => ({
       chapterContents: {
@@ -302,15 +280,6 @@ export const useStreamStore = create<StreamState>((set, get) => {
         [sort]: (state.chapterContents[sort] || '') + chunk
       }
     })),
-  appendChapterContents: (updates) =>
-    set((state) => {
-      const newContents = { ...state.chapterContents };
-      for (const [sort, chunk] of Object.entries(updates)) {
-        const key = Number(sort);
-        newContents[key] = (newContents[key] || '') + chunk;
-      }
-      return { chapterContents: newContents };
-    }),
   bufferChapterContent: (sort, chunk) => {
     chapterContentBuffer.push(sort, chunk)
   },
@@ -320,30 +289,9 @@ export const useStreamStore = create<StreamState>((set, get) => {
   clearBufferedChapterContents: () => {
     chapterContentBuffer.cancel()
   },
-  clearGeneratedContent: () => set({ generatedContent: '' }),
-  clearChapterContent: (sort) =>
-    set((state) => ({
-      chapterContents: {
-        ...state.chapterContents,
-        [sort]: ''
-      }
-    })),
   setScanning: (status) => set({ isScanning: status }),
   setGenerating: (status) => set({ isGenerating: status }),
   setAnalyzing: (status) => set({ isAnalyzing: status }),
-  setMapReduceProgress: (progress) => set((state) => {
-    if (!progress) return { mapReduceProgress: null, workers: {} };
-    if (progress.worker_id !== undefined) {
-      return {
-        mapReduceProgress: progress,
-        workers: {
-          ...state.workers,
-          [progress.worker_id]: progress
-        }
-      }
-    }
-    return { mapReduceProgress: progress }
-  }),
   setAnalysisStep: (step) => set({ analysisStep: step }),
   setAnalysisMessage: (msg) => set({ analysisMessage: msg }),
   appendAnalysisHistory: (item) => set((state) => {
@@ -396,39 +344,6 @@ export const useStreamStore = create<StreamState>((set, get) => {
   }),
   setModules: (modules) => set({ modules }),
   setSelectedModules: (paths) => set({ selectedModules: paths }),
-  stopAllStreams: () => {
-    const ctrl = get().abortController;
-    if (ctrl) {
-      ctrl.abort();
-    }
-    chapterContentBuffer.cancel()
-    contentBuffer.cancel()
-    set((state) => {
-      const newStatus = { ...state.chapterStatus };
-      const newPhases = { ...state.chapterPhases };
-      Object.keys(newStatus).forEach((key) => {
-        if (newStatus[Number(key)] === 'generating') {
-          newStatus[Number(key)] = 'pending';
-        }
-        if (
-          newPhases[Number(key)] &&
-          !['pending', 'completed', 'error'].includes(newPhases[Number(key)])
-        ) {
-          newPhases[Number(key)] = 'pending';
-        }
-      });
-      return { 
-        isScanning: false,
-        isAnalyzing: false, 
-        isGenerating: false, 
-        analysisStep: -1, 
-        abortController: null,
-        currentTaskId: null,
-        chapterStatus: newStatus,
-        chapterPhases: newPhases,
-      };
-    });
-  },
   reset: () => {
     const ctrl = get().abortController;
     if (ctrl) {
@@ -449,13 +364,10 @@ export const useStreamStore = create<StreamState>((set, get) => {
       chapterPhases: {},
       chapterErrors: {},
       chapterUsage: {},
-      generatedContent: '',
       chapterContents: {},
       isScanning: false,
       isAnalyzing: false,
       isGenerating: false,
-      mapReduceProgress: null,
-      workers: {},
       analysisStep: -1,
       analysisMessage: '',
       analysisHistory: [],

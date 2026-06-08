@@ -13,7 +13,6 @@ import (
 	"inkwords-backend/internal/service"
 	"inkwords-backend/internal/transport/http/middleware"
 	transportv1api "inkwords-backend/internal/transport/http/v1/api"
-	generation "inkwords-backend/services/llm-stream/domain/generation"
 	streamv1 "inkwords-backend/services/llm-stream/transport/http/v1"
 	"inkwords-backend/shared/platform/postgres"
 )
@@ -51,14 +50,12 @@ func BuildRouter() (*gin.Engine, *taskdomain.Service, *streamdomain.Service, err
 		blogdomain.NewSeriesPersistence(dbConn),
 		blogdomain.NewContinuePersistence(dbConn),
 	)
-	generationService := generation.NewService(nil, nil)
 
 	streamDomainService := streamdomain.NewService(generatorService, decompositionService, userService)
 	taskRepo := taskdomain.NewGormRepository(dbConn)
 	taskDomainService := taskdomain.NewService(taskRepo, nil, nil)
 	streamDomainHandler := streamdomain.NewHandler(streamDomainService, streamdomain.NewGormBlogReadable())
-	streamAPI := transportv1api.NewStreamAPIWithDeps(generatorService, decompositionService, userService, streamDomainHandler)
-	_ = generationService
+	streamAPI := transportv1api.NewStreamAPIWithDeps(streamDomainHandler)
 
 	streamv1.RegisterStreamRoutes(r, middleware.AuthMiddleware(), streamv1.StreamHandlers{
 		ContinueBlog: streamAPI.ContinueBlogStreamHandler,

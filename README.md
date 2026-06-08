@@ -2,6 +2,9 @@
 
 把资料变成知识，把知识变成能力。
 
+## 最近更新
+- `2026-06-08`：完成一轮全仓安全清理，删除 `llm-stream` 下未接入的 generation 占位/空桥接代码，收窄过渡层 `StreamAPI` 依赖，并移除前端 `GeneratorProgressStage` 兼容壳与两处 store 中未消费状态；不改变对外功能、API 和默认访问入口。
+
 ## 项目定位
 InkWords Trainer 是一个面向个人知识沉淀、知识复习与可选内容输出的本地知识工作台。
 

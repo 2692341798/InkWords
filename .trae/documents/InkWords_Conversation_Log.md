@@ -1,6 +1,21 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 121：检查源码并清理多余代码，随后提交到 GitHub
+- **用户需求**：用户先要求“检查源码，清理掉多余或者无用的代码”，完成后又要求“提交到 GitHub”。
+- **AI 动作**：
+  1. 先做知识库 Query 与全仓静态审查，区分“高置信可删”和“仍属兼容入口、不能直接删”的代码。
+  2. 删除 `backend/services/llm-stream/domain/generation/` 下未接入的 generation 占位/空桥接文件，并同步去掉 `llm-stream` bootstrap 中仅创建后立刻丢弃的空 `generation.Service` 初始化。
+  3. 收窄 `internal/transport/http/v1/api/StreamAPI` 的依赖面，只保留真实使用的 `streamDomainHandler`；前端删除 `GeneratorProgressStage` 兼容壳，并清理 `reviewStore`、`streamStore` 中未消费的状态与动作。
+  4. 运行后端定向 `go test`、前端全量 `vitest` 与前端生产构建验证后，再按仓库规则补齐文档同步，准备提交当前 `agent/*` 分支并创建 PR。
+- **决策/变更**：
+  - 这次只做“安全清理”，不顺手删除 `backend/cmd/*` 旧入口，因为 README 仍将其中一部分视为本地调试入口。
+  - 提交路径遵循仓库规则：不直推 `main/master`，改为推送当前 `agent/20260605-series-persistence-boundary` 分支并创建 PR。
+- **验证**：
+  - `cd backend && go test ./services/llm-stream/... ./internal/transport/http/v1/... ./cmd/server -count=1` 通过
+  - `cd frontend && npm run test -- --run` 通过
+  - `cd frontend && npm run build` 通过
+
 ### 对话 120：继续推进，阻断跨用户系列导读写入
 - **用户需求**：用户继续要求“继续”，在收紧旧正文读取边界后，继续沿同一条 `SeriesPersistence` 边界线往前推进。
 - **AI 动作**：
