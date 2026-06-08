@@ -1,7 +1,6 @@
 # 墨言知识训练平台 (InkWords Trainer) - 架构设计与工程规范
 
 ## 0. 变更记录
-- 2026-06-08：执行一次文档与仓库治理同步：刷新 `README.md`、补充 `docs/superpowers/*` 设计/计划文档，并移除仓库内旧的 `CODE_OF_CONDUCT.md` 与 `skills/llm-wiki-ingest/*` 文档资产；本次不改变 Docker Compose 多服务形态、Nginx 单入口、服务拆分边界或任何运行时架构约束。
 - 2026-06-05：继续推进 `core-api / llm-stream` 深拆分第十六轮。`internal/domain/blog/series_persistence.go` 现在在 `SaveSeriesIntro()` 与 `MarkSeriesIntroFailed()` 中显式按 `user_id + parent_id` 更新系列父稿；`DecompositionService.generateSeriesIntro()` 也同步透传当前用户，避免跨用户改写他人的系列导读正文或失败状态。
 - 2026-06-05：继续推进 `core-api / llm-stream` 深拆分第十五轮。`internal/domain/blog/series_persistence.go` 现在在 `LoadSeriesOldContent()` 中显式按 `user_id + blog_id` 读取旧正文；`DecompositionService` 的 regenerate 路径也同步透传当前用户，避免跨用户读取他人的历史章节内容。
 - 2026-06-05：继续推进 `core-api / llm-stream` 深拆分第十四轮。`internal/domain/blog/series_persistence.go` 现在在 `EnsureSeriesParentAndDrafts()` 中显式校验父稿归属用户；若传入的 `parent_id` 指向其它用户的系列父稿，将直接返回错误而不是继续在其下创建当前用户的章节草稿，避免跨用户系列树挂接。
