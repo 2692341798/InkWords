@@ -11,8 +11,8 @@ import (
 
 	"github.com/joho/godotenv"
 
-	taskdomain "inkwords-backend/internal/domain/task"
 	"inkwords-backend/services/core-api/app/bootstrap"
+	coretask "inkwords-backend/services/core-api/domain/task"
 	"inkwords-backend/shared/kernel/httpx"
 )
 
@@ -44,6 +44,6 @@ func main() {
 	}
 }
 
-func initTaskPublisherFromEnv(factory func(string, string) (taskdomain.Publisher, func(), error)) (taskdomain.Publisher, func(), error) {
+func initTaskPublisherFromEnv(factory func(string, string) (coretask.Publisher, func(), error)) (coretask.Publisher, func(), error) {
 	return bootstrap.InitTaskPublisherFromEnv(factory)
 }

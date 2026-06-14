@@ -22,11 +22,11 @@ import (
 	userdomain "inkwords-backend/internal/domain/user"
 	"inkwords-backend/internal/infra/cache"
 	"inkwords-backend/internal/infra/db"
-	"inkwords-backend/internal/infra/parser"
 	"inkwords-backend/internal/service"
 	"inkwords-backend/internal/transport/http/middleware"
 	transportv1 "inkwords-backend/internal/transport/http/v1"
 	"inkwords-backend/internal/transport/http/v1/api"
+	"inkwords-backend/shared/platform/parser"
 )
 
 type shutdownableServer interface {
@@ -139,10 +139,10 @@ func main() {
 			UpdatePromptSettings: userAPI.UpdatePromptSettings,
 		},
 		Blog: transportv1.CoreBlogHandlers{
-			GetUserBlogs:           blogAPI.GetUserBlogs,
-			CreateDraftBlog:        blogAPI.CreateDraftBlog,
-			BatchDeleteBlogs:       blogAPI.BatchDeleteBlogs,
-			UpdateBlog:             blogAPI.UpdateBlog,
+			GetUserBlogs:     blogAPI.GetUserBlogs,
+			CreateDraftBlog:  blogAPI.CreateDraftBlog,
+			BatchDeleteBlogs: blogAPI.BatchDeleteBlogs,
+			UpdateBlog:       blogAPI.UpdateBlog,
 		},
 		Project: transportv1.CoreProjectHandlers{
 			ScanGithubRepo: projectAPI.ScanGithubRepo,

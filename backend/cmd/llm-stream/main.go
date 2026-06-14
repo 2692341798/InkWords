@@ -14,11 +14,10 @@ import (
 	"github.com/joho/godotenv"
 	amqp "github.com/rabbitmq/amqp091-go"
 
-	streamdomain "inkwords-backend/internal/domain/stream"
-	taskdomain "inkwords-backend/internal/domain/task"
-	"inkwords-backend/internal/infra/mq"
 	"inkwords-backend/services/llm-stream/app/bootstrap"
+	streamdomain "inkwords-backend/services/llm-stream/domain/stream"
 	"inkwords-backend/shared/kernel/httpx"
+	sharedrabbitmq "inkwords-backend/shared/platform/rabbitmq"
 )
 
 func init() {
@@ -56,7 +55,7 @@ func main() {
 
 func startGenerationTaskConsumer(
 	signalContext context.Context,
-	taskService *taskdomain.Service,
+	taskService *streamdomain.GormTaskStore,
 	streamService *streamdomain.Service,
 ) (func(), error) {
 	rabbitURL := os.Getenv("RABBITMQ_URL")
@@ -78,7 +77,7 @@ func startGenerationTaskConsumer(
 
 	exchangeName := envOrDefault("RABBITMQ_EXCHANGE", "inkwords.events")
 	queueName := envOrDefault("RABBITMQ_GENERATION_QUEUE", "inkwords.generation")
-	routingKey := mq.GenerationRequestedMessage{}.RoutingKey()
+	routingKey := sharedrabbitmq.GenerationRequestedMessage{}.RoutingKey()
 
 	if err := channel.ExchangeDeclare(exchangeName, "topic", true, false, false, false, nil); err != nil {
 		_ = channel.Close()
@@ -115,7 +114,7 @@ func startGenerationTaskConsumer(
 					return
 				}
 
-				var message mq.GenerationRequestedMessage
+				var message sharedrabbitmq.GenerationRequestedMessage
 				if err := json.Unmarshal(delivery.Body, &message); err != nil {
 					log.Printf("invalid generation message payload: %v", err)
 					_ = delivery.Ack(false)
