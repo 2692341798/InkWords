@@ -6,19 +6,17 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	blogdomain "inkwords-backend/internal/domain/blog"
-	taskdomain "inkwords-backend/internal/domain/task"
-	legacyservice "inkwords-backend/internal/service"
-	"inkwords-backend/internal/transport/http/middleware"
-	transportv1api "inkwords-backend/internal/transport/http/v1/api"
 	exportdomain "inkwords-backend/services/export-service/domain/export"
 	artifact "inkwords-backend/services/export-service/infra/artifact"
 	exportroutes "inkwords-backend/services/export-service/transport/http/v1"
+	"inkwords-backend/shared/kernel/httpx"
+	platformllm "inkwords-backend/shared/platform/llm"
+	"inkwords-backend/shared/platform/obsidian"
 	"inkwords-backend/shared/platform/postgres"
 )
 
 // BuildRouter assembles the export-service router and worker dependencies behind service-owned entrypoints.
-func BuildRouter() (*gin.Engine, *taskdomain.ExportConsumer, error) {
+func BuildRouter() (*gin.Engine, *exportdomain.Consumer, error) {
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
 		return nil, nil, errors.New("DATABASE_URL environment variable is not set")
@@ -30,23 +28,26 @@ func BuildRouter() (*gin.Engine, *taskdomain.ExportConsumer, error) {
 	}
 
 	r := gin.New()
-	r.Use(gin.Recovery(), middleware.RequestID(), middleware.RequestLogger("export-service"))
-	transportv1api.RegisterHealthRoutes(r, transportv1api.NewHealthAPI("export-service", map[string]transportv1api.ReadinessCheck{
-		"db": transportv1api.NewGormReadinessCheck(dbConn),
+	r.Use(gin.Recovery(), httpx.RequestID(), httpx.RequestLogger("export-service"))
+	httpx.RegisterHealthRoutes(r, httpx.NewHealthAPI("export-service", map[string]httpx.ReadinessCheck{
+		"db": httpx.NewGormReadinessCheck(dbConn),
 	}))
 
-	// Why: export-service 先收口自己的装配边界，再逐步替换掉 legacy export implementation。
-	blogService := legacyservice.NewBlogServiceWithDB(dbConn)
-	exportService := exportdomain.NewService(blogService)
-	blogRepo := blogdomain.NewGormRepository(dbConn)
-	blogDomainService := blogdomain.NewService(blogRepo)
-	blogDomainHandler := blogdomain.NewHandlerWithLegacy(blogDomainService, exportService)
-	taskService := taskdomain.NewService(taskdomain.NewGormRepository(dbConn), nil, nil)
-	blogAPI := transportv1api.NewBlogAPIWithDeps(blogService, blogDomainHandler)
-	exportroutes.RegisterExportRoutes(r, middleware.AuthMiddleware(), blogAPI)
+	llmClient := platformllm.NewDeepSeekClient(os.Getenv("DEEPSEEK_API_KEY"))
+	exportRepo := exportdomain.NewGormRepository(dbConn)
+	exportService := exportdomain.NewService(
+		exportRepo,
+		obsidian.NewStoreFromEnv,
+		llmClient,
+		envOrDefault("DEEPSEEK_MODEL", "deepseek-v4-flash"),
+		envOrDefault("OBSIDIAN_WIKI_DIR", "wiki"),
+	)
+	exportHandler := exportdomain.NewHandler(exportService)
+	exportroutes.RegisterExportRoutes(r, httpx.AuthMiddleware(), exportHandler)
 
 	artifactStore := artifact.NewStore(envOrDefault("EXPORT_ARTIFACTS_DIR", "/app/export-artifacts"))
-	consumer := taskdomain.NewExportConsumer(taskService, exportService, artifactStore)
+	taskStore := exportdomain.NewGormTaskStore(dbConn)
+	consumer := exportdomain.NewConsumer(taskStore, exportService, artifactStore)
 
 	return r, consumer, nil
 }

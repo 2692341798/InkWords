@@ -8,8 +8,6 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
-
-	"inkwords-backend/internal/model"
 )
 
 // GormGenerationResultRepository persists structured generation task results
@@ -136,7 +134,7 @@ func (r *GormGenerationResultRepository) AccumulateTokens(ctx context.Context, t
 		return err
 	}
 
-	var blog model.Blog
+	var blog blogRecord
 	if err := r.db.WithContext(ctx).Select("id", "user_id").First(&blog, "id = ?", blogID).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return fmt.Errorf("load generated blog owner: blog %s not found", blogID)
@@ -144,7 +142,7 @@ func (r *GormGenerationResultRepository) AccumulateTokens(ctx context.Context, t
 		return fmt.Errorf("load generated blog owner: %w", err)
 	}
 
-	updateTx := r.db.WithContext(ctx).Model(&model.User{}).
+	updateTx := r.db.WithContext(ctx).Model(&userRecord{}).
 		Where("id = ?", blog.UserID).
 		UpdateColumn("tokens_used", gorm.Expr("tokens_used + ?", decoded.Usage.EstimatedTokens))
 	if updateTx.Error != nil {
@@ -157,7 +155,7 @@ func (r *GormGenerationResultRepository) AccumulateTokens(ctx context.Context, t
 }
 
 func updateBlogByID(ctx context.Context, db *gorm.DB, blogID uuid.UUID, updates map[string]any, action string) error {
-	resultTx := db.WithContext(ctx).Model(&model.Blog{}).Where("id = ?", blogID).Updates(updates)
+	resultTx := db.WithContext(ctx).Model(&blogRecord{}).Where("id = ?", blogID).Updates(updates)
 	if resultTx.Error != nil {
 		return fmt.Errorf("%s: %w", action, resultTx.Error)
 	}

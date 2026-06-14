@@ -6,13 +6,11 @@ import (
 	"log"
 	"os"
 
-	taskdomain "inkwords-backend/internal/domain/task"
-	"inkwords-backend/internal/infra/mq"
 	sharedrabbitmq "inkwords-backend/shared/platform/rabbitmq"
 )
 
 // StartExportConsumer starts the export worker on the service-owned RabbitMQ queue.
-func StartExportConsumer(ctx context.Context, consumer *taskdomain.ExportConsumer, queueName string) (func(), error) {
+func StartExportConsumer(ctx context.Context, consumer *Consumer, queueName string) (func(), error) {
 	rabbitURL := os.Getenv("RABBITMQ_URL")
 	if rabbitURL == "" {
 		log.Println("RabbitMQ is not configured, export consumer disabled")
@@ -25,7 +23,7 @@ func StartExportConsumer(ctx context.Context, consumer *taskdomain.ExportConsume
 	}
 
 	exchangeName := envOrDefault("RABBITMQ_EXCHANGE", "inkwords.events")
-	routingKey := mq.ExportRequestedMessage{}.RoutingKey()
+	routingKey := sharedrabbitmq.ExportRequestedMessage{}.RoutingKey()
 
 	if err := channel.ExchangeDeclare(exchangeName, "topic", true, false, false, false, nil); err != nil {
 		_ = channel.Close()
@@ -64,14 +62,14 @@ func StartExportConsumer(ctx context.Context, consumer *taskdomain.ExportConsume
 					return
 				}
 
-				var message taskdomain.ExportRequestedMessage
+				var message sharedrabbitmq.ExportRequestedMessage
 				if err := json.Unmarshal(delivery.Body, &message); err != nil {
 					log.Printf("invalid export message payload: %v", err)
 					_ = delivery.Ack(false)
 					continue
 				}
 
-				if err := consumer.HandleExportRequested(ctx, message); err != nil {
+				if err := consumer.HandleExportRequested(ctx, RequestedMessage(message)); err != nil {
 					log.Printf("export task handling failed for %s: %v", message.TaskID, err)
 					_ = delivery.Nack(false, true)
 					continue

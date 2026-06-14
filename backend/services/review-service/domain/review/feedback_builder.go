@@ -2,12 +2,10 @@ package review
 
 import (
 	"strings"
-
-	"inkwords-backend/internal/model"
 )
 
 func buildStageFeedback(mode string, feedback ReviewFeedback) string {
-	if mode == model.ReviewModeDetailedQA {
+	if mode == ReviewModeDetailedQA {
 		switch feedback.Judgement {
 		case "偏题":
 			return "这一轮先不用展开整篇，只要先回答当前追问即可，下一轮我们再继续往下拆。"
@@ -28,8 +26,8 @@ func buildStageFeedback(mode string, feedback ReviewFeedback) string {
 	}
 }
 
-func buildFinalFeedback(mode string, turns []model.ReviewTurn) FinalFeedback {
-	if mode == model.ReviewModeDetailedQA {
+func buildFinalFeedback(mode string, turns []ReviewTurn) FinalFeedback {
+	if mode == ReviewModeDetailedQA {
 		answerCount := countUserAnswers(turns)
 		summary := "这次已经完成一轮逐步追问式复习。"
 		if answerCount == 0 {

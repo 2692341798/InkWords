@@ -6,19 +6,16 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	blogdomain "inkwords-backend/internal/domain/blog"
-	streamdomain "inkwords-backend/internal/domain/stream"
-	taskdomain "inkwords-backend/internal/domain/task"
-	"inkwords-backend/internal/infra/cache"
 	"inkwords-backend/internal/service"
-	"inkwords-backend/internal/transport/http/middleware"
-	transportv1api "inkwords-backend/internal/transport/http/v1/api"
+	streamdomain "inkwords-backend/services/llm-stream/domain/stream"
 	streamv1 "inkwords-backend/services/llm-stream/transport/http/v1"
+	"inkwords-backend/shared/kernel/httpx"
+	"inkwords-backend/shared/platform/cache"
 	"inkwords-backend/shared/platform/postgres"
 )
 
 // BuildRouter assembles the llm-stream owned router plus the services required by its consumer worker.
-func BuildRouter() (*gin.Engine, *taskdomain.Service, *streamdomain.Service, error) {
+func BuildRouter() (*gin.Engine, *streamdomain.GormTaskStore, *streamdomain.Service, error) {
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
 		return nil, nil, nil, errors.New("DATABASE_URL environment variable is not set")
@@ -33,36 +30,34 @@ func BuildRouter() (*gin.Engine, *taskdomain.Service, *streamdomain.Service, err
 	}
 
 	r := gin.New()
-	r.Use(gin.Recovery(), middleware.RequestID(), middleware.RequestLogger("llm-stream"))
-	transportv1api.RegisterHealthRoutes(r, transportv1api.NewHealthAPI("llm-stream", map[string]transportv1api.ReadinessCheck{
-		"db":              transportv1api.NewGormReadinessCheck(dbConn),
-		"rabbitmq_config": transportv1api.NewRequiredValueCheck(os.Getenv("RABBITMQ_URL"), "RABBITMQ_URL is not configured"),
+	r.Use(gin.Recovery(), httpx.RequestID(), httpx.RequestLogger("llm-stream"))
+	httpx.RegisterHealthRoutes(r, httpx.NewHealthAPI("llm-stream", map[string]httpx.ReadinessCheck{
+		"db":              httpx.NewGormReadinessCheck(dbConn),
+		"rabbitmq_config": httpx.NewRequiredValueCheck(os.Getenv("RABBITMQ_URL"), "RABBITMQ_URL is not configured"),
 	}))
 
 	userService := service.NewUserService(dbConn)
 	promptReqService := service.NewPromptRequirementsService(dbConn)
 	generatorService := service.NewGeneratorServiceWithPersistence(
 		promptReqService,
-		blogdomain.NewGeneratedBlogPersistence(dbConn),
+		streamdomain.NewGeneratedBlogPersistence(dbConn),
 	)
 	decompositionService := service.NewDecompositionServiceWithPersistences(
 		promptReqService,
-		blogdomain.NewSeriesPersistence(dbConn),
-		blogdomain.NewContinuePersistence(dbConn),
+		streamdomain.NewSeriesPersistence(dbConn),
+		streamdomain.NewContinuePersistence(dbConn),
 	)
 
 	streamDomainService := streamdomain.NewService(generatorService, decompositionService, userService)
-	taskRepo := taskdomain.NewGormRepository(dbConn)
-	taskDomainService := taskdomain.NewService(taskRepo, nil, nil)
-	streamDomainHandler := streamdomain.NewHandler(streamDomainService, streamdomain.NewGormBlogReadable())
-	streamAPI := transportv1api.NewStreamAPIWithDeps(streamDomainHandler)
+	taskDomainService := streamdomain.NewGormTaskStore(dbConn)
+	streamDomainHandler := streamdomain.NewHandler(streamDomainService, streamdomain.NewGormBlogReadable(dbConn))
 
-	streamv1.RegisterStreamRoutes(r, middleware.AuthMiddleware(), streamv1.StreamHandlers{
-		ContinueBlog: streamAPI.ContinueBlogStreamHandler,
-		PolishBlog:   streamAPI.PolishBlogStreamHandler,
-		Scan:         streamAPI.ScanStreamHandler,
-		Analyze:      streamAPI.AnalyzeStreamHandler,
-		Generate:     streamAPI.GenerateBlogStreamHandler,
+	streamv1.RegisterStreamRoutes(r, httpx.AuthMiddleware(), streamv1.StreamHandlers{
+		ContinueBlog: streamDomainHandler.ContinueBlogStreamHandler,
+		PolishBlog:   streamDomainHandler.PolishBlogStreamHandler,
+		Scan:         streamDomainHandler.ScanStreamHandler,
+		Analyze:      streamDomainHandler.AnalyzeStreamHandler,
+		Generate:     streamDomainHandler.GenerateBlogStreamHandler,
 	})
 
 	return r, taskDomainService, streamDomainService, nil

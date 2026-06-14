@@ -13,8 +13,8 @@ import (
 
 	taskdomain "inkwords-backend/internal/domain/task"
 	"inkwords-backend/internal/infra/mq"
-	"inkwords-backend/internal/infra/parser"
 	"inkwords-backend/internal/model"
+	"inkwords-backend/shared/platform/parser"
 )
 
 func TestTaskConsumer_HandleParseRequested_PersistsParseResult(t *testing.T) {

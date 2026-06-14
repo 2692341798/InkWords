@@ -19,11 +19,11 @@ import (
 	taskdomain "inkwords-backend/internal/domain/task"
 	"inkwords-backend/internal/infra/db"
 	"inkwords-backend/internal/infra/mq"
-	"inkwords-backend/internal/infra/parser"
 	"inkwords-backend/internal/service"
 	"inkwords-backend/internal/transport/http/middleware"
 	transportv1 "inkwords-backend/internal/transport/http/v1"
 	transportv1api "inkwords-backend/internal/transport/http/v1/api"
+	"inkwords-backend/shared/platform/parser"
 )
 
 type shutdownableServer interface {

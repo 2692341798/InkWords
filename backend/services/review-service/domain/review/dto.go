@@ -106,6 +106,9 @@ type ReviewSessionResponse struct {
 	Status               string               `json:"status"`
 	Mode                 string               `json:"mode"`
 	Title                string               `json:"title"`
+	SourceTitle          string               `json:"source_title"`
+	SourcePreview        string               `json:"source_preview"`
+	ReadyToAnswer        bool                 `json:"ready_to_answer"`
 	OpeningPrompt        string               `json:"opening_prompt"`
 	InitialHints         []string             `json:"initial_hints"`
 	SessionOutline       SessionOutline       `json:"session_outline"`
@@ -138,6 +141,8 @@ type RespondResponse struct {
 	CurrentRoundGoal string         `json:"current_round_goal,omitempty"`
 	ReviewFeedback   ReviewFeedback `json:"review_feedback"`
 	NextQuestion     string         `json:"next_question,omitempty"`
+	HintText         string         `json:"hint_text,omitempty"`
+	ExcerptText      string         `json:"excerpt_text,omitempty"`
 	Completed        bool           `json:"completed"`
 	FinalFeedback    FinalFeedback  `json:"final_feedback"`
 }

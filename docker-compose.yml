@@ -50,7 +50,8 @@ services:
   core-api:
     build:
       context: ./backend
-      dockerfile: Dockerfile
+      dockerfile: services/core-api/Dockerfile
+    image: inkwords/core-api:local
     container_name: inkwords-core-api
     command: ["./core-api"]
     environment:
@@ -107,7 +108,8 @@ services:
   llm-stream:
     build:
       context: ./backend
-      dockerfile: Dockerfile
+      dockerfile: services/llm-stream/Dockerfile
+    image: inkwords/llm-stream:local
     container_name: inkwords-llm-stream
     command: ["./llm-stream"]
     environment:
@@ -142,7 +144,8 @@ services:
   parser-service:
     build:
       context: ./backend
-      dockerfile: Dockerfile
+      dockerfile: services/parser-service/Dockerfile
+    image: inkwords/parser-service:local
     container_name: inkwords-parser-service
     command: ["./parser-service"]
     environment:
@@ -174,7 +177,8 @@ services:
   export-service:
     build:
       context: ./backend
-      dockerfile: Dockerfile
+      dockerfile: services/export-service/Dockerfile
+    image: inkwords/export-service:local
     container_name: inkwords-export-service
     command: ["./export-service"]
     environment:
@@ -219,7 +223,8 @@ services:
   review-service:
     build:
       context: ./backend
-      dockerfile: Dockerfile
+      dockerfile: services/review-service/Dockerfile
+    image: inkwords/review-service:local
     container_name: inkwords-review-service
     command: ["./review-service"]
     environment:

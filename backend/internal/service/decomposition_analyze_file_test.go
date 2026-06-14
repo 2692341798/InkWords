@@ -11,7 +11,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"inkwords-backend/internal/infra/parser"
+	"inkwords-backend/shared/platform/parser"
 )
 
 func TestResolveFileAnalyzeChunkSize_UsesFinerSlicesForLargeDocuments(t *testing.T) {

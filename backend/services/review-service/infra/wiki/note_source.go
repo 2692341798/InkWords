@@ -5,8 +5,8 @@ import (
 	"log"
 	"strings"
 
-	"inkwords-backend/internal/service"
 	reviewdomain "inkwords-backend/services/review-service/domain/review"
+	"inkwords-backend/shared/platform/obsidian"
 )
 
 type unavailableReviewNoteSource struct {
@@ -19,7 +19,7 @@ func (s unavailableReviewNoteSource) ListEligibleNotes(context.Context) ([]revie
 
 // BuildNoteSource keeps Obsidian bootstrap concerns in service-owned infra while reusing the domain note reader.
 func BuildNoteSource(rootDir string) reviewdomain.NoteSource {
-	store, err := service.NewObsidianStoreFromEnv()
+	store, err := obsidian.NewStoreFromEnv()
 	if err != nil {
 		log.Printf("Review note source initialization failed: %v", err)
 		return unavailableReviewNoteSource{err: err}

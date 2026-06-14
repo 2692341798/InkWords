@@ -15,6 +15,7 @@ import (
 	"inkwords-backend/internal/infra/db"
 	"inkwords-backend/internal/infra/llm"
 	"inkwords-backend/internal/model"
+	sharedblog "inkwords-backend/shared/kernel/blog"
 )
 
 func TestContinueGeneration_TaskOnlyMode_DoesNotUpdateBlogDirectly(t *testing.T) {
@@ -91,7 +92,7 @@ func TestContinueGeneration_UsesInjectedPersistence(t *testing.T) {
 	defer fakeLLM.Close()
 
 	persistence := &continuePersistenceRecorder{
-		blog: model.Blog{
+		blog: sharedblog.ContinueBlog{
 			ID:      uuid.MustParse("11111111-1111-1111-1111-111111111111"),
 			UserID:  uuid.MustParse("22222222-2222-2222-2222-222222222222"),
 			Content: "旧内容",
@@ -131,7 +132,7 @@ func TestBuildContinueTaskResult_UsesInjectedPersistence(t *testing.T) {
 	}()
 
 	persistence := &continuePersistenceRecorder{
-		blog: model.Blog{
+		blog: sharedblog.ContinueBlog{
 			ID:      uuid.MustParse("11111111-1111-1111-1111-111111111111"),
 			UserID:  uuid.MustParse("22222222-2222-2222-2222-222222222222"),
 			Content: "旧内容",
@@ -161,18 +162,18 @@ func newContinueGenerationStreamServer(t *testing.T, appendedContent string) *ht
 }
 
 type continuePersistenceRecorder struct {
-	blog        model.Blog
-	loadCalls   int
-	saveCalls   int
+	blog         sharedblog.ContinueBlog
+	loadCalls    int
+	saveCalls    int
 	savedContent string
 }
 
-func (r *continuePersistenceRecorder) LoadContinueBlog(context.Context, uuid.UUID, uuid.UUID) (model.Blog, error) {
+func (r *continuePersistenceRecorder) LoadContinueBlog(context.Context, uuid.UUID, uuid.UUID) (sharedblog.ContinueBlog, error) {
 	r.loadCalls++
 	return r.blog, nil
 }
 
-func (r *continuePersistenceRecorder) SaveContinuedBlog(_ context.Context, _ model.Blog, updatedContent string) error {
+func (r *continuePersistenceRecorder) SaveContinuedBlog(_ context.Context, _ sharedblog.ContinueBlog, updatedContent string) error {
 	r.saveCalls++
 	r.savedContent = updatedContent
 	return nil

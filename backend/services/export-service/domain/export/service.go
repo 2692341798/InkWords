@@ -3,46 +3,71 @@ package export
 import (
 	"context"
 	"errors"
+	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
-	blogcontracts "inkwords-backend/internal/domain/blog/contracts"
-	legacyservice "inkwords-backend/internal/service"
+	platformllm "inkwords-backend/shared/platform/llm"
+	"inkwords-backend/shared/platform/obsidian"
 )
 
-// ErrSeriesNotFound re-exports the shared blog export error so callers can stay scoped to export-service.
-var ErrSeriesNotFound = blogcontracts.ErrSeriesNotFound
+var (
+	ErrBlogNotFound        = errors.New("blog not found")
+	ErrSeriesNotFound      = errors.New("series not found")
+	ErrExportNotConfigured = errors.New("export service is not configured")
+)
 
-// Service wraps the legacy blog export implementation behind a service-owned boundary.
+type ObsidianStoreFactory func() (obsidian.Store, error)
+
+type JSONGenerator interface {
+	GenerateJSON(ctx context.Context, model string, messages []platformllm.Message) (string, error)
+}
+
+// Service owns export-service's PDF and Obsidian export workflows.
 type Service struct {
-	legacy *legacyservice.BlogService
+	repo                 Repository
+	obsidianStoreFactory ObsidianStoreFactory
+	jsonGenerator        JSONGenerator
+	model                string
+	rootDir              string
+	now                  func() time.Time
 }
 
-// NewService creates an export-service scoped adapter for the existing export implementation.
-func NewService(legacy *legacyservice.BlogService) *Service {
-	return &Service{legacy: legacy}
-}
-
-// ExportSeriesToPDF delegates PDF export to the existing blog service while keeping the dependency local to export-service.
-func (s *Service) ExportSeriesToPDF(ctx context.Context, blogID uuid.UUID, userID uuid.UUID) (string, string, error) {
-	if s == nil || s.legacy == nil {
-		return "", "", errors.New("export service is not configured")
+func NewService(repo Repository, storeFactory ObsidianStoreFactory, jsonGenerator JSONGenerator, model string, rootDir string) *Service {
+	if strings.TrimSpace(model) == "" {
+		model = "deepseek-v4-flash"
 	}
-	return s.legacy.ExportSeriesToPDF(ctx, blogID, userID)
+	if strings.TrimSpace(rootDir) == "" {
+		rootDir = "wiki"
+	}
+	return &Service{
+		repo:                 repo,
+		obsidianStoreFactory: storeFactory,
+		jsonGenerator:        jsonGenerator,
+		model:                strings.TrimSpace(model),
+		rootDir:              strings.TrimSuffix(strings.TrimSpace(rootDir), "/"),
+		now:                  time.Now,
+	}
 }
 
-// ExportToObsidian delegates single-blog Obsidian export to the existing implementation.
-func (s *Service) ExportToObsidian(ctx context.Context, blogID uuid.UUID, userID uuid.UUID) error {
-	if s == nil || s.legacy == nil {
-		return errors.New("export service is not configured")
+func (s *Service) GetSeriesBlogs(ctx context.Context, blogID uuid.UUID, userID uuid.UUID) ([]Blog, error) {
+	if s == nil || s.repo == nil {
+		return nil, ErrExportNotConfigured
 	}
-	return s.legacy.ExportToObsidian(ctx, blogID, userID)
+	blogs, err := s.repo.GetSeriesBlogs(ctx, userID, blogID)
+	if err != nil {
+		return nil, err
+	}
+	if len(blogs) == 0 {
+		return nil, ErrSeriesNotFound
+	}
+	return blogs, nil
 }
 
-// ExportSeriesToObsidian delegates series export to Obsidian to the existing implementation.
-func (s *Service) ExportSeriesToObsidian(ctx context.Context, blogID uuid.UUID, userID uuid.UUID) error {
-	if s == nil || s.legacy == nil {
-		return errors.New("export service is not configured")
+func (s *Service) getObsidianStore() (obsidian.Store, error) {
+	if s == nil || s.obsidianStoreFactory == nil {
+		return nil, ErrExportNotConfigured
 	}
-	return s.legacy.ExportSeriesToObsidian(ctx, blogID, userID)
+	return s.obsidianStoreFactory()
 }

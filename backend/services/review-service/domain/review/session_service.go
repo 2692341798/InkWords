@@ -6,8 +6,6 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-
-	"inkwords-backend/internal/model"
 )
 
 // CreateSession 创建一条新的复习会话，并生成训练快照与开场提示。
@@ -24,12 +22,12 @@ func (s *Service) CreateSession(ctx context.Context, userID uuid.UUID, req Creat
 		return ReviewSessionResponse{}, err
 	}
 
-	summarySnapshot, outline := buildSessionSnapshot(note)
+	summarySnapshot, outline, sourcePreview := buildSessionSnapshot(note)
 	opening := openingPrompt(req.Mode, outline)
 	hints := initialHints(req.Mode, outline)
 	now := s.now()
 
-	session := model.ReviewSession{
+	session := ReviewSession{
 		ID:                uuid.New(),
 		UserID:            userID,
 		NotePath:          note.NotePath,
@@ -37,13 +35,14 @@ func (s *Service) CreateSession(ctx context.Context, userID uuid.UUID, req Creat
 		SourceTitle:       note.SourceTitle,
 		EntryType:         req.EntryType,
 		Mode:              req.Mode,
-		Status:            model.ReviewStatusCreated,
+		Status:            ReviewStatusCreated,
 		EstimatedMinutes:  defaultReviewCardEstimatedMinutes,
 		SummarySnapshot:   summarySnapshot,
 		KeyPointsSnapshot: mustMarshalJSON(outline.Checkpoints),
 		MetadataSnapshot: mustMarshalJSON(sessionMetadata{
 			PreferredMode:  note.PreferredMode,
 			SessionOutline: outline,
+			SourcePreview:  sourcePreview,
 		}),
 		MaxHintCount: 2,
 		TurnCount:    1,
@@ -54,11 +53,11 @@ func (s *Service) CreateSession(ctx context.Context, userID uuid.UUID, req Creat
 		return ReviewSessionResponse{}, fmt.Errorf("创建复习会话失败: %w", err)
 	}
 
-	openingTurn := model.ReviewTurn{
+	openingTurn := ReviewTurn{
 		SessionID: session.ID,
 		TurnIndex: 1,
-		Role:      model.ReviewTurnRoleSystem,
-		TurnType:  model.ReviewTurnTypeOpening,
+		Role:      ReviewTurnRoleSystem,
+		TurnType:  ReviewTurnTypeOpening,
 		Content:   opening,
 	}
 	if err := s.repo.AppendTurn(ctx, &openingTurn); err != nil {
@@ -70,11 +69,14 @@ func (s *Service) CreateSession(ctx context.Context, userID uuid.UUID, req Creat
 		Status:           session.Status,
 		Mode:             session.Mode,
 		Title:            session.NoteTitle,
+		SourceTitle:      session.SourceTitle,
+		SourcePreview:    sourcePreview,
+		ReadyToAnswer:    false,
 		OpeningPrompt:    opening,
 		InitialHints:     hints,
 		SessionOutline:   outline,
 		CurrentRoundGoal: currentRoundGoal(session.Mode, 0, outline),
-		NextQuestion:     nextQuestionForSession(session, []model.ReviewTurn{openingTurn}, outline),
+		NextQuestion:     nextQuestionForSession(session, []ReviewTurn{openingTurn}, outline),
 		TurnIndex:        openingTurn.TurnIndex,
 		Turns:            []ReviewTurnResponse{toTurnResponse(openingTurn)},
 	}, nil
@@ -105,26 +107,60 @@ func (s *Service) Respond(ctx context.Context, userID uuid.UUID, sessionID uuid.
 		return RespondResponse{}, errReviewSessionClosed
 	}
 
-	answerTurn := model.ReviewTurn{
+	answerTurn := ReviewTurn{
 		SessionID: session.ID,
 		TurnIndex: nextTurnIndex(turns),
-		Role:      model.ReviewTurnRoleUser,
-		TurnType:  model.ReviewTurnTypeAnswer,
+		Role:      ReviewTurnRoleUser,
+		TurnType:  ReviewTurnTypeAnswer,
 		Content:   answer,
 	}
 	if err := s.repo.AppendTurn(ctx, &answerTurn); err != nil {
 		return RespondResponse{}, fmt.Errorf("写入回答失败: %w", err)
 	}
 
-	updatedTurns := append(append([]model.ReviewTurn(nil), turns...), answerTurn)
-	session.Status = model.ReviewStatusInProgress
+	updatedTurns := append(append([]ReviewTurn(nil), turns...), answerTurn)
+	session.Status = ReviewStatusInProgress
 	session.TurnCount = answerTurn.TurnIndex
 	outline := decodeSessionMetadata(session.MetadataSnapshot).SessionOutline
+	metadata := decodeSessionMetadata(session.MetadataSnapshot)
 	answerCount := countUserAnswers(updatedTurns)
 	reviewFeedback := buildReviewFeedback(outline, answer)
 	roundGoal := currentRoundGoal(session.Mode, answerCount, outline)
+	stageFeedback := buildStageFeedback(session.Mode, reviewFeedback)
+	hintText := ""
+	excerptText := ""
 
-	if session.Mode == model.ReviewModeDetailedQA {
+	if indicatesMemoryGap(answer) {
+		hintText = buildMemoryGapHint(outline)
+		excerptText = buildMemoryGapExcerpt(metadata.SourcePreview, outline)
+		stageFeedback = "这一轮先不用硬想完整答案，我先给你一个提醒，再带你回到原文里的关键位置。"
+	}
+
+	if s.aiFeedback != nil {
+		result, err := s.aiFeedback.Generate(ctx, buildAIFeedbackInput(
+			session.NoteTitle,
+			session.Mode,
+			metadata,
+			toTurnResponses(updatedTurns),
+			roundGoal,
+			answer,
+		))
+		if err == nil {
+			reviewFeedback = ReviewFeedback{
+				Judgement:    firstNonEmpty(result.Judgement, reviewFeedback.Judgement),
+				HitPoints:    ensureFeedbackItems(result.HitPoints, reviewFeedback.HitPoints[0]),
+				MissedPoints: ensureFeedbackItems(result.MissedPoints, reviewFeedback.MissedPoints[0]),
+				Suggestion:   firstNonEmpty(result.Suggestion, reviewFeedback.Suggestion),
+			}
+			stageFeedback = firstNonEmpty(result.StageFeedback, stageFeedback)
+			hintText = firstNonEmpty(result.HintText, hintText)
+			if result.ShouldShowQuote {
+				excerptText = firstNonEmpty(result.ExcerptText, excerptText)
+			}
+		}
+	}
+
+	if session.Mode == ReviewModeDetailedQA {
 		if answerCount >= maxDetailedQARounds {
 			feedback := buildFinalFeedback(session.Mode, updatedTurns)
 			if err := s.completeSession(ctx, &session, updatedTurns, feedback); err != nil {
@@ -136,18 +172,19 @@ func (s *Service) Respond(ctx context.Context, userID uuid.UUID, sessionID uuid.
 				TurnIndex:        session.TurnCount,
 				CurrentRoundGoal: roundGoal,
 				ReviewFeedback:   reviewFeedback,
+				HintText:         hintText,
+				ExcerptText:      excerptText,
 				Completed:        true,
 				FinalFeedback:    feedback,
 			}, nil
 		}
 
 		nextQuestion := nextDetailedQuestion(answerCount, outline)
-		stageFeedback := buildStageFeedback(session.Mode, reviewFeedback)
-		questionTurn := model.ReviewTurn{
+		questionTurn := ReviewTurn{
 			SessionID: session.ID,
 			TurnIndex: answerTurn.TurnIndex + 1,
-			Role:      model.ReviewTurnRoleSystem,
-			TurnType:  model.ReviewTurnTypeQuestion,
+			Role:      ReviewTurnRoleSystem,
+			TurnType:  ReviewTurnTypeQuestion,
 			Content:   nextQuestion,
 		}
 		if err := s.repo.AppendTurn(ctx, &questionTurn); err != nil {
@@ -167,16 +204,17 @@ func (s *Service) Respond(ctx context.Context, userID uuid.UUID, sessionID uuid.
 			CurrentRoundGoal: currentRoundGoal(session.Mode, answerCount, outline),
 			ReviewFeedback:   reviewFeedback,
 			NextQuestion:     nextQuestion,
+			HintText:         hintText,
+			ExcerptText:      excerptText,
 			Completed:        false,
 		}, nil
 	}
 
-	stageFeedback := buildStageFeedback(session.Mode, reviewFeedback)
-	feedbackTurn := model.ReviewTurn{
+	feedbackTurn := ReviewTurn{
 		SessionID: session.ID,
 		TurnIndex: answerTurn.TurnIndex + 1,
-		Role:      model.ReviewTurnRoleSystem,
-		TurnType:  model.ReviewTurnTypeFeedback,
+		Role:      ReviewTurnRoleSystem,
+		TurnType:  ReviewTurnTypeFeedback,
 		Content:   stageFeedback,
 	}
 	if err := s.repo.AppendTurn(ctx, &feedbackTurn); err != nil {
@@ -195,6 +233,8 @@ func (s *Service) Respond(ctx context.Context, userID uuid.UUID, sessionID uuid.
 		StageFeedback:    stageFeedback,
 		CurrentRoundGoal: roundGoal,
 		ReviewFeedback:   reviewFeedback,
+		HintText:         hintText,
+		ExcerptText:      excerptText,
 		Completed:        false,
 	}, nil
 }
@@ -212,13 +252,40 @@ func (s *Service) RequestHint(ctx context.Context, userID uuid.UUID, sessionID u
 		return HintResponse{}, errReviewHintExhausted
 	}
 
-	outline := decodeSessionMetadata(session.MetadataSnapshot).SessionOutline
+	metadata := decodeSessionMetadata(session.MetadataSnapshot)
+	outline := metadata.SessionOutline
 	hintText := buildHintText(session, turns, outline)
-	hintTurn := model.ReviewTurn{
+	lastAnswer := lastUserAnswer(turns)
+
+	if indicatesMemoryGap(lastAnswer) {
+		hintText = buildMemoryGapHint(outline)
+		excerpt := buildMemoryGapExcerpt(metadata.SourcePreview, outline)
+		if strings.TrimSpace(excerpt) != "" {
+			hintText = hintText + "\n\n" + excerpt
+		}
+	}
+
+	if s.aiFeedback != nil {
+		result, aiErr := s.aiFeedback.Generate(ctx, buildAIFeedbackInput(
+			session.NoteTitle,
+			session.Mode,
+			metadata,
+			toTurnResponses(turns),
+			currentRoundGoal(session.Mode, countUserAnswers(turns), outline),
+			lastAnswer,
+		))
+		if aiErr == nil {
+			hintText = firstNonEmpty(result.HintText, hintText)
+			if result.ShouldShowQuote && strings.TrimSpace(result.ExcerptText) != "" {
+				hintText = hintText + "\n\n" + result.ExcerptText
+			}
+		}
+	}
+	hintTurn := ReviewTurn{
 		SessionID: session.ID,
 		TurnIndex: nextTurnIndex(turns),
-		Role:      model.ReviewTurnRoleSystem,
-		TurnType:  model.ReviewTurnTypeHint,
+		Role:      ReviewTurnRoleSystem,
+		TurnType:  ReviewTurnTypeHint,
 		Content:   hintText,
 	}
 	if err := s.repo.AppendTurn(ctx, &hintTurn); err != nil {
@@ -282,31 +349,31 @@ func (s *Service) findNoteByPath(ctx context.Context, notePath string) (ReviewNo
 	return ReviewNote{}, errReviewNoteNotFound
 }
 
-func (s *Service) loadOwnedSession(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID) (model.ReviewSession, []model.ReviewTurn, error) {
+func (s *Service) loadOwnedSession(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID) (ReviewSession, []ReviewTurn, error) {
 	session, err := s.repo.GetSessionByID(ctx, sessionID)
 	if err != nil {
-		return model.ReviewSession{}, nil, fmt.Errorf("查询复习会话失败: %w", err)
+		return ReviewSession{}, nil, fmt.Errorf("查询复习会话失败: %w", err)
 	}
 	if session.ID == uuid.Nil {
-		return model.ReviewSession{}, nil, errReviewSessionNotFound
+		return ReviewSession{}, nil, errReviewSessionNotFound
 	}
 	if session.UserID != userID {
-		return model.ReviewSession{}, nil, errReviewSessionDenied
+		return ReviewSession{}, nil, errReviewSessionDenied
 	}
 
 	turns, err := s.repo.ListTurns(ctx, session.ID)
 	if err != nil {
-		return model.ReviewSession{}, nil, fmt.Errorf("查询复习轮次失败: %w", err)
+		return ReviewSession{}, nil, fmt.Errorf("查询复习轮次失败: %w", err)
 	}
 	return session, turns, nil
 }
 
-func (s *Service) completeSession(ctx context.Context, session *model.ReviewSession, turns []model.ReviewTurn, feedback FinalFeedback) error {
-	completionTurn := model.ReviewTurn{
+func (s *Service) completeSession(ctx context.Context, session *ReviewSession, turns []ReviewTurn, feedback FinalFeedback) error {
+	completionTurn := ReviewTurn{
 		SessionID: session.ID,
 		TurnIndex: nextTurnIndex(turns),
-		Role:      model.ReviewTurnRoleSystem,
-		TurnType:  model.ReviewTurnTypeCompletion,
+		Role:      ReviewTurnRoleSystem,
+		TurnType:  ReviewTurnTypeCompletion,
 		Content:   feedback.Summary,
 	}
 	if err := s.repo.AppendTurn(ctx, &completionTurn); err != nil {
@@ -314,7 +381,7 @@ func (s *Service) completeSession(ctx context.Context, session *model.ReviewSess
 	}
 
 	completedAt := s.now()
-	session.Status = model.ReviewStatusCompleted
+	session.Status = ReviewStatusCompleted
 	session.CompletedAt = &completedAt
 	session.FinalSummary = feedback.Summary
 	session.Strengths = mustMarshalJSON(feedback.Strengths)
@@ -327,10 +394,10 @@ func (s *Service) completeSession(ctx context.Context, session *model.ReviewSess
 	return nil
 }
 
-func buildSessionResponse(session model.ReviewSession, turns []model.ReviewTurn) ReviewSessionResponse {
+func buildSessionResponse(session ReviewSession, turns []ReviewTurn) ReviewSessionResponse {
 	opening := ""
 	for _, turn := range turns {
-		if turn.TurnType == model.ReviewTurnTypeOpening {
+		if turn.TurnType == ReviewTurnTypeOpening {
 			opening = turn.Content
 			break
 		}
@@ -342,6 +409,9 @@ func buildSessionResponse(session model.ReviewSession, turns []model.ReviewTurn)
 		Status:               session.Status,
 		Mode:                 session.Mode,
 		Title:                session.NoteTitle,
+		SourceTitle:          session.SourceTitle,
+		SourcePreview:        firstNonEmpty(metadata.SourcePreview, session.SummarySnapshot),
+		ReadyToAnswer:        countUserAnswers(turns) > 0 || session.Status != ReviewStatusCreated,
 		OpeningPrompt:        opening,
 		InitialHints:         initialHints(session.Mode, metadata.SessionOutline),
 		SessionOutline:       metadata.SessionOutline,
@@ -353,8 +423,8 @@ func buildSessionResponse(session model.ReviewSession, turns []model.ReviewTurn)
 	}
 }
 
-func nextQuestionForSession(session model.ReviewSession, turns []model.ReviewTurn, outline SessionOutline) string {
-	if session.Mode != model.ReviewModeDetailedQA || isClosedStatus(session.Status) {
+func nextQuestionForSession(session ReviewSession, turns []ReviewTurn, outline SessionOutline) string {
+	if session.Mode != ReviewModeDetailedQA || isClosedStatus(session.Status) {
 		return ""
 	}
 
@@ -365,7 +435,7 @@ func nextQuestionForSession(session model.ReviewSession, turns []model.ReviewTur
 	return nextDetailedQuestion(answerCount, outline)
 }
 
-func latestReviewFeedback(outline SessionOutline, turns []model.ReviewTurn) *ReviewFeedback {
+func latestReviewFeedback(outline SessionOutline, turns []ReviewTurn) *ReviewFeedback {
 	answer := lastUserAnswer(turns)
 	if strings.TrimSpace(answer) == "" {
 		return nil

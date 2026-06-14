@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"inkwords-backend/internal/infra/llm"
-	"inkwords-backend/internal/infra/parser"
+	"inkwords-backend/shared/platform/parser"
 	"os"
 	"sync"
 	"time"

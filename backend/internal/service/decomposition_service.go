@@ -13,8 +13,8 @@ import (
 	blogcontracts "inkwords-backend/internal/domain/blog/contracts"
 	"inkwords-backend/internal/infra/db"
 	"inkwords-backend/internal/infra/llm"
-	"inkwords-backend/internal/infra/parser"
 	"inkwords-backend/internal/prompt"
+	"inkwords-backend/shared/platform/parser"
 )
 
 // exponentialBackoff 返回退避时间： 2^retryCount 秒 + 随机抖动
