@@ -4,8 +4,8 @@ import (
 	"github.com/gin-gonic/gin"
 
 	projectdomain "inkwords-backend/internal/domain/project"
-	"inkwords-backend/internal/infra/parser"
 	"inkwords-backend/internal/service"
+	"inkwords-backend/shared/platform/parser"
 )
 
 type ProjectAPI struct {

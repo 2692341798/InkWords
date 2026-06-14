@@ -3,7 +3,7 @@ package v1
 import (
 	"github.com/gin-gonic/gin"
 
-	transportv1api "inkwords-backend/internal/transport/http/v1/api"
+	exportdomain "inkwords-backend/services/export-service/domain/export"
 )
 
 type exportRouteHandlers struct {
@@ -14,16 +14,16 @@ type exportRouteHandlers struct {
 }
 
 // RegisterExportRoutes wires only export-service owned endpoints onto the shared API surface.
-func RegisterExportRoutes(r *gin.Engine, authMiddleware gin.HandlerFunc, blogAPI *transportv1api.BlogAPI) {
-	if blogAPI == nil {
-		panic("missing dependency: blogAPI")
+func RegisterExportRoutes(r *gin.Engine, authMiddleware gin.HandlerFunc, handler *exportdomain.Handler) {
+	if handler == nil {
+		panic("missing dependency: exportHandler")
 	}
 
 	registerExportRoutes(r, authMiddleware, exportRouteHandlers{
-		ExportSeries:           blogAPI.ExportSeries,
-		ExportSeriesPDF:        blogAPI.ExportSeriesPDF,
-		ExportToObsidian:       blogAPI.ExportToObsidian,
-		ExportSeriesToObsidian: blogAPI.ExportSeriesToObsidian,
+		ExportSeries:           handler.ExportSeries,
+		ExportSeriesPDF:        handler.ExportSeriesPDF,
+		ExportToObsidian:       handler.ExportToObsidian,
+		ExportSeriesToObsidian: handler.ExportSeriesToObsidian,
 	})
 }
 

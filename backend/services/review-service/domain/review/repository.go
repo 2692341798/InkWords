@@ -5,18 +5,16 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
-
-	"inkwords-backend/internal/model"
 )
 
 // Repository 定义 review 领域所需的持久化接口。
 type Repository interface {
-	GetRecentSessions(ctx context.Context, userID uuid.UUID, limit int) ([]model.ReviewSession, error)
-	CreateSession(ctx context.Context, session *model.ReviewSession) error
-	GetSessionByID(ctx context.Context, sessionID uuid.UUID) (model.ReviewSession, error)
-	ListTurns(ctx context.Context, sessionID uuid.UUID) ([]model.ReviewTurn, error)
-	AppendTurn(ctx context.Context, turn *model.ReviewTurn) error
-	UpdateSession(ctx context.Context, session *model.ReviewSession) error
+	GetRecentSessions(ctx context.Context, userID uuid.UUID, limit int) ([]ReviewSession, error)
+	CreateSession(ctx context.Context, session *ReviewSession) error
+	GetSessionByID(ctx context.Context, sessionID uuid.UUID) (ReviewSession, error)
+	ListTurns(ctx context.Context, sessionID uuid.UUID) ([]ReviewTurn, error)
+	AppendTurn(ctx context.Context, turn *ReviewTurn) error
+	UpdateSession(ctx context.Context, session *ReviewSession) error
 }
 
 // GormRepository 使用 GORM 实现 review 领域仓储。
@@ -29,12 +27,12 @@ func NewGormRepository(db *gorm.DB) *GormRepository {
 	return &GormRepository{db: db}
 }
 
-func (r *GormRepository) GetRecentSessions(ctx context.Context, userID uuid.UUID, limit int) ([]model.ReviewSession, error) {
+func (r *GormRepository) GetRecentSessions(ctx context.Context, userID uuid.UUID, limit int) ([]ReviewSession, error) {
 	if limit <= 0 {
 		limit = 20
 	}
 
-	var sessions []model.ReviewSession
+	var sessions []ReviewSession
 	err := r.db.WithContext(ctx).
 		Where("user_id = ?", userID).
 		Order("created_at DESC").
@@ -47,23 +45,23 @@ func (r *GormRepository) GetRecentSessions(ctx context.Context, userID uuid.UUID
 	return sessions, nil
 }
 
-func (r *GormRepository) CreateSession(ctx context.Context, session *model.ReviewSession) error {
+func (r *GormRepository) CreateSession(ctx context.Context, session *ReviewSession) error {
 	return r.db.WithContext(ctx).Create(session).Error
 }
 
-func (r *GormRepository) GetSessionByID(ctx context.Context, sessionID uuid.UUID) (model.ReviewSession, error) {
-	var session model.ReviewSession
+func (r *GormRepository) GetSessionByID(ctx context.Context, sessionID uuid.UUID) (ReviewSession, error) {
+	var session ReviewSession
 	err := r.db.WithContext(ctx).
 		Where("id = ?", sessionID).
 		First(&session).Error
 	if err != nil {
-		return model.ReviewSession{}, err
+		return ReviewSession{}, err
 	}
 	return session, nil
 }
 
-func (r *GormRepository) ListTurns(ctx context.Context, sessionID uuid.UUID) ([]model.ReviewTurn, error) {
-	var turns []model.ReviewTurn
+func (r *GormRepository) ListTurns(ctx context.Context, sessionID uuid.UUID) ([]ReviewTurn, error) {
+	var turns []ReviewTurn
 	err := r.db.WithContext(ctx).
 		Where("session_id = ?", sessionID).
 		Order("turn_index ASC").
@@ -74,10 +72,10 @@ func (r *GormRepository) ListTurns(ctx context.Context, sessionID uuid.UUID) ([]
 	return turns, nil
 }
 
-func (r *GormRepository) AppendTurn(ctx context.Context, turn *model.ReviewTurn) error {
+func (r *GormRepository) AppendTurn(ctx context.Context, turn *ReviewTurn) error {
 	return r.db.WithContext(ctx).Create(turn).Error
 }
 
-func (r *GormRepository) UpdateSession(ctx context.Context, session *model.ReviewSession) error {
+func (r *GormRepository) UpdateSession(ctx context.Context, session *ReviewSession) error {
 	return r.db.WithContext(ctx).Save(session).Error
 }

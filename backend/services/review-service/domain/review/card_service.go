@@ -5,8 +5,6 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-
-	"inkwords-backend/internal/model"
 )
 
 // GetTodayCard 返回今日推荐题卡。
@@ -73,7 +71,7 @@ func (s *Service) ListNotes(ctx context.Context, userID uuid.UUID, query ListNot
 			NotePath:      note.NotePath,
 			Title:         note.Title,
 			SourceTitle:   note.SourceTitle,
-			PreferredMode: firstNonEmpty(note.PreferredMode, model.ReviewModeLightRecall),
+			PreferredMode: firstNonEmpty(note.PreferredMode, ReviewModeLightRecall),
 		}
 		if lastReviewedAt := stats[note.NotePath].LastReviewedAt; !lastReviewedAt.IsZero() {
 			copyValue := lastReviewedAt
@@ -120,7 +118,7 @@ func (s *Service) loadItemState(ctx context.Context, userID uuid.UUID) (map[stri
 		}
 
 		state := stats[session.NotePath]
-		if session.Status == model.ReviewStatusCompleted {
+		if session.Status == ReviewStatusCompleted {
 			state.CompletedCount++
 		}
 		reviewedAt := resolveReviewedAt(session)
@@ -155,9 +153,9 @@ func (s *Service) loadRecentItems(ctx context.Context, userID uuid.UUID) (map[st
 }
 
 func toReviewCardResponse(note ReviewNote, reason string) ReviewCardResponse {
-	availableModes := []string{model.ReviewModeLightRecall, model.ReviewModeDetailedQA}
-	if note.PreferredMode == model.ReviewModeDetailedQA {
-		availableModes = []string{model.ReviewModeDetailedQA, model.ReviewModeLightRecall}
+	availableModes := []string{ReviewModeLightRecall, ReviewModeDetailedQA}
+	if note.PreferredMode == ReviewModeDetailedQA {
+		availableModes = []string{ReviewModeDetailedQA, ReviewModeLightRecall}
 	}
 
 	return ReviewCardResponse{

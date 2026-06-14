@@ -8,23 +8,21 @@ import (
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
-
-	"inkwords-backend/internal/model"
 )
 
 func TestGormGenerationResultRepository_PersistSingleGenerationResult(t *testing.T) {
 	testDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, testDB.AutoMigrate(&model.User{}, &model.Blog{}))
+	require.NoError(t, testDB.AutoMigrate(&userRecord{}, &blogRecord{}))
 
 	userID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 	blogID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
-	require.NoError(t, testDB.Create(&model.User{
+	require.NoError(t, testDB.Create(&userRecord{
 		ID:       userID,
 		Username: "tester",
 		Email:    "tester@example.com",
 	}).Error)
-	require.NoError(t, testDB.Create(&model.Blog{
+	require.NoError(t, testDB.Create(&blogRecord{
 		ID:         blogID,
 		UserID:     userID,
 		Title:      "旧标题",
@@ -57,7 +55,7 @@ func TestGormGenerationResultRepository_PersistSingleGenerationResult(t *testing
 	require.NoError(t, repo.PersistGenerationResult(context.Background(), taskID, result))
 	require.NoError(t, repo.AccumulateTokens(context.Background(), taskID, result))
 
-	var blog model.Blog
+	var blog blogRecord
 	require.NoError(t, testDB.First(&blog, "id = ?", blogID).Error)
 	require.Equal(t, "文件解析生成的博客", blog.Title)
 	require.Equal(t, "# 标题", blog.Content)
@@ -65,7 +63,7 @@ func TestGormGenerationResultRepository_PersistSingleGenerationResult(t *testing
 	require.Equal(t, int16(1), blog.Status)
 	require.JSONEq(t, `["Go","Docker"]`, string(blog.TechStacks))
 
-	var user model.User
+	var user userRecord
 	require.NoError(t, testDB.First(&user, "id = ?", userID).Error)
 	require.Equal(t, 24, user.TokensUsed)
 }
@@ -73,16 +71,16 @@ func TestGormGenerationResultRepository_PersistSingleGenerationResult(t *testing
 func TestGormGenerationResultRepository_PersistContinueResult(t *testing.T) {
 	testDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, testDB.AutoMigrate(&model.User{}, &model.Blog{}))
+	require.NoError(t, testDB.AutoMigrate(&userRecord{}, &blogRecord{}))
 
 	userID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 	blogID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
-	require.NoError(t, testDB.Create(&model.User{
+	require.NoError(t, testDB.Create(&userRecord{
 		ID:       userID,
 		Username: "tester",
 		Email:    "tester@example.com",
 	}).Error)
-	require.NoError(t, testDB.Create(&model.Blog{
+	require.NoError(t, testDB.Create(&blogRecord{
 		ID:         blogID,
 		UserID:     userID,
 		Title:      "旧标题",
@@ -111,7 +109,7 @@ func TestGormGenerationResultRepository_PersistContinueResult(t *testing.T) {
 	taskID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	require.NoError(t, repo.PersistGenerationResult(context.Background(), taskID, result))
 
-	var blog model.Blog
+	var blog blogRecord
 	require.NoError(t, testDB.First(&blog, "id = ?", blogID).Error)
 	require.Equal(t, "旧内容追加内容", blog.Content)
 }
@@ -119,17 +117,17 @@ func TestGormGenerationResultRepository_PersistContinueResult(t *testing.T) {
 func TestGormGenerationResultRepository_PersistGenerateSeriesResult(t *testing.T) {
 	testDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, testDB.AutoMigrate(&model.User{}, &model.Blog{}))
+	require.NoError(t, testDB.AutoMigrate(&userRecord{}, &blogRecord{}))
 
 	userID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 	parentID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
 	childID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
-	require.NoError(t, testDB.Create(&model.User{
+	require.NoError(t, testDB.Create(&userRecord{
 		ID:       userID,
 		Username: "tester",
 		Email:    "tester@example.com",
 	}).Error)
-	require.NoError(t, testDB.Create(&model.Blog{
+	require.NoError(t, testDB.Create(&blogRecord{
 		ID:         parentID,
 		UserID:     userID,
 		Title:      "旧系列标题",
@@ -138,7 +136,7 @@ func TestGormGenerationResultRepository_PersistGenerateSeriesResult(t *testing.T
 		IsSeries:   true,
 		Status:     0,
 	}).Error)
-	require.NoError(t, testDB.Create(&model.Blog{
+	require.NoError(t, testDB.Create(&blogRecord{
 		ID:          childID,
 		UserID:      userID,
 		ParentID:    &parentID,
@@ -183,13 +181,13 @@ func TestGormGenerationResultRepository_PersistGenerateSeriesResult(t *testing.T
 	taskID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	require.NoError(t, repo.PersistGenerationResult(context.Background(), taskID, result))
 
-	var parent model.Blog
+	var parent blogRecord
 	require.NoError(t, testDB.First(&parent, "id = ?", parentID).Error)
 	require.Equal(t, "Go 源码解析系列", parent.Title)
 	require.Equal(t, "导读正文", parent.Content)
 	require.Equal(t, int16(1), parent.Status)
 
-	var child model.Blog
+	var child blogRecord
 	require.NoError(t, testDB.First(&child, "id = ?", childID).Error)
 	require.Equal(t, "第 1 章", child.Title)
 	require.Equal(t, "章节正文", child.Content)

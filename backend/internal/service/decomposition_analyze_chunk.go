@@ -2,7 +2,7 @@ package service
 
 import (
 	"fmt"
-	"inkwords-backend/internal/infra/parser"
+	"inkwords-backend/shared/platform/parser"
 )
 
 const (

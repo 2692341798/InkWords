@@ -14,14 +14,11 @@ import (
 
 	"github.com/google/uuid"
 
-	taskdomain "inkwords-backend/internal/domain/task"
-	"inkwords-backend/internal/infra/mq"
 	sharedmq "inkwords-backend/shared/platform/rabbitmq"
 )
 
 type parseTaskService interface {
 	MarkRunning(ctx context.Context, taskID uuid.UUID) error
-	AppendEvent(ctx context.Context, taskID uuid.UUID, input taskdomain.AppendEventInput) error
 	MarkSucceeded(ctx context.Context, taskID uuid.UUID, result []byte) error
 	MarkFailed(ctx context.Context, taskID uuid.UUID, message string) error
 	IsCancelled(ctx context.Context, taskID uuid.UUID) (bool, error)
@@ -51,7 +48,7 @@ type parsePayload struct {
 }
 
 // StartParseConsumer boots the parser-service RabbitMQ worker for parse.requested messages.
-func StartParseConsumer(ctx context.Context, taskService *taskdomain.Service, parseService *Service) (func(), error) {
+func StartParseConsumer(ctx context.Context, taskService parseTaskService, parseService *Service) (func(), error) {
 	rabbitURL := os.Getenv("RABBITMQ_URL")
 	if rabbitURL == "" {
 		log.Println("RabbitMQ is not configured, parse consumer disabled")
@@ -65,7 +62,7 @@ func StartParseConsumer(ctx context.Context, taskService *taskdomain.Service, pa
 
 	exchangeName := envOrDefault("RABBITMQ_EXCHANGE", "inkwords.events")
 	queueName := envOrDefault("RABBITMQ_PARSE_QUEUE", "inkwords.parse")
-	routingKey := mq.ParseRequestedMessage{}.RoutingKey()
+	routingKey := sharedmq.ParseRequestedMessage{}.RoutingKey()
 
 	if err := channel.ExchangeDeclare(exchangeName, "topic", true, false, false, false, nil); err != nil {
 		_ = channel.Close()
@@ -104,7 +101,7 @@ func StartParseConsumer(ctx context.Context, taskService *taskdomain.Service, pa
 					return
 				}
 
-				var message mq.ParseRequestedMessage
+				var message sharedmq.ParseRequestedMessage
 				if err := json.Unmarshal(delivery.Body, &message); err != nil {
 					log.Printf("invalid parse message payload: %v", err)
 					_ = delivery.Ack(false)
@@ -129,7 +126,7 @@ func StartParseConsumer(ctx context.Context, taskService *taskdomain.Service, pa
 }
 
 // HandleParseRequested consumes one parse.requested message and persists the parse result to the task store.
-func (c *TaskConsumer) HandleParseRequested(ctx context.Context, message mq.ParseRequestedMessage) error {
+func (c *TaskConsumer) HandleParseRequested(ctx context.Context, message sharedmq.ParseRequestedMessage) error {
 	if c == nil || c.tasks == nil || c.parser == nil {
 		return errors.New("parse task consumer dependencies are not configured")
 	}

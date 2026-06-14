@@ -8,9 +8,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"inkwords-backend/internal/infra/parser"
 	"inkwords-backend/internal/prompt"
 	"inkwords-backend/internal/service"
+	"inkwords-backend/shared/platform/parser"
 )
 
 type Service struct {

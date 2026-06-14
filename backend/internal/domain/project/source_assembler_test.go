@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"inkwords-backend/internal/infra/parser"
+	"inkwords-backend/shared/platform/parser"
 )
 
 func TestAssembleSourceContent_MatchesLegacyFormat(t *testing.T) {

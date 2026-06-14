@@ -3,14 +3,13 @@ package review
 import (
 	"strings"
 	"unicode"
-
-	"inkwords-backend/internal/model"
 )
 
-func buildSessionSnapshot(note ReviewNote) (string, SessionOutline) {
+func buildSessionSnapshot(note ReviewNote) (string, SessionOutline, string) {
 	body := truncateRunes(strings.TrimSpace(note.Body), 800)
 	outline := buildSessionOutline(note)
-	return body, outline
+	sourcePreview := truncateRunes(strings.TrimSpace(note.Body), 2400)
+	return body, outline, sourcePreview
 }
 
 func buildSessionOutline(note ReviewNote) SessionOutline {
@@ -39,7 +38,7 @@ func buildSessionOutline(note ReviewNote) SessionOutline {
 }
 
 func openingPrompt(mode string, outline SessionOutline) string {
-	if mode == model.ReviewModeDetailedQA {
+	if mode == ReviewModeDetailedQA {
 		return "先别看原文，我们先围绕这篇文章的主线来回答：" + firstNonEmpty(outline.MainQuestion, "这篇文章最核心在讲什么？")
 	}
 
@@ -47,7 +46,7 @@ func openingPrompt(mode string, outline SessionOutline) string {
 }
 
 func initialHints(mode string, outline SessionOutline) []string {
-	if mode == model.ReviewModeDetailedQA {
+	if mode == ReviewModeDetailedQA {
 		return []string{}
 	}
 	if len(outline.Checkpoints) > 0 {
@@ -65,7 +64,7 @@ func initialHints(mode string, outline SessionOutline) []string {
 }
 
 func currentRoundGoal(mode string, answerCount int, outline SessionOutline) string {
-	if mode == model.ReviewModeDetailedQA {
+	if mode == ReviewModeDetailedQA {
 		switch answerCount {
 		case 0:
 			return "先讲清楚这篇文章的主线问题和核心结论。"
@@ -102,8 +101,8 @@ func nextDetailedQuestion(answerCount int, outline SessionOutline) string {
 	}
 }
 
-func buildHintText(session model.ReviewSession, turns []model.ReviewTurn, outline SessionOutline) string {
-	if session.Mode == model.ReviewModeDetailedQA {
+func buildHintText(session ReviewSession, turns []ReviewTurn, outline SessionOutline) string {
+	if session.Mode == ReviewModeDetailedQA {
 		answerCount := countUserAnswers(turns)
 		currentQuestion := nextDetailedQuestion(answerCount, outline)
 		if currentQuestion == "" {

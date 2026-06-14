@@ -6,9 +6,6 @@ import (
 	"path"
 	"sort"
 	"strings"
-
-	"inkwords-backend/internal/model"
-	"inkwords-backend/internal/service"
 )
 
 // ReviewNote 表示可进入复习入口的一篇候选笔记。
@@ -20,14 +17,19 @@ type ReviewNote struct {
 	PreferredMode string
 }
 
+type noteStore interface {
+	Read(ctx context.Context, path string) ([]byte, error)
+	List(ctx context.Context, dirPath string) ([]string, error)
+}
+
 // ReviewNoteSource 负责从 Obsidian concepts 目录中读取候选复习笔记。
 type ReviewNoteSource struct {
-	store   service.ObsidianStore
+	store   noteStore
 	rootDir string
 }
 
-// NewReviewNoteSource 创建基于 ObsidianStore 的复习笔记源。
-func NewReviewNoteSource(store service.ObsidianStore, rootDir string) *ReviewNoteSource {
+// NewReviewNoteSource 创建基于只读笔记存储的复习笔记源。
+func NewReviewNoteSource(store noteStore, rootDir string) *ReviewNoteSource {
 	return &ReviewNoteSource{
 		store:   store,
 		rootDir: strings.TrimSuffix(rootDir, "/"),
@@ -63,7 +65,7 @@ func (s *ReviewNoteSource) ListEligibleNotes(ctx context.Context) ([]ReviewNote,
 			Title:         firstNonEmpty(meta.Title, inferTitleFromPath(notePath)),
 			SourceTitle:   extractSourceTitle(meta.Related),
 			Body:          strings.TrimSpace(body),
-			PreferredMode: firstNonEmpty(meta.Review.PreferredMode, model.ReviewModeLightRecall),
+			PreferredMode: firstNonEmpty(meta.Review.PreferredMode, ReviewModeLightRecall),
 		}
 		notes = append(notes, note)
 	}

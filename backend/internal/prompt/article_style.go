@@ -1,19 +1,11 @@
 package prompt
 
-type ArticleStyle string
+import sharedprompt "inkwords-backend/shared/kernel/prompt"
+
+type ArticleStyle = sharedprompt.ArticleStyle
 
 const (
-	ArticleStyleGeneral          ArticleStyle = "general"
-	ArticleStyleBeginnerTutorial ArticleStyle = "beginner_tutorial"
-	ArticleStyleExamReview       ArticleStyle = "exam_review"
+	ArticleStyleGeneral          = sharedprompt.ArticleStyleGeneral
+	ArticleStyleBeginnerTutorial = sharedprompt.ArticleStyleBeginnerTutorial
+	ArticleStyleExamReview       = sharedprompt.ArticleStyleExamReview
 )
-
-func (s ArticleStyle) IsValid() bool {
-	switch s {
-	case ArticleStyleGeneral, ArticleStyleBeginnerTutorial, ArticleStyleExamReview:
-		return true
-	default:
-		return false
-	}
-}
-

@@ -11,8 +11,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-
-	"inkwords-backend/internal/model"
 )
 
 func TestHandler_GetTodayCard_Returns200(t *testing.T) {
@@ -32,7 +30,7 @@ func TestHandler_GetTodayCard_Returns200(t *testing.T) {
 			SourceTitle:      "后端系列",
 			ReviewReason:     "这是你最近导入但还没复习过的一篇内容。",
 			EstimatedMinutes: 5,
-			AvailableModes:   []string{model.ReviewModeLightRecall, model.ReviewModeDetailedQA},
+			AvailableModes:   []string{ReviewModeLightRecall, ReviewModeDetailedQA},
 		},
 	})
 	r.GET("/api/v1/review/today", h.GetTodayCard)
@@ -86,8 +84,8 @@ func TestHandler_CreateSession_Returns200(t *testing.T) {
 	h := NewHandler(&stubHandlerService{
 		sessionResp: ReviewSessionResponse{
 			SessionID:        sessionID,
-			Status:           model.ReviewStatusCreated,
-			Mode:             model.ReviewModeLightRecall,
+			Status:           ReviewStatusCreated,
+			Mode:             ReviewModeLightRecall,
 			Title:            "Gin 路由",
 			OpeningPrompt:    "先别看原文，试着用自己的话讲讲这篇内容。",
 			InitialHints:     []string{"这篇内容主要在解决什么问题？"},
@@ -106,8 +104,8 @@ func TestHandler_CreateSession_Returns200(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Equal(t, CreateSessionRequest{
 		NotePath:  "wiki/concepts/gin.md",
-		Mode:      model.ReviewModeLightRecall,
-		EntryType: model.ReviewEntryTypeToday,
+		Mode:      ReviewModeLightRecall,
+		EntryType: ReviewEntryTypeToday,
 	}, h.service.(*stubHandlerService).lastCreateReq)
 }
 
@@ -128,8 +126,8 @@ func TestHandler_GetHistory_Returns200(t *testing.T) {
 					SessionID:   uuid.New(),
 					Title:       "Gin 路由",
 					SourceTitle: "后端系列",
-					Status:      model.ReviewStatusCompleted,
-					Mode:        model.ReviewModeLightRecall,
+					Status:      ReviewStatusCompleted,
+					Mode:        ReviewModeLightRecall,
 					Summary:     "已经抓住了主线",
 				},
 			},

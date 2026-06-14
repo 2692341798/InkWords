@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"inkwords-backend/internal/infra/parser"
+	"inkwords-backend/shared/platform/parser"
 )
 
 type ParseResult struct {

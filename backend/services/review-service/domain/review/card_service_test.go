@@ -7,8 +7,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-
-	"inkwords-backend/internal/model"
 )
 
 func TestService_GetTodayCard_PrefersUnreviewed(t *testing.T) {
@@ -19,8 +17,8 @@ func TestService_GetTodayCard_PrefersUnreviewed(t *testing.T) {
 		{NotePath: "wiki/concepts/b.md", Title: "B", SourceTitle: "系列 B"},
 	})
 	svc.repo = &stubReviewRepository{
-		recentSessions: []model.ReviewSession{
-			{NotePath: "wiki/concepts/a.md", Status: model.ReviewStatusCompleted},
+		recentSessions: []ReviewSession{
+			{NotePath: "wiki/concepts/a.md", Status: ReviewStatusCompleted},
 		},
 	}
 
@@ -28,7 +26,7 @@ func TestService_GetTodayCard_PrefersUnreviewed(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "wiki/concepts/b.md", resp.NotePath)
 	require.Equal(t, "这是你最近导入但还没复习过的一篇内容。", resp.ReviewReason)
-	require.ElementsMatch(t, []string{model.ReviewModeLightRecall, model.ReviewModeDetailedQA}, resp.AvailableModes)
+	require.ElementsMatch(t, []string{ReviewModeLightRecall, ReviewModeDetailedQA}, resp.AvailableModes)
 }
 
 func TestService_PickRandomCard_AvoidsRecentReviewedNotes(t *testing.T) {
@@ -41,10 +39,10 @@ func TestService_PickRandomCard_AvoidsRecentReviewedNotes(t *testing.T) {
 	})
 	svc.now = func() time.Time { return now }
 	svc.repo = &stubReviewRepository{
-		recentSessions: []model.ReviewSession{
+		recentSessions: []ReviewSession{
 			{
 				NotePath:    "wiki/concepts/a.md",
-				Status:      model.ReviewStatusCompleted,
+				Status:      ReviewStatusCompleted,
 				CompletedAt: timePtr(now.Add(-24 * time.Hour)),
 			},
 		},
@@ -75,15 +73,15 @@ func TestService_ListNotes_UsesSeriesFilterAndPagination(t *testing.T) {
 
 	now := time.Date(2026, 5, 27, 9, 0, 0, 0, time.UTC)
 	svc := newTestReviewServiceWithNotes([]ReviewNote{
-		{NotePath: "wiki/concepts/并发控制与速率限制.md", Title: "并发控制与速率限制", SourceTitle: "后端系列", PreferredMode: model.ReviewModeDetailedQA},
-		{NotePath: "wiki/concepts/前端状态管理.md", Title: "前端状态管理", SourceTitle: "前端系列", PreferredMode: model.ReviewModeLightRecall},
-		{NotePath: "wiki/concepts/并发原语.md", Title: "并发原语", SourceTitle: "后端系列", PreferredMode: model.ReviewModeLightRecall},
+		{NotePath: "wiki/concepts/并发控制与速率限制.md", Title: "并发控制与速率限制", SourceTitle: "后端系列", PreferredMode: ReviewModeDetailedQA},
+		{NotePath: "wiki/concepts/前端状态管理.md", Title: "前端状态管理", SourceTitle: "前端系列", PreferredMode: ReviewModeLightRecall},
+		{NotePath: "wiki/concepts/并发原语.md", Title: "并发原语", SourceTitle: "后端系列", PreferredMode: ReviewModeLightRecall},
 	})
 	svc.repo = &stubReviewRepository{
-		recentSessions: []model.ReviewSession{
+		recentSessions: []ReviewSession{
 			{
 				NotePath:    "wiki/concepts/并发原语.md",
-				Status:      model.ReviewStatusCompleted,
+				Status:      ReviewStatusCompleted,
 				CompletedAt: timePtr(now.Add(-48 * time.Hour)),
 			},
 		},
@@ -100,6 +98,6 @@ func TestService_ListNotes_UsesSeriesFilterAndPagination(t *testing.T) {
 	require.Equal(t, 1, resp.PageSize)
 	require.Len(t, resp.Items, 1)
 	require.Equal(t, "并发原语", resp.Items[0].Title)
-	require.Equal(t, model.ReviewModeLightRecall, resp.Items[0].PreferredMode)
+	require.Equal(t, ReviewModeLightRecall, resp.Items[0].PreferredMode)
 	require.NotNil(t, resp.Items[0].LastReviewedAt)
 }

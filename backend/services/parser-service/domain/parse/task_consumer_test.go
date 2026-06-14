@@ -11,10 +11,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	taskdomain "inkwords-backend/internal/domain/task"
-	"inkwords-backend/internal/infra/mq"
-	"inkwords-backend/internal/model"
 	parserinfra "inkwords-backend/services/parser-service/infra/parser"
+	sharedmq "inkwords-backend/shared/platform/rabbitmq"
 )
 
 func TestTaskConsumer_HandleParseRequested_PersistsParseResult(t *testing.T) {
@@ -36,7 +34,7 @@ func TestTaskConsumer_HandleParseRequested_PersistsParseResult(t *testing.T) {
 	}
 
 	consumer := NewTaskConsumer(tasks, parserService)
-	err := consumer.HandleParseRequested(context.Background(), mq.ParseRequestedMessage{
+	err := consumer.HandleParseRequested(context.Background(), sharedmq.ParseRequestedMessage{
 		TaskID: uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
 		Kind:   "parse_archive",
 		UserID: uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
@@ -48,7 +46,7 @@ func TestTaskConsumer_HandleParseRequested_PersistsParseResult(t *testing.T) {
 
 	require.NoError(t, err)
 	require.True(t, tasks.markRunningCalled)
-	require.Equal(t, model.JobTaskStatusSucceeded, tasks.lastStatus)
+	require.Equal(t, "succeeded", tasks.lastStatus)
 
 	var stored map[string]any
 	require.NoError(t, json.Unmarshal(tasks.lastResult, &stored))
@@ -63,7 +61,7 @@ func TestTaskConsumer_HandleParseRequested_InvalidPayloadMarksTaskFailed(t *test
 	tasks := &fakeParseTaskService{}
 	consumer := NewTaskConsumer(tasks, &stubParseTaskService{})
 
-	err := consumer.HandleParseRequested(context.Background(), mq.ParseRequestedMessage{
+	err := consumer.HandleParseRequested(context.Background(), sharedmq.ParseRequestedMessage{
 		TaskID:  uuid.MustParse("cccccccc-cccc-cccc-cccc-cccccccccccc"),
 		Kind:    "parse_file",
 		UserID:  uuid.MustParse("dddddddd-dddd-dddd-dddd-dddddddddddd"),
@@ -71,13 +69,13 @@ func TestTaskConsumer_HandleParseRequested_InvalidPayloadMarksTaskFailed(t *test
 	})
 
 	require.NoError(t, err)
-	require.Equal(t, model.JobTaskStatusFailed, tasks.lastStatus)
+	require.Equal(t, "failed", tasks.lastStatus)
 	require.Equal(t, "invalid parse payload", tasks.lastErrorMessage)
 }
 
 type fakeParseTaskService struct {
 	markRunningCalled bool
-	lastStatus        model.JobTaskStatus
+	lastStatus        string
 	lastResult        []byte
 	lastErrorMessage  string
 	cancelled         bool
@@ -85,22 +83,18 @@ type fakeParseTaskService struct {
 
 func (f *fakeParseTaskService) MarkRunning(_ context.Context, _ uuid.UUID) error {
 	f.markRunningCalled = true
-	f.lastStatus = model.JobTaskStatusRunning
-	return nil
-}
-
-func (f *fakeParseTaskService) AppendEvent(_ context.Context, _ uuid.UUID, _ taskdomain.AppendEventInput) error {
+	f.lastStatus = "running"
 	return nil
 }
 
 func (f *fakeParseTaskService) MarkSucceeded(_ context.Context, _ uuid.UUID, result []byte) error {
-	f.lastStatus = model.JobTaskStatusSucceeded
+	f.lastStatus = "succeeded"
 	f.lastResult = append([]byte(nil), result...)
 	return nil
 }
 
 func (f *fakeParseTaskService) MarkFailed(_ context.Context, _ uuid.UUID, message string) error {
-	f.lastStatus = model.JobTaskStatusFailed
+	f.lastStatus = "failed"
 	f.lastErrorMessage = message
 	return nil
 }

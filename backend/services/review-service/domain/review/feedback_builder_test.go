@@ -4,8 +4,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-
-	"inkwords-backend/internal/model"
 )
 
 func TestBuildHintText_DifferentiatesReviewModes(t *testing.T) {
@@ -19,12 +17,12 @@ func TestBuildHintText_DifferentiatesReviewModes(t *testing.T) {
 		},
 	}
 
-	lightHint := buildHintText(model.ReviewSession{
-		Mode:          model.ReviewModeLightRecall,
+	lightHint := buildHintText(ReviewSession{
+		Mode:          ReviewModeLightRecall,
 		HintUsedCount: 0,
 	}, nil, outline)
-	detailedHint := buildHintText(model.ReviewSession{
-		Mode:          model.ReviewModeDetailedQA,
+	detailedHint := buildHintText(ReviewSession{
+		Mode:          ReviewModeDetailedQA,
 		HintUsedCount: 0,
 	}, nil, outline)
 
@@ -36,14 +34,14 @@ func TestBuildHintText_DifferentiatesReviewModes(t *testing.T) {
 func TestBuildFinalFeedback_DifferentiatesReviewModes(t *testing.T) {
 	t.Parallel()
 
-	lightFeedback := buildFinalFeedback(model.ReviewModeLightRecall, []model.ReviewTurn{{
-		Role:     model.ReviewTurnRoleUser,
-		TurnType: model.ReviewTurnTypeAnswer,
+	lightFeedback := buildFinalFeedback(ReviewModeLightRecall, []ReviewTurn{{
+		Role:     ReviewTurnRoleUser,
+		TurnType: ReviewTurnTypeAnswer,
 		Content:  "我先讲主线",
 	}})
-	detailedFeedback := buildFinalFeedback(model.ReviewModeDetailedQA, []model.ReviewTurn{{
-		Role:     model.ReviewTurnRoleUser,
-		TurnType: model.ReviewTurnTypeAnswer,
+	detailedFeedback := buildFinalFeedback(ReviewModeDetailedQA, []ReviewTurn{{
+		Role:     ReviewTurnRoleUser,
+		TurnType: ReviewTurnTypeAnswer,
 		Content:  "我回答当前追问",
 	}})
 

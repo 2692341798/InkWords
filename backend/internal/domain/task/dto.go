@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"inkwords-backend/internal/model"
+	sharedrabbitmq "inkwords-backend/shared/platform/rabbitmq"
 )
 
 const (
@@ -48,28 +49,13 @@ type AppendEventInput struct {
 }
 
 // GenerationRequestedMessage 是任务创建成功后发往消息队列的标准载荷。
-type GenerationRequestedMessage struct {
-	TaskID  uuid.UUID       `json:"task_id"`
-	Kind    string          `json:"kind"`
-	UserID  uuid.UUID       `json:"user_id"`
-	Payload json.RawMessage `json:"payload"`
-}
+type GenerationRequestedMessage = sharedrabbitmq.GenerationRequestedMessage
 
 // ParseRequestedMessage 是解析任务创建成功后发往消息队列的标准载荷。
-type ParseRequestedMessage struct {
-	TaskID  uuid.UUID       `json:"task_id"`
-	Kind    string          `json:"kind"`
-	UserID  uuid.UUID       `json:"user_id"`
-	Payload json.RawMessage `json:"payload"`
-}
+type ParseRequestedMessage = sharedrabbitmq.ParseRequestedMessage
 
 // ExportRequestedMessage 是导出任务创建成功后发往消息队列的标准载荷。
-type ExportRequestedMessage struct {
-	TaskID  uuid.UUID       `json:"task_id"`
-	Kind    string          `json:"kind"`
-	UserID  uuid.UUID       `json:"user_id"`
-	Payload json.RawMessage `json:"payload"`
-}
+type ExportRequestedMessage = sharedrabbitmq.ExportRequestedMessage
 
 // CreateGenerationTaskRequest 描述创建生成任务的 HTTP 请求体。
 type CreateGenerationTaskRequest struct {

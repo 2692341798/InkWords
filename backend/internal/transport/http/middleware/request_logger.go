@@ -2,11 +2,11 @@ package middleware
 
 import (
 	"io"
-	"log/slog"
 	"os"
-	"time"
 
 	"github.com/gin-gonic/gin"
+
+	"inkwords-backend/shared/kernel/httpx"
 )
 
 // RequestLogger emits one structured access log entry after each HTTP request completes.
@@ -20,19 +20,5 @@ func RequestLoggerWithWriter(serviceName string, writer io.Writer) gin.HandlerFu
 		writer = os.Stdout
 	}
 
-	logger := slog.New(slog.NewJSONHandler(writer, nil))
-	return func(c *gin.Context) {
-		startedAt := time.Now()
-		c.Next()
-
-		logger.Info(
-			"request_completed",
-			"service", serviceName,
-			"request_id", GetRequestID(c),
-			"path", c.Request.URL.Path,
-			"method", c.Request.Method,
-			"status", c.Writer.Status(),
-			"latency_ms", time.Since(startedAt).Milliseconds(),
-		)
-	}
+	return httpx.RequestLoggerWithWriter(serviceName, writer)
 }
