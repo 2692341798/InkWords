@@ -3,6 +3,7 @@ import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recha
 import { Coins, FileText, Hash, User, Loader2, Upload, BookOpen } from 'lucide-react'
 import { userService } from '@/services/user'
 import { toast } from 'sonner'
+import { PageHeader, PageShell, Panel, SectionHeader, StatusPill } from '@/components/ui/workspace'
 
 interface TechStackStat {
   name: string
@@ -115,33 +116,36 @@ export function Dashboard() {
 
   if (loading) {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
+      <div className="flex-1 flex items-center justify-center bg-background">
+        <Loader2 className="w-8 h-8 animate-spin text-[var(--brand)]" />
       </div>
     )
   }
 
   return (
-    <div className="flex-1 flex flex-col overflow-y-auto bg-zinc-50 p-8 custom-scrollbar">
-      <div className="max-w-5xl mx-auto w-full space-y-8">
-        
-        {/* Header / Profile Section */}
-        <div className="bg-white p-6 rounded-xl border border-zinc-200 shadow-sm flex items-center gap-6">
-          <div className="relative group">
-            <div className="w-20 h-20 rounded-full bg-zinc-100 border border-zinc-200 overflow-hidden flex items-center justify-center shrink-0">
+    <PageShell>
+        <PageHeader
+          title="个人中心"
+          description="查看账号资料、内容产出和模型消耗情况。"
+          meta={<StatusPill>账户与用量</StatusPill>}
+        />
+
+        <Panel className="flex items-center gap-6 p-6">
+          <div className="relative group shrink-0">
+            <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-border shadow-[0_2px_8px_rgba(0,0,0,0.02)] bg-secondary flex items-center justify-center">
               {profile?.avatar_url ? (
-                <img src={profile.avatar_url} alt="用户头像" className="w-full h-full object-cover" />
+                <img src={profile.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
               ) : (
-                <User className="w-10 h-10 text-zinc-400" />
+                <User className="w-8 h-8 text-muted-foreground" />
               )}
             </div>
-            <label className="absolute inset-0 bg-black/50 text-white flex flex-col items-center justify-center rounded-full opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
+            <label className="absolute inset-0 bg-black/40 text-white flex flex-col items-center justify-center rounded-full opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity backdrop-blur-sm">
               {uploadingAvatar ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
-              <span className="text-[10px] mt-1">上传</span>
+              <span className="text-[10px] mt-1 font-medium">更换</span>
               <input type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} disabled={uploadingAvatar} />
             </label>
           </div>
-          
+
           <div className="flex-1">
             <div className="flex items-center gap-3">
               {editingUsername ? (
@@ -152,11 +156,11 @@ export function Dashboard() {
                   onChange={(e) => setNewUsername(e.target.value)}
                   onBlur={handleUpdateUsername}
                   onKeyDown={(e) => e.key === 'Enter' && handleUpdateUsername()}
-                  className="text-2xl font-bold text-zinc-900 border-b-2 border-indigo-500 focus:outline-none bg-transparent"
+                  className="text-2xl font-semibold text-foreground border-b border-border focus:border-foreground focus:outline-none bg-transparent transition-colors"
                 />
               ) : (
-                <h1 
-                  className="text-2xl font-bold text-zinc-900 cursor-pointer hover:text-indigo-600 transition-colors"
+                <h1
+                  className="text-2xl font-semibold text-foreground cursor-pointer hover:text-muted-foreground transition-colors"
                   onClick={() => setEditingUsername(true)}
                   title="点击修改用户名"
                 >
@@ -164,59 +168,57 @@ export function Dashboard() {
                 </h1>
               )}
             </div>
-            <p className="text-sm text-zinc-500 mt-1">{profile?.email}</p>
+            <p className="text-sm text-muted-foreground mt-1">{profile?.email}</p>
           </div>
-        </div>
+        </Panel>
 
-        {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white p-5 rounded-xl border border-zinc-200 shadow-sm flex items-start gap-4">
-            <div className="p-3 bg-blue-50 text-blue-600 rounded-lg">
-              <Hash className="w-6 h-6" />
+          <Panel tone="section" className="flex items-start gap-4 p-5">
+            <div className="p-2.5 bg-secondary text-foreground rounded-lg">
+              <Hash className="w-5 h-5" />
             </div>
             <div>
-              <p className="text-sm font-medium text-zinc-500">消耗 Token</p>
-              <h3 className="text-2xl font-bold text-zinc-900 mt-1">{stats?.tokens_used?.toLocaleString() || 0}</h3>
+              <p className="text-sm font-medium text-muted-foreground">消耗 Token</p>
+              <h3 className="text-2xl font-semibold text-foreground mt-1">{stats?.tokens_used?.toLocaleString() || 0}</h3>
             </div>
-          </div>
+          </Panel>
 
-          <div className="bg-white p-5 rounded-xl border border-zinc-200 shadow-sm flex items-start gap-4">
-            <div className="p-3 bg-green-50 text-green-600 rounded-lg">
-              <Coins className="w-6 h-6" />
+          <Panel tone="section" className="flex items-start gap-4 p-5">
+            <div className="p-2.5 bg-secondary text-foreground rounded-lg">
+              <Coins className="w-5 h-5" />
             </div>
             <div>
-              <p className="text-sm font-medium text-zinc-500">预估费用 (元)</p>
-              <h3 className="text-2xl font-bold text-zinc-900 mt-1">¥{stats?.estimated_cost?.toFixed(2) || '0.00'}</h3>
-              <p className="text-[10px] text-zinc-400 mt-1">按 2.3元/1M Tokens 均价估算</p>
+              <p className="text-sm font-medium text-muted-foreground">预估费用 (元)</p>
+              <h3 className="text-2xl font-semibold text-foreground mt-1">¥{stats?.estimated_cost?.toFixed(2) || '0.00'}</h3>
+              <p className="text-[10px] text-muted-foreground mt-1">按 2.3元/1M Tokens 估算</p>
             </div>
-          </div>
+          </Panel>
 
-          <div className="bg-white p-5 rounded-xl border border-zinc-200 shadow-sm flex items-start gap-4">
-            <div className="p-3 bg-indigo-50 text-indigo-600 rounded-lg">
-              <FileText className="w-6 h-6" />
+          <Panel tone="section" className="flex items-start gap-4 p-5">
+            <div className="p-2.5 bg-secondary text-foreground rounded-lg">
+              <FileText className="w-5 h-5" />
             </div>
             <div>
-              <p className="text-sm font-medium text-zinc-500">生成文章数</p>
-              <h3 className="text-2xl font-bold text-zinc-900 mt-1">{stats?.total_articles?.toLocaleString() || 0}</h3>
+              <p className="text-sm font-medium text-muted-foreground">生成文章数</p>
+              <h3 className="text-2xl font-semibold text-foreground mt-1">{stats?.total_articles?.toLocaleString() || 0}</h3>
             </div>
-          </div>
+          </Panel>
 
-          <div className="bg-white p-5 rounded-xl border border-zinc-200 shadow-sm flex items-start gap-4">
-            <div className="p-3 bg-orange-50 text-orange-600 rounded-lg">
-              <BookOpen className="w-6 h-6" />
+          <Panel tone="section" className="flex items-start gap-4 p-5">
+            <div className="p-2.5 bg-secondary text-foreground rounded-lg">
+              <BookOpen className="w-5 h-5" />
             </div>
             <div>
-              <p className="text-sm font-medium text-zinc-500">生成总字数</p>
-              <h3 className="text-2xl font-bold text-zinc-900 mt-1">{stats?.total_words?.toLocaleString() || 0}</h3>
+              <p className="text-sm font-medium text-muted-foreground">生成总字数</p>
+              <h3 className="text-2xl font-semibold text-foreground mt-1">{stats?.total_words?.toLocaleString() || 0}</h3>
             </div>
-          </div>
+          </Panel>
         </div>
 
-        {/* Charts Section */}
-        <div className="bg-white p-6 rounded-xl border border-zinc-200 shadow-sm">
-          <h2 className="text-lg font-semibold text-zinc-800 mb-6">技术栈涉及频率分布</h2>
+        <Panel className="p-6">
+          <SectionHeader title="技术栈涉及频率分布" description="根据历史文章提取的技术主题频率，用于观察内容覆盖面。" />
           
-          <div className="h-[400px] w-full">
+          <div className="mt-6 h-[400px] w-full">
             {processedChartData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -248,9 +250,8 @@ export function Dashboard() {
               </div>
             )}
           </div>
-        </div>
+        </Panel>
         
-      </div>
-    </div>
+    </PageShell>
   )
 }

@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react'
+import { Button } from '@/components/ui/button'
+import { Panel, SectionHeader, StatusPill } from '@/components/ui/workspace'
 
 interface GeneratorOutlineStageProps {
   lockedScenarioLabel?: string | null
@@ -19,35 +21,23 @@ export function GeneratorOutlineStage({
   onBack,
 }: GeneratorOutlineStageProps) {
   return (
-    <section className="space-y-6 rounded-3xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-      <div className="flex items-start justify-between gap-4">
-        <div className="space-y-2">
-          <h2 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">确认并调整大纲</h2>
-          <p className="text-sm leading-6 text-zinc-500 dark:text-zinc-400">
-            当前页面只保留大纲相关操作，确认无误后直接开始生成博客。
-          </p>
-          {lockedScenarioLabel ? (
-            <div className="inline-flex items-center rounded-full border border-zinc-200 bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-              当前创作场景：{lockedScenarioLabel}
-            </div>
-          ) : null}
-          {lockedPromptProfileLabel ? (
-            <div className="inline-flex items-center rounded-full border border-zinc-200 bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-              当前提示词类型：{lockedPromptProfileLabel}
-            </div>
-          ) : null}
+    <Panel className="space-y-5 p-6">
+      <SectionHeader
+        eyebrow="大纲确认"
+        title="确认并调整大纲"
+        description="当前页面只保留结构调整和开始生成，前序配置被收进摘要标签。"
+        action={<Button variant="outline" onClick={onBack}>返回上一步</Button>}
+      />
+
+      {(lockedScenarioLabel || lockedPromptProfileLabel) ? (
+        <div className="flex flex-wrap gap-2">
+          {lockedScenarioLabel ? <StatusPill>创作场景：{lockedScenarioLabel}</StatusPill> : null}
+          {lockedPromptProfileLabel ? <StatusPill>提示词类型：{lockedPromptProfileLabel}</StatusPill> : null}
         </div>
-        <button
-          type="button"
-          onClick={onBack}
-          className="rounded-xl border border-zinc-200 px-3 py-2 text-sm text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-900 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-zinc-600 dark:hover:text-zinc-100"
-        >
-          返回上一步
-        </button>
-      </div>
+      ) : null}
 
       {outlineEditor}
       {progressPanel}
-    </section>
+    </Panel>
   )
 }

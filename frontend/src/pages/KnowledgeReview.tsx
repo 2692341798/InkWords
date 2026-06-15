@@ -5,6 +5,7 @@ import { ReviewNotePicker } from '@/components/review/ReviewNotePicker'
 import { ReviewSessionCard } from '@/components/review/ReviewSessionCard'
 import { StepStrip, type StepStripItem } from '@/components/shared/StepStrip'
 import { Button } from '@/components/ui/button'
+import { PageHeader, PageShell, Panel, SectionHeader, StatusPill } from '@/components/ui/workspace'
 import { useKnowledgeReview } from '@/hooks/useKnowledgeReview'
 import { useReviewStore } from '@/store/reviewStore'
 import { getKnowledgeReviewViewState } from './knowledgeReviewViewState'
@@ -61,28 +62,15 @@ export function KnowledgeReview() {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto bg-zinc-50 custom-scrollbar">
-      <div className="mx-auto flex max-w-6xl flex-col gap-8 px-6 py-12">
-        <section className="rounded-3xl border border-zinc-200 bg-white px-8 py-10 shadow-sm">
-          <div className="space-y-4">
-            <span className="inline-flex items-center rounded-full bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700">
-              知识漫游复习
-            </span>
-            <div className="space-y-2">
-              <h1 className="text-3xl font-semibold tracking-tight text-zinc-900">把知识库里的重点内容重新讲出来</h1>
-              <p className="max-w-3xl text-sm leading-6 text-zinc-600">
-                这里会承接随机抽题和手动选文两种入口，并把会话提示、追问和最近记录收敛在同一个复习工作台里。
-              </p>
-            </div>
-          </div>
-        </section>
+    <PageShell>
+        <PageHeader
+          title="像整理笔记一样，把重点重新讲出来"
+          description="先聚焦当前问题，需要时再展开原文细节，让复习过程保持安静和可持续。"
+          meta={<StatusPill tone="success">知识漫游复习</StatusPill>}
+          actions={<StatusPill>当前步骤：{currentStepMeta.title}</StatusPill>}
+        />
 
-        <section className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
-          <div className="mb-5 flex justify-end">
-            <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-600">
-              当前步骤：{currentStepMeta.title}
-            </span>
-          </div>
+        <Panel className="p-6">
           <StepStrip
             title="当前流程"
             description={currentStepMeta.description}
@@ -90,18 +78,18 @@ export function KnowledgeReview() {
             currentStepIndex={viewState.currentStepIndex}
             variant="progress"
           />
-        </section>
+        </Panel>
 
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,1.4fr)_340px]">
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
           <div className="space-y-6">
             {viewState.shouldShowEntryStep && (
               <>
                 {hasHiddenSession && (
-                  <section className="rounded-3xl border border-indigo-200 bg-indigo-50 px-5 py-4">
+                  <section className="rounded-xl border border-[color-mix(in_srgb,var(--brand)_22%,var(--border))] bg-[var(--brand-soft)] px-5 py-4">
                     <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                       <div>
-                        <p className="text-sm font-medium text-indigo-900">你有一个未完成的复习会话</p>
-                        <p className="mt-1 text-sm leading-6 text-indigo-800">
+                        <p className="text-sm font-medium text-foreground">你有一个未完成的复习会话</p>
+                        <p className="mt-1 text-sm leading-6 text-muted-foreground">
                           当前主题：{reviewStore.currentSession?.title}，可继续上次进度，或放弃后重新选择新的入口。
                         </p>
                       </div>
@@ -203,35 +191,27 @@ export function KnowledgeReview() {
             )}
           </div>
 
-          <aside className="h-fit rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
-            <div>
-              <h2 className="text-lg font-semibold text-zinc-900">任务摘要</h2>
-              <p className="mt-1 text-sm leading-6 text-zinc-600">
-                右侧持续告诉用户当前所处的复习阶段，以及接下来唯一应该做的动作。
-              </p>
-            </div>
+          <aside className="summary-rail">
+            <SectionHeader eyebrow="任务摘要" title="必要决策信息" description="当前步骤、主题、模式和下一步动作固定显示。" />
             <div className="mt-5 space-y-3">
-              <div className="flex items-start justify-between gap-4 rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3">
-                <span className="text-sm text-zinc-500">当前步骤</span>
-                <span className="text-right text-sm font-medium text-zinc-900">{currentStepMeta.title}</span>
+              <div className="summary-row">
+                <span className="text-xs text-muted-foreground">当前步骤</span>
+                <p className="mt-1 text-sm font-medium text-foreground">{currentStepMeta.title}</p>
               </div>
-              <div className="flex items-start justify-between gap-4 rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3">
-                <span className="text-sm text-zinc-500">当前主题</span>
-                <span className="text-right text-sm font-medium text-zinc-900">{currentEntrySummary}</span>
+              <div className="summary-row">
+                <span className="text-xs text-muted-foreground">当前主题</span>
+                <p className="mt-1 text-sm font-medium text-foreground">{currentEntrySummary}</p>
               </div>
-              <div className="flex items-start justify-between gap-4 rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3">
-                <span className="text-sm text-zinc-500">当前模式</span>
-                <span className="text-right text-sm font-medium text-zinc-900">
-                  {currentModeLabel}
-                </span>
+              <div className="summary-row">
+                <span className="text-xs text-muted-foreground">当前模式</span>
+                <p className="mt-1 text-sm font-medium text-foreground">{currentModeLabel}</p>
               </div>
             </div>
-            <div className="mt-5 rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-4 text-sm leading-6 text-zinc-600">
+            <div className="mt-5 rounded-xl border border-dashed border-border bg-secondary/35 px-4 py-4 text-sm leading-relaxed text-muted-foreground">
               {nextActionText}
             </div>
           </aside>
         </div>
-      </div>
-    </div>
+    </PageShell>
   )
 }

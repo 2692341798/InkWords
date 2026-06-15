@@ -244,79 +244,107 @@ export function Sidebar() {
   }
 
   const headerContent = (
-    <div className="p-4 border-b border-zinc-200 flex flex-col gap-4">
-      <div className="flex items-center gap-2 font-semibold text-lg text-zinc-800">
-        <GitBranch className="w-5 h-5 text-indigo-600" />
-        墨言博客助手
+    <div className="border-b border-sidebar-border p-4">
+      <div className="flex items-center gap-3">
+        <div className="grid h-9 w-9 place-items-center rounded-lg bg-foreground text-sm font-semibold text-background">
+          墨
+        </div>
+        <div className="min-w-0">
+          <div className="truncate text-sm font-semibold text-sidebar-foreground">墨言博客助手</div>
+          <div className="mt-0.5 text-xs text-muted-foreground">知识写作工作台</div>
+        </div>
       </div>
-      <Button
-        className="w-full gap-2 bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm"
-        onClick={() => {
-          if (streamStore.isGenerating || streamStore.isAnalyzing) {
-            setShowWorkspaceResetConfirm(true)
-          } else {
-            streamStore.reset()
-            setCurrentView('home-entry')
-          }
-        }}
-      >
-        <Plus className="w-4 h-4" />
-        新工作区
-      </Button>
-      <Button
-        variant="outline"
-        className="w-full gap-2 shadow-sm"
-        disabled={isCreatingDraft}
-        onClick={async () => {
-          if (isCreatingDraft) return
-          setIsCreatingDraft(true)
-          try {
-            await createDraftBlog()
-            toast.success('已创建草稿，开始写作吧')
-          } catch (err: unknown) {
-            const message = err instanceof Error ? err.message : '创建草稿失败'
-            toast.error(message)
-          } finally {
-            setIsCreatingDraft(false)
-          }
-        }}
-      >
-        {isCreatingDraft ? <Loader2 className="w-4 h-4 animate-spin" /> : <FilePenLine className="w-4 h-4" />}
-        写博客
-      </Button>
+
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        <Button
+          className="gap-2"
+          onClick={() => {
+            if (streamStore.isGenerating || streamStore.isAnalyzing) {
+              setShowWorkspaceResetConfirm(true)
+            } else {
+              streamStore.reset()
+              setCurrentView('home-entry')
+            }
+          }}
+        >
+          <Plus className="w-4 h-4" />
+          新建
+        </Button>
+        <Button
+          variant="outline"
+          className="gap-2"
+          disabled={isCreatingDraft}
+          onClick={async () => {
+            if (isCreatingDraft) return
+            setIsCreatingDraft(true)
+            try {
+              await createDraftBlog()
+              toast.success('已创建草稿，开始写作吧')
+            } catch (err: unknown) {
+              const message = err instanceof Error ? err.message : '创建草稿失败'
+              toast.error(message)
+            } finally {
+              setIsCreatingDraft(false)
+            }
+          }}
+        >
+          {isCreatingDraft ? <Loader2 className="w-4 h-4 animate-spin" /> : <FilePenLine className="w-4 h-4" />}
+          写作
+        </Button>
+      </div>
+
+      <nav className="mt-4 space-y-1">
+        <Button
+          variant="ghost"
+          className={cn(
+            'w-full justify-start gap-2',
+            currentView === 'home-entry' && !selectedBlog
+              ? 'bg-sidebar-accent text-sidebar-foreground font-medium'
+              : 'text-muted-foreground hover:text-sidebar-foreground',
+          )}
+          onClick={() => setCurrentView('home-entry')}
+        >
+          <GitBranch className="w-4 h-4" />
+          工作入口
+        </Button>
+        <Button
+          variant="ghost"
+          className={cn(
+            'w-full justify-start gap-2',
+            currentView === 'knowledge-review' && !selectedBlog
+              ? 'bg-sidebar-accent text-sidebar-foreground font-medium'
+              : 'text-muted-foreground hover:text-sidebar-foreground',
+          )}
+          onClick={() => {
+            setShouldResumeSessionOnOpen(false)
+            setCurrentView('knowledge-review')
+          }}
+        >
+          <Sparkles className="w-4 h-4" />
+          知识复习
+        </Button>
+        <Button
+          variant="ghost"
+          className={cn(
+            'w-full justify-start gap-2',
+            currentView === 'dashboard' && !selectedBlog
+              ? 'bg-sidebar-accent text-sidebar-foreground font-medium'
+              : 'text-muted-foreground hover:text-sidebar-foreground',
+          )}
+          onClick={() => setCurrentView('dashboard')}
+        >
+          <User className="w-4 h-4" />
+          个人中心
+        </Button>
+      </nav>
     </div>
   )
 
   const footerContent = (
-    <div className="p-4 border-t border-zinc-200 flex flex-col gap-2">
+    <div className="border-t border-sidebar-border p-4">
       <Button
         variant="ghost"
-        className={cn(
-          'w-full flex items-center justify-start gap-2',
-          currentView === 'knowledge-review' && !selectedBlog ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900'
-        )}
-        onClick={() => {
-          setShouldResumeSessionOnOpen(false)
-          setCurrentView('knowledge-review')
-        }}
-      >
-        <Sparkles className="w-4 h-4" />
-        知识漫游复习
-      </Button>
-      <Button
-        variant="ghost"
-        className={cn(
-          'w-full flex items-center justify-start gap-2',
-          currentView === 'dashboard' && !selectedBlog ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900'
-        )}
-        onClick={() => setCurrentView('dashboard')}
-      >
-        <User className="w-4 h-4" />
-        个人中心
-      </Button>
-      <Button
-        variant="ghost"
-        className="w-full flex items-center justify-start gap-2 text-zinc-600 hover:text-red-600 hover:bg-red-50"
+        className="w-full justify-start gap-2 text-muted-foreground hover:bg-red-50 hover:text-red-600"
         onClick={() => {
           setShowLogoutConfirm(true)
         }}
