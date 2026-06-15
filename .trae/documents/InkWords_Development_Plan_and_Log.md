@@ -1,6 +1,54 @@
 # 墨言知识训练平台 (InkWords Trainer) - 开发计划与日志
 > **目标**：跟踪项目的核心开发模块、里程碑进度以及每日开发记录。
 
+### [2026-06-08] Polish - 复习页回调为极简阅读工作台，并给原文抽屉增加独立滚动条
+- **需求背景**：
+  1. 用户认为当前复习页“很丑陋，并且观感极差”，明确要求弱化训练台感，改成更像文档工作台的阅读优先布局。
+  2. 用户额外强调原文模块必须加滚动条，不能再让原文内容把整页继续撑长。
+- **本次完成**：
+  1. `ReviewSessionCard` 从深色训练仪表盘回调为浅色“阅读工作台”，去掉大面积黑底与强对比色块，改用更克制的边框、留白和浅色信息面板。
+  2. 原文改为抽屉式阅读面板，提供“查看原文 / 收起原文”切换；原文正文容器新增固定高度与独立滚动区，滚动时不再影响整页高度。
+  3. `KnowledgeReview` 页级头图同步改为极简文档工作台风格，右侧摘要区也改成浅色、弱阴影和低压迫感布局，使页面整体视觉语言重新统一。
+- **验证记录**：
+  - `cd frontend && npm test -- ReviewSessionCard KnowledgeReview` 通过
+  - `cd frontend && npm test -- ReviewSessionCard useKnowledgeReview review` 通过
+
+### [2026-06-08] Fix - 修正 GitHub OAuth 本地回调仍指向 8088 的残留配置
+- **需求背景**：
+  1. 用户在项目已切回默认 `http://localhost` 后，访问 GitHub 登录回调仍被浏览器带到 `http://localhost:8088/api/v1/auth/callback/github`，导致 `ERR_CONNECTION_REFUSED`。
+  2. 排查确认不是容器未启动，而是 `backend/.env` 中仍保留了临时 `8088` 入口配置。
+- **本次完成**：
+  1. 将 `backend/.env` 中的 `FRONTEND_URL` 从 `http://localhost:8088` 修正回 `http://localhost`。
+  2. 将 `DOCKER_GITHUB_REDIRECT_URL` 从 `http://localhost:8088/api/v1/auth/callback/github` 修正回 `http://localhost/api/v1/auth/callback/github`。
+  3. 重新执行 `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build`，恢复默认 `:80` 单入口。
+- **验证记录**：
+  - `docker compose --env-file backend/.env ps` 显示 `inkwords-frontend` 绑定 `0.0.0.0:80->80/tcp`
+  - `curl -I http://localhost` 返回 `HTTP/1.1 200 OK`
+
+### [2026-06-08] Feat - 知识漫游复习：先预览原文，再由 AI 辅助复述
+- **需求背景**：
+  1. 用户要求调整复习逻辑：在用户选择要复习的文章之后，必须先让用户看到原文，再开始辅助复述。
+  2. 用户还要求把“复习文章 + 用户回答”一起发送给后端 AI，以便给出更针对性的提示；当用户在回答中自然表达“我不记得”时，不增加按钮，而是先给简短提示，再按需给原文摘录。
+- **本次完成**：
+  1. review-service 的 `ReviewSessionResponse` 新增 `source_title / source_preview / ready_to_answer`，创建 session 时把原文预览片段写入 `metadata_snapshot` 并返回给前端。
+  2. `ReviewSessionCard` 改为 preview-first 交互：先展示原文预览卡，再由用户点击“开始复述”进入回答区；`useKnowledgeReview` 同步承接阶段切换与 `hint_text / excerpt_text`。
+  3. review 域新增可选 `AIFeedbackGenerator` 与 DeepSeek 结构化反馈适配器；若未配置或调用失败，则继续回落到规则反馈。对“我不记得 / 忘了 / 记不清了”等自然表达，后端会先返回简短提示，再补相关原文摘录兜底。
+- **验证记录**：
+  - `cd backend && go test ./services/review-service/... -count=1` 通过
+  - `cd frontend && npm test -- ReviewSessionCard useKnowledgeReview review` 通过
+
+### [2026-06-08] Polish - 复习页重设计为训练仪表盘，并优化请求提示避免机械重复
+- **需求背景**：
+  1. 用户指出“请求提示功能很烂，只会机械式重复，复习页面也不够美观”，并要求使用前端设计 skill 重新设计。
+  2. 在澄清后，用户明确选择了“训练仪表盘”风格、“中密度聚焦版”信息密度，以及“智能单次提示”交互。
+- **本次完成**：
+  1. `ReviewSessionCard` 改造成训练仪表盘布局：主区聚焦当前问题、输入区和阶段反馈，侧栏承接训练面板、智能提示、反馈摘要，底部统一保留最近轨迹。
+  2. `KnowledgeReview` 页面头部改成更强的工作台引导区，右侧摘要卡固定展示“当前步骤 / 当前主题 / 当前模式 / 下一步动作”，整体视觉从普通表单页切换为训练台。
+  3. `RequestHint` 增加“用户明显卡住时优先给具体上下文提醒”的逻辑；当最近回答是“我不记得了”等遗忘表达时，会优先返回更具体的提示并拼接相关原文摘录，减少重复感。
+- **验证记录**：
+  - `cd frontend && npm test -- ReviewSessionCard useKnowledgeReview review` 通过
+  - `cd backend && go test ./services/review-service/domain/review -run 'TestService_(RequestHint_WhenUserIsStuck_ReturnsConcreteContext|Respond_WhenUserDoesNotRemember_ReturnsHintThenExcerpt)' -count=1` 通过
+
 ### [2026-06-08] Refactor - 全仓安全清理首轮：删除未接入占位代码与历史兼容残留
 - **需求背景**：
   1. 用户要求“检查源码，清理掉多余或者无用的代码”，并优先采用全仓低风险、安全可验证的清理方式。

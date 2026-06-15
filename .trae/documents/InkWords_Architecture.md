@@ -1,6 +1,8 @@
 # 墨言知识训练平台 (InkWords Trainer) - 架构设计与工程规范
 
 ## 0. 变更记录
+- 2026-06-08：知识漫游复习前端继续重设计为“训练仪表盘 + 中密度聚焦版”。`KnowledgeReview` 顶部改成强引导工作台头图，`ReviewSessionCard` 重构为主区聚焦当前问题与输入、侧栏收纳训练面板/智能提示/反馈摘要、底部统一承接最近轨迹；同时 `RequestHint` 在用户明显卡住时优先返回更具体的上下文提醒和原文摘录，降低机械重复。
+- 2026-06-08：知识漫游复习链路升级为“原文预览优先 + AI 辅助复述”。`review-service` 在建 session 时会把原文预览片段写入 `metadata_snapshot` 并返回给前端，前端 `ReviewSessionCard` 改为先展示原文预览、再进入回答区；回答阶段则由 review 域优先调用可选的 DeepSeek 结构化反馈生成器，结合原文预览、当前问题、最近轮次和用户回答输出中文反馈，若未配置或调用失败则降级到规则反馈。
 - 2026-06-08：执行全仓安全清理首轮。删除 `backend/services/llm-stream/domain/generation/` 下未接入的占位/空桥接包，`services/llm-stream/app/bootstrap` 不再创建后立刻丢弃空 `generation.Service`；同时将过渡层 `internal/transport/http/v1/api/StreamAPI` 收窄为只依赖真实使用的 `streamDomainHandler`，前端删除 `GeneratorProgressStage` 兼容壳并同步清理两处 store 中未消费状态。
 - 2026-06-05：继续推进 `core-api / llm-stream` 深拆分第十六轮。`internal/domain/blog/series_persistence.go` 现在在 `SaveSeriesIntro()` 与 `MarkSeriesIntroFailed()` 中显式按 `user_id + parent_id` 更新系列父稿；`DecompositionService.generateSeriesIntro()` 也同步透传当前用户，避免跨用户改写他人的系列导读正文或失败状态。
 - 2026-06-05：继续推进 `core-api / llm-stream` 深拆分第十五轮。`internal/domain/blog/series_persistence.go` 现在在 `LoadSeriesOldContent()` 中显式按 `user_id + blog_id` 读取旧正文；`DecompositionService` 的 regenerate 路径也同步透传当前用户，避免跨用户读取他人的历史章节内容。

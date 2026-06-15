@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - API 接口文档
 
 ## 0. 变更记录
+- 2026-06-08：知识漫游复习进一步升级为“先预览原文，再进入复述 + AI 针对性提示”。`POST /api/v1/review/sessions` 与 `GET /api/v1/review/sessions/:id` 新增 `source_title`、`source_preview`、`ready_to_answer`；`POST /api/v1/review/sessions/:id/respond` 新增 `hint_text`、`excerpt_text`，用于承接“用户自然表达记不清时，先给简短提示，再返回相关原文摘录”的反馈链路。
 - 2026-06-08：执行全仓安全清理首轮。本次删除 `llm-stream` 下未接入的 generation 占位/空桥接文件，并收窄过渡层 `StreamAPI` 的内部依赖；不新增也不修改任何对外 API 路由、请求字段或响应字段。
 - 2026-06-05：继续推进 blog-domain 内部边界修复。本次将 `SeriesPersistence.SaveSeriesIntro()` 与 `SeriesPersistence.MarkSeriesIntroFailed()` 收紧为必须同时校验 `user_id + parent_id`，并让 service 导读生成调用链显式透传当前用户；不新增也不修改任何对外 API 路由、请求字段或响应字段。
 - 2026-06-05：继续推进 blog-domain 内部边界修复。本次将 `SeriesPersistence.LoadSeriesOldContent()` 收紧为必须同时按 `user_id + blog_id` 读取旧正文，并让 service 调用链显式透传当前用户；不新增也不修改任何对外 API 路由、请求字段或响应字段。
@@ -381,6 +382,9 @@
 ### 5.2 会话与反馈字段
 - `POST /api/v1/review/sessions`、`GET /api/v1/review/sessions/:id` 返回：
   - `session_id`, `status`, `mode`, `title`
+  - `source_title`: 当前复习文章所属来源/系列标题
+  - `source_preview`: 当前复习文章的原文预览片段，前端需先展示给用户阅读
+  - `ready_to_answer`: 当前会话是否已经进入可作答阶段
   - `opening_prompt`: 开场提问
   - `initial_hints`: 初始提示列表
   - `session_outline.summary`: 当前文章的复习摘要
@@ -399,9 +403,13 @@
   - `review_feedback.hit_points`: 当前回答已命中的文章关键点
   - `review_feedback.missed_points`: 当前回答尚未覆盖的关键点
   - `review_feedback.suggestion`: 下一步补充建议
+  - `hint_text`: 当用户回答中表达“记不清/忘了”时返回的简短提醒（可选）
+  - `excerpt_text`: 在提醒后仍需进一步帮助时返回的相关原文摘录（可选）
   - `next_question`: 下一轮问题（可选）
   - `completed`: 是否已结束
   - `final_feedback.summary / strengths / gaps / next_focus`
+- `POST /api/v1/review/sessions/:id/hint`：
+  - 在用户最近回答明显表达“记不清/忘了”时，优先返回更具体的上下文提醒，并可直接拼接相关原文摘录，避免继续输出抽象、重复的机械提示。
 - `POST /api/v1/review/sessions/:id/hint` 返回：
   - `session_id`, `hint_text`, `remaining_hint_count`
 - `POST /api/v1/review/sessions/:id/finish` 返回：
