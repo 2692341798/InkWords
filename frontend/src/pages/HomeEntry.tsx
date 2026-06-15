@@ -66,29 +66,29 @@ export function HomeEntry() {
         }
 
   return (
-    <div className="flex-1 overflow-y-auto bg-zinc-50 custom-scrollbar">
-      <div className="mx-auto flex max-w-6xl flex-col gap-8 px-6 py-12">
-        <section className="rounded-3xl border border-zinc-200 bg-white px-8 py-10 shadow-sm">
+    <div className="flex-1 overflow-y-auto bg-background custom-scrollbar">
+      <div className="mx-auto flex max-w-5xl flex-col gap-8 px-6 py-16">
+        <section className="rounded-2xl border border-border bg-card px-8 py-10 shadow-[0_2px_8px_rgba(0,0,0,0.02)] transition-shadow">
           <div className="space-y-4">
-            <span className="inline-flex items-center rounded-full bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700">
+            <span className="inline-flex items-center rounded-md bg-secondary px-2.5 py-0.5 text-xs font-medium text-secondary-foreground">
               墨言博客助手 · 工作入口
             </span>
             <div className="space-y-2">
-              <h1 className="text-4xl font-bold tracking-tight text-zinc-900">今天你想先完成哪一种任务？</h1>
-              <p className="max-w-3xl text-sm leading-6 text-zinc-600">
+              <h1 className="text-3xl font-semibold tracking-tight text-foreground">今天你想先完成哪一种任务？</h1>
+              <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
                 这里先帮助你判断现在应该进入哪条路径，再把你送入真实的工作页。首页只保留一个主动作，其余信息全部收敛成支持信息。
               </p>
             </div>
           </div>
         </section>
 
-        <section className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
-          <div className="mb-5 flex items-center justify-between gap-4">
+        <section className="rounded-2xl border border-border bg-card p-6 shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
+          <div className="mb-6 flex items-center justify-between gap-4">
             <div>
-              <h2 className="text-lg font-semibold text-zinc-900">选择工作路径</h2>
-              <p className="mt-1 text-sm text-zinc-500">先决定当前目标，再进入真实的页面继续完成后续步骤。</p>
+              <h2 className="text-lg font-medium text-foreground">选择工作路径</h2>
+              <p className="mt-1 text-sm text-muted-foreground">先决定当前目标，再进入真实的页面继续完成后续步骤。</p>
             </div>
-            <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-600">
+            <span className="rounded-md bg-secondary px-2.5 py-0.5 text-xs font-medium text-secondary-foreground">
               {activePath === 'blog' ? '推荐路径' : '内化路径'}
             </span>
           </div>
@@ -97,17 +97,17 @@ export function HomeEntry() {
             <button
               type="button"
               onClick={() => setActivePath('blog')}
-              className={`rounded-2xl border p-6 text-left transition ${
+              className={`rounded-xl border p-6 text-left transition-all duration-200 ${
                 activePath === 'blog'
-                  ? 'border-zinc-900 bg-zinc-50 shadow-sm'
-                  : 'border-zinc-200 bg-white hover:border-zinc-300'
+                  ? 'border-foreground bg-card shadow-[0_4px_12px_rgba(0,0,0,0.05)]'
+                  : 'border-border bg-card hover:border-muted-foreground/30 hover:bg-secondary/50'
               }`}
             >
               <div className="flex items-center justify-between gap-3">
-                <h3 className="text-xl font-semibold text-zinc-900">生成博客</h3>
-                <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700">推荐</span>
+                <h3 className="text-base font-semibold text-foreground">生成博客</h3>
+                <span className="rounded-md bg-secondary px-2.5 py-0.5 text-xs font-medium text-secondary-foreground">推荐</span>
               </div>
-              <p className="mt-3 text-sm leading-6 text-zinc-600">
+              <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
                 从 GitHub 仓库或本地文档开始，先做解析，再进入创作场景和大纲确认。
               </p>
             </button>
@@ -115,17 +115,17 @@ export function HomeEntry() {
             <button
               type="button"
               onClick={() => setActivePath('review')}
-              className={`rounded-2xl border p-6 text-left transition ${
+              className={`rounded-xl border p-6 text-left transition-all duration-200 ${
                 activePath === 'review'
-                  ? 'border-zinc-900 bg-zinc-50 shadow-sm'
-                  : 'border-zinc-200 bg-white hover:border-zinc-300'
+                  ? 'border-foreground bg-card shadow-[0_4px_12px_rgba(0,0,0,0.05)]'
+                  : 'border-border bg-card hover:border-muted-foreground/30 hover:bg-secondary/50'
               }`}
             >
               <div className="flex items-center justify-between gap-3">
-                <h3 className="text-xl font-semibold text-zinc-900">知识复习</h3>
-                <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">内化</span>
+                <h3 className="text-base font-semibold text-foreground">知识复习</h3>
+                <span className="rounded-md bg-secondary px-2.5 py-0.5 text-xs font-medium text-secondary-foreground">内化</span>
               </div>
-              <p className="mt-3 text-sm leading-6 text-zinc-600">
+              <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
                 从知识库中抽取重点内容，先选入口，再进入真实的复述与反馈会话。
               </p>
             </button>
@@ -134,7 +134,7 @@ export function HomeEntry() {
 
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1.35fr)_360px]">
           <section className="space-y-6">
-            <article className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
+            <article className="rounded-2xl border border-border bg-card p-6 shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
               <StepStrip
                 title="流程预览"
                 description={viewState.description}
@@ -143,11 +143,11 @@ export function HomeEntry() {
               />
             </article>
 
-            <article className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
-              <div className="space-y-3">
+            <article className="rounded-2xl border border-border bg-card p-6 shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
+              <div className="space-y-4">
                 <div className="flex items-center gap-3">
                   {activePath === 'blog' ? (
-                    <FileText className="h-5 w-5 text-indigo-600" />
+                    <FileText className="h-5 w-5 text-foreground" />
                   ) : (
                     <Sparkles className="h-5 w-5 text-emerald-600" />
                   )}
@@ -192,21 +192,21 @@ export function HomeEntry() {
               </div>
             </article>
 
-            <article className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
+            <article className="rounded-2xl border border-border bg-card p-6 shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
               <div className="flex items-center gap-3">
-                <BookOpen className="h-5 w-5 text-zinc-600" />
-                <h2 className="text-lg font-semibold text-zinc-900">最近博客记录</h2>
+                <BookOpen className="h-5 w-5 text-muted-foreground" />
+                <h2 className="text-lg font-medium text-foreground">最近博客记录</h2>
               </div>
               <div className="mt-4 space-y-3">
                 {recentBlogs.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-5 text-sm text-zinc-500">
+                  <div className="rounded-xl border border-dashed border-border bg-secondary/50 px-4 py-5 text-sm text-muted-foreground">
                     还没有博客记录，先进入博客生成开始第一条工作流。
                   </div>
                 ) : (
                   recentBlogs.map((blog) => (
-                    <article key={blog.id} className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-4">
-                      <p className="text-sm font-medium text-zinc-900">{blog.title || '无标题博客'}</p>
-                      <p className="mt-1 text-xs text-zinc-500">
+                    <article key={blog.id} className="rounded-xl border border-border bg-secondary/30 px-4 py-4 hover:bg-secondary/70 transition-colors">
+                      <p className="text-sm font-medium text-foreground">{blog.title || '无标题博客'}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
                         {blog.parent_id ? '系列章节' : '独立文章'} · 最近更新：{new Date(blog.updated_at).toLocaleString()}
                       </p>
                     </article>
@@ -215,25 +215,25 @@ export function HomeEntry() {
               </div>
             </article>
 
-            <article className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
+            <article className="rounded-2xl border border-border bg-card p-6 shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
               <div className="flex items-center gap-3">
-                <Sparkles className="h-5 w-5 text-zinc-600" />
-                <h2 className="text-lg font-semibold text-zinc-900">最近复习记录</h2>
+                <Sparkles className="h-5 w-5 text-muted-foreground" />
+                <h2 className="text-lg font-medium text-foreground">最近复习记录</h2>
               </div>
               <div className="mt-4 space-y-3">
                 {reviewStore.isLoadingHistory && recentReviews.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-5 text-sm text-zinc-500">
+                  <div className="rounded-xl border border-dashed border-border bg-secondary/50 px-4 py-5 text-sm text-muted-foreground">
                     正在加载复习记录...
                   </div>
                 ) : recentReviews.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-5 text-sm text-zinc-500">
+                  <div className="rounded-xl border border-dashed border-border bg-secondary/50 px-4 py-5 text-sm text-muted-foreground">
                     还没有复习记录，等你完成第一轮知识漫游后会显示在这里。
                   </div>
                 ) : (
                   recentReviews.map((item) => (
-                    <article key={item.session_id} className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-4">
-                      <p className="text-sm font-medium text-zinc-900">{item.title}</p>
-                      <p className="mt-1 text-xs text-zinc-500">
+                    <article key={item.session_id} className="rounded-xl border border-border bg-secondary/30 px-4 py-4 hover:bg-secondary/70 transition-colors">
+                      <p className="text-sm font-medium text-foreground">{item.title}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
                         {item.mode === 'detailed_qa' ? '细致提问' : '轻提示复述'} · {item.reviewed_at ? new Date(item.reviewed_at).toLocaleString() : '暂无时间'}
                       </p>
                     </article>

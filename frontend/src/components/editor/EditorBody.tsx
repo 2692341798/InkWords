@@ -42,12 +42,12 @@ export function EditorBody(props: EditorBodyProps) {
   const deferredPolishedDraft = useDeferredValue(normalizedPolishedDraft)
 
   return (
-    <div className="flex-1 flex overflow-hidden print:overflow-visible print:block">
-      <div className="flex-1 border-r border-zinc-200 flex flex-col print:hidden">
+    <div className="flex-1 flex overflow-hidden print:overflow-visible print:block bg-background">
+      <div className="flex-1 border-r border-border flex flex-col print:hidden">
         <textarea
           ref={editorRef}
           onScroll={handleEditorScroll}
-          className="flex-1 w-full p-6 resize-none bg-zinc-50 border-none focus:outline-none focus:ring-0 font-mono text-sm text-zinc-700 leading-relaxed"
+          className="flex-1 w-full p-8 resize-none bg-secondary/20 border-none focus:outline-none focus:ring-0 font-mono text-[15px] text-foreground leading-[1.8] custom-scrollbar"
           placeholder="使用 Markdown 开始编写您的博客..."
           value={content}
           onChange={(e) => onContentChange(e.target.value)}
@@ -58,18 +58,18 @@ export function EditorBody(props: EditorBodyProps) {
       <div
         ref={previewRef}
         onScroll={handlePreviewScroll}
-        className="flex-1 bg-white overflow-y-auto print:block print:w-full print:overflow-visible relative"
+        className="flex-1 bg-background overflow-y-auto print:block print:w-full print:overflow-visible relative custom-scrollbar"
       >
-        <div className="sticky top-0 z-10 border-b border-zinc-200/60 bg-white/80 backdrop-blur print:hidden">
+        <div className="sticky top-0 z-10 border-b border-border/60 bg-background/80 backdrop-blur print:hidden">
           <div className="max-w-3xl mx-auto px-8 py-3 flex items-center justify-between gap-4">
-            <div className="inline-flex rounded-lg bg-zinc-100 p-1">
+            <div className="inline-flex rounded-lg bg-secondary p-1">
               <button
                 type="button"
                 onClick={() => setActivePreviewTab('preview')}
                 className={
                   activePreviewTab === 'preview'
-                    ? 'px-3 py-1.5 text-sm font-medium rounded-md bg-white shadow-sm text-zinc-900'
-                    : 'px-3 py-1.5 text-sm font-medium rounded-md text-zinc-600 hover:text-zinc-900'
+                    ? 'px-3 py-1.5 text-sm font-medium rounded-md bg-card shadow-sm text-foreground'
+                    : 'px-3 py-1.5 text-sm font-medium rounded-md text-muted-foreground hover:text-foreground'
                 }
               >
                 预览
@@ -79,8 +79,8 @@ export function EditorBody(props: EditorBodyProps) {
                 onClick={() => setActivePreviewTab('polish')}
                 className={
                   activePreviewTab === 'polish'
-                    ? 'px-3 py-1.5 text-sm font-medium rounded-md bg-white shadow-sm text-zinc-900 flex items-center gap-2'
-                    : 'px-3 py-1.5 text-sm font-medium rounded-md text-zinc-600 hover:text-zinc-900 flex items-center gap-2'
+                    ? 'px-3 py-1.5 text-sm font-medium rounded-md bg-card shadow-sm text-foreground flex items-center gap-2'
+                    : 'px-3 py-1.5 text-sm font-medium rounded-md text-muted-foreground hover:text-foreground flex items-center gap-2'
                 }
               >
                 润色预览

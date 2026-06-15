@@ -50,34 +50,34 @@ export function GeneratorStatus() {
   // Why: Task 3 turns progress into embeddable page content, so this component
   // should only own the progress card itself and not a fullscreen overlay shell.
   return (
-    <div className="overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-      <div className="flex items-center justify-between border-b border-zinc-200 bg-zinc-50 px-6 py-4 dark:border-zinc-800 dark:bg-zinc-800/50">
-        <h3 className="flex items-center gap-2 font-medium text-zinc-900 dark:text-zinc-100">
-          <span className={`h-2.5 w-2.5 rounded-full ${isWorking ? 'bg-blue-500 dark:bg-blue-400 animate-pulse' : 'bg-green-500 dark:bg-green-400'}`}></span>
+    <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
+      <div className="flex items-center justify-between border-b border-border bg-secondary/50 px-6 py-4">
+        <h3 className="flex items-center gap-2 font-medium text-foreground">
+          <span className={`h-2.5 w-2.5 rounded-full ${isWorking ? 'bg-blue-500 animate-pulse' : 'bg-green-500'}`}></span>
           {title}
         </h3>
         {store.currentChapterTitle && !isParsing && (
-          <span className="rounded-full border border-zinc-200 bg-white px-3 py-1 text-sm text-zinc-500 shadow-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">
+          <span className="rounded-md border border-border bg-card px-3 py-1 text-sm text-muted-foreground shadow-sm">
             正在生成: {store.currentChapterTitle}
           </span>
         )}
       </div>
       <div className="max-h-[70vh] overflow-y-auto p-6 custom-scrollbar">
-        <div className="prose max-w-none bg-zinc-50/30 dark:prose-invert dark:bg-zinc-900/30">
+        <div className="prose max-w-none bg-transparent dark:prose-invert">
         {!isParsing && currentStatusMessage && (
-          <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 rounded-lg border border-blue-100 dark:border-blue-800/50 font-mono text-sm shadow-sm flex items-center gap-3">
+          <div className="mb-6 p-4 bg-secondary/50 text-foreground rounded-xl border border-border font-mono text-sm shadow-[0_2px_8px_rgba(0,0,0,0.02)] flex items-center gap-3">
             {isWorking && (
               <Loader2 className="w-5 h-5 animate-spin flex-shrink-0" />
             )}
             <span className="break-all">{currentStatusMessage}</span>
           </div>
         )}
-        
+
         {isParsing ? (
           <div className="flex flex-col gap-4">
              {store.analysisStep >= 0 && (
-               <div className="w-full bg-white dark:bg-zinc-900 p-6 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm">
-                 <div className="flex justify-between text-sm font-medium mb-3">
+               <div className="w-full bg-card p-6 rounded-xl border border-border shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
+                 <div className="flex justify-between text-sm font-medium mb-3 text-foreground">
                    <span className={cn("transition-colors", store.analysisStep >= 0 ? "text-blue-600 dark:text-blue-400" : "text-zinc-400")}>{store.sourceType === 'file' ? '上传文件' : '克隆代码'}</span>
                    <span className={cn("transition-colors", store.analysisStep >= 1 ? "text-blue-600 dark:text-blue-400" : "text-zinc-400")}>{store.sourceType === 'file' ? '解析内容' : '扫描结构'}</span>
                    <span className={cn("transition-colors", store.analysisStep >= 2 ? "text-blue-600 dark:text-blue-400" : "text-zinc-400")}>深度分析</span>

@@ -12,7 +12,7 @@ interface SidebarShellProps {
  */
 export function SidebarShell({ header, footer, children }: SidebarShellProps) {
   return (
-    <div className="w-80 bg-white border-r border-zinc-200 flex flex-col print:hidden">
+    <div className="w-72 bg-sidebar text-sidebar-foreground border-r border-sidebar-border flex flex-col print:hidden transition-colors duration-200">
       <div className="shrink-0">{header}</div>
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">{children}</div>
       <div className="mt-auto shrink-0">{footer}</div>

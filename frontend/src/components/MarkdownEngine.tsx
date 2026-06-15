@@ -103,7 +103,7 @@ const MermaidBlock: React.FC<{ chart: string }> = ({ chart }) => {
     }
   }, [chart]);
 
-  return <div className="mermaid-container flex justify-center bg-white p-6 rounded-xl border border-zinc-200 shadow-sm overflow-x-auto" ref={containerRef} />;
+  return <div className="mermaid-container flex justify-center bg-card p-6 rounded-xl border border-border shadow-[0_2px_8px_rgba(0,0,0,0.02)] overflow-x-auto" ref={containerRef} />;
 };
 
 interface MarkdownEngineProps {
@@ -160,7 +160,7 @@ export const MarkdownEngine: React.FC<MarkdownEngineProps> = ({ content }) => {
                   children={String(children).replace(/\n$/, '')}
                   language={match ? match[1] : 'text'}
                   style={oneLight}
-                  className="rounded-xl border border-zinc-200 shadow-sm text-sm !my-0"
+                  className="rounded-xl border border-border shadow-[0_2px_8px_rgba(0,0,0,0.02)] text-sm !my-0"
                 />
               );
             }
