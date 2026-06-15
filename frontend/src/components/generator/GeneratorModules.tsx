@@ -2,6 +2,7 @@ import { Button } from '@/components/ui/button'
 import { Loader2 } from 'lucide-react'
 import { useStreamStore } from '@/store/streamStore'
 import { useShallow } from 'zustand/react/shallow'
+import { Panel, SectionHeader, StatusPill } from '@/components/ui/workspace'
 
 interface GeneratorModulesProps {
   toggleModuleSelection: (path: string) => void
@@ -24,14 +25,13 @@ export function GeneratorModules({
   if (!store.modules || store.modules.length === 0) return null
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h3 className="text-lg font-medium text-zinc-900 dark:text-zinc-100">请选择要深入解析的目录</h3>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
-            已选择 {store.selectedModules.length} 个目录
-          </p>
-        </div>
+    <Panel className="p-5">
+      <SectionHeader
+        title="选择深入解析目录"
+        description="只选择和本次写作目标相关的目录，减少后续大纲噪声。"
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusPill>已选择 {store.selectedModules.length} 个</StatusPill>
         <Button
           onClick={handleAnalyze}
           disabled={store.selectedModules.length === 0 || store.isAnalyzing}
@@ -40,6 +40,8 @@ export function GeneratorModules({
           {store.isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : '深入解析并生成大纲'}
         </Button>
       </div>
+        }
+      />
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {store.modules.map(mod => {
           const isSelected = store.selectedModules.includes(mod.path)
@@ -51,31 +53,31 @@ export function GeneratorModules({
                   toggleModuleSelection(mod.path)
                 }
               }}
-              className={`p-4 rounded-xl border transition-all cursor-pointer relative overflow-hidden group
+              className={`choice-tile relative cursor-pointer overflow-hidden
                 ${isSelected
-                  ? 'bg-blue-50/50 border-blue-500 dark:bg-blue-900/10 dark:border-blue-400 shadow-sm'
-                  : 'bg-white border-zinc-200 hover:border-zinc-300 dark:bg-zinc-900 dark:border-zinc-800 dark:hover:border-zinc-700'
+                  ? 'choice-tile-active'
+                  : 'choice-tile-muted'
                 }
                 ${(store.isAnalyzing || store.isGenerating) ? 'opacity-50 cursor-not-allowed' : ''}
               `}
             >
               {isSelected && (
-                <div className="absolute top-0 right-0 w-8 h-8 bg-blue-500 dark:bg-blue-400 rounded-bl-xl flex items-center justify-center">
+                <div className="absolute right-0 top-0 flex h-8 w-8 items-center justify-center rounded-bl-xl bg-[var(--brand)]">
                   <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
               )}
-              <h4 className={`font-medium mb-2 ${isSelected ? 'text-blue-900 dark:text-blue-100 pr-6' : 'text-zinc-900 dark:text-zinc-100'}`}>
+              <h4 className={`mb-2 font-medium ${isSelected ? 'pr-6 text-foreground' : 'text-foreground'}`}>
                 {mod.name}
               </h4>
-              <p className={`text-sm line-clamp-2 ${isSelected ? 'text-blue-700/80 dark:text-blue-200/80' : 'text-zinc-500 dark:text-zinc-400'}`}>
+              <p className="line-clamp-2 text-sm text-muted-foreground">
                 {mod.description}
               </p>
             </div>
           )
         })}
       </div>
-    </div>
+    </Panel>
   )
 }

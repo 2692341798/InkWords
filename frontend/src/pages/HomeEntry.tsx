@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { ArrowRight, BookOpen, Clock3, FileText, Sparkles } from 'lucide-react'
 import { StepStrip } from '@/components/shared/StepStrip'
 import { Button } from '@/components/ui/button'
+import { PageHeader, PageShell, Panel, SectionHeader, StatusPill } from '@/components/ui/workspace'
 import { useBlogStore } from '@/store/blogStore'
 import { useReviewStore } from '@/store/reviewStore'
 import { getHomeEntryViewState, type HomeEntryPath } from './homeEntryViewState'
@@ -65,185 +66,177 @@ export function HomeEntry() {
           onAction: () => setCurrentView(viewState.targetView),
         }
 
+  const enterActivePath = () => {
+    if (viewState.targetView === 'knowledge-review') {
+      reviewStore.setShouldResumeSessionOnOpen(false)
+    }
+    setCurrentView(viewState.targetView)
+  }
+
   return (
-    <div className="flex-1 overflow-y-auto bg-zinc-50 custom-scrollbar">
-      <div className="mx-auto flex max-w-6xl flex-col gap-8 px-6 py-12">
-        <section className="rounded-3xl border border-zinc-200 bg-white px-8 py-10 shadow-sm">
-          <div className="space-y-4">
-            <span className="inline-flex items-center rounded-full bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700">
-              墨言博客助手 · 工作入口
-            </span>
-            <div className="space-y-2">
-              <h1 className="text-4xl font-bold tracking-tight text-zinc-900">今天你想先完成哪一种任务？</h1>
-              <p className="max-w-3xl text-sm leading-6 text-zinc-600">
-                这里先帮助你判断现在应该进入哪条路径，再把你送入真实的工作页。首页只保留一个主动作，其余信息全部收敛成支持信息。
-              </p>
-            </div>
-          </div>
-        </section>
+    <PageShell wide>
+      <PageHeader
+        title="从资料到博客，从博客到复习"
+        description="墨言会先帮你选定今天的主路径，再把注意力收敛到当前唯一需要完成的动作。"
+        meta={<StatusPill tone="brand">墨言博客助手</StatusPill>}
+        actions={
+          <Button variant="outline" className="gap-2" onClick={resumeCard.onAction}>
+            <Clock3 className="h-4 w-4" />
+            {resumeCard.actionLabel}
+          </Button>
+        }
+      />
 
-        <section className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
-          <div className="mb-5 flex items-center justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-semibold text-zinc-900">选择工作路径</h2>
-              <p className="mt-1 text-sm text-zinc-500">先决定当前目标，再进入真实的页面继续完成后续步骤。</p>
-            </div>
-            <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-600">
-              {activePath === 'blog' ? '推荐路径' : '内化路径'}
-            </span>
-          </div>
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <section className="space-y-6">
+          <Panel className="p-6">
+            <SectionHeader
+              eyebrow="工作路径"
+              title="今天先完成哪一种任务？"
+              description="只展开一个主流程，其他信息作为辅助上下文保留在下方。"
+              action={<StatusPill>{activePath === 'blog' ? '推荐路径' : '内化路径'}</StatusPill>}
+            />
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <button
-              type="button"
-              onClick={() => setActivePath('blog')}
-              className={`rounded-2xl border p-6 text-left transition ${
-                activePath === 'blog'
-                  ? 'border-zinc-900 bg-zinc-50 shadow-sm'
-                  : 'border-zinc-200 bg-white hover:border-zinc-300'
-              }`}
-            >
-              <div className="flex items-center justify-between gap-3">
-                <h3 className="text-xl font-semibold text-zinc-900">生成博客</h3>
-                <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700">推荐</span>
-              </div>
-              <p className="mt-3 text-sm leading-6 text-zinc-600">
-                从 GitHub 仓库或本地文档开始，先做解析，再进入创作场景和大纲确认。
-              </p>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActivePath('review')}
-              className={`rounded-2xl border p-6 text-left transition ${
-                activePath === 'review'
-                  ? 'border-zinc-900 bg-zinc-50 shadow-sm'
-                  : 'border-zinc-200 bg-white hover:border-zinc-300'
-              }`}
-            >
-              <div className="flex items-center justify-between gap-3">
-                <h3 className="text-xl font-semibold text-zinc-900">知识复习</h3>
-                <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">内化</span>
-              </div>
-              <p className="mt-3 text-sm leading-6 text-zinc-600">
-                从知识库中抽取重点内容，先选入口，再进入真实的复述与反馈会话。
-              </p>
-            </button>
-          </div>
-        </section>
-
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,1.35fr)_360px]">
-          <section className="space-y-6">
-            <article className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
-              <StepStrip
-                title="流程预览"
-                description={viewState.description}
-                steps={viewState.steps}
-                variant="preview"
-              />
-            </article>
-
-            <article className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
-              <div className="space-y-3">
-                <div className="flex items-center gap-3">
-                  {activePath === 'blog' ? (
-                    <FileText className="h-5 w-5 text-indigo-600" />
-                  ) : (
-                    <Sparkles className="h-5 w-5 text-emerald-600" />
-                  )}
-                  <h2 className="text-lg font-semibold text-zinc-900">{viewState.title}</h2>
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => setActivePath('blog')}
+                className={`choice-tile ${activePath === 'blog' ? 'choice-tile-active' : 'choice-tile-muted'}`}
+                aria-pressed={activePath === 'blog'}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <FileText className="h-5 w-5 text-[var(--brand)]" />
+                    <h3 className="text-base font-semibold text-foreground">生成博客</h3>
+                  </div>
+                  <StatusPill tone="brand">推荐</StatusPill>
                 </div>
-                <p className="text-sm leading-6 text-zinc-600">{viewState.recommendation}</p>
-              </div>
-              <div className="mt-5 rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-4 text-sm leading-6 text-zinc-600">
-                {activePath === 'blog'
-                  ? '点击后会进入真实的博客生成页，在那里继续完成“选择来源 -> 配置解析 -> 确认大纲 -> 开始生成”的逐步流程。'
-                  : '点击后会进入真实的知识复习页，在那里继续完成“选择入口 -> 开始会话 -> 获得反馈”的逐步流程。'}
-              </div>
-              <div className="mt-5">
-                <Button
-                  className="gap-2"
-                  onClick={() => {
-                    if (viewState.targetView === 'knowledge-review') {
-                      reviewStore.setShouldResumeSessionOnOpen(false)
-                    }
-                    setCurrentView(viewState.targetView)
-                  }}
-                >
+                <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                  从 GitHub 仓库或本地文档开始，生成可编辑的结构化技术博客。
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActivePath('review')}
+                className={`choice-tile ${activePath === 'review' ? 'choice-tile-active' : 'choice-tile-muted'}`}
+                aria-pressed={activePath === 'review'}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <Sparkles className="h-5 w-5 text-[var(--success)]" />
+                    <h3 className="text-base font-semibold text-foreground">知识复习</h3>
+                  </div>
+                  <StatusPill tone="success">内化</StatusPill>
+                </div>
+                <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                  从知识库中抽取重点内容，进入复述、提示与反馈会话。
+                </p>
+              </button>
+            </div>
+          </Panel>
+
+          <Panel className="p-6">
+            <StepStrip
+              title="流程预览"
+              description={viewState.description}
+              steps={viewState.steps}
+              variant="preview"
+            />
+          </Panel>
+
+          <Panel className="p-6">
+            <SectionHeader
+              title={viewState.title}
+              description={viewState.recommendation}
+              action={
+                <Button className="gap-2" onClick={enterActivePath}>
                   {viewState.ctaLabel}
                   <ArrowRight className="h-4 w-4" />
                 </Button>
-              </div>
-            </article>
-          </section>
+              }
+            />
+            <div className="mt-5 surface-inset px-4 py-4 text-sm leading-6 text-muted-foreground">
+              {activePath === 'blog'
+                ? '下一步会进入博客生成工作台，继续完成来源选择、解析配置、大纲确认与生成。'
+                : '下一步会进入知识复习工作台，继续完成入口选择、会话开始、提示与反馈。'}
+            </div>
+          </Panel>
+        </section>
 
-          <aside className="space-y-6">
-            <article className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
-              <div className="flex items-center gap-3">
-                <Clock3 className="h-5 w-5 text-zinc-600" />
-                <h2 className="text-lg font-semibold text-zinc-900">继续上次任务</h2>
-              </div>
-              <p className="mt-4 text-sm font-medium text-zinc-900">{resumeCard.title}</p>
-              <p className="mt-2 text-sm leading-6 text-zinc-600">{resumeCard.description}</p>
-              <div className="mt-4">
-                <Button variant="outline" onClick={resumeCard.onAction}>
-                  {resumeCard.actionLabel}
-                </Button>
-              </div>
-            </article>
+        <aside className="summary-rail">
+          <SectionHeader eyebrow="当前摘要" title="本次工作" description="右侧只保留影响下一步决策的信息。" />
+          <div className="mt-5 space-y-3">
+            <div className="summary-row">
+              <p className="text-xs text-muted-foreground">已选择</p>
+              <p className="mt-1 text-sm font-medium text-foreground">{viewState.title}</p>
+            </div>
+            <div className="summary-row">
+              <p className="text-xs text-muted-foreground">下一步</p>
+              <p className="mt-1 text-sm font-medium text-foreground">{viewState.ctaLabel}</p>
+            </div>
+            <div className="summary-row">
+              <p className="text-xs text-muted-foreground">可继续</p>
+              <p className="mt-1 text-sm font-medium text-foreground">{resumeCard.title}</p>
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">{resumeCard.description}</p>
+            </div>
+          </div>
+        </aside>
+      </div>
 
-            <article className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
-              <div className="flex items-center gap-3">
-                <BookOpen className="h-5 w-5 text-zinc-600" />
-                <h2 className="text-lg font-semibold text-zinc-900">最近博客记录</h2>
+      <section className="grid gap-6 lg:grid-cols-2">
+        <Panel className="p-6">
+          <SectionHeader title="最近博客" description="最多展示最近 3 条，作为恢复上下文而不是主流程入口。" />
+          <div className="mt-5 space-y-3">
+            {recentBlogs.length === 0 ? (
+              <div className="surface-inset px-4 py-5 text-sm text-muted-foreground">
+                还没有博客记录，先进入博客生成开始第一条工作流。
               </div>
-              <div className="mt-4 space-y-3">
-                {recentBlogs.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-5 text-sm text-zinc-500">
-                    还没有博客记录，先进入博客生成开始第一条工作流。
-                  </div>
-                ) : (
-                  recentBlogs.map((blog) => (
-                    <article key={blog.id} className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-4">
-                      <p className="text-sm font-medium text-zinc-900">{blog.title || '无标题博客'}</p>
-                      <p className="mt-1 text-xs text-zinc-500">
+            ) : (
+              recentBlogs.map((blog) => (
+                <article key={blog.id} className="surface-inset px-4 py-4 transition-colors hover:bg-secondary/70">
+                  <div className="flex items-start gap-3">
+                    <BookOpen className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-foreground">{blog.title || '无标题博客'}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
                         {blog.parent_id ? '系列章节' : '独立文章'} · 最近更新：{new Date(blog.updated_at).toLocaleString()}
                       </p>
-                    </article>
-                  ))
-                )}
-              </div>
-            </article>
+                    </div>
+                  </div>
+                </article>
+              ))
+            )}
+          </div>
+        </Panel>
 
-            <article className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
-              <div className="flex items-center gap-3">
-                <Sparkles className="h-5 w-5 text-zinc-600" />
-                <h2 className="text-lg font-semibold text-zinc-900">最近复习记录</h2>
+        <Panel className="p-6">
+          <SectionHeader title="最近复习" description="复习记录保持辅助地位，避免和当前工作路径抢焦点。" />
+          <div className="mt-5 space-y-3">
+            {reviewStore.isLoadingHistory && recentReviews.length === 0 ? (
+              <div className="surface-inset px-4 py-5 text-sm text-muted-foreground">正在加载复习记录...</div>
+            ) : recentReviews.length === 0 ? (
+              <div className="surface-inset px-4 py-5 text-sm text-muted-foreground">
+                还没有复习记录，完成第一轮知识漫游后会显示在这里。
               </div>
-              <div className="mt-4 space-y-3">
-                {reviewStore.isLoadingHistory && recentReviews.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-5 text-sm text-zinc-500">
-                    正在加载复习记录...
-                  </div>
-                ) : recentReviews.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-5 text-sm text-zinc-500">
-                    还没有复习记录，等你完成第一轮知识漫游后会显示在这里。
-                  </div>
-                ) : (
-                  recentReviews.map((item) => (
-                    <article key={item.session_id} className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-4">
-                      <p className="text-sm font-medium text-zinc-900">{item.title}</p>
-                      <p className="mt-1 text-xs text-zinc-500">
+            ) : (
+              recentReviews.map((item) => (
+                <article key={item.session_id} className="surface-inset px-4 py-4 transition-colors hover:bg-secondary/70">
+                  <div className="flex items-start gap-3">
+                    <Sparkles className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-foreground">{item.title}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
                         {item.mode === 'detailed_qa' ? '细致提问' : '轻提示复述'} · {item.reviewed_at ? new Date(item.reviewed_at).toLocaleString() : '暂无时间'}
                       </p>
-                    </article>
-                  ))
-                )}
-              </div>
-            </article>
-          </aside>
-        </div>
-      </div>
-    </div>
+                    </div>
+                  </div>
+                </article>
+              ))
+            )}
+          </div>
+        </Panel>
+      </section>
+    </PageShell>
   )
 }

@@ -31,28 +31,28 @@ export function GeneratorOutline({
   if (!store.outline || store.outline.length === 0) return null
 
   return (
-    <div className="mb-12 bg-white dark:bg-zinc-900 rounded-xl shadow-sm border border-zinc-200 dark:border-zinc-800 overflow-hidden transition-all duration-300">
+    <div className="overflow-hidden rounded-xl border border-border bg-card transition-colors">
       <div 
-        className="p-6 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors"
+        className="flex cursor-pointer items-center justify-between border-b border-border px-5 py-4 transition-colors hover:bg-secondary/35"
         onClick={() => setIsOutlineExpanded(!isOutlineExpanded)}
       >
         <div className="flex items-center gap-4">
-          <div className="w-10 h-10 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 rounded-full flex items-center justify-center">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--brand-soft)] text-[var(--brand)]">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
             </svg>
           </div>
           <div>
-            <h3 className="text-lg font-medium text-zinc-900 dark:text-zinc-100 flex items-center gap-3">
+            <h3 className="flex items-center gap-3 text-base font-semibold text-foreground">
               博客大纲 ({store.outline.length} 篇)
               {isOutlineExpanded ? (
-                <ChevronUp className="w-5 h-5 text-zinc-400 dark:text-zinc-500" />
+                <ChevronUp className="w-5 h-5 text-muted-foreground" />
               ) : (
-                <ChevronDown className="w-5 h-5 text-zinc-400 dark:text-zinc-500" />
+                <ChevronDown className="w-5 h-5 text-muted-foreground" />
               )}
             </h3>
-            <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
-              可拖拽调整顺序，或点击生成开始写作
+            <p className="mt-1 text-sm text-muted-foreground">
+              调整章节顺序和摘要，确认后开始生成
             </p>
           </div>
         </div>
@@ -68,7 +68,6 @@ export function GeneratorOutline({
           ) : (
             <Button
               onClick={handleGenerate}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white dark:bg-indigo-500 dark:hover:bg-indigo-600"
             >
               开始生成系列博客
             </Button>
@@ -77,22 +76,22 @@ export function GeneratorOutline({
       </div>
 
       {isOutlineExpanded && (
-        <div className="p-6 bg-zinc-50/50 dark:bg-zinc-900/50">
-          <div className="space-y-4">
+        <div className="bg-secondary/25 p-5">
+          <div className="space-y-3">
             {store.outline.map((chapter, index) => (
               <div
                 key={index}
-                className="bg-white dark:bg-zinc-800 p-5 rounded-lg border border-zinc-200 dark:border-zinc-700 shadow-sm hover:shadow-md transition-shadow group relative"
+                className="group relative rounded-xl border border-border bg-card p-4 transition-colors hover:bg-secondary/20"
               >
                 <div className="flex items-start gap-4">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-sm font-medium text-zinc-500 dark:text-zinc-400">
+                  <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-secondary text-sm font-medium text-muted-foreground">
                     {index + 1}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <input
                         type="text"
-                        className="flex-1 bg-transparent text-base font-medium text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded px-2 py-1 -ml-2"
+                        className="-ml-2 flex-1 rounded px-2 py-1 text-base font-medium text-foreground bg-transparent focus:outline-none focus:ring-2 focus:ring-ring"
                         value={chapter.title}
                         onChange={(e) => {
                           if (!store.outline) return;
@@ -103,17 +102,17 @@ export function GeneratorOutline({
                         disabled={store.isGenerating}
                       />
                       {chapter.action === 'new' && (
-                        <span className="px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border border-green-200 dark:border-green-800">新增</span>
+                        <span className="rounded border border-[color-mix(in_srgb,var(--success)_22%,var(--border))] bg-[var(--success-soft)] px-2 py-0.5 text-xs font-medium text-[var(--success)]">新增</span>
                       )}
                       {chapter.action === 'regenerate' && (
-                        <span className="px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-800">更新</span>
+                        <span className="rounded border border-[color-mix(in_srgb,var(--warning)_22%,var(--border))] bg-[var(--warning-soft)] px-2 py-0.5 text-xs font-medium text-[var(--warning)]">更新</span>
                       )}
                       {chapter.action === 'skip' && (
-                        <span className="px-2 py-0.5 rounded text-xs font-medium bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700">保留</span>
+                        <span className="rounded border border-border bg-secondary px-2 py-0.5 text-xs font-medium text-muted-foreground">保留</span>
                       )}
                     </div>
                     <textarea
-                        className="w-full bg-transparent text-sm text-zinc-600 dark:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 rounded px-2 py-1 -ml-2 resize-none h-20"
+                        className="-ml-2 h-20 w-full resize-none rounded bg-transparent px-2 py-1 text-sm text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                         value={chapter.summary}
                         onChange={(e) => {
                           if (!store.outline) return;
@@ -131,7 +130,7 @@ export function GeneratorOutline({
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-8 w-8 text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
                       disabled={index === 0 || store.isGenerating}
                       onClick={() => {
                         if (!store.outline) return;
@@ -147,7 +146,7 @@ export function GeneratorOutline({
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-8 w-8 text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
                       disabled={index === (store.outline ? store.outline.length - 1 : 0) || store.isGenerating}
                       onClick={() => {
                         if (!store.outline) return;
@@ -178,7 +177,7 @@ export function GeneratorOutline({
           <div className="mt-6 flex justify-center">
             <Button
               variant="outline"
-              className="text-zinc-600 dark:text-zinc-400 border-dashed hover:border-solid w-full max-w-md bg-white dark:bg-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-700"
+              className="w-full max-w-md border-dashed bg-card text-muted-foreground hover:border-solid hover:bg-secondary/50"
               disabled={store.isGenerating}
               onClick={() => {
                 if (!store.outline) return;
