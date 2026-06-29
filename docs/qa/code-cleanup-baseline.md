@@ -122,3 +122,84 @@ A direct-import scan (`rg -n '"inkwords-backend/internal/service"' backend/servi
 - `backend/services/llm-stream/domain/stream/service.go`
 
 Thus, both `core-api` and `llm-stream` retain direct dependencies on `internal/service` at this baseline.
+
+## After Cleanup
+
+Captured on 2026-06-29 after the systematic cleanup was applied. Unless noted otherwise, commands were run from the directory named in each section.
+
+### Comparison: Duplicate Groups / Files
+
+| Metric | Before | After | Delta |
+| --- | --- | --- | --- |
+| Duplicate groups | 22 | 12 | -10 (-45%) |
+| Duplicate files | 52 | 24 | -28 (-54%) |
+
+The remaining 12 groups are domain-level mirrors between `internal/domain/*` and `services/*/domain/*` that share identical DTOs and handler definitions by design.
+
+### Comparison: `services → internal` Dependency
+
+| Metric | Before | After | Delta |
+| --- | --- | --- | --- |
+| Service files importing `internal/service` | 3 | 0 | -3 |
+
+Service files that previously depended on the monolithic `internal/service` package:
+- `services/core-api/app/bootstrap/bootstrap.go` — removed
+- `services/llm-stream/app/bootstrap/bootstrap.go` — removed
+- `services/llm-stream/domain/stream/service.go` — removed
+
+All service-to-monolith dependencies have been eliminated. The only remaining reference is in `backend/services/architecture_test.go:453` (a test assertion).
+
+### Comparison: Backend
+
+| Check | Before | After |
+| --- | --- | --- |
+| `go test ./...` | All passed | All passed |
+| `go vet ./...` | Passed, 0 findings | Passed, 0 findings |
+| `go tool cover -func` total | 37.7% | 35.4% |
+
+Note: the slight coverage decrease is expected as some removed code was covered by tests, while the core test suite remains intact.
+
+### Comparison: Frontend
+
+| Check | Before | After |
+| --- | --- | --- |
+| `npm test` | 41 files, 138 tests | All passed |
+| `npm run lint` (--max-warnings=0) | 5 findings (2 errors, 3 warnings) | 0 findings |
+| `npm run deadcode` (knip) | Not measured | 2 unused files, 5 unused deps, 1 unused devDep, 13 unused exports, 11 unused exported types |
+| `npm run test:coverage` statements | Not measured | 38.83% |
+| `npm run build` | 6,862 modules, main JS 1,805.56 kB / 585.91 kB gzip | Passed, main JS 1,103.21 kB / 335.15 kB gzip |
+
+### CI Quality Gates (enforced)
+
+All checks in `.github/workflows/ci.yml` are now blocking (any failure fails the job):
+
+- Backend: `go vet`, `golangci-lint`, `go test ./...`
+- Frontend: `npm run lint` (`--max-warnings=0`), `npm run deadcode`, `npm test`, `npm run test:coverage`, `npm run build`
+- Config: `docker compose config`
+- Smoke: `docker compose up` + health checks + gateway checks + parser worker check
+
+### Verification Command Reference
+
+```bash
+# Backend
+cd backend
+go test ./... -count=1 -coverprofile=/tmp/inkwords-final.cover
+go tool cover -func=/tmp/inkwords-final.cover | tail -n 1
+go vet ./...
+
+# Frontend
+cd ../frontend
+npm run lint           # --max-warnings=0
+npm run deadcode
+npm run test:coverage
+npm run build 2>&1 | grep -E "index-.*gzip"
+
+# Duplicate scan
+cd ..
+rg --files backend -g '*.go' -g '!**/*_test.go' -g '!**/vendor/**' \
+  | LC_ALL=C sort | while IFS= read -r file; do shasum "$file"; done \
+  | LC_ALL=C sort -k1,1 -k2,2 | awk '{...}'
+
+# Service dependency check
+rg -n '"inkwords-backend/internal/service"' backend/services --glob '*.go'
+```

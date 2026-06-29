@@ -21,6 +21,11 @@ jobs:
         working-directory: backend
         run: go vet ./...
 
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          working-directory: backend
+
       - name: backend coverage
         working-directory: backend
         run: go test ./... -coverprofile=coverage.out
@@ -45,6 +50,10 @@ jobs:
       - name: npm run lint
         working-directory: frontend
         run: npm run lint
+
+      - name: npm run deadcode
+        working-directory: frontend
+        run: npm run deadcode
 
       - name: npm test
         working-directory: frontend

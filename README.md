@@ -3,6 +3,7 @@
 把资料变成知识，把知识变成能力。
 
 ## 最近更新
+- `2026-06-29`：完成代码治理清理收尾：消除 54% 的重复 Go 文件、消除全部 service→monolith 依赖、前端 lint 清零、CI 新增 golangci-lint 与 deadcode 阻塞门禁、前端打包体积缩减 43%（gzip）。质量基线文档已同步更新。
 - `2026-06-08`：完成一轮全仓安全清理，删除 `llm-stream` 下未接入的 generation 占位/空桥接代码，收窄过渡层 `StreamAPI` 依赖，并移除前端 `GeneratorProgressStage` 兼容壳与两处 store 中未消费状态；不改变对外功能、API 和默认访问入口。
 
 ## 项目定位
@@ -40,7 +41,7 @@ InkWords Trainer 是一个面向个人知识沉淀、知识复习与可选内容
 ## 系统架构
 项目采用前后端分离的 Monorepo 结构：
 
-- `frontend/`：React 18 + Vite + Tailwind CSS + shadcn/ui + Zustand
+- `frontend/`：React 19 + Vite + Tailwind CSS + shadcn/ui + Zustand
 - `backend/`：Go + Gin + PostgreSQL + RabbitMQ + Redis
 - `docker-compose.yml`：当前唯一的容器化编排入口
 
@@ -216,7 +217,7 @@ InkWords/
 
 ## 技术栈
 ### 前端
-- React 18
+- React 19
 - Vite
 - Tailwind CSS
 - shadcn/ui
@@ -272,6 +273,35 @@ InkWords/
 - [API 接口文档 API](.trae/documents/InkWords_API.md)
 - [开发计划与日志 Plan & Log](.trae/documents/InkWords_Development_Plan_and_Log.md)
 - [对话与决策摘要 Conversation Log](.trae/documents/InkWords_Conversation_Log.md)
+
+## 代码治理与质量门禁
+
+项目采用 CI 强制质量门禁，每次 PR 和 push main 均执行以下阻塞检查：
+
+| 层级 | 检查 | 阻塞 |
+| --- | --- | --- |
+| Backend | `go vet` | ✅ |
+| Backend | `golangci-lint` | ✅ |
+| Backend | `go test ./...` | ✅ |
+| Frontend | `npm run lint` (`--max-warnings=0`) | ✅ |
+| Frontend | `npm run deadcode` (knip) | ✅ |
+| Frontend | `npm test` | ✅ |
+| Frontend | `npm run test:coverage` | ✅ |
+| Frontend | `npm run build` | ✅ |
+| Config | `docker compose config` | ✅ |
+| Smoke | Docker 多服务启动 + 健康检查 + 网关冒烟 | ✅ |
+
+### 当前质量基线
+
+- **重复 Go 文件**：12 组 24 个文件（均为 domain 镜像，已完成 de-duplication，从 22 组 52 文件缩减）
+- **service → monolith 依赖**：0（已全部消除，仅剩测试引用）
+- **后端覆盖**：35.4%
+- **前端覆盖**：38.83%
+- **前端 lint**：0 发现
+- **前端死码**：2 未使用文件、5 未使用依赖、1 未使用 devDep（存量已知）
+- **主 bundle gzip**：335 kB
+
+以上基线与详细验证命令参见 [docs/qa/code-cleanup-baseline.md](docs/qa/code-cleanup-baseline.md)。
 
 ## 开发约束
 - 修改业务逻辑、接口或表结构时，需要同步更新上述文档
