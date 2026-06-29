@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 
@@ -57,37 +58,11 @@ func (h *Handler) ExportSeries(c *gin.Context) {
 		return
 	}
 
-	parentTitle := blogs[0].Title
-	if parentTitle == "" {
-		parentTitle = "series"
-	}
-
 	c.Writer.Header().Set("Content-Type", "application/zip")
-	c.Writer.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s.zip\"", parentTitle))
+	c.Writer.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s.zip\"", seriesParentTitle(blogs)))
 
-	zipWriter := zip.NewWriter(c.Writer)
-	for idx, blog := range blogs {
-		title := blog.Title
-		if title == "" {
-			title = fmt.Sprintf("未命名_%d", idx)
-		}
-
-		filename := ""
-		if blog.ParentID == nil || *blog.ParentID == uuid.Nil {
-			filename = fmt.Sprintf("%s.md", title)
-		} else {
-			filename = fmt.Sprintf("%02d-%s.md", blog.ChapterSort, title)
-		}
-
-		file, err := zipWriter.Create(filename)
-		if err != nil {
-			continue
-		}
-		_, _ = file.Write([]byte(fmt.Sprintf("# %s\n\n%s", title, blog.Content)))
-	}
-
-	if err := zipWriter.Close(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "创建 ZIP 包失败", "data": nil})
+	if err := writeSeriesZip(c.Writer, blogs); err != nil {
+		log.Printf("series zip write failed: %v", err)
 		return
 	}
 }
@@ -123,8 +98,13 @@ func (h *Handler) ExportSeriesPDF(c *gin.Context) {
 	c.Writer.Header().Set("Content-Type", "application/pdf")
 	c.Writer.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
 	c.Status(http.StatusOK)
-	_, _ = io.Copy(c.Writer, file)
-	_ = os.Remove(pdfPath)
+
+	if _, err := io.Copy(c.Writer, file); err != nil {
+		log.Printf("pdf copy to response failed for %s: %v", blogID, err)
+	}
+	if err := os.Remove(pdfPath); err != nil {
+		log.Printf("pdf temp file cleanup failed for %s: %v", pdfPath, err)
+	}
 }
 
 func (h *Handler) ExportToObsidian(c *gin.Context) {
@@ -142,6 +122,51 @@ func (h *Handler) ExportToObsidian(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"code": http.StatusOK, "message": "success", "data": nil})
+}
+
+// writeSeriesZip 将系列博客归档写入 io.Writer，ZIP 创建或写入失败时返回错误。
+// 提取为独立可测试函数，避免归档构造逻辑与 HTTP 响应耦合。
+func writeSeriesZip(w io.Writer, blogs []Blog) error {
+	zipWriter := zip.NewWriter(w)
+	defer func() {
+		if closeErr := zipWriter.Close(); closeErr != nil {
+			log.Printf("series zip close failed: %v", closeErr)
+		}
+	}()
+
+	for idx, blog := range blogs {
+		title := blog.Title
+		if title == "" {
+			title = fmt.Sprintf("未命名_%d", idx)
+		}
+
+		filename := ""
+		if blog.ParentID == nil || *blog.ParentID == uuid.Nil {
+			filename = fmt.Sprintf("%s.md", title)
+		} else {
+			filename = fmt.Sprintf("%02d-%s.md", blog.ChapterSort, title)
+		}
+
+		file, err := zipWriter.Create(filename)
+		if err != nil {
+			return fmt.Errorf("zip create entry %q: %w", filename, err)
+		}
+		if _, err := file.Write([]byte(fmt.Sprintf("# %s\n\n%s", title, blog.Content))); err != nil {
+			return fmt.Errorf("zip write entry %q: %w", filename, err)
+		}
+	}
+	return nil
+}
+
+// seriesParentTitle 从系列博客列表中提取父级标题，用于生成下载文件名。
+func seriesParentTitle(blogs []Blog) string {
+	if len(blogs) == 0 {
+		return "series"
+	}
+	if blogs[0].Title != "" {
+		return blogs[0].Title
+	}
+	return "series"
 }
 
 func currentUserID(c *gin.Context) (uuid.UUID, bool) {
