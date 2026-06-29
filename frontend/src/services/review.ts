@@ -69,6 +69,9 @@ export interface ReviewSessionResponse {
   status: string
   mode: ReviewMode
   title: string
+  source_title?: string
+  source_preview?: string
+  ready_to_answer?: boolean
   opening_prompt: string
   initial_hints: string[]
   session_outline: SessionOutline
@@ -104,6 +107,8 @@ export interface RespondResponse {
   current_round_goal?: string
   review_feedback: ReviewFeedback
   next_question?: string
+  hint_text?: string
+  excerpt_text?: string
   completed: boolean
   final_feedback: FinalFeedback
 }

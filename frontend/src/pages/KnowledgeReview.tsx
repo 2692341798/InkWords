@@ -14,7 +14,7 @@ import { getKnowledgeReviewViewState } from './knowledgeReviewViewState'
 // 避免用户同时面对多个主操作区，降低启动阻力。
 export function KnowledgeReview() {
   const reviewStore = useReviewStore()
-  const { initialize, startSession, respond, requestHint, finish, clearSession } = useKnowledgeReview()
+  const { initialize, startSession, startAnswering, respond, requestHint, finish, clearSession } = useKnowledgeReview()
   const [isPickerOpen, setIsPickerOpen] = useState(false)
   const effectiveIsPickerOpen = isPickerOpen && !reviewStore.currentSession
   const hasHiddenSession = Boolean(reviewStore.currentSession) && !reviewStore.shouldResumeSessionOnOpen
@@ -177,6 +177,7 @@ export function KnowledgeReview() {
                 finalFeedback={reviewStore.finalFeedback}
                 onModeChange={reviewStore.setSelectedMode}
                 onRespond={respond}
+                onStartAnswering={startAnswering}
                 onRequestHint={requestHint}
                 onFinish={finish}
                 onClose={closeSession}

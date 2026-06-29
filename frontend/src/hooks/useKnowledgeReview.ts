@@ -130,6 +130,15 @@ export function useKnowledgeReview() {
         setLatestStageFeedback(null)
       }
 
+      if (response.hint_text) {
+        setLatestHint(response.hint_text)
+        nextTurns = appendTurn(nextTurns, 'system', 'hint', response.hint_text)
+      }
+
+      if (response.excerpt_text) {
+        nextTurns = appendTurn(nextTurns, 'system', 'excerpt', response.excerpt_text)
+      }
+
       if (response.next_question) {
         nextTurns = appendTurn(nextTurns, 'system', 'question', response.next_question)
       }
@@ -144,6 +153,7 @@ export function useKnowledgeReview() {
       setCurrentSession({
         ...currentSession,
         status: response.session_status,
+        ready_to_answer: true,
         current_round_goal: response.current_round_goal,
         latest_review_feedback: response.review_feedback ?? null,
         next_question: response.next_question,
@@ -153,6 +163,17 @@ export function useKnowledgeReview() {
     },
     [currentSession, loadHistory, persistSessionID, setCurrentSession, setFinalFeedback, setLatestStageFeedback],
   )
+
+  const startAnswering = useCallback(() => {
+    if (!currentSession || currentSession.ready_to_answer) {
+      return
+    }
+
+    setCurrentSession({
+      ...currentSession,
+      ready_to_answer: true,
+    })
+  }, [currentSession, setCurrentSession])
 
   const requestHint = useCallback(async () => {
     if (!currentSession) {
@@ -196,6 +217,7 @@ export function useKnowledgeReview() {
   return {
     initialize,
     startSession,
+    startAnswering,
     respond,
     requestHint,
     finish,

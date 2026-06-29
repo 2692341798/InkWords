@@ -1,6 +1,49 @@
 # 墨言知识训练平台 (InkWords Trainer) - AI 对话与决策摘要 (Conversation Log)
 > **目的**：记录在 Vibe Coding 过程中，每一次核心对话的上下文、用户指令意图以及关键架构决策。以便在长周期的开发中，不论更换 AI 会话窗口还是重新梳理思路，都能快速找回项目背景。
 
+### 对话 125：复习页从训练仪表盘回调为极简阅读工作台，并给原文加独立滚动
+- **用户需求**：用户直接指出“前端页面很丑陋，并且观感极差，原文模块应该加上滚动条”，随后在澄清后明确选择了 `极简阅读优先` 和 `原文抽屉式` 方案。
+- **AI 动作**：
+  1. 重新走一轮 `brainstorming + frontend-design` 的设计澄清，放弃之前的深色训练台方向，改为更像 Notion / 文档工作台的浅色阅读优先布局。
+  2. 先补失败测试，锁定 `查看原文` 触发器、`data-slot="source-drawer-scroll"` 和 `overflow-y-auto` 独立滚动容器，再按 TDD 改造 `ReviewSessionCard`。
+  3. 将会话主卡重构为浅色“阅读工作台”，保留当前问题、复述输入、智能提示和反馈摘要，但把原文收进可开合抽屉；抽屉正文使用固定高度 + 内部滚动，避免继续撑高整页。
+  4. 将 `KnowledgeReview` 页级骨架同步改为浅色文档工作台风格，去掉大面积黑色 Hero 和强烈训练台观感，改为更安静的标题区与右侧摘要区。
+- **验证**：
+  - `cd frontend && npm test -- ReviewSessionCard KnowledgeReview` 通过
+  - `cd frontend && npm test -- ReviewSessionCard useKnowledgeReview review` 通过
+
+### 对话 124：修正 GitHub OAuth 本地回调仍指向 8088 的残留配置
+- **用户需求**：用户要求“直接修复并重启”，处理 GitHub 登录回调仍然落到 `http://localhost:8088/api/v1/auth/callback/github` 的问题。
+- **AI 动作**：
+  1. 全局检索后确认项目已恢复默认 `http://localhost`，但 `backend/.env` 里仍残留 `FRONTEND_URL=http://localhost:8088` 和 `DOCKER_GITHUB_REDIRECT_URL=http://localhost:8088/api/v1/auth/callback/github`。
+  2. 直接将这两项修回默认 `localhost` 入口，避免 OAuth 流程继续把浏览器带向未监听的 `8088`。
+  3. 计划在修正后重新执行 Docker 一键重启，并验证 `:80` 入口和 `curl http://localhost` 的连通性。
+
+### 对话 122：知识漫游复习改为“先看原文，再由 AI 辅助复述”
+- **用户需求**：用户要求调整复习逻辑，希望在选择复习文章后先看到原文，再进入辅助复述；同时要把复习文章与用户回答一起发送给后端 AI 生成针对性提示。当用户说自己“不记得”时，不增加专门按钮，而是按自然语言识别后先给简短提示，再给原文提醒。
+- **AI 动作**：
+  1. 先按知识库 Query 与仓库上下文审计 review 域现状，确认当前复习页没有“原文预览”步骤，后端反馈仍主要是规则匹配，尚未把原文和回答一起交给 AI。
+  2. 使用 `frontend-design`、`test-driven-development` 与 `writing-plans`，先产出 [2026-06-08-review-preview-ai-hints.md](file:///Users/huangqijun/Documents/%E5%A2%A8%E8%A8%80%E5%8D%9A%E5%AE%A2%E5%8A%A9%E6%89%8B/InkWords/docs/superpowers/plans/2026-06-08-review-preview-ai-hints.md)，再按 TDD 分别补后端 session preview 和前端 preview-first 交互的失败测试。
+  3. 在 `review-service` 中扩展 `ReviewSessionResponse`、把原文预览写入 `metadata_snapshot`，并引入可选 `AIFeedbackGenerator` + DeepSeek 结构化反馈适配器；未配置或失败时回退到规则反馈，同时对“我不记得 / 忘了 / 记不清了”提供“先提示、再摘录”的兜底逻辑。
+  4. 在前端 `ReviewSessionCard` / `useKnowledgeReview` 中落地“先预览原文，再开始复述”的两阶段体验，并接入后端返回的 `hint_text / excerpt_text`。
+- **决策/变更**：
+  - 不新增“我不记得”按钮，把它视为用户在文本输入中的自然表达，由后端统一识别。
+  - 不新增数据库表或字段，仅复用 `review_sessions.metadata_snapshot` 与 `review_turns` 记录会话快照和轮次。
+- **验证**：
+  - `cd backend && go test ./services/review-service/... -count=1` 通过
+  - `cd frontend && npm test -- ReviewSessionCard useKnowledgeReview review` 通过
+
+### 对话 123：复习页重设计为训练仪表盘，并修复请求提示机械重复
+- **用户需求**：用户指出“请求提示的功能很烂，只会机械式重复，复习页面也不够美观”，要求调用前端设计相关 skill 重新设计；在澄清后明确选择了 `训练仪表盘` 风格、`中密度聚焦版` 信息密度和 `智能单次提示` 方式。
+- **AI 动作**：
+  1. 激活 `frontend-design`，通过多轮澄清将复习页设计方向收敛为“主区只突出当前动作、次级面板承接提示和反馈”的训练工作台。
+  2. 重构 `ReviewSessionCard`：预览态改成“原文预览 + 训练面板 + 进入前先留意”，作答态改成“当前问题 + 阶段反馈 + 复述输入 + 智能提示 + 反馈摘要 + 最近轨迹”的双栏结构，并把“请求提示”文案调整为“换个角度提示”。
+  3. 重构 `KnowledgeReview` 页级骨架：顶部改成工作台式引导头图，右侧摘要卡固定展示步骤、主题、模式与下一步动作，使页面整体从灰白表单页切到训练台气质。
+  4. 后端 `RequestHint` 在用户最近回答明显为“我不记得了”时，优先返回更具体的上下文提示并拼接相关原文摘录，降低重复机械感。
+- **验证**：
+  - `cd frontend && npm test -- ReviewSessionCard useKnowledgeReview review` 通过
+  - `cd backend && go test ./services/review-service/domain/review -run 'TestService_(RequestHint_WhenUserIsStuck_ReturnsConcreteContext|Respond_WhenUserDoesNotRemember_ReturnsHintThenExcerpt)' -count=1` 通过
+
 ### 对话 121：检查源码并清理多余代码，随后提交到 GitHub
 - **用户需求**：用户先要求“检查源码，清理掉多余或者无用的代码”，完成后又要求“提交到 GitHub”。
 - **AI 动作**：
