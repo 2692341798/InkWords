@@ -1,11 +1,22 @@
 package services_test
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestLegacyStandaloneCommandWrappersAreRemoved(t *testing.T) {
+	legacyDirs := []string{"core-api", "llm-stream", "parser-service", "export-service"}
+	for _, name := range legacyDirs {
+		path := filepath.Join("..", "cmd", name)
+		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("legacy command wrapper %s must be removed", path)
+		}
+	}
+}
 
 var backendServices = []string{
 	"core-api",
