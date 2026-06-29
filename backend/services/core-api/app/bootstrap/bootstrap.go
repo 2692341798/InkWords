@@ -39,7 +39,7 @@ func BuildRouter() (*gin.Engine, func(), error) {
 		return nil, nil, err
 	}
 	if err := cache.InitRedis(); err != nil {
-		// Why: cache 是增强项而不是启动硬依赖，保持与现有 core-api 行为一致。
+		_ = err // Redis 是增强项而不是启动硬依赖
 	}
 
 	taskPublisher, cleanupTaskPublisher, err := InitTaskPublisherFromEnv(newRabbitMQTaskPublisher)

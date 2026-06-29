@@ -17,6 +17,7 @@ import (
 	"golang.org/x/sync/semaphore"
 )
 
+//nolint:gocyclo
 func (f *GitFetcher) fetchWithGithubAPI(owner, repo, subDir string, progressCallback func(string)) (string, []FileChunk, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
@@ -33,7 +34,7 @@ func (f *GitFetcher) fetchWithGithubAPI(owner, repo, subDir string, progressCall
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to fetch tree: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", nil, fmt.Errorf("github api returned status %d", resp.StatusCode)
@@ -102,21 +103,23 @@ func (f *GitFetcher) fetchWithGithubAPI(owner, repo, subDir string, progressCall
 
 			var data []byte
 			var fetchErr error
+			attemptLoop:
 			for attempt := 0; attempt < 3; attempt++ {
 				if progressCallback != nil {
 					progressCallback(fmt.Sprintf("Downloading %s (attempt %d/3)...", path, attempt+1))
 				}
 				respRaw, err := client.Do(reqRaw)
-				if err == nil && respRaw.StatusCode == http.StatusOK {
+				switch {
+				case err == nil && respRaw.StatusCode == http.StatusOK:
 					data, fetchErr = io.ReadAll(respRaw.Body)
-					respRaw.Body.Close()
+					_ = respRaw.Body.Close()
 					if fetchErr == nil {
-						break
+						break attemptLoop
 					}
-				} else if respRaw != nil {
-					respRaw.Body.Close()
+				case respRaw != nil:
+					_ = respRaw.Body.Close()
 					fetchErr = fmt.Errorf("status %d", respRaw.StatusCode)
-				} else {
+				default:
 					fetchErr = err
 				}
 				time.Sleep(500 * time.Millisecond)
@@ -124,7 +127,7 @@ func (f *GitFetcher) fetchWithGithubAPI(owner, repo, subDir string, progressCall
 
 			if fetchErr != nil || data == nil {
 				mu.Lock()
-				fetchErrs = append(fetchErrs, fmt.Errorf("failed to fetch %s: %v", path, fetchErr))
+				fetchErrs = append(fetchErrs, fmt.Errorf("failed to fetch %s: %w", path, fetchErr))
 				mu.Unlock()
 				return
 			}
@@ -160,7 +163,7 @@ func (f *GitFetcher) fetchWithGithubAPI(owner, repo, subDir string, progressCall
 	wg.Wait()
 
 	if len(dirContents) == 0 && len(fetchErrs) > 0 {
-		return "", nil, fmt.Errorf("failed to fetch any files, errors: %v", fetchErrs[0])
+		return "", nil, fmt.Errorf("failed to fetch any files, errors: %w", fetchErrs[0])
 	}
 
 	chunks := buildChunksFromDirContents(dirContents)

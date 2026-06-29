@@ -3,6 +3,7 @@ package generation
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -53,7 +54,7 @@ func (s *PromptRequirements) Resolve(
 
 	var row userPromptSettingsRow
 	if err := s.db.WithContext(ctx).First(&row, "user_id = ?", userID).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return strings.TrimSpace(strings.Join([]string{
 				prompt.DefaultScenarioRequirements(scenario),
 				userStyleOverride,
@@ -149,6 +150,7 @@ func (r *PromptProfileResolver) ResolveForFile(
 	}
 	payload, err := r.generateClassifierJSON(ctx, messages)
 	if err != nil {
+		//nolint:nilerr
 		return fallback, resolvedPromptProfile{
 			Key:          fallback.Key,
 			DisplayName:  fallback.DisplayName,
@@ -163,6 +165,7 @@ func (r *PromptProfileResolver) ResolveForFile(
 		Reason           string `json:"reason"`
 	}
 	if err := json.Unmarshal([]byte(payload), &result); err != nil {
+		//nolint:nilerr
 		return fallback, resolvedPromptProfile{
 			Key:          fallback.Key,
 			DisplayName:  fallback.DisplayName,

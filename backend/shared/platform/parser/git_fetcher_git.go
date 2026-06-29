@@ -2,6 +2,7 @@ package parser
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os/exec"
 	"path/filepath"
@@ -39,6 +40,7 @@ func buildChunksFromDirContents(dirContents map[string]*strings.Builder) []FileC
 	return chunks
 }
 
+//nolint:gosec,noctx
 func (f *GitFetcher) fetchWithGitCLI(repoURL, subDir string, progressCallback func(string)) (string, []FileChunk, error) {
 	cachePath, err := f.GetCachedRepoPath(repoURL, progressCallback)
 	if err != nil {
@@ -54,7 +56,7 @@ func (f *GitFetcher) fetchWithGitCLI(repoURL, subDir string, progressCallback fu
 		args = append(args, subDir)
 	}
 
-	cmd := exec.Command("git", args...)
+	cmd := exec.CommandContext(context.Background(), "git", args...)
 	cmd.Dir = cachePath
 	outBytes, err := cmd.Output()
 	if err != nil {

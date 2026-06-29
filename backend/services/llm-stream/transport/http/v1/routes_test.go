@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -33,7 +34,7 @@ func TestRegisterStreamRoutes_RegistersLegacyStreamEndpoints(t *testing.T) {
 		{method: http.MethodPost, path: "/api/v1/stream/analyze"},
 		{method: http.MethodPost, path: "/api/v1/stream/generate"},
 	} {
-		req := httptest.NewRequest(tc.method, tc.path, nil)
+		req := httptest.NewRequestWithContext(context.Background(), tc.method, tc.path, nil)
 		resp := httptest.NewRecorder()
 		r.ServeHTTP(resp, req)
 		require.Equal(t, http.StatusOK, resp.Code, tc.path)

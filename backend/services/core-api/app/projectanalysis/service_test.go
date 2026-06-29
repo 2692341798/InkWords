@@ -53,7 +53,7 @@ func githubStubServer(t *testing.T) *httptest.Server {
 		case strings.HasSuffix(r.URL.Path, "/contents") && strings.Contains(r.URL.Path, "/repos/"):
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode([]map[string]interface{}{
+			_ = json.NewEncoder(w).Encode([]map[string]interface{}{
 				{"name": "src", "type": "dir"},
 				{"name": "pkg", "type": "dir"},
 				{"name": "cmd", "type": "dir"},
@@ -64,7 +64,7 @@ func githubStubServer(t *testing.T) *httptest.Server {
 		case strings.HasSuffix(r.URL.Path, "/readme") && strings.Contains(r.URL.Path, "/repos/"):
 			w.Header().Set("Content-Type", "text/plain")
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("# Test Repo\n\nsrc: core source code\npkg: public library packages\ncmd: command line tools"))
+			_, _ = w.Write([]byte("# Test Repo\n\nsrc: core source code\npkg: public library packages\ncmd: command line tools"))
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -75,8 +75,7 @@ func TestScanProjectModules_WithGitHubAPIMock(t *testing.T) {
 	server := githubStubServer(t)
 	defer server.Close()
 
-	os.Setenv("GITHUB_API_BASE", server.URL)
-	defer os.Unsetenv("GITHUB_API_BASE")
+	t.Setenv("GITHUB_API_BASE", server.URL)
 
 	fakeLLM := &fakeLLMClient{
 		jsonResponse: `{"src": "核心源码目录", "pkg": "公共库包", "cmd": "命令行工具"}`,
@@ -114,6 +113,7 @@ func TestScanProjectModules_WithGitHubAPIMock(t *testing.T) {
 	}
 }
 
+//nolint:gosec,noctx
 func TestScanProjectModules_NoGitHubFallback(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available")
@@ -141,9 +141,9 @@ func TestScanProjectModules_NoGitHubFallback(t *testing.T) {
 	}
 
 	commitCmd := exec.Command("git", "-C", tempDir, "add", "-A")
-	commitCmd.Run()
+	_ = commitCmd.Run()
 	commitCmd = exec.Command("git", "-C", tempDir, "commit", "-m", "init", "--allow-empty")
-	commitCmd.Run()
+	_ = commitCmd.Run()
 
 	modules, err := svc.ScanProjectModules(context.Background(), tempDir)
 	if err != nil {
@@ -165,8 +165,7 @@ func TestScanProjectModules_LLMErrorStillReturnsModules(t *testing.T) {
 	server := githubStubServer(t)
 	defer server.Close()
 
-	os.Setenv("GITHUB_API_BASE", server.URL)
-	defer os.Unsetenv("GITHUB_API_BASE")
+	t.Setenv("GITHUB_API_BASE", server.URL)
 
 	fakeLLM := &fakeLLMClient{
 		err:          &llm.APIError{StatusCode: http.StatusTooManyRequests, Body: "rate limited"},
@@ -400,8 +399,7 @@ func TestScanProjectModules_ContextCanceledWithGitHubAPI(t *testing.T) {
 	server := githubStubServer(t)
 	defer server.Close()
 
-	os.Setenv("GITHUB_API_BASE", server.URL)
-	defer os.Unsetenv("GITHUB_API_BASE")
+	t.Setenv("GITHUB_API_BASE", server.URL)
 
 	fakeLLM := &fakeLLMClient{
 		jsonResponse: `{}`,

@@ -200,7 +200,7 @@ func (c *DeepSeekClient) doChatCompletion(ctx context.Context, reqBody ChatReque
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -318,6 +318,8 @@ func (c *DeepSeekClient) GenerateStreamWithUsage(ctx context.Context, model stri
 }
 
 // GenerateStreamWithOptions calls the DeepSeek API with stream=true and request options.
+//
+//nolint:gocyclo
 func (c *DeepSeekClient) GenerateStreamWithOptions(ctx context.Context, model string, messages []Message, chunkChan chan<- string, options ChatOptions) (string, CompletionUsage, error) {
 	defer close(chunkChan)
 	reqBody := ChatRequest{
@@ -345,7 +347,7 @@ func (c *DeepSeekClient) GenerateStreamWithOptions(ctx context.Context, model st
 	if err != nil {
 		return "", CompletionUsage{}, fmt.Errorf("failed to execute request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)

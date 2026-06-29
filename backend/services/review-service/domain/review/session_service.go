@@ -75,7 +75,7 @@ func (s *Service) CreateSession(ctx context.Context, userID uuid.UUID, req Creat
 		OpeningPrompt:    opening,
 		InitialHints:     hints,
 		SessionOutline:   outline,
-		CurrentRoundGoal: currentRoundGoal(session.Mode, 0, outline),
+		CurrentRoundGoal: currentRoundGoal(session.Mode, 0),
 		NextQuestion:     nextQuestionForSession(session, []ReviewTurn{openingTurn}, outline),
 		TurnIndex:        openingTurn.TurnIndex,
 		Turns:            []ReviewTurnResponse{toTurnResponse(openingTurn)},
@@ -125,7 +125,7 @@ func (s *Service) Respond(ctx context.Context, userID uuid.UUID, sessionID uuid.
 	metadata := decodeSessionMetadata(session.MetadataSnapshot)
 	answerCount := countUserAnswers(updatedTurns)
 	reviewFeedback := buildReviewFeedback(outline, answer)
-	roundGoal := currentRoundGoal(session.Mode, answerCount, outline)
+	roundGoal := currentRoundGoal(session.Mode, answerCount)
 	stageFeedback := buildStageFeedback(session.Mode, reviewFeedback)
 	hintText := ""
 	excerptText := ""
@@ -201,7 +201,7 @@ func (s *Service) Respond(ctx context.Context, userID uuid.UUID, sessionID uuid.
 			SessionStatus:    session.Status,
 			TurnIndex:        session.TurnCount,
 			StageFeedback:    stageFeedback,
-			CurrentRoundGoal: currentRoundGoal(session.Mode, answerCount, outline),
+			CurrentRoundGoal: currentRoundGoal(session.Mode, answerCount),
 			ReviewFeedback:   reviewFeedback,
 			NextQuestion:     nextQuestion,
 			HintText:         hintText,
@@ -271,7 +271,7 @@ func (s *Service) RequestHint(ctx context.Context, userID uuid.UUID, sessionID u
 			session.Mode,
 			metadata,
 			toTurnResponses(turns),
-			currentRoundGoal(session.Mode, countUserAnswers(turns), outline),
+			currentRoundGoal(session.Mode, countUserAnswers(turns)),
 			lastAnswer,
 		))
 		if aiErr == nil {
@@ -415,7 +415,7 @@ func buildSessionResponse(session ReviewSession, turns []ReviewTurn) ReviewSessi
 		OpeningPrompt:        opening,
 		InitialHints:         initialHints(session.Mode, metadata.SessionOutline),
 		SessionOutline:       metadata.SessionOutline,
-		CurrentRoundGoal:     currentRoundGoal(session.Mode, countUserAnswers(turns), metadata.SessionOutline),
+		CurrentRoundGoal:     currentRoundGoal(session.Mode, countUserAnswers(turns)),
 		LatestReviewFeedback: latestReviewFeedback(metadata.SessionOutline, turns),
 		NextQuestion:         nextQuestionForSession(session, turns, metadata.SessionOutline),
 		TurnIndex:            len(turns),

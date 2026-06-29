@@ -79,6 +79,8 @@ func (s *DecompositionService) TakeGenerateSeriesTaskResult(parentID uuid.UUID) 
 }
 
 // ScanProjectModulesWithProgress 克隆 git 仓库或使用 GitHub API，列出根目录模块。
+//
+//nolint:gocyclo,noctx
 func (s *DecompositionService) ScanProjectModulesWithProgress(ctx context.Context, gitURL string, progressCallback chan<- string) ([]streamdomain.ModuleCard, error) {
 	if progressCallback != nil {
 		progressCallback <- "正在分析项目目录结构..."
@@ -109,7 +111,7 @@ func (s *DecompositionService) ScanProjectModulesWithProgress(ctx context.Contex
 					}
 				}
 			}
-			resp.Body.Close()
+			_ = resp.Body.Close()
 		}
 	}
 

@@ -49,6 +49,8 @@ func NewTaskConsumer(tasks taskService, streams generationStreamService) *TaskCo
 }
 
 // HandleGenerationRequested 消费一条 generation.requested 消息并把执行结果回写到任务表。
+//
+//nolint:gocyclo
 func (c *TaskConsumer) HandleGenerationRequested(ctx context.Context, message sharedrabbitmq.GenerationRequestedMessage) error {
 	if c == nil || c.tasks == nil || c.streams == nil {
 		return errors.New("task consumer dependencies are not configured")

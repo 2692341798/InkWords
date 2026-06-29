@@ -58,46 +58,7 @@ func (h *Handler) AnalyzeStreamHandler(c *gin.Context) {
 	w := c.Writer
 	w.Flush()
 
-	c.Stream(func(w io.Writer) bool {
-		select {
-		case <-ctx.Done():
-			go func() {
-				progressOpen, errOpen := true, true
-				for progressOpen || errOpen {
-					select {
-					case _, ok := <-progressChan:
-						if !ok {
-							progressOpen = false
-						}
-					case _, ok := <-errChan:
-						if !ok {
-							errOpen = false
-						}
-					}
-				}
-			}()
-			return false
-		case err, ok := <-errChan:
-			if ok && err != nil {
-				writeStreamEvent(c, w, "error", externalStreamErrorMessage(streamOperationAnalyze, err))
-				return false
-			}
-			if !ok {
-				errChan = nil
-			}
-			return true
-		case msg, ok := <-progressChan:
-			if !ok {
-				writeStreamEvent(c, w, "done", "[DONE]")
-				return false
-			}
-			writeStreamEvent(c, w, "chunk", msg)
-			return true
-		case <-time.After(10 * time.Second):
-			writeStreamEvent(c, w, "ping", "keepalive")
-			return true
-		}
-	})
+	sseStreamBody(c, progressChan, &errChan, streamOperationAnalyze)
 
 	go wg.Wait()
 }
@@ -154,6 +115,7 @@ func (h *Handler) ScanStreamHandler(c *gin.Context) {
 	w := c.Writer
 	w.Flush()
 
+	//nolint:gocritic // scan uses a different select pattern (3 channels)
 	c.Stream(func(w io.Writer) bool {
 		select {
 		case <-ctx.Done():

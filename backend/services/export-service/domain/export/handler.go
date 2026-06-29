@@ -67,6 +67,7 @@ func (h *Handler) ExportSeries(c *gin.Context) {
 	}
 }
 
+//nolint:gosec
 func (h *Handler) ExportSeriesPDF(c *gin.Context) {
 	userID, ok := currentUserID(c)
 	if !ok {
@@ -93,7 +94,7 @@ func (h *Handler) ExportSeriesPDF(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "读取 PDF 失败", "data": nil})
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	c.Writer.Header().Set("Content-Type", "application/pdf")
 	c.Writer.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
@@ -151,7 +152,7 @@ func writeSeriesZip(w io.Writer, blogs []Blog) error {
 		if err != nil {
 			return fmt.Errorf("zip create entry %q: %w", filename, err)
 		}
-		if _, err := file.Write([]byte(fmt.Sprintf("# %s\n\n%s", title, blog.Content))); err != nil {
+		if _, err := fmt.Fprintf(file, "# %s\n\n%s", title, blog.Content); err != nil {
 			return fmt.Errorf("zip write entry %q: %w", filename, err)
 		}
 	}

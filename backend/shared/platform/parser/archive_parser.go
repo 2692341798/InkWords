@@ -140,7 +140,7 @@ func (p *ArchiveParser) parseArchiveEntry(entry *zip.File, archivePath string) (
 	if err != nil {
 		return "", fmt.Errorf("打开压缩包文件失败: %w", err)
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	if requiresDocParser(archivePath) {
 		return p.docParser.Parse(reader, archivePath)

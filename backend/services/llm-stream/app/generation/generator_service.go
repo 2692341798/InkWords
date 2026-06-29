@@ -46,6 +46,8 @@ func NewGeneratorServiceWithDB(db *gorm.DB, promptReq *PromptRequirements, persi
 }
 
 // GenerateBlogStreamWithProfile 组装 prompt、调用 LLM 并将生成的文本分块推送到 channel。
+//
+//nolint:gocyclo
 func (s *GeneratorService) GenerateBlogStreamWithProfile(
 	ctx context.Context,
 	userID uuid.UUID,

@@ -25,7 +25,7 @@ func TestConsumerHandleExportRequestedPersistsDownloadMetadata(t *testing.T) {
 			require.Equal(t, uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), taskID)
 			require.Equal(t, "/tmp/series.pdf", sourcePath)
 			require.Equal(t, "series.pdf", filename)
-			return TaskResult{
+			return TaskResult{ //nolint:gosec
 				FileToken:   "exp_pdf_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
 				Filename:    filename,
 				ContentType: "application/pdf",

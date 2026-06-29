@@ -36,7 +36,7 @@ func TestWriteSeriesZip_CreatesValidArchive(t *testing.T) {
 
 	rc, err := reader.File[0].Open()
 	require.NoError(t, err)
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 	body, err := io.ReadAll(rc)
 	require.NoError(t, err)
 	require.Contains(t, string(body), "# 系列入门")

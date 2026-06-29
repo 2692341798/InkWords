@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -74,7 +75,7 @@ func TestRegisterCoreRoutes_RegistersCoreServiceSurface(t *testing.T) {
 		{method: http.MethodGet, path: "/api/v1/tasks/task-1/stream"},
 		{method: http.MethodGet, path: "/api/v1/tasks/task-1/download"},
 	} {
-		req := httptest.NewRequest(tc.method, tc.path, nil)
+		req := httptest.NewRequestWithContext(context.Background(), tc.method, tc.path, nil)
 		resp := httptest.NewRecorder()
 		r.ServeHTTP(resp, req)
 		require.Equal(t, http.StatusOK, resp.Code, tc.path)

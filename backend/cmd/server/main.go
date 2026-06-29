@@ -225,7 +225,8 @@ func main() {
 
 	log.Printf("InkWords server is running on %s", server.Addr)
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		log.Fatalf("Server startup failed: %v", err)
+		stop()
+		log.Printf("Server startup failed: %v", err)
 	}
 }
 

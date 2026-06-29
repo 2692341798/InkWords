@@ -52,12 +52,13 @@ func (h *Handler) DownloadTask(c *gin.Context) {
 	}
 
 	filePath := filepath.Join(h.exportArtifactsDir, result.FileToken+".pdf")
+	//nolint:gosec
 	file, err := os.Open(filePath)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "download artifact missing"})
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	defer func() { _ = os.Remove(filePath) }()
 
 	c.Header("Content-Type", result.ContentType)

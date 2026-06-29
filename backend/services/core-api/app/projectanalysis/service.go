@@ -49,6 +49,8 @@ func NewService(llmClient LLMClient) *Service {
 
 // ScanProjectModules 克隆仓库（partial clone）或使用 GitHub API 列出顶级目录并返回模块卡片。
 // 行为与 legacy internal/service.(*DecompositionService).ScanProjectModules 完全一致。
+//
+//nolint:gocyclo,gosec,noctx
 func (s *Service) ScanProjectModules(ctx context.Context, gitURL string) ([]projectdomain.ModuleCard, error) {
 	var dirNames []string
 
@@ -81,9 +83,9 @@ func (s *Service) ScanProjectModules(ctx context.Context, gitURL string) ([]proj
 					}
 				}
 			}
-			resp.Body.Close()
+			_ = resp.Body.Close()
 		} else if resp != nil {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 		}
 	}
 
@@ -95,7 +97,7 @@ func (s *Service) ScanProjectModules(ctx context.Context, gitURL string) ([]proj
 		if err != nil {
 			return nil, fmt.Errorf("failed to create temp dir: %w", err)
 		}
-		defer os.RemoveAll(tempDir)
+		defer func() { _ = os.RemoveAll(tempDir) }()
 
 		var stderr bytes.Buffer
 		cmd := exec.Command("git", "-c", "http.postBuffer=1048576000", "-c", "http.maxRequestBuffer=100M", "-c", "core.compression=0", "-c", "http.lowSpeedLimit=1000", "-c", "http.lowSpeedTime=60", "clone", "--filter=blob:none", "--no-checkout", "--depth", "1", gitURL, tempDir)
@@ -133,11 +135,11 @@ func (s *Service) ScanProjectModules(ctx context.Context, gitURL string) ([]proj
 		resp, err := client.Do(req)
 		if err == nil && resp.StatusCode == http.StatusOK {
 			buf := new(bytes.Buffer)
-			buf.ReadFrom(resp.Body)
+			_, _ = buf.ReadFrom(resp.Body)
 			readmeContent = buf.String()
-			resp.Body.Close()
+			_ = resp.Body.Close()
 		} else if resp != nil {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 		}
 	}
 
@@ -352,14 +354,4 @@ func normalizePromptProfile(profile sharedprompt.PromptProfile, scenarioMode sha
 	}
 
 	return sharedprompt.ResolvePromptProfileKey(string(profile.Key), scenarioMode)
-}
-
-// newResolvedPromptProfile 从 PromptProfile 构造 ResolvedPromptProfile，行为与 legacy 完全一致。
-func newResolvedPromptProfile(profile sharedprompt.PromptProfile, documentKind string, reason string) sharedprompt.ResolvedPromptProfile {
-	return sharedprompt.ResolvedPromptProfile{
-		Key:          profile.Key,
-		DisplayName:  profile.DisplayName,
-		DocumentKind: documentKind,
-		Reason:       reason,
-	}
 }

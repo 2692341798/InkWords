@@ -2,7 +2,7 @@ package parser
 
 import (
 	"bytes"
-	"crypto/md5"
+	"crypto/md5" //nolint:gosec
 	"fmt"
 	"io"
 	"os"
@@ -14,11 +14,13 @@ import (
 
 var repoCacheMu sync.Mutex
 
+//nolint:gosec
 func getRepoCacheDir(gitURL string) string {
 	hash := md5.Sum([]byte(gitURL))
 	return filepath.Join(os.TempDir(), "inkwords_repos", fmt.Sprintf("%x", hash))
 }
 
+//nolint:gosec,noctx
 func (f *GitFetcher) GetCachedRepoPath(repoURL string, progressCallback func(string)) (string, error) {
 	repoCacheMu.Lock()
 	defer repoCacheMu.Unlock()

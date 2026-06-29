@@ -26,6 +26,7 @@ func BuildRouter() (*gin.Engine, *streamdomain.GormTaskStore, *streamdomain.Serv
 		return nil, nil, nil, err
 	}
 	if err := cache.InitRedis(); err != nil {
+		_ = err // Redis 是增强项而不是启动硬依赖
 	}
 
 	r := gin.New()

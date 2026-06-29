@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,14 +12,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+//nolint:gosec,noctx
 func TestGitFetcher_Fetch(t *testing.T) {
 	// Create a local git repository to test
 	tempDir, err := os.MkdirTemp("", "inkwords-test-repo-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	// Initialize git repo
-	cmd := exec.Command("git", "init")
+	cmd := exec.CommandContext(context.Background(), "git", "init")
 	cmd.Dir = tempDir
 	err = cmd.Run()
 	require.NoError(t, err)
@@ -42,7 +44,7 @@ func TestGitFetcher_Fetch(t *testing.T) {
 	require.NoError(t, err)
 
 	// Commit files
-	cmd = exec.Command("git", "add", ".")
+	cmd = exec.CommandContext(context.Background(), "git", "add", ".")
 	cmd.Dir = tempDir
 	err = cmd.Run()
 	require.NoError(t, err)
@@ -91,10 +93,11 @@ func TestGitFetcher_Fetch(t *testing.T) {
 	assert.NotContains(t, content, "node_modules")
 }
 
+//nolint:gosec,noctx
 func TestGitFetcher_FetchWithSubDir(t *testing.T) {
 	tempDir, err := os.MkdirTemp("", "inkwords-test-repo-subdir-*")
 	require.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	cmd := exec.Command("git", "init")
 	cmd.Dir = tempDir
@@ -146,6 +149,7 @@ func TestGitFetcher_FetchWithSubDir(t *testing.T) {
 	assert.NotContains(t, allText, "--- File: other.go ---")
 }
 
+//nolint:gosec,noctx
 func TestGitFetcher_FetchWithSubDir_UsesSparseCheckout(t *testing.T) {
 	data, err := os.ReadFile("git_fetcher.go")
 	require.NoError(t, err)

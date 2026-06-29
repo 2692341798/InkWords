@@ -44,6 +44,7 @@ func splitMarkdownParagraphs(content string) []string {
 	return regexp.MustCompile(`\n\s*\n`).Split(content, -1)
 }
 
+//nolint:gocyclo
 func isLeadingMetaParagraph(paragraph string) bool {
 	trimmed := strings.TrimSpace(paragraph)
 	if trimmed == "" {

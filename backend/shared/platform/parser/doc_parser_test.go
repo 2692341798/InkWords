@@ -67,6 +67,7 @@ func TestIsLowQualityPDFExtraction_AllowsReadableText(t *testing.T) {
 	assert.False(t, isLowQualityPDFExtraction(readable))
 }
 
+//nolint:gosec
 func TestResolveReadablePDFText_UsesPdftotextFallbackForGarbledPrimary(t *testing.T) {
 	tempDir := t.TempDir()
 	scriptPath := filepath.Join(tempDir, "pdftotext")

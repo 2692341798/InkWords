@@ -27,6 +27,7 @@ var backendServices = []string{
 }
 
 func TestServiceDockerfilesAreOwnedByEachService(t *testing.T) {
+	//nolint:gosec
 	composeBytes, err := os.ReadFile(filepath.Join("..", "..", "docker-compose.yml"))
 	if err != nil {
 		t.Fatalf("read docker-compose.yml: %v", err)
@@ -36,6 +37,7 @@ func TestServiceDockerfilesAreOwnedByEachService(t *testing.T) {
 	for _, service := range backendServices {
 		t.Run(service, func(t *testing.T) {
 			dockerfilePath := filepath.Join(service, "Dockerfile")
+			//nolint:gosec
 			contentsBytes, err := os.ReadFile(dockerfilePath)
 			if err != nil {
 				t.Fatalf("read %s: %v", dockerfilePath, err)
@@ -72,6 +74,7 @@ func TestServicesDoNotImportPeerServicePackages(t *testing.T) {
 					return nil
 				}
 
+				//nolint:gosec
 				contentsBytes, err := os.ReadFile(path)
 				if err != nil {
 					return err
@@ -114,6 +117,7 @@ func TestServicesUseSharedHTTPRuntimeContract(t *testing.T) {
 					return nil
 				}
 
+				//nolint:gosec
 				contentsBytes, err := os.ReadFile(path)
 				if err != nil {
 					return err
@@ -151,6 +155,7 @@ func TestWorkerDomainsDoNotDependOnLegacyTaskDomain(t *testing.T) {
 					return nil
 				}
 
+				//nolint:gosec
 				contentsBytes, err := os.ReadFile(path)
 				if err != nil {
 					return err
@@ -179,6 +184,7 @@ func TestReviewDomainOwnsReviewModels(t *testing.T) {
 			return nil
 		}
 
+		//nolint:gosec
 		contentsBytes, err := os.ReadFile(path)
 		if err != nil {
 			return err
@@ -205,6 +211,7 @@ func TestParserServiceUsesSharedParserPlatform(t *testing.T) {
 			return nil
 		}
 
+		//nolint:gosec
 		contentsBytes, err := os.ReadFile(path)
 		if err != nil {
 			return err
@@ -231,6 +238,7 @@ func TestReviewServiceDoesNotImportLegacyInternalPackages(t *testing.T) {
 			return nil
 		}
 
+		//nolint:gosec
 		contentsBytes, err := os.ReadFile(path)
 		if err != nil {
 			return err
@@ -261,6 +269,7 @@ func TestExportOwnedPackagesDoNotImportLegacyInternalPackages(t *testing.T) {
 					return nil
 				}
 
+				//nolint:gosec
 				contentsBytes, err := os.ReadFile(path)
 				if err != nil {
 					return err
@@ -289,6 +298,7 @@ func TestParserServiceDoesNotImportLegacyInternalPackages(t *testing.T) {
 			return nil
 		}
 
+		//nolint:gosec
 		contentsBytes, err := os.ReadFile(path)
 		if err != nil {
 			return err
@@ -315,6 +325,7 @@ func TestCoreAPITaskDomainDoesNotImportLegacyInternalPackages(t *testing.T) {
 			return nil
 		}
 
+		//nolint:gosec
 		contentsBytes, err := os.ReadFile(path)
 		if err != nil {
 			return err
@@ -348,6 +359,7 @@ func TestCoreAPIOwnedUserFacingDomainsDoNotImportLegacyInternalPackages(t *testi
 					return nil
 				}
 
+				//nolint:gosec
 				contentsBytes, err := os.ReadFile(path)
 				if err != nil {
 					return err
@@ -376,6 +388,7 @@ func TestLLMStreamDoesNotImportLegacyInternalPackages(t *testing.T) {
 			return nil
 		}
 
+		//nolint:gosec
 		contentsBytes, err := os.ReadFile(path)
 		if err != nil {
 			return err
@@ -402,6 +415,7 @@ func TestCoreAPIInfraDoesNotImportLegacyInternalPackages(t *testing.T) {
 			return nil
 		}
 
+		//nolint:gosec
 		contentsBytes, err := os.ReadFile(path)
 		if err != nil {
 			return err
@@ -428,6 +442,7 @@ func TestCoreAPIDoesNotImportLegacyInternalPackages(t *testing.T) {
 			return nil
 		}
 
+		//nolint:gosec
 		contentsBytes, err := os.ReadFile(path)
 		if err != nil {
 			return err
@@ -453,6 +468,7 @@ func TestCmdServerDoesNotImportLegacyInternalBusinessPackages(t *testing.T) {
 			return nil
 		}
 
+		//nolint:gosec
 		contentsBytes, err := os.ReadFile(path)
 		if err != nil {
 			return err

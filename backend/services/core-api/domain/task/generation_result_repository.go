@@ -3,6 +3,7 @@ package task
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -29,7 +30,7 @@ func (r *GormGenerationResultRepository) PersistGenerationResult(ctx context.Con
 	}
 	switch decoded.TaskSubtype {
 	case "generate_single":
-		blogID, err := readPayloadUUID(decoded.Payload, "blog_id")
+		blogID, err := readPayloadUUID(decoded.Payload)
 		if err != nil {
 			return err
 		}
@@ -48,7 +49,7 @@ func (r *GormGenerationResultRepository) PersistGenerationResult(ctx context.Con
 		}
 		return updateBlogByID(ctx, r.db, blogID, updates, "update generated blog")
 	case "continue":
-		blogID, err := readPayloadUUID(decoded.Payload, "blog_id")
+		blogID, err := readPayloadUUID(decoded.Payload)
 		if err != nil {
 			return err
 		}
@@ -60,7 +61,7 @@ func (r *GormGenerationResultRepository) PersistGenerationResult(ctx context.Con
 		if !ok {
 			return fmt.Errorf("read parent_blog: invalid payload")
 		}
-		parentID, err := readPayloadUUID(parentRaw, "blog_id")
+		parentID, err := readPayloadUUID(parentRaw)
 		if err != nil {
 			return err
 		}
@@ -84,7 +85,7 @@ func (r *GormGenerationResultRepository) PersistGenerationResult(ctx context.Con
 				if !ok {
 					return fmt.Errorf("read chapter: invalid payload")
 				}
-				blogID, err := readPayloadUUID(chapter, "blog_id")
+				blogID, err := readPayloadUUID(chapter)
 				if err != nil {
 					return err
 				}
@@ -152,7 +153,7 @@ func (r *GormGenerationResultRepository) usageOwnerUserID(ctx context.Context, t
 	if err == nil {
 		var blog blogRecord
 		if err := r.db.WithContext(ctx).Select("id", "user_id").First(&blog, "id = ?", blogID).Error; err != nil {
-			if err != gorm.ErrRecordNotFound {
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
 				return uuid.Nil, fmt.Errorf("load generated blog owner: %w", err)
 			}
 		} else {
@@ -162,7 +163,7 @@ func (r *GormGenerationResultRepository) usageOwnerUserID(ctx context.Context, t
 
 	var task JobTask
 	if err := r.db.WithContext(ctx).Select("id", "requested_by").First(&task, "id = ?", taskID).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return uuid.Nil, fmt.Errorf("load generation task owner: task %s not found", taskID)
 		}
 		return uuid.Nil, fmt.Errorf("load generation task owner: %w", err)
@@ -176,10 +177,10 @@ func usageOwnerBlogID(decoded GenerationResult) (uuid.UUID, error) {
 		if !ok {
 			return uuid.Nil, fmt.Errorf("read parent_blog: invalid payload")
 		}
-		return readPayloadUUID(parentRaw, "blog_id")
+		return readPayloadUUID(parentRaw)
 	}
 
-	return readPayloadUUID(decoded.Payload, "blog_id")
+	return readPayloadUUID(decoded.Payload)
 }
 
 func updateBlogByID(ctx context.Context, db *gorm.DB, blogID uuid.UUID, updates map[string]any, action string) error {
@@ -206,11 +207,11 @@ func decodeGenerationResult(result map[string]any) (GenerationResult, error) {
 	return decoded, nil
 }
 
-func readPayloadUUID(payload map[string]any, key string) (uuid.UUID, error) {
-	value := readPayloadString(payload, key)
+func readPayloadUUID(payload map[string]any) (uuid.UUID, error) {
+	value := readPayloadString(payload, "blog_id")
 	parsed, err := uuid.Parse(value)
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("parse %s: %w", key, err)
+		return uuid.Nil, fmt.Errorf("parse blog_id: %w", err)
 	}
 	return parsed, nil
 }

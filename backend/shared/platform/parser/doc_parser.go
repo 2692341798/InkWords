@@ -51,8 +51,8 @@ func (p *DocParser) Parse(src io.Reader, filename string) (string, error) {
 
 	// 核心策略：阅后即焚
 	defer func() {
-		tempFile.Close()
-		os.Remove(tempFile.Name())
+		_ = tempFile.Close()
+		_ = os.Remove(tempFile.Name())
 	}()
 
 	// Copy data to temp file
@@ -93,7 +93,7 @@ func (p *DocParser) parseDocx(file *os.File) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to open docx file: %w", err)
 	}
-	defer doc.Close()
+	defer func() { _ = doc.Close() }()
 
 	text := doc.Editable().GetContent()
 	// Usually text contains raw xml or plain text, wait, GetContent() returns a string
@@ -111,12 +111,15 @@ func stripXMLTags(content string) string {
 	var buf bytes.Buffer
 	inTag := false
 	for _, r := range content {
-		if r == '<' {
+		switch r {
+		case '<':
 			inTag = true
-		} else if r == '>' {
+		case '>':
 			inTag = false
-		} else if !inTag {
-			buf.WriteRune(r)
+		default:
+			if !inTag {
+				buf.WriteRune(r)
+			}
 		}
 	}
 	return buf.String()
@@ -139,7 +142,7 @@ func (p *DocParser) parsePDF(file *os.File, size int64) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("提取 PDF 文本失败: %w", err)
 	}
-	buf.ReadFrom(b)
+	_, _ = buf.ReadFrom(b)
 
 	return resolveReadablePDFText(strings.TrimSpace(buf.String()), file.Name())
 }
@@ -190,6 +193,7 @@ func resolveReadablePDFText(primaryText, filePath string) (string, error) {
 	return "", fmt.Errorf("无法可靠解析该 PDF 文本：检测到严重乱码，可能是扫描版、嵌入字体或当前解析库不兼容。请尝试导出为可复制文本的 PDF，或改用 DOCX/Markdown")
 }
 
+//nolint:gosec,noctx
 func extractPDFTextWithPdftotext(filePath string) (string, error) {
 	cmd := exec.Command("pdftotext", "-enc", "UTF-8", "-layout", filePath, "-")
 	output, err := cmd.Output()

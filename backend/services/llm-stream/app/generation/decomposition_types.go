@@ -246,21 +246,6 @@ func (c *seriesTaskResultCollector) SetParentContent(content string) {
 	c.EstimatedTokens += len([]rune(content)) * 2
 }
 
-// outlineResult 表示生成的大纲结果。
-type outlineResult struct {
-	SeriesTitle           string                       `json:"series_title"`
-	Chapters              []sharedblog.Chapter         `json:"chapters"`
-	ParentID              string                       `json:"parent_id,omitempty"`
-	ResolvedPromptProfile prompt.ResolvedPromptProfile `json:"resolved_prompt_profile"`
-}
-
-// moduleCard 表示从仓库中提取的单个模块/目录。
-type moduleCard struct {
-	Path        string `json:"path"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-}
-
 // seriesQualityPipelineInput 质量流水线输入。
 type seriesQualityPipelineInput struct {
 	SeriesTitle          string

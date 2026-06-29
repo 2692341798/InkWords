@@ -51,7 +51,7 @@ func newQualityPipelineHarness(t *testing.T, jsonResponses, streamResponses []st
 		streamResponses: append([]string(nil), streamResponses...),
 	}
 	h.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		defer r.Body.Close()
+		defer func() { _ = r.Body.Close() }()
 		var request struct {
 			Stream         bool              `json:"stream"`
 			ResponseFormat map[string]string `json:"response_format"`
@@ -62,15 +62,15 @@ func newQualityPipelineHarness(t *testing.T, jsonResponses, streamResponses []st
 		if request.Stream {
 			require.NotEmpty(t, h.streamResponses)
 			w.Header().Set("Content-Type", "text/event-stream")
-			fmt.Fprintf(w, "data: {\"choices\":[{\"delta\":{\"content\":%q},\"finish_reason\":null}]}\n\n", h.streamResponses[0])
-			fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n")
-			fmt.Fprint(w, "data: {\"choices\":[],\"usage\":{\"prompt_tokens\":1200,\"completion_tokens\":500,\"prompt_cache_hit_tokens\":900,\"prompt_cache_miss_tokens\":300}}\n\n")
+			_, _ = fmt.Fprintf(w, "data: {\"choices\":[{\"delta\":{\"content\":%q},\"finish_reason\":null}]}\n\n", h.streamResponses[0])
+			_, _ = fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n")
+			_, _ = fmt.Fprint(w, "data: {\"choices\":[],\"usage\":{\"prompt_tokens\":1200,\"completion_tokens\":500,\"prompt_cache_hit_tokens\":900,\"prompt_cache_miss_tokens\":300}}\n\n")
 			h.streamResponses = h.streamResponses[1:]
 			return
 		}
 		require.Equal(t, "json_object", request.ResponseFormat["type"])
 		require.NotEmpty(t, h.jsonResponses)
-		fmt.Fprintf(w, `{"choices":[{"message":{"content":%q}}]}`, h.jsonResponses[0])
+		_, _ = fmt.Fprintf(w, `{"choices":[{"message":{"content":%q}}]}`, h.jsonResponses[0])
 		h.jsonResponses = h.jsonResponses[1:]
 	}))
 	h.service.llmClient.APIURL = h.server.URL

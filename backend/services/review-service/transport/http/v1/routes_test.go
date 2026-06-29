@@ -37,14 +37,14 @@ func TestRegisterReviewRoutes_RegistersReviewRoutes(t *testing.T) {
 		{method: http.MethodPost, path: "/api/v1/review/sessions/123e4567-e89b-12d3-a456-426614174000/hint"},
 		{method: http.MethodPost, path: "/api/v1/review/sessions/123e4567-e89b-12d3-a456-426614174000/finish"},
 	} {
-		req := httptest.NewRequest(tc.method, tc.path, nil)
+		req := httptest.NewRequestWithContext(context.Background(), tc.method, tc.path, nil)
 		resp := httptest.NewRecorder()
 		r.ServeHTTP(resp, req)
 		require.NotEqual(t, http.StatusNotFound, resp.Code)
 	}
 
 	resp := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/blogs/1/export", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/blogs/1/export", nil)
 	r.ServeHTTP(resp, req)
 	require.Equal(t, http.StatusNotFound, resp.Code)
 }

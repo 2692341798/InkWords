@@ -2,6 +2,7 @@ package parse
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -76,7 +77,7 @@ func TestHandler_Parse_RejectsWhenQuotaExceeded(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, writer.Close())
 
-	request := httptest.NewRequest(http.MethodPost, "/api/v1/project/parse", &body)
+	request := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/project/parse", &body)
 	request.Header.Set("Content-Type", writer.FormDataContentType())
 	recorder := httptest.NewRecorder()
 
@@ -125,7 +126,7 @@ func performMultipartParseRequest(t *testing.T, handler *Handler, filename strin
 	require.NoError(t, err)
 	require.NoError(t, writer.Close())
 
-	request := httptest.NewRequest(http.MethodPost, "/api/v1/project/parse", &body)
+	request := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/project/parse", &body)
 	request.Header.Set("Content-Type", writer.FormDataContentType())
 	recorder := httptest.NewRecorder()
 

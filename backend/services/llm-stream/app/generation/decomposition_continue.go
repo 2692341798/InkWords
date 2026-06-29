@@ -15,6 +15,8 @@ import (
 )
 
 // ContinueGeneration 加载已有博客并通过 LLM 流式续写，将新内容推送到 chunkChan。
+//
+//nolint:gocyclo
 func (s *DecompositionService) ContinueGeneration(ctx context.Context, userID uuid.UUID, blogID uuid.UUID, chunkChan chan<- string, errChan chan<- error) {
 	defer close(chunkChan)
 	defer close(errChan)

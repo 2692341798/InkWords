@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -18,12 +19,12 @@ func TestRegisterParserRoutes_OnlyRegistersParseRoute(t *testing.T) {
 	})
 
 	resp := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/project/parse", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/project/parse", nil)
 	r.ServeHTTP(resp, req)
 	require.Equal(t, http.StatusOK, resp.Code)
 
 	resp = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodPost, "/api/v1/project/scan", nil)
+	req = httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/project/scan", nil)
 	r.ServeHTTP(resp, req)
 	require.Equal(t, http.StatusNotFound, resp.Code)
 }

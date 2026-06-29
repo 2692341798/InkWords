@@ -49,7 +49,8 @@ func main() {
 	}()
 
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		log.Fatalf("Server startup failed: %v", err)
+		stopConsumer()
+		log.Printf("Server startup failed: %v", err)
 	}
 }
 

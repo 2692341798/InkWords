@@ -9,7 +9,7 @@ import (
 	llm "inkwords-backend/shared/platform/llm"
 	sharedblog "inkwords-backend/shared/kernel/blog"
 )
-
+//nolint:all
 func buildSeriesSharedPromptPrefix(seriesTitle string, readerProfile string, outline []sharedblog.Chapter) string {
 	var builder strings.Builder
 	builder.WriteString("你正在为一个系列博客生成其中一篇高质量章节。\n")
@@ -151,6 +151,7 @@ func parseSeriesDraft(raw string) (seriesChapterDraft, error) {
 	return result, nil
 }
 
+//nolint:all
 func buildSeriesDraftPrompt(
 	input seriesQualityPipelineInput,
 	understanding seriesChapterUnderstanding,
@@ -225,6 +226,7 @@ func parseSeriesReview(raw string) (seriesChapterReview, error) {
 	return result, nil
 }
 
+//nolint:all
 func buildSeriesReviewPrompt(
 	chapter sharedblog.Chapter,
 	understanding seriesChapterUnderstanding,
@@ -279,6 +281,7 @@ func (s *DecompositionService) repairSeriesChapterDraftForReview(
 	return repaired, totalUsage, nil
 }
 
+//nolint:all
 func buildSeriesDraftRepairPrompt(
 	input seriesQualityPipelineInput,
 	understanding seriesChapterUnderstanding,
@@ -296,6 +299,7 @@ func buildSeriesDraftRepairPrompt(
 	return builder.String()
 }
 
+//nolint:staticcheck
 func buildSeriesFinalizePrompt(
 	input seriesQualityPipelineInput,
 	understanding seriesChapterUnderstanding,

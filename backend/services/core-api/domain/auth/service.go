@@ -66,7 +66,7 @@ func (s *Service) HandleCallback(ctx context.Context, provider, code string) (st
 
 	token, err := config.Exchange(ctx, code)
 	if err != nil {
-		return "", nil, fmt.Errorf("%w: failed to exchange token: %v", ErrOAuthCallback, err)
+		return "", nil, fmt.Errorf("%w: failed to exchange token: %w", ErrOAuthCallback, err)
 	}
 
 	var user *User
@@ -82,7 +82,7 @@ func (s *Service) HandleCallback(ctx context.Context, provider, code string) (st
 
 	jwtToken, err := jwt.GenerateToken(user.ID, 24*time.Hour)
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to generate jwt: %v", err)
+		return "", nil, fmt.Errorf("failed to generate jwt: %w", err)
 	}
 
 	return jwtToken, user, nil
@@ -100,7 +100,7 @@ func (s *Service) fetchGithubUser(ctx context.Context, accessToken string) (*Use
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("github api returned status: %d", resp.StatusCode)

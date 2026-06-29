@@ -32,20 +32,20 @@ func (r *generatedPersistenceRecorder) SaveGeneratedBlog(_ context.Context, inpu
 func newGenerationLLMServer(t *testing.T, streamContent string) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		defer r.Body.Close()
+		defer func() { _ = r.Body.Close() }()
 		var request struct {
 			Stream bool `json:"stream"`
 		}
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&request))
 		if request.Stream {
 			w.Header().Set("Content-Type", "text/event-stream")
-			fmt.Fprintf(w, "data: {\"choices\":[{\"delta\":{\"content\":%q},\"finish_reason\":null}]}\n\n", streamContent)
-			fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n")
-			fmt.Fprint(w, "data: {\"choices\":[],\"usage\":{\"prompt_tokens\":20,\"completion_tokens\":10,\"prompt_cache_hit_tokens\":12,\"prompt_cache_miss_tokens\":8}}\n\n")
+			_, _ = fmt.Fprintf(w, "data: {\"choices\":[{\"delta\":{\"content\":%q},\"finish_reason\":null}]}\n\n", streamContent)
+			_, _ = fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n")
+			_, _ = fmt.Fprint(w, "data: {\"choices\":[],\"usage\":{\"prompt_tokens\":20,\"completion_tokens\":10,\"prompt_cache_hit_tokens\":12,\"prompt_cache_miss_tokens\":8}}\n\n")
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"choices":[{"message":{"content":"[\"Go\",\"Docker\"]"}}]}`)
+		_, _ = fmt.Fprint(w, `{"choices":[{"message":{"content":"[\"Go\",\"Docker\"]"}}]}`)
 	}))
 }
 

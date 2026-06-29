@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -32,7 +33,7 @@ func TestRegisterExportRoutes_OnlyRegistersExportRoutes(t *testing.T) {
 		{method: http.MethodPost, path: "/api/v1/blogs/1/export/obsidian/series", code: http.StatusOK},
 		{method: http.MethodGet, path: "/api/v1/blogs", code: http.StatusNotFound},
 	} {
-		req := httptest.NewRequest(tc.method, tc.path, nil)
+		req := httptest.NewRequestWithContext(context.Background(), tc.method, tc.path, nil)
 		resp := httptest.NewRecorder()
 		r.ServeHTTP(resp, req)
 		require.Equal(t, tc.code, resp.Code)
