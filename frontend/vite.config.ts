@@ -9,7 +9,8 @@ const frontendRootDir = path.dirname(fileURLToPath(import.meta.url))
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  plugins: [react(), tailwindcss()] as any,
   resolve: {
     alias: {
       '@': path.resolve(frontendRootDir, './src'),

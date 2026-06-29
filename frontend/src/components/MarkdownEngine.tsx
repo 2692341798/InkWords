@@ -1,125 +1,74 @@
-import React, { useEffect, useRef } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import mermaid from 'mermaid';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { visit } from 'unist-util-visit';
+import React, { Suspense } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import { visit } from 'unist-util-visit'
 
-// Initialize mermaid
-mermaid.initialize({
-  startOnLoad: false,
-  theme: 'default',
-  securityLevel: 'loose',
-  suppressErrorRendering: true, // Prevent "Syntax error in text" from rendering on the page
-  darkMode: false,
-  themeVariables: {
-    background: '#ffffff',
-  }
-});
+const LazyMermaidBlock = React.lazy(() => import('./markdown/MermaidBlock'))
+const LazyCodeBlock = React.lazy(() => import('./markdown/CodeBlock'))
 
-// Remark plugin to strip style and classDef from mermaid blocks
+const MermaidSkeleton = () => (
+  <div className="mermaid-container flex justify-center bg-white p-6 rounded-xl border border-zinc-200 shadow-sm overflow-x-auto">
+    <div className="flex items-center gap-2 text-sm text-zinc-400">
+      <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+      </svg>
+      加载图表中...
+    </div>
+  </div>
+)
+
+const CodeSkeleton = ({ language }: { language: string }) => (
+  <pre className="rounded-xl border border-zinc-200 shadow-sm p-4 text-sm text-zinc-400 bg-zinc-50">
+    <code>{language ? `加载 ${language} 代码中...` : '加载代码中...'}</code>
+  </pre>
+)
+
 const remarkStripMermaidStyles = () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (tree: any) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     visit(tree, 'code', (node: any) => {
       if (node.lang === 'mermaid' && node.value) {
-        // Remove style and classDef lines to ensure a clean default theme
         node.value = node.value
           .split('\n')
-          .filter((line: string) => !line.trim().startsWith('style ') && !line.trim().startsWith('classDef ') && !line.trim().startsWith('linkStyle '))
-          .join('\n');
+          .filter(
+            (line: string) =>
+              !line.trim().startsWith('style ') &&
+              !line.trim().startsWith('classDef ') &&
+              !line.trim().startsWith('linkStyle '),
+          )
+          .join('\n')
       }
-    });
-  };
-};
+    })
+  }
+}
 
-// Rehype plugin to add source line numbers to elements
 const rehypeSourceLine = () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (tree: any) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     visit(tree, 'element', (node: any) => {
       if (node.position?.start?.line) {
-        node.properties = node.properties || {};
-        node.properties['data-source-line'] = node.position.start.line;
+        node.properties = node.properties || {}
+        node.properties['data-source-line'] = node.position.start.line
       }
-    });
-  };
-};
-
-const MermaidBlock: React.FC<{ chart: string }> = ({ chart }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (containerRef.current && chart) {
-      const renderChart = async () => {
-        try {
-          // Add a unique ID for each chart to avoid conflicts
-          const id = `mermaid-${Math.random().toString(36).substr(2, 9)}`;
-          // Validate diagram type to prevent rendering errors
-          let trimmedChart = chart.trim();
-          
-          // Auto-fix common mermaid syntax issues (e.g. unquoted special characters in node text)
-          // Matches any node definition like A[something] where something doesn't contain quotes
-          trimmedChart = trimmedChart.replace(/\[([^"\]]+)\]/g, (match, p1) => {
-            if (p1.includes('(') || p1.includes(')') || p1.includes('^')) {
-              return `["${p1}"]`;
-            }
-            return match;
-          });
-
-          if (!trimmedChart || trimmedChart === 'undefined') {
-            throw new Error('Empty or undefined diagram text');
-          }
-          
-          // Use suppressErrors to prevent mermaid from throwing errors directly to console/UI
-          mermaid.mermaidAPI.getConfig().suppressErrorRendering = true;
-          
-          const { svg } = await mermaid.render(id, trimmedChart);
-          if (containerRef.current) {
-            containerRef.current.innerHTML = svg;
-          }
-        } catch (err: unknown) {
-          // Do not log the error to the console during streaming as it's expected
-          // that incomplete mermaid syntax will throw errors until fully generated.
-          // If the stream is finished and it still fails, show a fallback code block
-          console.debug('Mermaid rendering failed:', err);
-          if (containerRef.current) {
-            containerRef.current.innerHTML = `
-              <div class="w-full">
-                <div class="text-xs text-red-500 mb-2 font-semibold flex items-center gap-1">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-                  Mermaid 渲染失败: 语法错误
-                </div>
-                <pre class="text-xs text-zinc-600 overflow-auto p-4 bg-zinc-50 rounded-lg border border-zinc-200"><code>${chart.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code></pre>
-              </div>
-            `;
-          }
-        }
-      };
-      renderChart();
-    }
-  }, [chart]);
-
-  return <div className="mermaid-container flex justify-center bg-white p-6 rounded-xl border border-zinc-200 shadow-sm overflow-x-auto" ref={containerRef} />;
-};
+    })
+  }
+}
 
 interface MarkdownEngineProps {
-  content: string;
+  content: string
 }
 
 export const MarkdownEngine: React.FC<MarkdownEngineProps> = ({ content }) => {
-  // Fix line breaks inside image or link URLs generated by LLM
-  const processedContent = content.replace(/(!?\[[^\]]*\])\(([^)]+)\)/g, (match, p1, p2) => {
-    // Only fix URLs that look like links (starting with http, /, or ./)
-    const trimmedUrl = p2.trim();
+  const processedContent = content.replace(/(!?\[[^\]]*\])\(([^)]+)\)/g, (_match, p1, p2) => {
+    const trimmedUrl = p2.trim()
     if (trimmedUrl.startsWith('http') || trimmedUrl.startsWith('/') || trimmedUrl.startsWith('./')) {
-      return `${p1}(${p2.replace(/\s*\n\s*/g, '')})`;
+      return `${p1}(${p2.replace(/\s*\n\s*/g, '')})`
     }
-    return match;
-  });
+    return _match
+  })
 
   return (
     <div className="prose prose-sm md:prose-base max-w-none dark:prose-invert">
@@ -127,54 +76,54 @@ export const MarkdownEngine: React.FC<MarkdownEngineProps> = ({ content }) => {
         remarkPlugins={[remarkGfm, remarkStripMermaidStyles]}
         rehypePlugins={[rehypeSourceLine]}
         components={{
-          // Override pre to remove the default prose black background
           pre(props) {
             // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
-            const { node, className, children, ...rest } = props as any;
+            const { node, className, children, ...rest } = props as any
             return (
               <div className={`not-prose my-6 ${className || ''}`} {...rest}>
                 {children}
               </div>
-            );
+            )
           },
           code(props) {
             // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any
-            const { children, className, ref, node, ...rest } = props as any;
-            const match = /language-(\w+)/.exec(className || '');
-            const isBlock = String(children).includes('\n');
-            
-            // Render Mermaid blocks using our custom component
+            const { children, className, ref, node, ...rest } = props as any
+            const match = /language-(\w+)/.exec(className || '')
+            const isBlock = String(children).includes('\n')
+
             if (match && match[1] === 'mermaid') {
-              const diagramText = String(children).replace(/\n$/, '');
+              const diagramText = String(children).replace(/\n$/, '')
               if (!diagramText || diagramText === 'undefined') {
-                return <code className={className} {...rest}>{children}</code>;
+                return <code className={className} {...rest}>{children}</code>
               }
-              return <MermaidBlock chart={diagramText} />;
+              return (
+                <Suspense fallback={<MermaidSkeleton />}>
+                  <LazyMermaidBlock chart={diagramText} />
+                </Suspense>
+              )
             }
 
             if (match || isBlock) {
               return (
-                <SyntaxHighlighter
-                  {...rest}
-                  PreTag="div"
-                  children={String(children).replace(/\n$/, '')}
-                  language={match ? match[1] : 'text'}
-                  style={oneLight}
-                  className="rounded-xl border border-zinc-200 shadow-sm text-sm !my-0"
-                />
-              );
+                <Suspense fallback={<CodeSkeleton language={match ? match[1] : ''} />}>
+                  <LazyCodeBlock
+                    language={match ? match[1] : 'text'}
+                    code={String(children).replace(/\n$/, '')}
+                  />
+                </Suspense>
+              )
             }
 
             return (
               <code ref={ref} {...rest} className={className}>
                 {children}
               </code>
-            );
-          }
+            )
+          },
         }}
       >
         {processedContent}
       </ReactMarkdown>
     </div>
-  );
-};
+  )
+}
