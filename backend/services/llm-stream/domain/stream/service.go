@@ -6,27 +6,63 @@ import (
 
 	"github.com/google/uuid"
 
-	"inkwords-backend/internal/service"
 	sharedblog "inkwords-backend/shared/kernel/blog"
 	"inkwords-backend/shared/kernel/prompt"
 )
 
-type Service struct {
-	generator     *service.GeneratorService
-	decomposition *service.DecompositionService
-	userService   *service.UserService
+// GenerateSingleResult 表示单篇生成完成后交给调用方的结构化结果。
+type GenerateSingleResult struct {
+	ResultJSON []byte
 }
 
-func NewService(generator *service.GeneratorService, decomposition *service.DecompositionService, userService *service.UserService) *Service {
+// ContinueTaskResultSnapshot 表示续写任务完成后交给调用方的业务事实快照。
+type ContinueTaskResultSnapshot struct {
+	BlogID          string
+	AppendedContent string
+	FinalContent    string
+	EstimatedTokens int
+	Usage           TaskResultUsage
+}
+
+// Generator 定义单篇博客生成与润色的能力边界。
+type Generator interface {
+	GenerateBlogStreamWithProfile(ctx context.Context, userID uuid.UUID, sourceContent string, sourceType string, scenarioMode prompt.ScenarioMode, style string, profile prompt.PromptProfile, chunkChan chan<- string, errChan chan<- error)
+	GeneratePolishDraftStream(ctx context.Context, title string, content string, chunkChan chan<- string, errChan chan<- error)
+	BuildGenerateSingleTaskResult(ctx context.Context, sourceType string, content string) (GenerateSingleResult, error)
+}
+
+// Decomposition 定义系列生成、续写、分析与扫描的能力边界。
+type Decomposition interface {
+	GenerateSeriesWithProfile(ctx context.Context, userID uuid.UUID, parentID uuid.UUID, seriesTitle string, outline []sharedblog.Chapter, sourceContent string, sourceType string, gitURL string, scenarioMode prompt.ScenarioMode, style string, profile prompt.PromptProfile, chunkChan chan<- string, errChan chan<- error)
+	ContinueGeneration(ctx context.Context, userID uuid.UUID, blogID uuid.UUID, chunkChan chan<- string, errChan chan<- error)
+	BuildContinueTaskResult(ctx context.Context, userID uuid.UUID, blogID uuid.UUID, appendedContent string) (ContinueTaskResultSnapshot, error)
+	TakeGenerateSeriesTaskResult(parentID uuid.UUID) ([]byte, error)
+	AnalyzeStream(ctx context.Context, userID uuid.UUID, gitURL string, selectedModules []string, scenarioMode prompt.ScenarioMode, progressChan chan<- string, errChan chan<- error)
+	AnalyzeFileStream(ctx context.Context, userID uuid.UUID, sourceContent string, scenarioMode prompt.ScenarioMode, progressChan chan<- string, errChan chan<- error)
+	ScanProjectModulesWithProgress(ctx context.Context, gitURL string, progressChan chan<- string) ([]ModuleCard, error)
+}
+
+// QuotaChecker 定义用量配额检查的能力边界。
+type QuotaChecker interface {
+	CheckQuota(uid uuid.UUID) error
+}
+
+type Service struct {
+	generator    Generator
+	decomposition Decomposition
+	quotaChecker QuotaChecker
+}
+
+func NewService(generator Generator, decomposition Decomposition, quotaChecker QuotaChecker) *Service {
 	return &Service{
-		generator:     generator,
+		generator:    generator,
 		decomposition: decomposition,
-		userService:   userService,
+		quotaChecker: quotaChecker,
 	}
 }
 
 func (s *Service) CheckQuota(uid uuid.UUID) error {
-	return s.userService.CheckQuota(uid)
+	return s.quotaChecker.CheckQuota(uid)
 }
 
 func (s *Service) Generate(ctx context.Context, userID uuid.UUID, req GenerateRequest, chunkChan chan<- string, errChan chan<- error) {
