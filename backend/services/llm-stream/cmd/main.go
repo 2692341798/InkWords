@@ -117,17 +117,23 @@ func startGenerationTaskConsumer(
 				var message sharedrabbitmq.GenerationRequestedMessage
 				if err := json.Unmarshal(delivery.Body, &message); err != nil {
 					log.Printf("invalid generation message payload: %v", err)
-					_ = delivery.Ack(false)
+					if ackErr := ackDelivery(delivery, "malformed generation message"); ackErr != nil {
+						log.Printf("generation delivery acknowledgement failed: %v", ackErr)
+					}
 					continue
 				}
 
 				if err := consumer.HandleGenerationRequested(signalContext, message); err != nil {
 					log.Printf("generation task handling failed for %s: %v", message.TaskID, err)
-					_ = delivery.Nack(false, true)
+					if nackErr := nackDelivery(delivery, message.TaskID); nackErr != nil {
+						log.Printf("generation delivery rejection failed: %v", nackErr)
+					}
 					continue
 				}
 
-				_ = delivery.Ack(false)
+				if ackErr := ackDelivery(delivery, "completed generation task "+message.TaskID.String()); ackErr != nil {
+					log.Printf("generation delivery acknowledgement failed: %v", ackErr)
+				}
 			}
 		}
 	}()
