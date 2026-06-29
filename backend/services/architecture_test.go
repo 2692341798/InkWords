@@ -353,16 +353,9 @@ func TestCoreAPIOwnedUserFacingDomainsDoNotImportLegacyInternalPackages(t *testi
 	}
 }
 
-func TestLLMStreamDoesNotImportLegacyStreamOrTaskEntrypoints(t *testing.T) {
-	disallowedImports := []string{
-		"inkwords-backend/internal/domain/blog",
-		"inkwords-backend/internal/domain/blog/contracts",
-		"inkwords-backend/internal/domain/stream",
-		"inkwords-backend/internal/domain/task",
-		"inkwords-backend/internal/prompt",
-		"inkwords-backend/internal/transport/http/v1/api",
-	}
+func TestLLMStreamDoesNotImportLegacyInternalPackages(t *testing.T) {
 	serviceDir := "llm-stream"
+	disallowedImport := "inkwords-backend/internal/"
 
 	err := filepath.WalkDir(serviceDir, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -376,11 +369,8 @@ func TestLLMStreamDoesNotImportLegacyStreamOrTaskEntrypoints(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		contents := string(contentsBytes)
-		for _, disallowedImport := range disallowedImports {
-			if strings.Contains(contents, disallowedImport) {
-				t.Fatalf("%s imports legacy entrypoint %q; llm-stream should use service-owned stream/task code", path, disallowedImport)
-			}
+		if strings.Contains(string(contentsBytes), disallowedImport) {
+			t.Fatalf("%s imports legacy internal package %q; llm-stream should use service-owned or shared packages", path, disallowedImport)
 		}
 		return nil
 	})
@@ -438,5 +428,46 @@ func TestCoreAPIDoesNotImportLegacyInternalPackages(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("walk %s: %v", serviceDir, err)
+	}
+}
+
+func TestCmdServerDoesNotImportLegacyInternalBusinessPackages(t *testing.T) {
+	entrypointDir := filepath.Join("..", "cmd", "server")
+
+	err := filepath.WalkDir(entrypointDir, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || !strings.HasSuffix(path, ".go") {
+			return nil
+		}
+
+		contentsBytes, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		contents := string(contentsBytes)
+
+		disallowedPrefixes := []string{
+			"inkwords-backend/internal/domain/",
+			"inkwords-backend/internal/service",
+			"inkwords-backend/internal/transport/",
+			"inkwords-backend/internal/prompt",
+			"inkwords-backend/internal/model",
+			"inkwords-backend/internal/infra/cache",
+			"inkwords-backend/internal/infra/llm",
+			"inkwords-backend/internal/infra/mq",
+			"inkwords-backend/internal/infra/parser",
+		}
+
+		for _, prefix := range disallowedPrefixes {
+			if strings.Contains(contents, prefix) {
+				t.Fatalf("%s imports legacy business package %q; cmd/server must use service-owned or shared packages", path, prefix)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk %s: %v", entrypointDir, err)
 	}
 }
