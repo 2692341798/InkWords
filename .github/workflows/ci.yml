@@ -17,9 +17,13 @@ jobs:
           go-version-file: backend/go.mod
           cache: true
 
-      - name: go test
+      - name: go vet
         working-directory: backend
-        run: go test ./...
+        run: go vet ./...
+
+      - name: backend coverage
+        working-directory: backend
+        run: go test ./... -coverprofile=coverage.out
 
   frontend-test-build:
     runs-on: ubuntu-latest
@@ -45,6 +49,10 @@ jobs:
       - name: npm test
         working-directory: frontend
         run: npm test
+
+      - name: frontend coverage
+        working-directory: frontend
+        run: npm run test:coverage
 
       - name: npm run build
         working-directory: frontend
