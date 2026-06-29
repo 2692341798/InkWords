@@ -163,9 +163,10 @@ export function Editor() {
   }, [isContinuing, isPolishing, isVoiceListening, isVoiceSupported, startVoice, stopVoice, editorRef])
 
   // Why: 切换博客时清空润色预览状态，避免旧博客的润色草稿残留
+  // setActivePreviewTab 是切换博客后视觉状态重置的必要副作用
   useEffect(() => {
     cancelPolishAndClear()
-    setActivePreviewTab('preview')
+    queueMicrotask(() => setActivePreviewTab('preview'))
   }, [selectedBlog?.id, cancelPolishAndClear])
 
   const handleStartPolish = useCallback(() => {
