@@ -3,6 +3,7 @@ import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recha
 import { Coins, FileText, Hash, User, Loader2, Upload, BookOpen } from 'lucide-react'
 import { userService } from '@/services/user'
 import { toast } from 'sonner'
+import { PageHeader, PageShell, Panel, SectionHeader, StatusPill } from '@/components/ui/workspace'
 
 interface TechStackStat {
   name: string
@@ -115,17 +116,21 @@ export function Dashboard() {
 
   if (loading) {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
+      <div className="flex-1 flex items-center justify-center bg-background">
+        <Loader2 className="w-8 h-8 animate-spin text-[var(--brand)]" />
       </div>
     )
   }
 
   return (
-    <div className="flex-1 overflow-y-auto bg-background custom-scrollbar">
-      <div className="mx-auto flex max-w-5xl flex-col gap-8 px-6 py-12">
-        {/* Profile Section */}
-        <div className="flex items-center gap-6 bg-card p-6 rounded-2xl border border-border shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
+    <PageShell>
+        <PageHeader
+          title="个人中心"
+          description="查看账号资料、内容产出和模型消耗情况。"
+          meta={<StatusPill>账户与用量</StatusPill>}
+        />
+
+        <Panel className="flex items-center gap-6 p-6">
           <div className="relative group shrink-0">
             <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-border shadow-[0_2px_8px_rgba(0,0,0,0.02)] bg-secondary flex items-center justify-center">
               {profile?.avatar_url ? (
@@ -165,11 +170,10 @@ export function Dashboard() {
             </div>
             <p className="text-sm text-muted-foreground mt-1">{profile?.email}</p>
           </div>
-        </div>
+        </Panel>
 
-        {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-card p-5 rounded-xl border border-border shadow-[0_2px_8px_rgba(0,0,0,0.02)] flex items-start gap-4">
+          <Panel tone="section" className="flex items-start gap-4 p-5">
             <div className="p-2.5 bg-secondary text-foreground rounded-lg">
               <Hash className="w-5 h-5" />
             </div>
@@ -177,9 +181,9 @@ export function Dashboard() {
               <p className="text-sm font-medium text-muted-foreground">消耗 Token</p>
               <h3 className="text-2xl font-semibold text-foreground mt-1">{stats?.tokens_used?.toLocaleString() || 0}</h3>
             </div>
-          </div>
+          </Panel>
 
-          <div className="bg-card p-5 rounded-xl border border-border shadow-[0_2px_8px_rgba(0,0,0,0.02)] flex items-start gap-4">
+          <Panel tone="section" className="flex items-start gap-4 p-5">
             <div className="p-2.5 bg-secondary text-foreground rounded-lg">
               <Coins className="w-5 h-5" />
             </div>
@@ -188,9 +192,9 @@ export function Dashboard() {
               <h3 className="text-2xl font-semibold text-foreground mt-1">¥{stats?.estimated_cost?.toFixed(2) || '0.00'}</h3>
               <p className="text-[10px] text-muted-foreground mt-1">按 2.3元/1M Tokens 估算</p>
             </div>
-          </div>
+          </Panel>
 
-          <div className="bg-card p-5 rounded-xl border border-border shadow-[0_2px_8px_rgba(0,0,0,0.02)] flex items-start gap-4">
+          <Panel tone="section" className="flex items-start gap-4 p-5">
             <div className="p-2.5 bg-secondary text-foreground rounded-lg">
               <FileText className="w-5 h-5" />
             </div>
@@ -198,9 +202,9 @@ export function Dashboard() {
               <p className="text-sm font-medium text-muted-foreground">生成文章数</p>
               <h3 className="text-2xl font-semibold text-foreground mt-1">{stats?.total_articles?.toLocaleString() || 0}</h3>
             </div>
-          </div>
+          </Panel>
 
-          <div className="bg-card p-5 rounded-xl border border-border shadow-[0_2px_8px_rgba(0,0,0,0.02)] flex items-start gap-4">
+          <Panel tone="section" className="flex items-start gap-4 p-5">
             <div className="p-2.5 bg-secondary text-foreground rounded-lg">
               <BookOpen className="w-5 h-5" />
             </div>
@@ -208,14 +212,13 @@ export function Dashboard() {
               <p className="text-sm font-medium text-muted-foreground">生成总字数</p>
               <h3 className="text-2xl font-semibold text-foreground mt-1">{stats?.total_words?.toLocaleString() || 0}</h3>
             </div>
-          </div>
+          </Panel>
         </div>
 
-        {/* Charts Section */}
-        <div className="bg-card p-6 rounded-2xl border border-border shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
-          <h2 className="text-lg font-medium text-foreground mb-6">技术栈涉及频率分布</h2>
+        <Panel className="p-6">
+          <SectionHeader title="技术栈涉及频率分布" description="根据历史文章提取的技术主题频率，用于观察内容覆盖面。" />
           
-          <div className="h-[400px] w-full">
+          <div className="mt-6 h-[400px] w-full">
             {processedChartData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -247,9 +250,8 @@ export function Dashboard() {
               </div>
             )}
           </div>
-        </div>
+        </Panel>
         
-      </div>
-    </div>
+    </PageShell>
   )
 }

@@ -2,7 +2,9 @@ package llm
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -27,7 +29,12 @@ func TestParseCompletionUsage_ReadsPromptCacheFields(t *testing.T) {
 }
 
 func TestDeepSeekClient_GenerateStreamWithUsage_ReadsUsageFromFinalChunk(t *testing.T) {
+	var capturedBody []byte
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		capturedBody = body
+
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 
@@ -59,4 +66,10 @@ func TestDeepSeekClient_GenerateStreamWithUsage_ReadsUsageFromFinalChunk(t *test
 	}
 
 	require.Equal(t, []string{"最终正文"}, chunks)
+
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(capturedBody, &payload))
+	streamOptions, ok := payload["stream_options"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, true, streamOptions["include_usage"])
 }

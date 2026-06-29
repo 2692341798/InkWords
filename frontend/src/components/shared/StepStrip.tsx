@@ -62,16 +62,15 @@ export function StepStrip({
     <div
       data-variant={variant}
       className={cn(
-        'space-y-6 transition-colors',
-        variant === 'preview' ? 'rounded-3xl' : 'rounded-3xl',
+        'space-y-5 transition-colors',
         className,
       )}
     >
       {title || description ? (
         <div className="space-y-1.5">
-          {title ? <h2 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">{title}</h2> : null}
+          {title ? <h2 className="section-title">{title}</h2> : null}
           {description ? (
-            <p className="max-w-3xl text-sm leading-6 text-zinc-500 dark:text-zinc-400">{description}</p>
+            <p className="page-description">{description}</p>
           ) : null}
         </div>
       ) : null}
@@ -90,38 +89,38 @@ export function StepStrip({
               className={cn(
                 'rounded-[20px] border px-4 py-5 transition-colors duration-200',
                 variant === 'preview' &&
-                  'border-zinc-200/90 bg-zinc-50/90 dark:border-zinc-800 dark:bg-zinc-900/95',
+                  'border-border bg-secondary/35',
                 variant === 'preview' &&
                   step.description &&
                   'min-h-[132px]',
                 stepState === 'current' &&
-                  'border-zinc-900/90 bg-white shadow-[0_10px_30px_rgba(15,23,42,0.06)] dark:border-zinc-100 dark:bg-zinc-900',
+                  'border-[color-mix(in_srgb,var(--brand)_32%,var(--border))] bg-[var(--brand-soft)]',
                 stepState === 'complete' &&
-                  'border-zinc-200 bg-zinc-50/75 dark:border-zinc-700 dark:bg-zinc-800/35',
+                  'border-border bg-secondary/35',
                 stepState === 'upcoming' &&
-                  'border-zinc-200/90 bg-white/95 dark:border-zinc-800 dark:bg-zinc-900/90',
+                  'border-border bg-card',
               )}
             >
               <div
                 className={cn(
                   'text-[11px] font-medium uppercase tracking-[0.18em]',
                   stepState === 'current'
-                    ? 'text-zinc-700 dark:text-zinc-300'
-                    : 'text-zinc-400 dark:text-zinc-500',
+                    ? 'text-[var(--brand)]'
+                    : 'text-muted-foreground',
                 )}
               >
                 步骤 {index + 1}
               </div>
               <div
                 className={cn(
-                  'mt-3 text-sm leading-6 text-zinc-900 dark:text-zinc-100',
+                  'mt-3 text-sm leading-6 text-foreground',
                   stepState === 'current' ? 'font-semibold' : variant === 'preview' ? 'font-medium' : 'font-semibold',
                 )}
               >
                 {step.title}
               </div>
               {step.description ? (
-                <div className="mt-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">{step.description}</div>
+                <div className="mt-2 text-xs leading-5 text-muted-foreground">{step.description}</div>
               ) : null}
             </article>
           )

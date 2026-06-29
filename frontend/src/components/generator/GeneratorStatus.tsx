@@ -6,6 +6,36 @@ import { useShallow } from 'zustand/react/shallow'
 import { CheckCircle2, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
+function formatCompactNumber(value: number | undefined) {
+  if (!Number.isFinite(value)) {
+    return '0'
+  }
+  return new Intl.NumberFormat('zh-CN', { notation: 'compact', maximumFractionDigits: 1 }).format(value ?? 0)
+}
+
+function formatCacheHitRate(hit: number | undefined, miss: number | undefined) {
+  const safeHit = Number.isFinite(hit) ? hit ?? 0 : 0
+  const safeMiss = Number.isFinite(miss) ? miss ?? 0 : 0
+  const total = safeHit + safeMiss
+  if (total <= 0) {
+    return '暂无'
+  }
+  return `${Math.round((safeHit / total) * 100)}%`
+}
+
+function chapterStatusLabel(status: string, phase: string) {
+  if (status === 'completed') return '已完成'
+  if (status === 'pending') return '等待中'
+  if (status === 'error') return '失败'
+  if (phase === 'understanding') return '理解中'
+  if (phase === 'drafting') return '起草中'
+  if (phase === 'reviewing') return '审稿中'
+  if (phase === 'repairing') return '修复中'
+  if (phase === 'revising') return '补强中'
+  if (phase === 'streaming') return '输出中'
+  return status === 'generating' ? '生成中' : status
+}
+
 export function GeneratorStatus() {
   const store = useStreamStore(
     useShallow((state) => ({
@@ -21,8 +51,10 @@ export function GeneratorStatus() {
       outline: state.outline,
       content: state.content,
       chapterStatus: state.chapterStatus,
+      chapterPhases: state.chapterPhases,
       chapterContents: state.chapterContents,
       chapterErrors: state.chapterErrors,
+      chapterUsage: state.chapterUsage,
     })),
   )
   const contentEndRef = useRef<HTMLDivElement>(null)
@@ -50,22 +82,22 @@ export function GeneratorStatus() {
   // Why: Task 3 turns progress into embeddable page content, so this component
   // should only own the progress card itself and not a fullscreen overlay shell.
   return (
-    <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
-      <div className="flex items-center justify-between border-b border-border bg-secondary/50 px-6 py-4">
+    <div className="overflow-hidden rounded-xl border border-border bg-card">
+      <div className="flex items-center justify-between border-b border-border bg-secondary/35 px-5 py-4">
         <h3 className="flex items-center gap-2 font-medium text-foreground">
-          <span className={`h-2.5 w-2.5 rounded-full ${isWorking ? 'bg-blue-500 animate-pulse' : 'bg-green-500'}`}></span>
+          <span className={`h-2.5 w-2.5 rounded-full ${isWorking ? 'bg-[var(--brand)]' : 'bg-[var(--success)]'}`}></span>
           {title}
         </h3>
         {store.currentChapterTitle && !isParsing && (
-          <span className="rounded-md border border-border bg-card px-3 py-1 text-sm text-muted-foreground shadow-sm">
+          <span className="status-pill">
             正在生成: {store.currentChapterTitle}
           </span>
         )}
       </div>
-      <div className="max-h-[70vh] overflow-y-auto p-6 custom-scrollbar">
+      <div className="max-h-[70vh] overflow-y-auto p-5 custom-scrollbar">
         <div className="prose max-w-none bg-transparent dark:prose-invert">
         {!isParsing && currentStatusMessage && (
-          <div className="mb-6 p-4 bg-secondary/50 text-foreground rounded-xl border border-border font-mono text-sm shadow-[0_2px_8px_rgba(0,0,0,0.02)] flex items-center gap-3">
+          <div className="mb-5 flex items-center gap-3 rounded-xl border border-border bg-secondary/35 p-4 font-mono text-sm text-foreground">
             {isWorking && (
               <Loader2 className="w-5 h-5 animate-spin flex-shrink-0" />
             )}
@@ -76,20 +108,18 @@ export function GeneratorStatus() {
         {isParsing ? (
           <div className="flex flex-col gap-4">
              {store.analysisStep >= 0 && (
-               <div className="w-full bg-card p-6 rounded-xl border border-border shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
+               <div className="w-full rounded-xl border border-border bg-card p-5">
                  <div className="flex justify-between text-sm font-medium mb-3 text-foreground">
-                   <span className={cn("transition-colors", store.analysisStep >= 0 ? "text-blue-600 dark:text-blue-400" : "text-zinc-400")}>{store.sourceType === 'file' ? '上传文件' : '克隆代码'}</span>
-                   <span className={cn("transition-colors", store.analysisStep >= 1 ? "text-blue-600 dark:text-blue-400" : "text-zinc-400")}>{store.sourceType === 'file' ? '解析内容' : '扫描结构'}</span>
-                   <span className={cn("transition-colors", store.analysisStep >= 2 ? "text-blue-600 dark:text-blue-400" : "text-zinc-400")}>深度分析</span>
-                   <span className={cn("transition-colors", store.analysisStep >= 3 ? "text-blue-600 dark:text-blue-400" : "text-zinc-400")}>生成大纲</span>
+                   <span className={cn("transition-colors", store.analysisStep >= 0 ? "text-[var(--brand)]" : "text-muted-foreground")}>{store.sourceType === 'file' ? '上传文件' : '克隆代码'}</span>
+                   <span className={cn("transition-colors", store.analysisStep >= 1 ? "text-[var(--brand)]" : "text-muted-foreground")}>{store.sourceType === 'file' ? '解析内容' : '扫描结构'}</span>
+                   <span className={cn("transition-colors", store.analysisStep >= 2 ? "text-[var(--brand)]" : "text-muted-foreground")}>深度分析</span>
+                   <span className={cn("transition-colors", store.analysisStep >= 3 ? "text-[var(--brand)]" : "text-muted-foreground")}>生成大纲</span>
                  </div>
-                 <div className="w-full bg-zinc-100 dark:bg-zinc-800 rounded-full h-2 overflow-hidden">
+                 <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
                   <div 
-                    className="bg-blue-500 h-full rounded-full transition-all duration-500 relative overflow-hidden"
+                    className="h-full rounded-full bg-[var(--brand)] transition-all duration-500"
                     style={{ width: `${Math.min(100, Math.max(5, (store.analysisStep + 1) * 25))}%` }}
-                  >
-                    <div className="absolute inset-0 bg-white/20 animate-pulse -skew-x-12" style={{ backgroundImage: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent)' }}></div>
-                  </div>
+                  />
                 </div>
               </div>
             )}
@@ -102,29 +132,29 @@ export function GeneratorStatus() {
                   <div 
                     key={item.id} 
                     className={cn(
-                      "p-4 rounded-xl border flex items-start gap-4 transition-all duration-300 shadow-sm",
+                      "flex items-start gap-4 rounded-xl border p-4 transition-colors duration-200",
                       isCompleted
-                        ? "bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 opacity-80" 
-                        : "bg-blue-50/50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-800/50 scale-[1.02]"
+                        ? "border-border bg-card opacity-80"
+                        : "border-[color-mix(in_srgb,var(--brand)_24%,var(--border))] bg-[var(--brand-soft)]"
                     )}
                   >
                     <div className="mt-0.5 flex-shrink-0">
                       {isCompleted ? (
-                        <CheckCircle2 className="w-5 h-5 text-green-500 dark:text-green-400" />
+                        <CheckCircle2 className="w-5 h-5 text-[var(--success)]" />
                       ) : (
-                        <Loader2 className="w-5 h-5 text-blue-500 dark:text-blue-400 animate-spin" />
+                        <Loader2 className="w-5 h-5 text-[var(--brand)] animate-spin" />
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className={cn(
                         "text-sm font-medium break-all",
-                        isCompleted ? "text-zinc-700 dark:text-zinc-300" : "text-blue-900 dark:text-blue-100"
+                        isCompleted ? "text-muted-foreground" : "text-foreground"
                       )}>
                         {item.message}
                       </div>
                       {item.status && (
                         <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1.5 flex items-center gap-2">
-                          <span className="px-2 py-0.5 bg-zinc-100 dark:bg-zinc-800 rounded-md capitalize">{item.status}</span>
+                          <span className="rounded-md bg-secondary px-2 py-0.5 capitalize">{item.status}</span>
                         </div>
                       )}
                     </div>
@@ -140,30 +170,32 @@ export function GeneratorStatus() {
               <div className="space-y-3 pb-8">
                 {[...store.outline].sort((a,b)=>a.sort-b.sort).map(chapter => {
                   const status = store.chapterStatus[chapter.sort] || 'pending';
+                  const phase = store.chapterPhases[chapter.sort] || 'pending';
                   const content = store.chapterContents[chapter.sort] || '';
                   const errorMessage = store.chapterErrors[chapter.sort] || '';
+                  const usage = store.chapterUsage[chapter.sort];
                   const snippet = content.length > 80 ? '...' + content.slice(-80) : content;
                   return (
                     <div key={chapter.sort} className={cn(
-                      "p-4 rounded-xl border flex flex-col gap-3 transition-all duration-300 shadow-sm",
-                      status === 'completed' ? "bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 opacity-80" :
-                      status === 'generating' ? "bg-blue-50/50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-800/50 scale-[1.02]" :
-                      "bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-700 opacity-60"
+                      "flex flex-col gap-3 rounded-xl border p-4 transition-colors duration-200",
+                      status === 'completed' ? "border-border bg-card opacity-80" :
+                      status === 'generating' ? "border-[color-mix(in_srgb,var(--brand)_24%,var(--border))] bg-[var(--brand-soft)]" :
+                      "border-border bg-secondary/35 opacity-70"
                     )}>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          {status === 'generating' ? <Loader2 className="w-5 h-5 text-blue-500 animate-spin" /> : 
-                           status === 'completed' ? <CheckCircle2 className="w-5 h-5 text-green-500" /> : 
-                           <div className="w-5 h-5 rounded-full border-2 border-zinc-300 dark:border-zinc-600" />}
+                          {status === 'generating' ? <Loader2 className="w-5 h-5 text-[var(--brand)] animate-spin" /> :
+                           status === 'completed' ? <CheckCircle2 className="w-5 h-5 text-[var(--success)]" /> :
+                           <div className="w-5 h-5 rounded-full border-2 border-border" />}
                           <span className={cn(
                             "font-medium",
-                            status === 'generating' ? "text-blue-900 dark:text-blue-100" :
-                            status === 'completed' ? "text-zinc-700 dark:text-zinc-300" :
-                            "text-zinc-500 dark:text-zinc-400"
+                            status === 'generating' ? "text-foreground" :
+                            status === 'completed' ? "text-muted-foreground" :
+                            "text-muted-foreground"
                           )}>{chapter.title}</span>
                         </div>
-                        <span className="text-xs px-2 py-1 rounded-md bg-zinc-100 dark:bg-zinc-800/80 text-zinc-500 dark:text-zinc-400 capitalize">
-                          {status === 'generating' ? '生成中' : status === 'completed' ? '已完成' : status === 'pending' ? '等待中' : status === 'error' ? '失败' : status}
+                        <span className="rounded-md bg-secondary px-2 py-1 text-xs capitalize text-muted-foreground">
+                          {chapterStatusLabel(status, phase)}
                         </span>
                       </div>
                       {status === 'error' && errorMessage && (
@@ -172,9 +204,16 @@ export function GeneratorStatus() {
                         </div>
                       )}
                       {snippet && (
-                        <div className="text-sm text-zinc-500 dark:text-zinc-400 font-mono bg-zinc-100/50 dark:bg-zinc-900/50 p-3 rounded-lg border border-zinc-100 dark:border-zinc-800/50 line-clamp-2 leading-relaxed">
+                        <div className="line-clamp-2 rounded-lg border border-border bg-secondary/35 p-3 font-mono text-sm leading-relaxed text-muted-foreground">
                           {snippet}
-                          {status === 'generating' && <span className="inline-block w-1.5 h-3 ml-1 align-middle bg-blue-500 animate-pulse" />}
+                          {status === 'generating' && <span className="ml-1 inline-block h-3 w-1.5 align-middle bg-[var(--brand)]" />}
+                        </div>
+                      )}
+                      {usage && (
+                        <div className="grid gap-2 rounded-lg border border-border bg-secondary/25 p-3 text-xs text-muted-foreground sm:grid-cols-3">
+                          <span>Prompt {formatCompactNumber(usage.prompt_tokens)}</span>
+                          <span>Completion {formatCompactNumber(usage.completion_tokens)}</span>
+                          <span>缓存命中 {formatCacheHitRate(usage.prompt_cache_hit_tokens, usage.prompt_cache_miss_tokens)}</span>
                         </div>
                       )}
                     </div>
@@ -183,24 +222,24 @@ export function GeneratorStatus() {
                 {/* Render series intro chapter if it exists */}
                 {store.chapterStatus[0] && (
                   <div className={cn(
-                    "p-4 rounded-xl border flex flex-col gap-3 transition-all duration-300 shadow-sm",
-                    store.chapterStatus[0] === 'completed' ? "bg-white dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 opacity-80" :
-                    store.chapterStatus[0] === 'generating' ? "bg-blue-50/50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-800/50 scale-[1.02]" :
-                    "bg-zinc-50 dark:bg-zinc-800/50 border-zinc-200 dark:border-zinc-700 opacity-60"
+                    "flex flex-col gap-3 rounded-xl border p-4 transition-colors duration-200",
+                    store.chapterStatus[0] === 'completed' ? "border-border bg-card opacity-80" :
+                    store.chapterStatus[0] === 'generating' ? "border-[color-mix(in_srgb,var(--brand)_24%,var(--border))] bg-[var(--brand-soft)]" :
+                    "border-border bg-secondary/35 opacity-70"
                   )}>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        {store.chapterStatus[0] === 'generating' ? <Loader2 className="w-5 h-5 text-blue-500 animate-spin" /> : 
-                         store.chapterStatus[0] === 'completed' ? <CheckCircle2 className="w-5 h-5 text-green-500" /> : 
-                         <div className="w-5 h-5 rounded-full border-2 border-zinc-300 dark:border-zinc-600" />}
+                        {store.chapterStatus[0] === 'generating' ? <Loader2 className="w-5 h-5 text-[var(--brand)] animate-spin" /> :
+                         store.chapterStatus[0] === 'completed' ? <CheckCircle2 className="w-5 h-5 text-[var(--success)]" /> :
+                         <div className="w-5 h-5 rounded-full border-2 border-border" />}
                         <span className={cn(
                           "font-medium",
-                          store.chapterStatus[0] === 'generating' ? "text-blue-900 dark:text-blue-100" :
-                          store.chapterStatus[0] === 'completed' ? "text-zinc-700 dark:text-zinc-300" :
-                          "text-zinc-500 dark:text-zinc-400"
+                          store.chapterStatus[0] === 'generating' ? "text-foreground" :
+                          store.chapterStatus[0] === 'completed' ? "text-muted-foreground" :
+                          "text-muted-foreground"
                         )}>系列导读</span>
                       </div>
-                      <span className="text-xs px-2 py-1 rounded-md bg-zinc-100 dark:bg-zinc-800/80 text-zinc-500 dark:text-zinc-400 capitalize">
+                      <span className="rounded-md bg-secondary px-2 py-1 text-xs capitalize text-muted-foreground">
                         {store.chapterStatus[0] === 'generating' ? '生成中' : store.chapterStatus[0] === 'completed' ? '已完成' : store.chapterStatus[0] === 'pending' ? '等待中' : store.chapterStatus[0] === 'error' ? '失败' : store.chapterStatus[0]}
                       </span>
                     </div>
@@ -210,9 +249,9 @@ export function GeneratorStatus() {
                       </div>
                     )}
                     {store.chapterContents[0] && (
-                      <div className="text-sm text-zinc-500 dark:text-zinc-400 font-mono bg-zinc-100/50 dark:bg-zinc-900/50 p-3 rounded-lg border border-zinc-100 dark:border-zinc-800/50 line-clamp-2 leading-relaxed">
+                      <div className="line-clamp-2 rounded-lg border border-border bg-secondary/35 p-3 font-mono text-sm leading-relaxed text-muted-foreground">
                         {store.chapterContents[0].length > 80 ? '...' + store.chapterContents[0].slice(-80) : store.chapterContents[0]}
-                        {store.chapterStatus[0] === 'generating' && <span className="inline-block w-1.5 h-3 ml-1 align-middle bg-blue-500 animate-pulse" />}
+                        {store.chapterStatus[0] === 'generating' && <span className="ml-1 inline-block h-3 w-1.5 align-middle bg-[var(--brand)]" />}
                       </div>
                     )}
                   </div>
@@ -220,11 +259,11 @@ export function GeneratorStatus() {
                 <div ref={contentEndRef} />
               </div>
             ) : (
-              <div className="bg-white dark:bg-zinc-900 p-6 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm min-h-[400px]">
+              <div className="min-h-[400px] rounded-xl border border-border bg-card p-6">
                 {store.content ? (
                   <MarkdownEngine content={store.content} />
                 ) : (
-                  <div className="h-full flex items-center justify-center text-zinc-400 py-12">
+                  <div className="flex h-full items-center justify-center py-12 text-sm text-muted-foreground">
                     {isWorking ? '等待大模型响应中...' : '暂无生成内容'}
                   </div>
                 )}

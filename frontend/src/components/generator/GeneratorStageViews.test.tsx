@@ -28,8 +28,15 @@ const mockStreamState = {
   selectedModules: [] as string[],
   outline: null as { sort: number; title: string; summary: string }[] | null,
   chapterStatus: {} as Record<number, 'pending' | 'generating' | 'completed' | 'error'>,
+  chapterPhases: {} as Record<number, string>,
   chapterContents: {} as Record<number, string>,
   chapterErrors: {} as Record<number, string>,
+  chapterUsage: {} as Record<number, {
+    prompt_tokens: number
+    completion_tokens: number
+    prompt_cache_hit_tokens: number
+    prompt_cache_miss_tokens: number
+  }>,
   setGitUrl: vi.fn(),
   setScenarioMode: vi.fn(),
   setModules: vi.fn(),
@@ -75,8 +82,10 @@ describe('Generator stage views', () => {
     mockStreamState.selectedModules = []
     mockStreamState.outline = null
     mockStreamState.chapterStatus = {}
+    mockStreamState.chapterPhases = {}
     mockStreamState.chapterContents = {}
     mockStreamState.chapterErrors = {}
+    mockStreamState.chapterUsage = {}
     mockStreamState.setGitUrl.mockReset()
     mockStreamState.setScenarioMode.mockReset()
     mockStreamState.setModules.mockReset()
@@ -92,8 +101,10 @@ describe('Generator stage views', () => {
     mockStreamState.selectedModules = []
     mockStreamState.outline = null
     mockStreamState.chapterStatus = {}
+    mockStreamState.chapterPhases = {}
     mockStreamState.chapterContents = {}
     mockStreamState.chapterErrors = {}
+    mockStreamState.chapterUsage = {}
   })
 
   it('renders a dedicated source stage wrapper around the source input choices', () => {
@@ -113,7 +124,7 @@ describe('Generator stage views', () => {
     )
 
     expect(html).toContain('先选择资料来源')
-    expect(html).toContain('完成这一步后再进入下一页配置解析策略')
+    expect(html).toContain('确认你要解析的是 GitHub 仓库还是本地文档，完成后再进入配置解析策略')
     expect(html).toContain('解析开源项目')
     expect(html).toContain('解析本地文档')
   })
@@ -144,8 +155,8 @@ describe('Generator stage views', () => {
     )
 
     expect(outlineStageHtml).toContain('确认并调整大纲')
-    expect(outlineStageHtml).toContain('当前创作场景：开卷复习')
-    expect(outlineStageHtml).toContain('当前提示词类型：心理学经典解读')
+    expect(outlineStageHtml).toContain('创作场景：开卷复习')
+    expect(outlineStageHtml).toContain('提示词类型：心理学经典解读')
     expect(outlineStageHtml).toContain('大纲编辑器')
     expect(outlineStageHtml).toContain('返回上一步')
   })
@@ -220,13 +231,13 @@ describe('Generator stage views', () => {
       />,
     )
     expect(inputHtml).not.toContain('mb-12')
-    expect(inputHtml).toContain('grid grid-cols-1 gap-8 md:grid-cols-2')
+    expect(inputHtml).toContain('grid grid-cols-1 gap-4 md:grid-cols-2')
 
     const modulesHtml = renderToStaticMarkup(
       <GeneratorModules toggleModuleSelection={() => {}} handleAnalyze={() => {}} />,
     )
     expect(modulesHtml).not.toContain('mb-12')
-    expect(modulesHtml).toContain('请选择要深入解析的目录')
+    expect(modulesHtml).toContain('选择深入解析目录')
 
     const outlineHtml = renderToStaticMarkup(
       <GeneratorOutline
@@ -253,7 +264,7 @@ describe('Generator stage views', () => {
 
     expect(html).toContain('解析进度')
     expect(html).not.toContain('fixed inset-0')
-    expect(html).toContain('overflow-hidden rounded-2xl')
+    expect(html).toContain('overflow-hidden rounded-xl border border-border bg-card')
   })
 
   it('shows chapter error reasons in the inline generation progress panel', () => {
@@ -269,6 +280,28 @@ describe('Generator stage views', () => {
     expect(html).toContain('DeepSeek 请求超时，请稍后重试')
   })
 
+  it('shows chapter usage and cache hit rate in the inline generation progress panel', () => {
+    mockStreamState.outline = [{ sort: 1, title: '第一篇', summary: '摘要' }]
+    mockStreamState.isGenerating = true
+    mockStreamState.chapterStatus = { 1: 'completed' }
+    mockStreamState.chapterPhases = { 1: 'completed' }
+    mockStreamState.chapterUsage = {
+      1: {
+        prompt_tokens: 1200,
+        completion_tokens: 500,
+        prompt_cache_hit_tokens: 900,
+        prompt_cache_miss_tokens: 300,
+      },
+    }
+
+    const html = renderToStaticMarkup(<GeneratorStatus />)
+
+    expect(html).toContain('Prompt')
+    expect(html).toContain('Completion')
+    expect(html).toContain('缓存命中')
+    expect(html).toContain('75%')
+  })
+
   it('keeps only the inline status panel for progress feedback', () => {
     mockStreamState.isAnalyzing = true
     mockStreamState.analysisMessage = '正在分析仓库结构'
@@ -279,6 +312,6 @@ describe('Generator stage views', () => {
 
     expect(html).toContain('解析进度')
     expect(html).toContain('已完成仓库克隆')
-    expect(html).toContain('overflow-hidden rounded-2xl')
+    expect(html).toContain('overflow-hidden rounded-xl border border-border bg-card')
   })
 })

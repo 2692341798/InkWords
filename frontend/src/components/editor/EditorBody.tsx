@@ -47,7 +47,7 @@ export function EditorBody(props: EditorBodyProps) {
         <textarea
           ref={editorRef}
           onScroll={handleEditorScroll}
-          className="flex-1 w-full p-8 resize-none bg-secondary/20 border-none focus:outline-none focus:ring-0 font-mono text-[15px] text-foreground leading-[1.8] custom-scrollbar"
+          className="custom-scrollbar flex-1 w-full resize-none border-none bg-secondary/25 p-8 font-mono text-[15px] leading-[1.8] text-foreground focus:outline-none focus:ring-0"
           placeholder="使用 Markdown 开始编写您的博客..."
           value={content}
           onChange={(e) => onContentChange(e.target.value)}
@@ -60,7 +60,7 @@ export function EditorBody(props: EditorBodyProps) {
         onScroll={handlePreviewScroll}
         className="flex-1 bg-background overflow-y-auto print:block print:w-full print:overflow-visible relative custom-scrollbar"
       >
-        <div className="sticky top-0 z-10 border-b border-border/60 bg-background/80 backdrop-blur print:hidden">
+        <div className="sticky top-0 z-10 border-b border-border bg-card/90 backdrop-blur print:hidden">
           <div className="max-w-3xl mx-auto px-8 py-3 flex items-center justify-between gap-4">
             <div className="inline-flex rounded-lg bg-secondary p-1">
               <button
@@ -90,12 +90,7 @@ export function EditorBody(props: EditorBodyProps) {
 
             {activePreviewTab === 'polish' ? (
               <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  onClick={onApplyPolish}
-                  disabled={isPolishing || !polishedDraft.trim()}
-                  className="gap-1.5 bg-emerald-600 hover:bg-emerald-600/90 text-white"
-                >
+                <Button size="sm" onClick={onApplyPolish} disabled={isPolishing || !polishedDraft.trim()}>
                   应用润色结果
                 </Button>
                 <Button variant="outline" size="sm" onClick={onCancelPolish}>

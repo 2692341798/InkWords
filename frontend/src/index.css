@@ -51,7 +51,7 @@
 }
 
 :root {
-    --background: #ffffff;
+    --background: #fbfbfa;
     --foreground: #37352f;
     --card: #ffffff;
     --card-foreground: #37352f;
@@ -69,6 +69,15 @@
     --border: #e9e9e7;
     --input: #e9e9e7;
     --ring: rgba(55, 53, 47, 0.16);
+    --brand: #4f46e5;
+    --brand-foreground: #ffffff;
+    --brand-soft: #eef0ff;
+    --brand-muted: #6366f1;
+    --success: #17825d;
+    --success-soft: #eaf7f1;
+    --warning: #a16207;
+    --warning-soft: #fff7df;
+    --surface-raised-shadow: 0 1px 2px rgba(15, 23, 42, 0.035);
     --chart-1: #0fa0ce;
     --chart-2: #ea7271;
     --chart-3: #e03e3e;
@@ -129,6 +138,91 @@
   html {
     @apply font-sans;
     }
+}
+
+@layer components {
+  .app-workspace {
+    @apply min-h-0 min-w-0 flex-1 overflow-y-auto bg-background;
+  }
+
+  .page-container {
+    @apply mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 md:px-6 md:py-10;
+  }
+
+  .page-container-wide {
+    @apply mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 md:px-6 md:py-8;
+  }
+
+  .surface-panel {
+    @apply rounded-2xl border border-border bg-card;
+    box-shadow: var(--surface-raised-shadow);
+  }
+
+  .surface-panel-soft {
+    @apply rounded-2xl border border-border bg-secondary/40;
+  }
+
+  .surface-section {
+    @apply rounded-xl border border-border bg-card;
+    box-shadow: var(--surface-raised-shadow);
+  }
+
+  .surface-inset {
+    @apply rounded-xl border border-border bg-secondary/45;
+  }
+
+  .page-kicker {
+    @apply text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground;
+  }
+
+  .page-title {
+    @apply text-2xl font-semibold tracking-tight text-foreground md:text-3xl;
+  }
+
+  .page-description {
+    @apply max-w-3xl text-sm leading-6 text-muted-foreground;
+  }
+
+  .section-title {
+    @apply text-base font-semibold text-foreground;
+  }
+
+  .section-description {
+    @apply mt-1 text-sm leading-6 text-muted-foreground;
+  }
+
+  .choice-tile {
+    @apply rounded-xl border border-border bg-card p-5 text-left transition-colors duration-200;
+    box-shadow: var(--surface-raised-shadow);
+  }
+
+  .choice-tile-active {
+    border-color: color-mix(in srgb, var(--brand) 36%, var(--border));
+    background: linear-gradient(180deg, var(--brand-soft) 0%, #ffffff 100%);
+  }
+
+  .choice-tile-muted {
+    @apply hover:bg-secondary/45;
+  }
+
+  .status-pill {
+    @apply inline-flex items-center rounded-md border border-border bg-secondary px-2.5 py-1 text-xs font-medium text-muted-foreground;
+  }
+
+  .brand-pill {
+    color: var(--brand);
+    background: var(--brand-soft);
+    border-color: color-mix(in srgb, var(--brand) 18%, var(--border));
+  }
+
+  .summary-rail {
+    @apply h-fit rounded-2xl border border-border bg-card p-5 lg:sticky lg:top-6;
+    box-shadow: var(--surface-raised-shadow);
+  }
+
+  .summary-row {
+    @apply rounded-xl border border-border bg-secondary/35 px-4 py-3;
+  }
 }
 
 @layer utilities {

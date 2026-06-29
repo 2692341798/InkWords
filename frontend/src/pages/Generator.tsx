@@ -10,6 +10,7 @@ import { GeneratorStatus } from '@/components/generator/GeneratorStatus'
 import { GeneratorSourceStage } from '@/components/generator/GeneratorSourceStage'
 import { GeneratorModules } from '@/components/generator/GeneratorModules'
 import { Button } from '@/components/ui/button'
+import { PageHeader, PageShell, Panel, SectionHeader, StatusPill } from '@/components/ui/workspace'
 import { StepStrip, type StepStripItem } from '@/components/shared/StepStrip'
 import { scenarioModeOptions } from '@/lib/scenarioMode'
 import { cn } from '@/lib/utils'
@@ -169,13 +170,11 @@ export function Generator() {
   }
 
   const renderScenarioSelector = () => (
-    <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-      <div className="flex flex-col gap-2">
-        <h2 className="text-lg font-medium text-zinc-900 dark:text-zinc-100">创作场景</h2>
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
-          为什么先确定场景：这样系统会围绕同一个目标组织解析与写作，避免后面再切换导致语义漂移。
-        </p>
-      </div>
+    <Panel className="p-5">
+      <SectionHeader
+        title="创作场景"
+        description="先确定写作目标，系统会围绕同一个语义目标组织解析与大纲。"
+      />
       <div className="mt-4 grid gap-3 md:grid-cols-3">
         {scenarioModeOptions.map((option) => (
           <button
@@ -183,21 +182,21 @@ export function Generator() {
             type="button"
             onClick={() => store.setScenarioMode(option.value)}
             className={cn(
-              'rounded-xl border px-4 py-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400',
+              'choice-tile min-h-[118px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
               store.scenarioMode === option.value
-                ? 'border-zinc-900 bg-zinc-50 dark:border-zinc-100 dark:bg-zinc-800/80'
-                : 'border-zinc-200 bg-white hover:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:border-zinc-500',
+                ? 'choice-tile-active'
+                : 'choice-tile-muted',
             )}
             aria-pressed={store.scenarioMode === option.value}
           >
-            <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{option.label}</div>
-            <div className="mt-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+            <div className="text-sm font-semibold text-foreground">{option.label}</div>
+            <div className="mt-2 text-xs leading-5 text-muted-foreground">
               {option.description}
             </div>
           </button>
         ))}
       </div>
-    </div>
+    </Panel>
   )
 
   const generatorSteps: StepStripItem[] = [
@@ -231,28 +230,15 @@ export function Generator() {
   }
 
   return (
-    <div className="flex-1 h-full overflow-y-auto custom-scrollbar">
-      <div className="max-w-6xl mx-auto px-4 py-12">
-        <section className="mb-8 rounded-3xl border border-zinc-200 bg-white px-8 py-10 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="space-y-4">
-            <span className="inline-flex items-center rounded-full bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300">
-              智能生成博客
-            </span>
-            <div className="space-y-2">
-              <h1 className="text-4xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">一键将开源项目或本地文档转化为高质量技术博客</h1>
-              <p className="max-w-3xl text-sm leading-6 text-zinc-500 dark:text-zinc-400">
-                页面现在只展开当前步骤，让用户先判断“我现在要做什么”，再看到与当前动作直接相关的模块。
-              </p>
-            </div>
-          </div>
-        </section>
+    <PageShell wide>
+      <PageHeader
+        title="生成博客工作台"
+        description="从资料入口开始，只展示当前步骤需要处理的内容，避免来源、配置和大纲同时抢占注意力。"
+        meta={<StatusPill tone="brand">智能生成博客</StatusPill>}
+        actions={<StatusPill>当前步骤：{currentStepMeta.title}</StatusPill>}
+      />
 
-        <section className="mb-8 rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="mb-5 flex justify-end">
-            <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
-              当前步骤：{currentStepMeta.title}
-            </span>
-          </div>
+      <Panel className="p-6">
           <StepStrip
             title="当前流程"
             description={currentStepMeta.description}
@@ -260,9 +246,9 @@ export function Generator() {
             currentStepIndex={viewState.currentStepIndex}
             variant="progress"
           />
-        </section>
+      </Panel>
 
-        <div className="space-y-8">
+      <div className="space-y-6">
           {viewState.currentStage === 'source' ? (
             <GeneratorSourceStage
               gitUrl={gitUrl}
@@ -293,8 +279,8 @@ export function Generator() {
               fileSummary={
                 store.sourceType === 'file' ? (
                   <section className="rounded-2xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-800 dark:bg-zinc-950/40">
-                    <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">已选择本地文档</h3>
-                    <p className="mt-2 text-sm leading-6 text-zinc-500 dark:text-zinc-400">
+                    <h3 className="text-base font-semibold text-foreground">已选择本地文档</h3>
+                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
                       当前文档已解析完成。先选择创作场景，再开始生成大纲。
                     </p>
                     <div className="mt-4 flex justify-end">
@@ -350,7 +336,6 @@ export function Generator() {
           cancelText="取消"
           isDestructive={true}
         />
-      </div>
-    </div>
+    </PageShell>
   )
 }

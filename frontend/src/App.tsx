@@ -28,7 +28,7 @@ function App() {
   }
 
   return (
-    <div className="h-screen overflow-hidden bg-zinc-50 flex print:bg-white print:block print:h-auto print:overflow-visible">
+    <div className="flex h-screen flex-col overflow-hidden bg-background print:block print:h-auto print:overflow-visible print:bg-white lg:flex-row">
       <Sidebar />
       {selectedBlog ? (
         <Editor key={selectedBlog.id} />

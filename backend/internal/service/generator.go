@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -21,9 +22,11 @@ import (
 
 // GeneratorService handles the blog generation process
 type GeneratorService struct {
-	llmClient   *llm.DeepSeekClient
-	promptReq   *PromptRequirementsService
-	persistence blogcontracts.GeneratedBlogPersistence
+	llmClient        *llm.DeepSeekClient
+	promptReq        *PromptRequirementsService
+	persistence      blogcontracts.GeneratedBlogPersistence
+	generatedUsageMu sync.Mutex
+	generatedUsage   map[string]llm.CompletionUsage
 }
 
 // GenerateBlogTaskResult 表示单篇生成完成后可交给任务层的结构化结果。
@@ -47,9 +50,10 @@ func NewGeneratorServiceWithPersistence(
 		persistence = blogdomain.NewGeneratedBlogPersistence(db.DB)
 	}
 	return &GeneratorService{
-		llmClient:   llm.NewDeepSeekClient(apiKey),
-		promptReq:   promptReq,
-		persistence: persistence,
+		llmClient:      llm.NewDeepSeekClient(apiKey),
+		promptReq:      promptReq,
+		persistence:    persistence,
+		generatedUsage: make(map[string]llm.CompletionUsage),
 	}
 }
 
@@ -116,6 +120,7 @@ func (s *GeneratorService) GenerateBlogStreamWithProfile(
 	// Create an intermediate channel to intercept chunks for saving
 	internalChunkChan := make(chan string, 100)
 	internalErrChan := make(chan error, 1)
+	internalUsageChan := make(chan llm.CompletionUsage, 1)
 
 	streamCtx, streamCancel := context.WithCancel(ctx)
 
@@ -155,6 +160,8 @@ func (s *GeneratorService) GenerateBlogStreamWithProfile(
 						if err := s.saveToDB(ctx, userID, sourceType, fullContent); err != nil {
 							errChan <- err
 						}
+					} else if usage, ok := <-internalUsageChan; ok {
+						s.storeGeneratedUsage(sourceType, fullContent, usage)
 					}
 					return
 				}
@@ -177,6 +184,12 @@ func (s *GeneratorService) GenerateBlogStreamWithProfile(
 		defer close(internalChunkChan)
 		defer close(internalErrChan)
 
+		var totalUsage llm.CompletionUsage
+		defer func() {
+			internalUsageChan <- totalUsage
+			close(internalUsageChan)
+		}()
+
 		for {
 			tempChunkChan := make(chan string)
 			var assistantContent string
@@ -191,13 +204,16 @@ func (s *GeneratorService) GenerateBlogStreamWithProfile(
 				}
 			}()
 
-			finishReason, err := s.llmClient.GenerateStream(streamCtx, modelType, messages, tempChunkChan)
+			options := llm.DefaultChatOptions()
+			options.UserID = fmt.Sprintf("single-%s", userID.String())
+			finishReason, usage, err := s.llmClient.GenerateStreamWithOptions(streamCtx, modelType, messages, tempChunkChan, options)
 			wg.Wait() // Ensure all chunks are collected
 
 			if err != nil {
 				internalErrChan <- err
 				return
 			}
+			totalUsage = addCompletionUsage(totalUsage, usage)
 
 			// Append what the assistant just generated
 			messages = append(messages, llm.Message{
@@ -218,6 +234,47 @@ func (s *GeneratorService) GenerateBlogStreamWithProfile(
 			messages = append(messages, continueMsg)
 		}
 	}()
+}
+
+func addCompletionUsage(a llm.CompletionUsage, b llm.CompletionUsage) llm.CompletionUsage {
+	return llm.CompletionUsage{
+		PromptTokens:          a.PromptTokens + b.PromptTokens,
+		CompletionTokens:      a.CompletionTokens + b.CompletionTokens,
+		PromptCacheHitTokens:  a.PromptCacheHitTokens + b.PromptCacheHitTokens,
+		PromptCacheMissTokens: a.PromptCacheMissTokens + b.PromptCacheMissTokens,
+	}
+}
+
+func generatedUsageKey(sourceType string, content string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(sourceType) + "\x00" + content))
+	return fmt.Sprintf("%x", sum)
+}
+
+func (s *GeneratorService) storeGeneratedUsage(sourceType string, content string, usage llm.CompletionUsage) {
+	if s == nil {
+		return
+	}
+	s.generatedUsageMu.Lock()
+	defer s.generatedUsageMu.Unlock()
+	if s.generatedUsage == nil {
+		s.generatedUsage = make(map[string]llm.CompletionUsage)
+	}
+	s.generatedUsage[generatedUsageKey(sourceType, content)] = usage
+}
+
+func (s *GeneratorService) takeGeneratedUsage(sourceType string, content string) llm.CompletionUsage {
+	if s == nil {
+		return llm.CompletionUsage{}
+	}
+	s.generatedUsageMu.Lock()
+	defer s.generatedUsageMu.Unlock()
+	if s.generatedUsage == nil {
+		return llm.CompletionUsage{}
+	}
+	key := generatedUsageKey(sourceType, content)
+	usage := s.generatedUsage[key]
+	delete(s.generatedUsage, key)
+	return usage
 }
 
 func buildSingleGenerateMessages(sourceContent string, requirements string, profile prompt.PromptProfile) []llm.Message {
@@ -379,6 +436,7 @@ func (s *GeneratorService) BuildGenerateSingleTaskResult(
 	content string,
 ) (GenerateBlogTaskResult, error) {
 	facts := s.buildGeneratedBlogFacts(ctx, sourceType, content)
+	usage := s.takeGeneratedUsage(sourceType, content)
 	resultJSON, err := json.Marshal(map[string]any{
 		"result_version":   1,
 		"task_type":        "generation",
@@ -386,7 +444,11 @@ func (s *GeneratorService) BuildGenerateSingleTaskResult(
 		"persistence_mode": "task_only",
 		"final_status":     "succeeded",
 		"usage": map[string]any{
-			"estimated_tokens": facts.EstimatedTokens,
+			"estimated_tokens":         facts.EstimatedTokens,
+			"prompt_tokens":            usage.PromptTokens,
+			"completion_tokens":        usage.CompletionTokens,
+			"prompt_cache_hit_tokens":  usage.PromptCacheHitTokens,
+			"prompt_cache_miss_tokens": usage.PromptCacheMissTokens,
 		},
 		"payload": map[string]any{
 			"title":       facts.Title,
@@ -462,7 +524,7 @@ func (s *GeneratorService) extractTechStacks(ctx context.Context, content string
 		return nil
 	}
 
-	extractedJSON, err := s.llmClient.GenerateJSON(ctx, modelType, messages)
+	extractedJSON, _, err := s.llmClient.GenerateJSONWithOptions(ctx, modelType, messages, llm.LightweightChatOptions("", 512))
 	if err != nil || len(extractedJSON) == 0 {
 		return nil
 	}

@@ -26,6 +26,13 @@ describe('handleSeriesChunkMessage', () => {
       store,
       JSON.stringify({
         chapter_sort: 1,
+        status: 'repairing',
+      }),
+    )
+    handleSeriesChunkMessage(
+      store,
+      JSON.stringify({
+        chapter_sort: 1,
         status: 'usage',
         prompt_tokens: 1200,
         completion_tokens: 500,

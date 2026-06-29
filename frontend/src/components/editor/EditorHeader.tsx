@@ -54,16 +54,16 @@ export function EditorHeader(props: EditorHeaderProps) {
     selectedBlog.children.length > 0
 
   return (
-    <div className="h-14 border-b border-zinc-200 flex items-center justify-between px-6 shrink-0 print:hidden">
+    <div className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-card px-5 print:hidden">
       <div className="flex items-center gap-4 flex-1">
         <input
           type="text"
-          className="text-lg font-semibold bg-transparent border-none focus:outline-none focus:ring-0 text-zinc-800 placeholder-zinc-400 w-1/2"
+          className="w-1/2 border-none bg-transparent text-lg font-semibold text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-0"
           placeholder="输入博客标题..."
           value={title}
           onChange={(e) => onTitleChange(e.target.value)}
         />
-        <div className="text-xs text-zinc-400 flex items-center gap-1">
+        <div className="flex items-center gap-1 text-xs text-muted-foreground">
           {isSaving ? (
             <>
               <Loader2 className="w-3 h-3 animate-spin" /> 保存中...
@@ -76,7 +76,7 @@ export function EditorHeader(props: EditorHeaderProps) {
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
         <Button
           variant="outline"
           size="sm"
@@ -85,7 +85,7 @@ export function EditorHeader(props: EditorHeaderProps) {
           className={
             isVoiceListening
               ? 'gap-1.5 text-red-600 border-red-200 hover:bg-red-50 transition-all duration-200'
-              : 'gap-1.5 text-zinc-700 hover:text-zinc-900 transition-all duration-200 shadow-sm'
+              : 'gap-1.5 text-muted-foreground hover:text-foreground transition-all duration-200'
           }
         >
           {isVoiceListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
@@ -97,7 +97,7 @@ export function EditorHeader(props: EditorHeaderProps) {
           size="sm"
           onClick={onStartPolish}
           disabled={isPolishing || isContinuing || isVoiceListening}
-          className="gap-1.5 text-emerald-700 border-emerald-200 hover:bg-emerald-50 transition-all duration-200"
+          className="gap-1.5 text-muted-foreground hover:text-foreground transition-all duration-200"
         >
           {isPolishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
           {isPolishing ? '润色中...' : '润色'}
@@ -108,7 +108,7 @@ export function EditorHeader(props: EditorHeaderProps) {
           size="sm"
           onClick={onContinueGenerating}
           disabled={isContinuing || isVoiceListening || isPolishing}
-          className="gap-1.5 text-indigo-600 border-indigo-200 hover:bg-indigo-50 transition-all duration-200"
+          className="gap-1.5 border-[color-mix(in_srgb,var(--brand)_20%,var(--border))] text-[var(--brand)] hover:bg-[var(--brand-soft)] transition-all duration-200"
         >
           {isContinuing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
           继续生成
@@ -120,7 +120,7 @@ export function EditorHeader(props: EditorHeaderProps) {
               <Button
                 variant="outline"
                 size="sm"
-                className="gap-1.5 text-zinc-700 hover:text-zinc-900 transition-all duration-200 shadow-sm"
+                className="gap-1.5 text-muted-foreground hover:text-foreground transition-all duration-200"
               >
                 <Download className="w-4 h-4" />
                 导出 / 同步
@@ -128,46 +128,46 @@ export function EditorHeader(props: EditorHeaderProps) {
               </Button>
             }
           />
-          <DropdownMenuContent align="end" className="w-56 shadow-xl border-zinc-200/60 rounded-xl p-1">
-            <DropdownMenuItem onClick={onExportToObsidian} className="gap-2 cursor-pointer focus:bg-zinc-100 rounded-lg py-2">
-              <div className="bg-indigo-50 text-indigo-600 p-1.5 rounded-md">
+          <DropdownMenuContent align="end" className="w-56 rounded-xl border-border p-1 shadow-lg">
+            <DropdownMenuItem onClick={onExportToObsidian} className="gap-2 cursor-pointer rounded-lg py-2 focus:bg-secondary">
+              <div className="rounded-md bg-[var(--brand-soft)] p-1.5 text-[var(--brand)]">
                 <Sparkles className="w-3.5 h-3.5" />
               </div>
               <div className="flex flex-col">
-                <span className="font-medium text-zinc-900">同步单篇到 Obsidian</span>
-                <span className="text-xs text-zinc-500">直通本地第二大脑</span>
+                <span className="font-medium text-foreground">同步单篇到 Obsidian</span>
+                <span className="text-xs text-muted-foreground">直通本地第二大脑</span>
               </div>
             </DropdownMenuItem>
 
             {isSeriesParent && (
               <DropdownMenuItem
                 onClick={onExportSeriesToObsidian}
-                className="gap-2 cursor-pointer focus:bg-zinc-100 rounded-lg py-2 mt-1"
+                className="mt-1 gap-2 cursor-pointer rounded-lg py-2 focus:bg-secondary"
               >
-                <div className="bg-indigo-50 text-indigo-600 p-1.5 rounded-md">
+                <div className="rounded-md bg-[var(--brand-soft)] p-1.5 text-[var(--brand)]">
                   <FileArchive className="w-3.5 h-3.5" />
                 </div>
                 <div className="flex flex-col">
-                  <span className="font-medium text-zinc-900">同步整个系列到 Obsidian</span>
-                  <span className="text-xs text-zinc-500">自动构建双链知识网络</span>
+                  <span className="font-medium text-foreground">同步整个系列到 Obsidian</span>
+                  <span className="text-xs text-muted-foreground">自动构建双链知识网络</span>
                 </div>
               </DropdownMenuItem>
             )}
 
-            <DropdownMenuSeparator className="bg-zinc-100 my-1" />
+            <DropdownMenuSeparator className="my-1 bg-border" />
 
             {isSeriesParent && (
-              <DropdownMenuItem onClick={onExportSeriesZip} className="gap-2 cursor-pointer focus:bg-zinc-100 rounded-lg">
-                <FileArchive className="w-4 h-4 text-zinc-500" />
+              <DropdownMenuItem onClick={onExportSeriesZip} className="gap-2 cursor-pointer rounded-lg focus:bg-secondary">
+                <FileArchive className="w-4 h-4 text-muted-foreground" />
                 <span>导出系列 ZIP</span>
               </DropdownMenuItem>
             )}
-            <DropdownMenuItem onClick={onExportMarkdown} className="gap-2 cursor-pointer focus:bg-zinc-100 rounded-lg">
-              <FileDown className="w-4 h-4 text-zinc-500" />
+            <DropdownMenuItem onClick={onExportMarkdown} className="gap-2 cursor-pointer rounded-lg focus:bg-secondary">
+              <FileDown className="w-4 h-4 text-muted-foreground" />
               <span>导出为 Markdown</span>
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={onExportPDF} className="gap-2 cursor-pointer focus:bg-zinc-100 rounded-lg">
-              <Download className="w-4 h-4 text-zinc-500" />
+            <DropdownMenuItem onClick={onExportPDF} className="gap-2 cursor-pointer rounded-lg focus:bg-secondary">
+              <Download className="w-4 h-4 text-muted-foreground" />
               <span>打印为 PDF</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -176,4 +176,3 @@ export function EditorHeader(props: EditorHeaderProps) {
     </div>
   )
 }
-

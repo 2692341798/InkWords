@@ -148,10 +148,29 @@ export function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-zinc-50 p-4">
-      <div className="max-w-md w-full p-8 bg-white rounded-2xl shadow-sm border border-zinc-100">
+    <div className="flex min-h-screen items-center justify-center bg-background p-6">
+      <div className="grid w-full max-w-5xl overflow-hidden rounded-2xl border border-border bg-card lg:grid-cols-[minmax(0,1fr)_440px]">
+        <section className="hidden bg-secondary/35 px-10 py-12 lg:flex lg:flex-col lg:justify-between">
+          <div>
+            <div className="grid h-11 w-11 place-items-center rounded-xl bg-foreground text-base font-semibold text-background">
+              墨
+            </div>
+            <h1 className="mt-8 max-w-md text-3xl font-semibold tracking-tight text-foreground">
+              从资料到博客，从博客到复习
+            </h1>
+            <p className="mt-4 max-w-md text-sm leading-7 text-muted-foreground">
+              登录后继续你的知识写作工作台，把仓库、文档和笔记整理成可输出、可复习的内容资产。
+            </p>
+          </div>
+          <div className="grid gap-3 text-sm text-muted-foreground">
+            <div className="surface-inset px-4 py-3">生成博客：来源解析、场景配置、大纲确认</div>
+            <div className="surface-inset px-4 py-3">知识复习：主动回忆、提示、反馈记录</div>
+          </div>
+        </section>
+
+        <div className="w-full p-8">
         <div className="mb-8 flex flex-col items-center">
-          <div className="w-16 h-16 bg-zinc-900 text-white rounded-xl flex items-center justify-center text-2xl font-bold shadow-md mb-4">
+          <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-foreground text-2xl font-bold text-background">
             墨
           </div>
           <h1 className="text-2xl font-semibold mb-2 text-zinc-900">
@@ -359,6 +378,7 @@ export function Login() {
           >
             {mode === 'login' ? '立即注册' : mode === 'register' ? '返回登录' : '返回登录'}
           </button>
+        </div>
         </div>
       </div>
     </div>

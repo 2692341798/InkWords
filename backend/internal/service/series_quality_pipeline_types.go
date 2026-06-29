@@ -42,31 +42,48 @@ type SeriesChapterDraft struct {
 
 // SeriesChapterReview 表示章节审稿阶段给出的结构化问题与修订动作。
 type SeriesChapterReview struct {
-	DepthIssues     []string `json:"depth_issues"`
-	ExampleIssues   []string `json:"example_issues"`
-	StructureIssues []string `json:"structure_issues"`
-	RevisionActions []string `json:"revision_actions"`
-	Scorecard       struct {
-		Depth           int `json:"depth"`
-		Examples        int `json:"examples"`
-		Reproducibility int `json:"reproducibility"`
-		Clarity         int `json:"clarity"`
-	} `json:"scorecard"`
+	DepthIssues     []string               `json:"depth_issues"`
+	ExampleIssues   []string               `json:"example_issues"`
+	StructureIssues []string               `json:"structure_issues"`
+	RevisionActions []string               `json:"revision_actions"`
+	Scorecard       SeriesChapterScorecard `json:"scorecard"`
+}
+
+// SeriesChapterScorecard 表示章节质量审稿的四维评分。
+type SeriesChapterScorecard struct {
+	Depth           int `json:"depth"`
+	Examples        int `json:"examples"`
+	Reproducibility int `json:"reproducibility"`
+	Clarity         int `json:"clarity"`
 }
 
 // SeriesChapterFinal 表示终稿补强阶段回收的最终章节结果。
 type SeriesChapterFinal struct {
-	FinalMarkdown  string   `json:"final_markdown"`
-	ResolvedIssues []string `json:"resolved_issues"`
-	ResidualRisks  []string `json:"residual_risks"`
+	FinalMarkdown    string                 `json:"final_markdown"`
+	ResolvedIssues   []string               `json:"resolved_issues"`
+	ResidualRisks    []string               `json:"residual_risks"`
+	Usage            SeriesChapterUsage     `json:"usage"`
+	QualityScorecard SeriesChapterScorecard `json:"quality_scorecard"`
+	RevisionActions  []string               `json:"revision_actions"`
 }
 
 // SeriesChapterUsage 表示单章节流水线阶段的模型用量摘要。
 type SeriesChapterUsage struct {
+	EstimatedTokens       int `json:"estimated_tokens,omitempty"`
 	PromptTokens          int `json:"prompt_tokens"`
 	CompletionTokens      int `json:"completion_tokens"`
 	PromptCacheHitTokens  int `json:"prompt_cache_hit_tokens"`
 	PromptCacheMissTokens int `json:"prompt_cache_miss_tokens"`
+}
+
+func (u SeriesChapterUsage) add(other SeriesChapterUsage) SeriesChapterUsage {
+	return SeriesChapterUsage{
+		EstimatedTokens:       u.EstimatedTokens + other.EstimatedTokens,
+		PromptTokens:          u.PromptTokens + other.PromptTokens,
+		CompletionTokens:      u.CompletionTokens + other.CompletionTokens,
+		PromptCacheHitTokens:  u.PromptCacheHitTokens + other.PromptCacheHitTokens,
+		PromptCacheMissTokens: u.PromptCacheMissTokens + other.PromptCacheMissTokens,
+	}
 }
 
 // Why: 这些校验函数是后续质量流水线的硬门禁，先在结构体边界拦截缺失字段，
@@ -108,4 +125,11 @@ func validateSeriesChapterReview(item SeriesChapterReview) error {
 		return fmt.Errorf("revision_actions is required")
 	}
 	return nil
+}
+
+func scorecardBelowThreshold(scorecard SeriesChapterScorecard, threshold int) bool {
+	return scorecard.Depth > 0 && scorecard.Depth < threshold ||
+		scorecard.Examples > 0 && scorecard.Examples < threshold ||
+		scorecard.Reproducibility > 0 && scorecard.Reproducibility < threshold ||
+		scorecard.Clarity > 0 && scorecard.Clarity < threshold
 }

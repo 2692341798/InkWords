@@ -1,5 +1,6 @@
 import type { ChangeEvent, DragEvent, RefObject } from 'react'
 import { GeneratorInput } from '@/components/generator/GeneratorInput'
+import { Panel, SectionHeader } from '@/components/ui/workspace'
 
 interface GeneratorSourceStageProps {
   gitUrl: string
@@ -19,14 +20,14 @@ interface GeneratorSourceStageProps {
  */
 export function GeneratorSourceStage(props: GeneratorSourceStageProps) {
   return (
-    <section className="rounded-3xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-      <div className="mb-8 space-y-2">
-        <h2 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">先选择资料来源</h2>
-        <p className="text-sm leading-6 text-zinc-500 dark:text-zinc-400">
-          先确认你要解析的是 GitHub 仓库还是本地文档，完成这一步后再进入下一页配置解析策略。
-        </p>
-      </div>
+    <Panel className="p-6">
+      <SectionHeader
+        title="先选择资料来源"
+        description="确认你要解析的是 GitHub 仓库还是本地文档，完成后再进入配置解析策略。"
+      />
+      <div className="mt-6">
       <GeneratorInput {...props} />
-    </section>
+      </div>
+    </Panel>
   )
 }

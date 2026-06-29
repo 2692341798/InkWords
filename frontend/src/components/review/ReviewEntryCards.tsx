@@ -1,6 +1,7 @@
 import type { ComponentType } from 'react'
 import { BookOpen, Clock3, Shuffle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Panel } from '@/components/ui/workspace'
 import type { ReviewCardResponse } from '@/services/review'
 
 interface ReviewEntryCardsProps {
@@ -46,20 +47,20 @@ function ReviewCard({
   const supportsDetailedQuestionMode = detail?.available_modes.includes('detailed_qa') ?? false
 
   return (
-    <article className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
-      <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 text-zinc-700">
+    <Panel className="p-6">
+      <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-secondary text-foreground">
         <Icon className="h-5 w-5" />
       </div>
       <div className="space-y-2">
-        <h2 className="text-base font-semibold text-zinc-900">{title}</h2>
-        <p className="text-sm leading-6 text-zinc-600">{description}</p>
+        <h2 className="text-base font-semibold text-foreground">{title}</h2>
+        <p className="text-sm leading-6 text-muted-foreground">{description}</p>
       </div>
-      <div className="mt-5 rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 p-4">
-        <p className="text-sm font-medium text-zinc-900">{detail?.title ?? '还没有抽到本次题卡'}</p>
-        <p className="mt-2 text-sm leading-6 text-zinc-600">
+      <div className="mt-5 rounded-xl border border-dashed border-border bg-secondary/35 p-4">
+        <p className="text-sm font-medium text-foreground">{detail?.title ?? '还没有抽到本次题卡'}</p>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">
           {detail?.review_reason ?? fallbackCard.review_reason}
         </p>
-        <div className="mt-3 flex items-center gap-2 text-xs text-zinc-500">
+        <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
           <Clock3 className="h-3.5 w-3.5" />
           <span>预计 {detail?.estimated_minutes ?? fallbackCard.estimated_minutes} 分钟</span>
         </div>
@@ -80,7 +81,7 @@ function ReviewCard({
           {refreshLabel}
         </Button>
       </div>
-    </article>
+    </Panel>
   )
 }
 
@@ -100,15 +101,15 @@ export function ReviewEntryCards(props: ReviewEntryCardsProps) {
         onQuestionAction={props.onStartQuestionRecommendation}
         onRefresh={props.onRefreshRecommendation}
       />
-      <article className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
-        <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 text-zinc-700">
+      <Panel className="p-6">
+        <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-secondary text-foreground">
           <BookOpen className="h-5 w-5" />
         </div>
         <div className="space-y-2">
-          <h2 className="text-base font-semibold text-zinc-900">选择文章复习</h2>
-          <p className="text-sm leading-6 text-zinc-600">按关键词筛选并手动挑选本次要训练的主题。</p>
+          <h2 className="text-base font-semibold text-foreground">选择文章复习</h2>
+          <p className="text-sm leading-6 text-muted-foreground">按关键词筛选并手动挑选本次要训练的主题。</p>
         </div>
-        <div className="mt-5 rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 p-4 text-sm leading-6 text-zinc-600">
+        <div className="mt-5 rounded-xl border border-dashed border-border bg-secondary/35 p-4 text-sm leading-6 text-muted-foreground">
           当你想定向练某个主题，而不是跟着系统漫游时，从候选列表里直接点选即可。
         </div>
         <div className="mt-4">
@@ -116,7 +117,7 @@ export function ReviewEntryCards(props: ReviewEntryCardsProps) {
             打开候选列表
           </Button>
         </div>
-      </article>
+      </Panel>
     </section>
   )
 }

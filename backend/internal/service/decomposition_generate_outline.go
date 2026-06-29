@@ -104,7 +104,9 @@ JSON 格式如下：
 		modelName = envModel
 	}
 
-	content, err := s.llmClient.GenerateJSON(ctx, modelName, messages)
+	options := llm.DefaultChatOptions()
+	options.MaxTokens = 6000
+	content, _, err := s.llmClient.GenerateJSONWithOptions(ctx, modelName, messages, options)
 	if err != nil {
 		return nil, fmt.Errorf("llm generation failed: %w", err)
 	}

@@ -35,6 +35,7 @@ export type ChapterPhase =
   | 'understanding'
   | 'drafting'
   | 'reviewing'
+  | 'repairing'
   | 'revising'
   | 'streaming'
   | 'completed'
