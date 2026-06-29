@@ -161,7 +161,7 @@ export function useKnowledgeReview() {
         turns: nextTurns,
       })
     },
-    [currentSession, loadHistory, persistSessionID, setCurrentSession, setFinalFeedback, setLatestStageFeedback],
+    [currentSession, loadHistory, persistSessionID, setCurrentSession, setFinalFeedback, setLatestHint, setLatestStageFeedback],
   )
 
   const startAnswering = useCallback(() => {
