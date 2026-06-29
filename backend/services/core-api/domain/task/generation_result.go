@@ -14,5 +14,17 @@ type GenerationResult struct {
 
 // GenerationResultUsage carries token accounting facts that belong to core-api.
 type GenerationResultUsage struct {
-	EstimatedTokens int `json:"estimated_tokens"`
+	EstimatedTokens       int `json:"estimated_tokens"`
+	PromptTokens          int `json:"prompt_tokens"`
+	CompletionTokens      int `json:"completion_tokens"`
+	PromptCacheHitTokens  int `json:"prompt_cache_hit_tokens"`
+	PromptCacheMissTokens int `json:"prompt_cache_miss_tokens"`
+}
+
+func (u GenerationResultUsage) billableTokens() int {
+	actualTokens := u.PromptTokens + u.CompletionTokens
+	if actualTokens > 0 {
+		return actualTokens
+	}
+	return u.EstimatedTokens
 }

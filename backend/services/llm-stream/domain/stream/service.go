@@ -120,6 +120,13 @@ func (s *Service) BuildContinueTaskResult(ctx context.Context, userID uuid.UUID,
 		AppendedContent: snapshot.AppendedContent,
 		FinalContent:    snapshot.FinalContent,
 		EstimatedTokens: snapshot.EstimatedTokens,
+		Usage: TaskResultUsage{
+			EstimatedTokens:       snapshot.EstimatedTokens,
+			PromptTokens:          snapshot.Usage.PromptTokens,
+			CompletionTokens:      snapshot.Usage.CompletionTokens,
+			PromptCacheHitTokens:  snapshot.Usage.PromptCacheHitTokens,
+			PromptCacheMissTokens: snapshot.Usage.PromptCacheMissTokens,
+		},
 	})
 }
 

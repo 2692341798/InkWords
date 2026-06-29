@@ -54,12 +54,13 @@ func (s *DecompositionService) handleSeriesChapterCompletion(
 	content string,
 	wordCount int,
 	techStacks []string,
+	qualityResult SeriesChapterFinal,
 	collector *seriesTaskResultCollector,
 ) error {
 	// Why: task_only 模式下系列章节的最终业务事实必须先收口进 result_json，
 	// 否则 core-api 无法在任务成功路径里一次性接管父子博客持久化。
 	if taskOnlyPersistenceMode() {
-		collector.AddChapterSuccess(chapter, content, wordCount, techStacks)
+		collector.AddChapterSuccessWithQuality(chapter, content, wordCount, techStacks, qualityResult)
 		return nil
 	}
 

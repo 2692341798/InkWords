@@ -125,33 +125,61 @@ func (r *GormGenerationResultRepository) AccumulateTokens(ctx context.Context, t
 	}
 	switch decoded.TaskSubtype {
 	case "generate_single", "continue":
+	case "generate_series":
 	default:
 		return nil
 	}
 
-	blogID, err := readPayloadUUID(decoded.Payload, "blog_id")
+	userID, err := r.usageOwnerUserID(ctx, taskID, decoded)
 	if err != nil {
 		return err
 	}
 
-	var blog blogRecord
-	if err := r.db.WithContext(ctx).Select("id", "user_id").First(&blog, "id = ?", blogID).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return fmt.Errorf("load generated blog owner: blog %s not found", blogID)
-		}
-		return fmt.Errorf("load generated blog owner: %w", err)
-	}
-
 	updateTx := r.db.WithContext(ctx).Model(&userRecord{}).
-		Where("id = ?", blog.UserID).
-		UpdateColumn("tokens_used", gorm.Expr("tokens_used + ?", decoded.Usage.EstimatedTokens))
+		Where("id = ?", userID).
+		UpdateColumn("tokens_used", gorm.Expr("tokens_used + ?", decoded.Usage.billableTokens()))
 	if updateTx.Error != nil {
 		return fmt.Errorf("accumulate user tokens: %w", updateTx.Error)
 	}
 	if updateTx.RowsAffected == 0 {
-		return fmt.Errorf("accumulate user tokens: user %s not found", blog.UserID)
+		return fmt.Errorf("accumulate user tokens: user %s not found", userID)
 	}
 	return nil
+}
+
+func (r *GormGenerationResultRepository) usageOwnerUserID(ctx context.Context, taskID uuid.UUID, decoded GenerationResult) (uuid.UUID, error) {
+	blogID, err := usageOwnerBlogID(decoded)
+	if err == nil {
+		var blog blogRecord
+		if err := r.db.WithContext(ctx).Select("id", "user_id").First(&blog, "id = ?", blogID).Error; err != nil {
+			if err != gorm.ErrRecordNotFound {
+				return uuid.Nil, fmt.Errorf("load generated blog owner: %w", err)
+			}
+		} else {
+			return blog.UserID, nil
+		}
+	}
+
+	var task JobTask
+	if err := r.db.WithContext(ctx).Select("id", "requested_by").First(&task, "id = ?", taskID).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return uuid.Nil, fmt.Errorf("load generation task owner: task %s not found", taskID)
+		}
+		return uuid.Nil, fmt.Errorf("load generation task owner: %w", err)
+	}
+	return task.RequestedBy, nil
+}
+
+func usageOwnerBlogID(decoded GenerationResult) (uuid.UUID, error) {
+	if decoded.TaskSubtype == "generate_series" {
+		parentRaw, ok := decoded.Payload["parent_blog"].(map[string]any)
+		if !ok {
+			return uuid.Nil, fmt.Errorf("read parent_blog: invalid payload")
+		}
+		return readPayloadUUID(parentRaw, "blog_id")
+	}
+
+	return readPayloadUUID(decoded.Payload, "blog_id")
 }
 
 func updateBlogByID(ctx context.Context, db *gorm.DB, blogID uuid.UUID, updates map[string]any, action string) error {

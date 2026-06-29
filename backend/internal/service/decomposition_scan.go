@@ -158,7 +158,7 @@ func (s *DecompositionService) ScanProjectModulesWithProgress(ctx context.Contex
 		defer cancel()
 
 		if err := s.limiter.Wait(ctxTimeout); err == nil {
-			if jsonStr, err := s.llmClient.GenerateJSON(ctxTimeout, modelStr, messages); err == nil {
+			if jsonStr, _, err := s.llmClient.GenerateJSONWithOptions(ctxTimeout, modelStr, messages, llm.LightweightChatOptions("", 1000)); err == nil {
 				jsonStr = strings.TrimPrefix(strings.TrimSpace(jsonStr), "```json")
 				jsonStr = strings.TrimPrefix(jsonStr, "```")
 				jsonStr = strings.TrimSuffix(jsonStr, "```")

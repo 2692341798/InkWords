@@ -6,6 +6,36 @@ import { useShallow } from 'zustand/react/shallow'
 import { CheckCircle2, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
+function formatCompactNumber(value: number | undefined) {
+  if (!Number.isFinite(value)) {
+    return '0'
+  }
+  return new Intl.NumberFormat('zh-CN', { notation: 'compact', maximumFractionDigits: 1 }).format(value ?? 0)
+}
+
+function formatCacheHitRate(hit: number | undefined, miss: number | undefined) {
+  const safeHit = Number.isFinite(hit) ? hit ?? 0 : 0
+  const safeMiss = Number.isFinite(miss) ? miss ?? 0 : 0
+  const total = safeHit + safeMiss
+  if (total <= 0) {
+    return '暂无'
+  }
+  return `${Math.round((safeHit / total) * 100)}%`
+}
+
+function chapterStatusLabel(status: string, phase: string) {
+  if (status === 'completed') return '已完成'
+  if (status === 'pending') return '等待中'
+  if (status === 'error') return '失败'
+  if (phase === 'understanding') return '理解中'
+  if (phase === 'drafting') return '起草中'
+  if (phase === 'reviewing') return '审稿中'
+  if (phase === 'repairing') return '修复中'
+  if (phase === 'revising') return '补强中'
+  if (phase === 'streaming') return '输出中'
+  return status === 'generating' ? '生成中' : status
+}
+
 export function GeneratorStatus() {
   const store = useStreamStore(
     useShallow((state) => ({
@@ -21,8 +51,10 @@ export function GeneratorStatus() {
       outline: state.outline,
       content: state.content,
       chapterStatus: state.chapterStatus,
+      chapterPhases: state.chapterPhases,
       chapterContents: state.chapterContents,
       chapterErrors: state.chapterErrors,
+      chapterUsage: state.chapterUsage,
     })),
   )
   const contentEndRef = useRef<HTMLDivElement>(null)
@@ -138,8 +170,10 @@ export function GeneratorStatus() {
               <div className="space-y-3 pb-8">
                 {[...store.outline].sort((a,b)=>a.sort-b.sort).map(chapter => {
                   const status = store.chapterStatus[chapter.sort] || 'pending';
+                  const phase = store.chapterPhases[chapter.sort] || 'pending';
                   const content = store.chapterContents[chapter.sort] || '';
                   const errorMessage = store.chapterErrors[chapter.sort] || '';
+                  const usage = store.chapterUsage[chapter.sort];
                   const snippet = content.length > 80 ? '...' + content.slice(-80) : content;
                   return (
                     <div key={chapter.sort} className={cn(
@@ -161,7 +195,7 @@ export function GeneratorStatus() {
                           )}>{chapter.title}</span>
                         </div>
                         <span className="rounded-md bg-secondary px-2 py-1 text-xs capitalize text-muted-foreground">
-                          {status === 'generating' ? '生成中' : status === 'completed' ? '已完成' : status === 'pending' ? '等待中' : status === 'error' ? '失败' : status}
+                          {chapterStatusLabel(status, phase)}
                         </span>
                       </div>
                       {status === 'error' && errorMessage && (
@@ -173,6 +207,13 @@ export function GeneratorStatus() {
                         <div className="line-clamp-2 rounded-lg border border-border bg-secondary/35 p-3 font-mono text-sm leading-relaxed text-muted-foreground">
                           {snippet}
                           {status === 'generating' && <span className="ml-1 inline-block h-3 w-1.5 align-middle bg-[var(--brand)]" />}
+                        </div>
+                      )}
+                      {usage && (
+                        <div className="grid gap-2 rounded-lg border border-border bg-secondary/25 p-3 text-xs text-muted-foreground sm:grid-cols-3">
+                          <span>Prompt {formatCompactNumber(usage.prompt_tokens)}</span>
+                          <span>Completion {formatCompactNumber(usage.completion_tokens)}</span>
+                          <span>缓存命中 {formatCacheHitRate(usage.prompt_cache_hit_tokens, usage.prompt_cache_miss_tokens)}</span>
                         </div>
                       )}
                     </div>

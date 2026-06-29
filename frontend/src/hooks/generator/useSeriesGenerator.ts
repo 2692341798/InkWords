@@ -76,6 +76,7 @@ export function handleSeriesChunkMessage(store: SeriesChunkStore, rawData: strin
     data.status === 'understanding' ||
     data.status === 'drafting' ||
     data.status === 'reviewing' ||
+    data.status === 'repairing' ||
     data.status === 'revising' ||
     data.status === 'streaming'
   ) {

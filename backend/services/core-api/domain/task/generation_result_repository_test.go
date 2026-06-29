@@ -39,7 +39,11 @@ func TestGormGenerationResultRepository_PersistSingleGenerationResult(t *testing
 		"persistence_mode": "task_only",
 		"final_status":     "succeeded",
 		"usage": map[string]any{
-			"estimated_tokens": 24,
+			"estimated_tokens":         24,
+			"prompt_tokens":            10,
+			"completion_tokens":        7,
+			"prompt_cache_hit_tokens":  6,
+			"prompt_cache_miss_tokens": 4,
 		},
 		"payload": map[string]any{
 			"blog_id":     blogID.String(),
@@ -65,7 +69,92 @@ func TestGormGenerationResultRepository_PersistSingleGenerationResult(t *testing
 
 	var user userRecord
 	require.NoError(t, testDB.First(&user, "id = ?", userID).Error)
+	require.Equal(t, 17, user.TokensUsed)
+}
+
+func TestGormGenerationResultRepository_AccumulateTokensFallsBackToEstimatedTokens(t *testing.T) {
+	testDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, testDB.AutoMigrate(&userRecord{}, &blogRecord{}))
+
+	userID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	blogID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
+	require.NoError(t, testDB.Create(&userRecord{
+		ID:       userID,
+		Username: "tester",
+		Email:    "tester@example.com",
+	}).Error)
+	require.NoError(t, testDB.Create(&blogRecord{
+		ID:         blogID,
+		UserID:     userID,
+		Title:      "标题",
+		Content:    "内容",
+		SourceType: "file",
+		Status:     1,
+	}).Error)
+
+	repo := NewGormGenerationResultRepository(testDB)
+	result := map[string]any{
+		"result_version":   1,
+		"task_type":        "generation",
+		"task_subtype":     "generate_single",
+		"persistence_mode": "task_only",
+		"final_status":     "succeeded",
+		"usage": map[string]any{
+			"estimated_tokens": 24,
+		},
+		"payload": map[string]any{
+			"blog_id": blogID.String(),
+		},
+	}
+
+	taskID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	require.NoError(t, repo.AccumulateTokens(context.Background(), taskID, result))
+
+	var user userRecord
+	require.NoError(t, testDB.First(&user, "id = ?", userID).Error)
 	require.Equal(t, 24, user.TokensUsed)
+}
+
+func TestGormGenerationResultRepository_AccumulateTokensFallsBackToTaskOwnerWithoutBlogID(t *testing.T) {
+	testDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, testDB.AutoMigrate(&userRecord{}, &JobTask{}))
+
+	userID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	taskID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+	require.NoError(t, testDB.Create(&userRecord{
+		ID:       userID,
+		Username: "tester",
+		Email:    "tester@example.com",
+	}).Error)
+	require.NoError(t, testDB.Create(&JobTask{
+		ID:          taskID,
+		TaskType:    "generation",
+		TaskSubtype: "generate_single",
+		Status:      JobTaskStatusSucceeded,
+		RequestedBy: userID,
+	}).Error)
+
+	repo := NewGormGenerationResultRepository(testDB)
+	result := map[string]any{
+		"result_version":   1,
+		"task_type":        "generation",
+		"task_subtype":     "generate_single",
+		"persistence_mode": "task_only",
+		"final_status":     "succeeded",
+		"usage": map[string]any{
+			"prompt_tokens":     11,
+			"completion_tokens": 9,
+		},
+		"payload": map[string]any{},
+	}
+
+	require.NoError(t, repo.AccumulateTokens(context.Background(), taskID, result))
+
+	var user userRecord
+	require.NoError(t, testDB.First(&user, "id = ?", userID).Error)
+	require.Equal(t, 20, user.TokensUsed)
 }
 
 func TestGormGenerationResultRepository_PersistContinueResult(t *testing.T) {
@@ -155,7 +244,11 @@ func TestGormGenerationResultRepository_PersistGenerateSeriesResult(t *testing.T
 		"persistence_mode": "task_only",
 		"final_status":     "succeeded",
 		"usage": map[string]any{
-			"estimated_tokens": 64,
+			"estimated_tokens":         64,
+			"prompt_tokens":            30,
+			"completion_tokens":        12,
+			"prompt_cache_hit_tokens":  25,
+			"prompt_cache_miss_tokens": 5,
 		},
 		"payload": map[string]any{
 			"parent_blog": map[string]any{
@@ -194,4 +287,9 @@ func TestGormGenerationResultRepository_PersistGenerateSeriesResult(t *testing.T
 	require.Equal(t, 4, child.WordCount)
 	require.Equal(t, int16(1), child.Status)
 	require.JSONEq(t, `["Go"]`, string(child.TechStacks))
+
+	require.NoError(t, repo.AccumulateTokens(context.Background(), taskID, result))
+	var user userRecord
+	require.NoError(t, testDB.First(&user, "id = ?", userID).Error)
+	require.Equal(t, 42, user.TokensUsed)
 }
