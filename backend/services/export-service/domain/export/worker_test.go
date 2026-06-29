@@ -76,11 +76,13 @@ type fakeExportTaskService struct {
 	lastResult       []byte
 	lastErrorMessage string
 	cancelled        bool
+	markRunningErr   error
+	isCancelledErr   error
 }
 
 func (f *fakeExportTaskService) MarkRunning(_ context.Context, _ uuid.UUID) error {
 	f.lastStatus = "running"
-	return nil
+	return f.markRunningErr
 }
 
 func (f *fakeExportTaskService) MarkSucceeded(_ context.Context, _ uuid.UUID, result []byte) error {
@@ -96,7 +98,7 @@ func (f *fakeExportTaskService) MarkFailed(_ context.Context, _ uuid.UUID, messa
 }
 
 func (f *fakeExportTaskService) IsCancelled(_ context.Context, _ uuid.UUID) (bool, error) {
-	return f.cancelled, nil
+	return f.cancelled, f.isCancelledErr
 }
 
 type stubPDFExporter struct {
@@ -119,4 +121,89 @@ func (s *stubArtifactStore) Save(taskID uuid.UUID, sourcePath string, filename s
 		return TaskResult{}, errors.New("unexpected save call")
 	}
 	return s.saveFunc(taskID, sourcePath, filename)
+}
+
+func TestConsumeMessage_SuccessButAckFails_ReturnsError(t *testing.T) {
+	tasks := &fakeExportTaskService{}
+	exporter := &stubPDFExporter{
+		exportFunc: func(context.Context, uuid.UUID, uuid.UUID) (string, string, error) {
+			return "/tmp/series.pdf", "series.pdf", nil
+		},
+	}
+	store := &stubArtifactStore{
+		saveFunc: func(taskID uuid.UUID, sourcePath string, filename string) (TaskResult, error) {
+			return TaskResult{FileToken: "tok", Filename: filename}, nil
+		},
+	}
+	consumer := NewConsumer(tasks, exporter, store)
+	ack := &fakeDeliveryAcknowledger{ackErr: errors.New("ack io error")}
+
+	body := []byte(`{"task_id":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","kind":"export_pdf","user_id":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb","payload":{"blog_id":"cccccccc-cccc-cccc-cccc-cccccccccccc"}}`)
+
+	err := consumer.ConsumeMessage(context.Background(), body, ack)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "ack for export task")
+	require.ErrorContains(t, err, "ack io error")
+	require.Equal(t, "succeeded", tasks.lastStatus)
+}
+
+func TestConsumeMessage_WorkFailsAndNackFails_RecordsBoth(t *testing.T) {
+	tasks := &fakeExportTaskService{markRunningErr: errors.New("db unavailable")}
+	consumer := NewConsumer(tasks, &stubPDFExporter{}, &stubArtifactStore{})
+	ack := &fakeDeliveryAcknowledger{nackErr: errors.New("nack io error")}
+
+	body := []byte(`{"task_id":"dddddddd-dddd-dddd-dddd-dddddddddddd","kind":"export_pdf","user_id":"eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee","payload":{"blog_id":"ffffffff-ffff-ffff-ffff-ffffffffffff"}}`)
+
+	err := consumer.ConsumeMessage(context.Background(), body, ack)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "nack for export task")
+	require.ErrorContains(t, err, "nack io error")
+	require.ErrorContains(t, err, "db unavailable")
+	require.True(t, ack.nackCalled)
+}
+
+func TestConsumeMessage_MalformedPayload_AcksOnce(t *testing.T) {
+	consumer := NewConsumer(&fakeExportTaskService{}, &stubPDFExporter{}, &stubArtifactStore{})
+	ack := &fakeDeliveryAcknowledger{}
+
+	err := consumer.ConsumeMessage(context.Background(), []byte(`not json`), ack)
+	require.NoError(t, err)
+	require.True(t, ack.ackCalled)
+	require.False(t, ack.nackCalled)
+}
+
+func TestConsumeMessage_TransientWorkError_NacksWithRequeue(t *testing.T) {
+	tasks := &fakeExportTaskService{isCancelledErr: errors.New("db timeout")}
+	consumer := NewConsumer(tasks, &stubPDFExporter{}, &stubArtifactStore{})
+	ack := &fakeDeliveryAcknowledger{}
+
+	body := []byte(`{"task_id":"11111111-1111-1111-1111-111111111111","kind":"export_pdf","user_id":"22222222-2222-2222-2222-222222222222","payload":{"blog_id":"33333333-3333-3333-3333-333333333333"}}`)
+
+	err := consumer.ConsumeMessage(context.Background(), body, ack)
+	require.NoError(t, err)
+	require.True(t, ack.nackCalled)
+	require.True(t, ack.lastNackRequeue)
+	require.False(t, ack.ackCalled)
+}
+
+type fakeDeliveryAcknowledger struct {
+	ackErr    error
+	nackErr   error
+	ackCalled bool
+
+	nackCalled       bool
+	lastNackRequeue  bool
+	lastNackMultiple bool
+}
+
+func (f *fakeDeliveryAcknowledger) Ack(multiple bool) error {
+	f.ackCalled = true
+	return f.ackErr
+}
+
+func (f *fakeDeliveryAcknowledger) Nack(multiple bool, requeue bool) error {
+	f.nackCalled = true
+	f.lastNackMultiple = multiple
+	f.lastNackRequeue = requeue
+	return f.nackErr
 }
