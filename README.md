@@ -36,7 +36,7 @@ InkWords Trainer 是一个面向个人知识沉淀、知识复习与可选内容
 - **生产形态升级**：从单体后端演进为 Docker Compose 多服务架构。
 - **任务中心升级**：生成、解析、导出逐步统一到 `job_tasks + RabbitMQ + SSE` 模型。
 - **复习链路升级**：知识漫游复习从固定模板问答升级为文章驱动的结构化追问。
-- **代码边界升级**：`parser-service`、`review-service`、`export-service` 已完成服务目录归属；`core-api` 与 `llm-stream` 正在做深拆分。
+- **代码边界升级**：五个后端服务均已完成服务目录归属；旧命令包装与不可达的 legacy 业务包已删除。
 
 ## 系统架构
 项目采用前后端分离的 Monorepo 结构：
@@ -202,7 +202,7 @@ InkWords/
 ├── frontend/                    # React 前端
 ├── backend/                     # Go 后端
 │   ├── cmd/server/              # 本地聚合入口
-│   ├── internal/                # 共享领域 / transport / infra
+│   ├── internal/                # 暂存数据库初始化与持久化模型桥接
 │   ├── services/
 │   │   ├── core-api/            # 核心 API 服务
 │   │   ├── llm-stream/          # 流式生成服务
@@ -240,17 +240,17 @@ InkWords/
 - Obsidian Local REST API
 
 ## 当前微服务化进度
-当前可以把项目理解为“多服务已落地，核心双服务仍在深拆”：
+当前可以把项目理解为“多服务已落地，旧业务层已退役”：
 
 - 已完成：
-  - `parser-service`、`review-service`、`export-service` 的服务自有入口与装配收口
+  - 五个后端服务的自有入口、领域与装配收口
   - Docker Compose 多服务生产形态
   - Nginx 单入口网关分流
   - 生成 / 解析 / 导出任务中心基础链路
+  - 删除旧 `cmd/*` 包装与不可达的 domain/service/transport/prompt/cache/mq 代码
 - 进行中：
-  - `core-api / llm-stream` 深拆分第一轮
   - 生成结果由 `core-api` 逐步回收最终业务落库
-  - legacy 共享 transport 和共享写入边界的进一步收口
+  - 将 `internal/infra/db` 与 `internal/model` 持久化桥接迁移到 shared/service-owned 边界
 
 ## 运行与验证建议
 当你修改了以下内容之一时，建议优先跑微服务冒烟检查：
