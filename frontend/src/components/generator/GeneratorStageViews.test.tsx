@@ -253,7 +253,7 @@ describe('Generator stage views', () => {
 
     expect(html).toContain('解析进度')
     expect(html).not.toContain('fixed inset-0')
-    expect(html).toContain('overflow-hidden rounded-3xl')
+    expect(html).toContain('overflow-hidden rounded-2xl')
   })
 
   it('shows chapter error reasons in the inline generation progress panel', () => {
@@ -279,6 +279,6 @@ describe('Generator stage views', () => {
 
     expect(html).toContain('解析进度')
     expect(html).toContain('已完成仓库克隆')
-    expect(html).toContain('overflow-hidden rounded-3xl')
+    expect(html).toContain('overflow-hidden rounded-2xl')
   })
 })

@@ -218,4 +218,3 @@
 .prose :where(code):not(:where([class~="not-prose"] *))::after {
     content: "";
 }
-EOF; __tr_native_ec=$?; pwd -P >| '/var/folders/8h/7sq88g7528v8_fgz02nc_wnm0000gn/T/agent-toolhost/jobs/job-37005a524b7e4ed294e20eae6ff35f5a/cwd.txt'; exit "$__tr_native_ec"

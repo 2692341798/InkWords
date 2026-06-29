@@ -17,7 +17,7 @@ describe('SidebarShell', () => {
     expect(html).toContain('顶部区域')
     expect(html).toContain('内容区域')
     expect(html).toContain('底部区域')
-    expect(html).toContain('w-80')
+    expect(html).toContain('w-72')
     expect(html).toContain('print:hidden')
   })
 })
