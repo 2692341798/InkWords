@@ -1,8 +1,8 @@
-import { renderToStaticMarkup } from 'react-dom/server'
+// @vitest-environment jsdom
+import { act, renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
-  capturedHook,
   createSessionMock,
   getSessionMock,
   loadHistoryMock,
@@ -25,9 +25,6 @@ const {
   }
 
   return {
-    capturedHook: {
-      current: null as null | ReturnType<typeof import('./useKnowledgeReview').useKnowledgeReview>,
-    },
     createSessionMock: vi.fn(),
     getSessionMock: vi.fn(),
     loadHistoryMock: state.loadHistory,
@@ -56,20 +53,10 @@ vi.mock('@/store/reviewStore', () => {
 
 import { useKnowledgeReview } from './useKnowledgeReview'
 
-function HookHarness() {
-  capturedHook.current = useKnowledgeReview()
-  return null
-}
-
 describe('useKnowledgeReview', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    capturedHook.current = null
     storeState.selectedMode = 'light_recall'
-    Object.defineProperty(globalThis, 'window', {
-      configurable: true,
-      value: undefined,
-    })
   })
 
   it('uses the explicit mode override when starting a session from a dedicated entry action', async () => {
@@ -91,21 +78,19 @@ describe('useKnowledgeReview', () => {
       turn_index: 1,
     })
 
-    renderToStaticMarkup(<HookHarness />)
+    const { result } = renderHook(() => useKnowledgeReview())
 
-    await (
-      capturedHook.current?.startSession as unknown as (
+    await act(async () => {
+      await (result.current.startSession as unknown as (
         card: { note_path: string },
         entryType: 'manual_random',
         modeOverride?: 'light_recall' | 'detailed_qa'
-      ) => Promise<void>
-    )(
-      {
-        note_path: 'wiki/concepts/random.md',
-      },
-      'manual_random',
-      'detailed_qa',
-    )
+      ) => Promise<void>)(
+        { note_path: 'wiki/concepts/random.md' },
+        'manual_random',
+        'detailed_qa',
+      )
+    })
 
     expect(createSessionMock).toHaveBeenCalledWith({
       note_path: 'wiki/concepts/random.md',
@@ -115,16 +100,9 @@ describe('useKnowledgeReview', () => {
   })
 
   it('keeps the explicit resume intent when restoring an active session on page open', async () => {
-    Object.defineProperty(globalThis, 'window', {
-      configurable: true,
-      value: {
-        localStorage: {
-          getItem: vi.fn().mockReturnValue('session-1'),
-          setItem: vi.fn(),
-          removeItem: vi.fn(),
-        },
-      },
-    })
+    vi.spyOn(window.localStorage, 'getItem').mockReturnValue('session-1')
+    vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => {})
+    vi.spyOn(window.localStorage, 'removeItem').mockImplementation(() => {})
 
     getSessionMock.mockResolvedValue({
       session_id: 'session-1',
@@ -144,9 +122,11 @@ describe('useKnowledgeReview', () => {
       turn_index: 2,
     })
 
-    renderToStaticMarkup(<HookHarness />)
+    const { result } = renderHook(() => useKnowledgeReview())
 
-    await capturedHook.current?.initialize()
+    await act(async () => {
+      await result.current.initialize()
+    })
 
     expect(loadRecommendationMock).toHaveBeenCalledTimes(1)
     expect(loadHistoryMock).toHaveBeenCalledWith(5)

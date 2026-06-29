@@ -61,7 +61,7 @@ export function Editor() {
       textarea.focus()
       textarea.setSelectionRange(pos, pos)
     })
-  }, [])
+  }, [editorRef])
 
   const applyVoiceText = useCallback(
     (rawText: string, isFinal: boolean) => {
@@ -105,7 +105,7 @@ export function Editor() {
         })
       }
     },
-    [moveCaretToVoiceEnd, normalizeVoiceText],
+    [moveCaretToVoiceEnd, normalizeVoiceText, editorRef],
   )
 
   const voiceCallbacks = useMemo(
@@ -153,7 +153,7 @@ export function Editor() {
     }
 
     startVoice()
-  }, [isContinuing, isPolishing, isVoiceListening, isVoiceSupported, startVoice, stopVoice])
+  }, [isContinuing, isPolishing, isVoiceListening, isVoiceSupported, startVoice, stopVoice, editorRef])
 
   useEffect(() => {
     cancelPolishAndClear()

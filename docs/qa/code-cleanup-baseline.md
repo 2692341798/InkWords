@@ -52,12 +52,38 @@ Asset hashes in generated filenames may change between builds; the sizes above a
 
 ### Exact duplicate production files
 
-The following baseline scan hashes all non-test Go files under `backend/` and groups byte-for-byte identical files:
+The following baseline scan hashes all non-test Go files under `backend/`, groups byte-for-byte identical files, prints every duplicate path, and calculates the summary totals:
 
 ```sh
 rg --files backend -g '*.go' -g '!**/*_test.go' -g '!**/vendor/**' \
-  | xargs shasum \
-  | sort
+  | LC_ALL=C sort \
+  | while IFS= read -r file; do shasum "$file"; done \
+  | LC_ALL=C sort -k1,1 -k2,2 \
+  | awk '
+      function flush_group(    i) {
+        if (group_size > 1) {
+          duplicate_groups++
+          duplicate_files += group_size
+          printf "duplicate_group=%d sha1=%s files=%d\n", duplicate_groups, current_hash, group_size
+          for (i = 1; i <= group_size; i++) print "  " group_paths[i]
+        }
+        delete group_paths
+        group_size = 0
+      }
+      {
+        hash = $1
+        path = $0
+        sub(/^[^[:space:]]+[[:space:]]+/, "", path)
+        if (current_hash != "" && hash != current_hash) flush_group()
+        current_hash = hash
+        group_paths[++group_size] = path
+      }
+      END {
+        flush_group()
+        printf "duplicate_groups=%d\n", duplicate_groups
+        printf "duplicate_files=%d\n", duplicate_files
+      }
+    '
 ```
 
 It found **22 exact duplicate groups spanning 52 files**:

@@ -14,28 +14,23 @@ import {
 class StopStreamError extends Error {}
 
 /**
- * 编辑器“润色（预览草稿）”的流式请求 Hook。
- * - 润色结果仅在前端暂存，用户点击“应用”前不覆盖正文
+ * 编辑器"润色（预览草稿）"的流式请求 Hook。
+ * - 润色结果仅在前端暂存，用户点击"应用"前不覆盖正文
  * - 取消会中止请求并清空草稿（按产品约定）
  */
 export const usePolishStream = () => {
   const abortControllerRef = useRef<AbortController | null>(null)
-  const draftBufferRef = useRef<ReturnType<typeof createTextChunkBuffer> | null>(null)
   const taskIdRef = useRef<string | null>(null)
   const [isPolishing, setIsPolishing] = useState(false)
   const [draft, setDraft] = useState('')
 
-  if (!draftBufferRef.current) {
-    draftBufferRef.current = createTextChunkBuffer((chunk) => {
+  const [draftBuffer] = useState(() =>
+    createTextChunkBuffer((chunk) => {
       setDraft((previous) => previous + chunk)
-    })
-  }
+    }),
+  )
 
-  useEffect(() => {
-    return () => {
-      draftBufferRef.current?.cancel()
-    }
-  }, [])
+  useEffect(() => () => draftBuffer.cancel(), [draftBuffer])
 
   const cancelAndClear = useCallback(() => {
     if (taskIdRef.current) {
@@ -44,12 +39,12 @@ export const usePolishStream = () => {
       })
       taskIdRef.current = null
     }
-    draftBufferRef.current?.cancel()
+    draftBuffer.cancel()
     abortControllerRef.current?.abort()
     abortControllerRef.current = null
     setDraft('')
     setIsPolishing(false)
-  }, [])
+  }, [draftBuffer])
 
   const start = useCallback(async (blogId: string, title: string, content: string) => {
     setDraft('')
@@ -83,20 +78,20 @@ export const usePolishStream = () => {
         },
         onmessage(msg) {
           if (msg.event === 'chunk') {
-            draftBufferRef.current?.push(extractTaskChunkContent(msg.data))
+            draftBuffer.push(extractTaskChunkContent(msg.data))
             return
           }
           if (msg.event === 'done') {
-            draftBufferRef.current?.flush()
+            draftBuffer.flush()
             taskIdRef.current = null
             setIsPolishing(false)
             throw new StopStreamError('done')
           }
           if (msg.event === 'error') {
             if (ctrl.signal.aborted) {
-              draftBufferRef.current?.cancel()
+              draftBuffer.cancel()
             } else {
-              draftBufferRef.current?.flush()
+              draftBuffer.flush()
             }
             taskIdRef.current = null
             setIsPolishing(false)
@@ -105,9 +100,9 @@ export const usePolishStream = () => {
         },
         onclose() {
           if (ctrl.signal.aborted) {
-            draftBufferRef.current?.cancel()
+            draftBuffer.cancel()
           } else {
-            draftBufferRef.current?.flush()
+            draftBuffer.flush()
           }
           taskIdRef.current = null
           setIsPolishing(false)
@@ -115,9 +110,9 @@ export const usePolishStream = () => {
         },
         onerror(err: unknown) {
           if (ctrl.signal.aborted) {
-            draftBufferRef.current?.cancel()
+            draftBuffer.cancel()
           } else {
-            draftBufferRef.current?.flush()
+            draftBuffer.flush()
           }
           if (err instanceof StopStreamError) {
             taskIdRef.current = null
@@ -167,7 +162,7 @@ export const usePolishStream = () => {
       toast.error('润色失败，请稍后重试')
       setIsPolishing(false)
     }
-  }, [])
+  }, [draftBuffer])
 
   return { isPolishing, draft, start, cancelAndClear }
 }
