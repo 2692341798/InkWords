@@ -5,8 +5,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 )
@@ -31,6 +33,21 @@ type ChatRequest struct {
 	Thinking        map[string]string `json:"thinking,omitempty"`
 	ReasoningEffort string            `json:"reasoning_effort,omitempty"`
 	ResponseFormat  map[string]string `json:"response_format,omitempty"`
+	StreamOptions   *StreamOptions    `json:"stream_options,omitempty"`
+	UserID          string            `json:"user_id,omitempty"`
+}
+
+// StreamOptions configures DeepSeek streaming response behavior.
+type StreamOptions struct {
+	IncludeUsage bool `json:"include_usage,omitempty"`
+}
+
+// ChatOptions captures optional DeepSeek request controls used by specialized call sites.
+type ChatOptions struct {
+	ThinkingType    string
+	ReasoningEffort string
+	MaxTokens       int
+	UserID          string
 }
 
 // ChatCompletionChunk represents a single chunk from the stream
@@ -64,6 +81,16 @@ type DeepSeekClient struct {
 	Client *http.Client
 }
 
+// APIError exposes HTTP status information for retry classification.
+type APIError struct {
+	StatusCode int
+	Body       string
+}
+
+func (e *APIError) Error() string {
+	return fmt.Sprintf("API request failed with status %d: %s", e.StatusCode, e.Body)
+}
+
 // NewDeepSeekClient creates a new DeepSeek client
 func NewDeepSeekClient(apiKey string) *DeepSeekClient {
 	return &DeepSeekClient{
@@ -71,6 +98,80 @@ func NewDeepSeekClient(apiKey string) *DeepSeekClient {
 		APIURL: defaultDeepSeekAPIURL,
 		Client: &http.Client{},
 	}
+}
+
+// DefaultChatOptions keeps the previous behavior for regular generation calls.
+func DefaultChatOptions() ChatOptions {
+	return ChatOptions{ThinkingType: "enabled", ReasoningEffort: "high"}
+}
+
+// LightweightChatOptions is for bounded metadata/JSON tasks where reasoning is not worth the cost.
+func LightweightChatOptions(userID string, maxTokens int) ChatOptions {
+	return ChatOptions{ThinkingType: "disabled", MaxTokens: maxTokens, UserID: userID}
+}
+
+func (o ChatOptions) apply(req *ChatRequest) {
+	thinkingType := strings.TrimSpace(o.ThinkingType)
+	if thinkingType == "" {
+		thinkingType = "enabled"
+	}
+	req.Thinking = map[string]string{"type": thinkingType}
+
+	if thinkingType == "enabled" {
+		reasoningEffort := strings.TrimSpace(o.ReasoningEffort)
+		if reasoningEffort == "" {
+			reasoningEffort = "high"
+		}
+		req.ReasoningEffort = reasoningEffort
+	}
+
+	if o.MaxTokens > 0 {
+		req.MaxTokens = o.MaxTokens
+	}
+	if userID := sanitizeUserID(o.UserID); userID != "" {
+		req.UserID = userID
+	}
+}
+
+func sanitizeUserID(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+
+	var builder strings.Builder
+	for _, r := range raw {
+		switch {
+		case r >= 'a' && r <= 'z':
+			builder.WriteRune(r)
+		case r >= 'A' && r <= 'Z':
+			builder.WriteRune(r)
+		case r >= '0' && r <= '9':
+			builder.WriteRune(r)
+		case r == '-' || r == '_':
+			builder.WriteRune(r)
+		}
+		if builder.Len() >= 512 {
+			break
+		}
+	}
+	return builder.String()
+}
+
+// IsRetryableError returns true for transient transport/API failures.
+func IsRetryableError(err error) bool {
+	if err == nil || errors.Is(err, context.Canceled) {
+		return false
+	}
+	var apiErr *APIError
+	if errors.As(err, &apiErr) {
+		return apiErr.StatusCode == http.StatusTooManyRequests || apiErr.StatusCode >= http.StatusInternalServerError
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+	return false
 }
 
 func parseCompletionUsage(body []byte) CompletionUsage {
@@ -107,7 +208,7 @@ func (c *DeepSeekClient) doChatCompletion(ctx context.Context, reqBody ChatReque
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+		return nil, &APIError{StatusCode: resp.StatusCode, Body: string(bodyBytes)}
 	}
 
 	return bodyBytes, nil
@@ -143,13 +244,17 @@ func (c *DeepSeekClient) Generate(ctx context.Context, model string, messages []
 
 // GenerateWithUsage calls the DeepSeek API with stream=false and returns the full response content plus usage.
 func (c *DeepSeekClient) GenerateWithUsage(ctx context.Context, model string, messages []Message) (string, CompletionUsage, error) {
+	return c.GenerateWithOptions(ctx, model, messages, DefaultChatOptions())
+}
+
+// GenerateWithOptions calls the DeepSeek API with stream=false and request options.
+func (c *DeepSeekClient) GenerateWithOptions(ctx context.Context, model string, messages []Message, options ChatOptions) (string, CompletionUsage, error) {
 	reqBody := ChatRequest{
-		Model:           model,
-		Messages:        messages,
-		Stream:          false,
-		Thinking:        map[string]string{"type": "enabled"},
-		ReasoningEffort: "high",
+		Model:    model,
+		Messages: messages,
+		Stream:   false,
 	}
+	options.apply(&reqBody)
 
 	bodyBytes, err := c.doChatCompletion(ctx, reqBody)
 	if err != nil {
@@ -172,16 +277,20 @@ func (c *DeepSeekClient) GenerateJSON(ctx context.Context, model string, message
 
 // GenerateJSONWithUsage calls the DeepSeek API with stream=false and response_format={"type": "json_object"}.
 func (c *DeepSeekClient) GenerateJSONWithUsage(ctx context.Context, model string, messages []Message) (string, CompletionUsage, error) {
+	return c.GenerateJSONWithOptions(ctx, model, messages, DefaultChatOptions())
+}
+
+// GenerateJSONWithOptions calls the DeepSeek API with JSON response mode and request options.
+func (c *DeepSeekClient) GenerateJSONWithOptions(ctx context.Context, model string, messages []Message, options ChatOptions) (string, CompletionUsage, error) {
 	temp := 0.1 // Recommend 0.1 for stable JSON output
 	reqBody := ChatRequest{
-		Model:           model,
-		Messages:        messages,
-		Stream:          false,
-		Temperature:     &temp,
-		Thinking:        map[string]string{"type": "enabled"},
-		ReasoningEffort: "high",
-		ResponseFormat:  map[string]string{"type": "json_object"},
+		Model:          model,
+		Messages:       messages,
+		Stream:         false,
+		Temperature:    &temp,
+		ResponseFormat: map[string]string{"type": "json_object"},
 	}
+	options.apply(&reqBody)
 
 	bodyBytes, err := c.doChatCompletion(ctx, reqBody)
 	if err != nil {
@@ -205,14 +314,19 @@ func (c *DeepSeekClient) GenerateStream(ctx context.Context, model string, messa
 
 // GenerateStreamWithUsage calls the DeepSeek API with stream=true, emits content deltas, and captures final usage.
 func (c *DeepSeekClient) GenerateStreamWithUsage(ctx context.Context, model string, messages []Message, chunkChan chan<- string) (string, CompletionUsage, error) {
+	return c.GenerateStreamWithOptions(ctx, model, messages, chunkChan, DefaultChatOptions())
+}
+
+// GenerateStreamWithOptions calls the DeepSeek API with stream=true and request options.
+func (c *DeepSeekClient) GenerateStreamWithOptions(ctx context.Context, model string, messages []Message, chunkChan chan<- string, options ChatOptions) (string, CompletionUsage, error) {
 	defer close(chunkChan)
 	reqBody := ChatRequest{
-		Model:           model,
-		Messages:        messages,
-		Stream:          true,
-		Thinking:        map[string]string{"type": "enabled"},
-		ReasoningEffort: "high",
+		Model:         model,
+		Messages:      messages,
+		Stream:        true,
+		StreamOptions: &StreamOptions{IncludeUsage: true},
 	}
+	options.apply(&reqBody)
 
 	jsonData, err := json.Marshal(reqBody)
 	if err != nil {
@@ -235,7 +349,7 @@ func (c *DeepSeekClient) GenerateStreamWithUsage(ctx context.Context, model stri
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		return "", CompletionUsage{}, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+		return "", CompletionUsage{}, &APIError{StatusCode: resp.StatusCode, Body: string(bodyBytes)}
 	}
 
 	reader := bufio.NewReader(resp.Body)

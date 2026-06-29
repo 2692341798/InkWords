@@ -16,7 +16,7 @@ func (s *DecompositionService) mapReduceAnalyze(ctx context.Context, chunks []pa
 	var summaries []string
 	var mu sync.Mutex
 
-	maxWorkers := maxWorkersFromEnv(len(chunks))
+	maxWorkers := maxWorkersForModel("deepseek-v4-flash", len(chunks))
 
 	sem := semaphore.NewWeighted(int64(maxWorkers))
 	var wg sync.WaitGroup
@@ -104,7 +104,12 @@ func (s *DecompositionService) generateLocalSummaryWithRetry(ctx context.Context
 			return fmt.Sprintf("【目录: %s】\n%s", chunk.Dir, summary)
 		}
 
-		sendProgress(2, fmt.Sprintf("分块 %d/%d 分析失败，正在重试 (%d/%d)...", idx, total, attempt, maxRetries), map[string]interface{}{
+		retryable := llm.IsRetryableError(err)
+		statusMessage := fmt.Sprintf("分块 %d/%d 分析失败，正在重试 (%d/%d)...", idx, total, attempt, maxRetries)
+		if !retryable || attempt == maxRetries {
+			statusMessage = fmt.Sprintf("分块 %d/%d 分析失败，已跳过", idx, total)
+		}
+		sendProgress(2, statusMessage, map[string]interface{}{
 			"status":    "chunk_failed",
 			"dir":       chunk.Dir,
 			"index":     idx,
@@ -112,6 +117,9 @@ func (s *DecompositionService) generateLocalSummaryWithRetry(ctx context.Context
 			"worker_id": workerID,
 		})
 
+		if !retryable {
+			break
+		}
 		time.Sleep(exponentialBackoff(attempt))
 	}
 

@@ -19,6 +19,7 @@ type seriesQualityPipelineInput struct {
 	ChapterSourceContent string
 	GitURL               string
 	OldContent           string
+	UserID               string
 	ProgressChan         chan<- string
 }
 
@@ -32,9 +33,23 @@ func buildSeriesSharedPromptPrefix(seriesTitle string, readerProfile string, out
 	for _, chapter := range outline {
 		builder.WriteString(fmt.Sprintf("- %d. %s\n", chapter.Sort, chapter.Title))
 	}
+	builder.WriteString("统一术语：同一概念在全系列中保持同名；章节标题、读者画像、总大纲和本门禁在每个章节请求中保持字面一致。\n")
 	builder.WriteString("统一质量门禁：必须解释机制、提供案例、给出复现方式、指出边界情况。\n")
 
 	return builder.String()
+}
+
+func usageFromCompletionUsage(usage llm.CompletionUsage) SeriesChapterUsage {
+	return SeriesChapterUsage{
+		PromptTokens:          usage.PromptTokens,
+		CompletionTokens:      usage.CompletionTokens,
+		PromptCacheHitTokens:  usage.PromptCacheHitTokens,
+		PromptCacheMissTokens: usage.PromptCacheMissTokens,
+	}
+}
+
+func estimateSeriesUsageFromText(text string) SeriesChapterUsage {
+	return SeriesChapterUsage{EstimatedTokens: len([]rune(text)) * 2}
 }
 
 // parseSeriesChapterUnderstanding 负责把理解阶段的 JSON 输出解析为受门禁保护的结构化结果。
@@ -50,6 +65,30 @@ func parseSeriesChapterUnderstanding(raw string) (SeriesChapterUnderstanding, er
 	return result, nil
 }
 
+func (s *DecompositionService) repairSeriesJSONOutput(
+	ctx context.Context,
+	llmModel string,
+	userID string,
+	seriesPrefix string,
+	stageName string,
+	raw string,
+	validationErr error,
+) (string, llm.CompletionUsage, error) {
+	messages := []llm.Message{
+		{Role: "system", Content: seriesPrefix + "\n当前阶段：" + stageName + " JSON 修复"},
+		{
+			Role: "user",
+			Content: fmt.Sprintf(
+				"下面是上一轮输出的 JSON 或近似 JSON，但它未通过结构化校验。\n校验错误：%v\n\n原始输出：\n%s\n\n请只修复缺失字段、布尔门禁或 JSON 格式，保持已有有效内容，不要扩写成新文章，返回严格 JSON。",
+				validationErr,
+				raw,
+			),
+		},
+	}
+
+	return s.llmClient.GenerateJSONWithOptions(ctx, llmModel, messages, llm.LightweightChatOptions(userID, 1800))
+}
+
 // generateSeriesChapterUnderstanding 调用模型先产出章节理解结果，避免后续草稿阶段直接凭空展开。
 func (s *DecompositionService) generateSeriesChapterUnderstanding(
 	ctx context.Context,
@@ -57,7 +96,8 @@ func (s *DecompositionService) generateSeriesChapterUnderstanding(
 	seriesPrefix string,
 	chapter blogcontracts.Chapter,
 	chapterSourceContent string,
-) (SeriesChapterUnderstanding, error) {
+	userID string,
+) (SeriesChapterUnderstanding, SeriesChapterUsage, error) {
 	messages := []llm.Message{
 		{Role: "system", Content: seriesPrefix + "\n当前阶段：章节理解"},
 		{
@@ -71,12 +111,26 @@ func (s *DecompositionService) generateSeriesChapterUnderstanding(
 		},
 	}
 
-	raw, err := s.llmClient.GenerateJSON(ctx, llmModel, messages)
+	raw, usage, err := s.llmClient.GenerateJSONWithOptions(ctx, llmModel, messages, llm.LightweightChatOptions(userID, 1200))
 	if err != nil {
-		return SeriesChapterUnderstanding{}, err
+		return SeriesChapterUnderstanding{}, SeriesChapterUsage{}, err
 	}
 
-	return parseSeriesChapterUnderstanding(raw)
+	result, parseErr := parseSeriesChapterUnderstanding(raw)
+	if parseErr == nil {
+		return result, usageFromCompletionUsage(usage), nil
+	}
+
+	repairedRaw, repairUsage, err := s.repairSeriesJSONOutput(ctx, llmModel, userID, seriesPrefix, "章节理解", raw, parseErr)
+	totalUsage := usageFromCompletionUsage(usage).add(usageFromCompletionUsage(repairUsage))
+	if err != nil {
+		return SeriesChapterUnderstanding{}, totalUsage, parseErr
+	}
+	result, err = parseSeriesChapterUnderstanding(repairedRaw)
+	if err != nil {
+		return SeriesChapterUnderstanding{}, totalUsage, err
+	}
+	return result, totalUsage, nil
 }
 
 // parseSeriesChapterDraft 负责把草稿阶段的 JSON 输出解析为受门禁保护的结构化结果。
@@ -169,6 +223,61 @@ func buildSeriesFinalizePrompt(
 	return builder.String()
 }
 
+func buildSeriesDraftRepairPrompt(
+	input seriesQualityPipelineInput,
+	understanding SeriesChapterUnderstanding,
+	draft SeriesChapterDraft,
+	review SeriesChapterReview,
+) string {
+	var builder strings.Builder
+	builder.WriteString(fmt.Sprintf("请只修补章节《%s》的草稿缺口，返回严格 JSON，字段仍为 draft_markdown、coverage_check、example_inventory。\n", input.Chapter.Title))
+	builder.WriteString("要求：保留草稿已有有效段落，不要重写整篇，只补齐审稿指出的缺口和低分维度。\n")
+	builder.WriteString(fmt.Sprintf("chapter_goal：%s\n", understanding.ChapterGoal))
+	builder.WriteString(fmt.Sprintf("revision_actions：%s\n", strings.Join(review.RevisionActions, "；")))
+	builder.WriteString(fmt.Sprintf("scorecard：depth=%d examples=%d reproducibility=%d clarity=%d\n", review.Scorecard.Depth, review.Scorecard.Examples, review.Scorecard.Reproducibility, review.Scorecard.Clarity))
+	builder.WriteString("\n当前草稿：\n")
+	builder.WriteString(draft.DraftMarkdown)
+	return builder.String()
+}
+
+func (s *DecompositionService) repairSeriesChapterDraftForReview(
+	ctx context.Context,
+	llmModel string,
+	seriesPrefix string,
+	userID string,
+	input seriesQualityPipelineInput,
+	understanding SeriesChapterUnderstanding,
+	draft SeriesChapterDraft,
+	review SeriesChapterReview,
+) (SeriesChapterDraft, SeriesChapterUsage, error) {
+	options := llm.DefaultChatOptions()
+	options.UserID = userID
+	options.MaxTokens = 5000
+	raw, usage, err := s.llmClient.GenerateJSONWithOptions(ctx, llmModel, []llm.Message{
+		{Role: "system", Content: seriesPrefix + "\n当前阶段：章节草稿定向修复"},
+		{Role: "user", Content: buildSeriesDraftRepairPrompt(input, understanding, draft, review)},
+	}, options)
+	if err != nil {
+		return SeriesChapterDraft{}, SeriesChapterUsage{}, err
+	}
+
+	repaired, parseErr := parseSeriesChapterDraft(raw)
+	if parseErr == nil {
+		return repaired, usageFromCompletionUsage(usage), nil
+	}
+
+	repairedRaw, repairUsage, err := s.repairSeriesJSONOutput(ctx, llmModel, userID, seriesPrefix, "章节草稿修复", raw, parseErr)
+	totalUsage := usageFromCompletionUsage(usage).add(usageFromCompletionUsage(repairUsage))
+	if err != nil {
+		return SeriesChapterDraft{}, totalUsage, parseErr
+	}
+	repaired, err = parseSeriesChapterDraft(repairedRaw)
+	if err != nil {
+		return SeriesChapterDraft{}, totalUsage, err
+	}
+	return repaired, totalUsage, nil
+}
+
 // generateSeriesChapterDraft 调用模型产出带门禁信息的章节草稿。
 func (s *DecompositionService) generateSeriesChapterDraft(
 	ctx context.Context,
@@ -176,16 +285,36 @@ func (s *DecompositionService) generateSeriesChapterDraft(
 	seriesPrefix string,
 	input seriesQualityPipelineInput,
 	understanding SeriesChapterUnderstanding,
-) (SeriesChapterDraft, error) {
-	raw, err := s.llmClient.Generate(ctx, llmModel, []llm.Message{
+	userID string,
+) (SeriesChapterDraft, SeriesChapterUsage, error) {
+	messages := []llm.Message{
 		{Role: "system", Content: seriesPrefix + "\n当前阶段：章节写作"},
 		{Role: "user", Content: buildSeriesDraftPrompt(input, understanding)},
-	})
-	if err != nil {
-		return SeriesChapterDraft{}, err
 	}
 
-	return parseSeriesChapterDraft(raw)
+	options := llm.DefaultChatOptions()
+	options.UserID = userID
+	options.MaxTokens = 5000
+	raw, usage, err := s.llmClient.GenerateJSONWithOptions(ctx, llmModel, messages, options)
+	if err != nil {
+		return SeriesChapterDraft{}, SeriesChapterUsage{}, err
+	}
+
+	result, parseErr := parseSeriesChapterDraft(raw)
+	if parseErr == nil {
+		return result, usageFromCompletionUsage(usage), nil
+	}
+
+	repairedRaw, repairUsage, err := s.repairSeriesJSONOutput(ctx, llmModel, userID, seriesPrefix, "章节草稿", raw, parseErr)
+	totalUsage := usageFromCompletionUsage(usage).add(usageFromCompletionUsage(repairUsage))
+	if err != nil {
+		return SeriesChapterDraft{}, totalUsage, parseErr
+	}
+	result, err = parseSeriesChapterDraft(repairedRaw)
+	if err != nil {
+		return SeriesChapterDraft{}, totalUsage, err
+	}
+	return result, totalUsage, nil
 }
 
 // reviewSeriesChapterDraft 调用模型对草稿执行结构化技术审稿。
@@ -196,16 +325,35 @@ func (s *DecompositionService) reviewSeriesChapterDraft(
 	chapter blogcontracts.Chapter,
 	understanding SeriesChapterUnderstanding,
 	draft SeriesChapterDraft,
-) (SeriesChapterReview, error) {
-	raw, err := s.llmClient.GenerateJSON(ctx, llmModel, []llm.Message{
+	userID string,
+) (SeriesChapterReview, SeriesChapterUsage, error) {
+	messages := []llm.Message{
 		{Role: "system", Content: seriesPrefix + "\n当前阶段：章节审稿"},
 		{Role: "user", Content: buildSeriesReviewPrompt(chapter, understanding, draft)},
-	})
+	}
+	options := llm.DefaultChatOptions()
+	options.UserID = userID
+	options.MaxTokens = 1800
+	raw, usage, err := s.llmClient.GenerateJSONWithOptions(ctx, llmModel, messages, options)
 	if err != nil {
-		return SeriesChapterReview{}, err
+		return SeriesChapterReview{}, SeriesChapterUsage{}, err
 	}
 
-	return parseSeriesChapterReview(raw)
+	result, parseErr := parseSeriesChapterReview(raw)
+	if parseErr == nil {
+		return result, usageFromCompletionUsage(usage), nil
+	}
+
+	repairedRaw, repairUsage, err := s.repairSeriesJSONOutput(ctx, llmModel, userID, seriesPrefix, "章节审稿", raw, parseErr)
+	totalUsage := usageFromCompletionUsage(usage).add(usageFromCompletionUsage(repairUsage))
+	if err != nil {
+		return SeriesChapterReview{}, totalUsage, parseErr
+	}
+	result, err = parseSeriesChapterReview(repairedRaw)
+	if err != nil {
+		return SeriesChapterReview{}, totalUsage, err
+	}
+	return result, totalUsage, nil
 }
 
 // runSeriesChapterQualityPipeline 负责在真正向前端流式输出前，先走完理解、草稿和审稿三段质量门禁。
@@ -218,41 +366,60 @@ func (s *DecompositionService) runSeriesChapterQualityPipeline(
 	draftModel := "deepseek-v4-flash"
 	reviewModel := "deepseek-v4-pro"
 	finalModel := "deepseek-v4-pro"
+	var totalUsage SeriesChapterUsage
 
 	sendSeriesProgressPayload(input.ProgressChan, map[string]interface{}{
 		"status":       "understanding",
 		"chapter_sort": input.Chapter.Sort,
 		"title":        input.Chapter.Title,
 	})
-	understanding, err := s.generateSeriesChapterUnderstanding(
+	understanding, understandingUsage, err := s.generateSeriesChapterUnderstanding(
 		ctx,
 		understandingModel,
 		seriesPrefix,
 		input.Chapter,
 		input.ChapterSourceContent,
+		input.UserID,
 	)
 	if err != nil {
 		return SeriesChapterFinal{}, err
 	}
+	totalUsage = totalUsage.add(understandingUsage)
 
 	sendSeriesProgressPayload(input.ProgressChan, map[string]interface{}{
 		"status":       "drafting",
 		"chapter_sort": input.Chapter.Sort,
 		"title":        input.Chapter.Title,
 	})
-	draft, err := s.generateSeriesChapterDraft(ctx, draftModel, seriesPrefix, input, understanding)
+	draft, draftUsage, err := s.generateSeriesChapterDraft(ctx, draftModel, seriesPrefix, input, understanding, input.UserID)
 	if err != nil {
 		return SeriesChapterFinal{}, err
 	}
+	totalUsage = totalUsage.add(draftUsage)
 
 	sendSeriesProgressPayload(input.ProgressChan, map[string]interface{}{
 		"status":       "reviewing",
 		"chapter_sort": input.Chapter.Sort,
 		"title":        input.Chapter.Title,
 	})
-	review, err := s.reviewSeriesChapterDraft(ctx, reviewModel, seriesPrefix, input.Chapter, understanding, draft)
+	review, reviewUsage, err := s.reviewSeriesChapterDraft(ctx, reviewModel, seriesPrefix, input.Chapter, understanding, draft, input.UserID)
 	if err != nil {
 		return SeriesChapterFinal{}, err
+	}
+	totalUsage = totalUsage.add(reviewUsage)
+
+	if scorecardBelowThreshold(review.Scorecard, 4) {
+		sendSeriesProgressPayload(input.ProgressChan, map[string]interface{}{
+			"status":       "repairing",
+			"chapter_sort": input.Chapter.Sort,
+			"title":        input.Chapter.Title,
+		})
+		repairedDraft, repairUsage, err := s.repairSeriesChapterDraftForReview(ctx, draftModel, seriesPrefix, input.UserID, input, understanding, draft, review)
+		if err != nil {
+			return SeriesChapterFinal{}, err
+		}
+		draft = repairedDraft
+		totalUsage = totalUsage.add(repairUsage)
 	}
 
 	sendSeriesProgressPayload(input.ProgressChan, map[string]interface{}{
@@ -260,5 +427,13 @@ func (s *DecompositionService) runSeriesChapterQualityPipeline(
 		"chapter_sort": input.Chapter.Sort,
 		"title":        input.Chapter.Title,
 	})
-	return s.finalizeSeriesChapterDraft(ctx, finalModel, input, seriesPrefix, understanding, draft, review)
+	final, err := s.finalizeSeriesChapterDraft(ctx, finalModel, input, seriesPrefix, understanding, draft, review)
+	if err != nil {
+		return SeriesChapterFinal{}, err
+	}
+	totalUsage = totalUsage.add(final.Usage)
+	final.Usage = totalUsage
+	final.QualityScorecard = review.Scorecard
+	final.RevisionActions = append([]string(nil), review.RevisionActions...)
+	return final, nil
 }

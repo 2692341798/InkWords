@@ -28,8 +28,15 @@ const mockStreamState = {
   selectedModules: [] as string[],
   outline: null as { sort: number; title: string; summary: string }[] | null,
   chapterStatus: {} as Record<number, 'pending' | 'generating' | 'completed' | 'error'>,
+  chapterPhases: {} as Record<number, string>,
   chapterContents: {} as Record<number, string>,
   chapterErrors: {} as Record<number, string>,
+  chapterUsage: {} as Record<number, {
+    prompt_tokens: number
+    completion_tokens: number
+    prompt_cache_hit_tokens: number
+    prompt_cache_miss_tokens: number
+  }>,
   setGitUrl: vi.fn(),
   setScenarioMode: vi.fn(),
   setModules: vi.fn(),
@@ -75,8 +82,10 @@ describe('Generator stage views', () => {
     mockStreamState.selectedModules = []
     mockStreamState.outline = null
     mockStreamState.chapterStatus = {}
+    mockStreamState.chapterPhases = {}
     mockStreamState.chapterContents = {}
     mockStreamState.chapterErrors = {}
+    mockStreamState.chapterUsage = {}
     mockStreamState.setGitUrl.mockReset()
     mockStreamState.setScenarioMode.mockReset()
     mockStreamState.setModules.mockReset()
@@ -92,8 +101,10 @@ describe('Generator stage views', () => {
     mockStreamState.selectedModules = []
     mockStreamState.outline = null
     mockStreamState.chapterStatus = {}
+    mockStreamState.chapterPhases = {}
     mockStreamState.chapterContents = {}
     mockStreamState.chapterErrors = {}
+    mockStreamState.chapterUsage = {}
   })
 
   it('renders a dedicated source stage wrapper around the source input choices', () => {
@@ -267,6 +278,28 @@ describe('Generator stage views', () => {
     expect(html).toContain('第一篇')
     expect(html).toContain('失败原因')
     expect(html).toContain('DeepSeek 请求超时，请稍后重试')
+  })
+
+  it('shows chapter usage and cache hit rate in the inline generation progress panel', () => {
+    mockStreamState.outline = [{ sort: 1, title: '第一篇', summary: '摘要' }]
+    mockStreamState.isGenerating = true
+    mockStreamState.chapterStatus = { 1: 'completed' }
+    mockStreamState.chapterPhases = { 1: 'completed' }
+    mockStreamState.chapterUsage = {
+      1: {
+        prompt_tokens: 1200,
+        completion_tokens: 500,
+        prompt_cache_hit_tokens: 900,
+        prompt_cache_miss_tokens: 300,
+      },
+    }
+
+    const html = renderToStaticMarkup(<GeneratorStatus />)
+
+    expect(html).toContain('Prompt')
+    expect(html).toContain('Completion')
+    expect(html).toContain('缓存命中')
+    expect(html).toContain('75%')
   })
 
   it('keeps only the inline status panel for progress feedback', () => {

@@ -15,7 +15,11 @@ type TaskResultEnvelope struct {
 
 // TaskResultUsage 表示任务结果中附带的用量摘要。
 type TaskResultUsage struct {
-	EstimatedTokens int `json:"estimated_tokens"`
+	EstimatedTokens       int `json:"estimated_tokens"`
+	PromptTokens          int `json:"prompt_tokens,omitempty"`
+	CompletionTokens      int `json:"completion_tokens,omitempty"`
+	PromptCacheHitTokens  int `json:"prompt_cache_hit_tokens,omitempty"`
+	PromptCacheMissTokens int `json:"prompt_cache_miss_tokens,omitempty"`
 }
 
 // GenerateSingleTaskResultInput 表示单篇生成成功后交给 core-api 的业务事实快照。
@@ -27,6 +31,7 @@ type GenerateSingleTaskResultInput struct {
 	WordCount       int
 	TechStacks      []string
 	EstimatedTokens int
+	Usage           TaskResultUsage
 }
 
 // ContinueTaskResultInput 表示续写任务成功后交给 core-api 的业务事实快照。
@@ -35,6 +40,7 @@ type ContinueTaskResultInput struct {
 	AppendedContent string
 	FinalContent    string
 	EstimatedTokens int
+	Usage           TaskResultUsage
 }
 
 // SeriesParentTaskResult 表示系列任务中父博客最终需要持久化的业务事实。
@@ -63,6 +69,14 @@ type GenerateSeriesTaskResultInput struct {
 	ParentContent   string
 	EstimatedTokens int
 	Chapters        []SeriesChapterTaskResult
+	Usage           TaskResultUsage
+}
+
+func taskResultUsageWithFallback(usage TaskResultUsage, estimatedTokens int) TaskResultUsage {
+	if usage.EstimatedTokens == 0 {
+		usage.EstimatedTokens = estimatedTokens
+	}
+	return usage
 }
 
 // BuildGenerateSingleTaskResult 构造 generate_single 的 task_only 结果契约。
@@ -73,7 +87,7 @@ func BuildGenerateSingleTaskResult(input GenerateSingleTaskResultInput) ([]byte,
 		TaskSubtype:     "generate_single",
 		PersistenceMode: "task_only",
 		FinalStatus:     "succeeded",
-		Usage:           TaskResultUsage{EstimatedTokens: input.EstimatedTokens},
+		Usage:           taskResultUsageWithFallback(input.Usage, input.EstimatedTokens),
 		Payload: map[string]any{
 			"blog_id":     input.BlogID,
 			"title":       input.Title,
@@ -95,7 +109,7 @@ func BuildContinueTaskResult(input ContinueTaskResultInput) ([]byte, error) {
 		TaskSubtype:     "continue",
 		PersistenceMode: "task_only",
 		FinalStatus:     "succeeded",
-		Usage:           TaskResultUsage{EstimatedTokens: input.EstimatedTokens},
+		Usage:           taskResultUsageWithFallback(input.Usage, input.EstimatedTokens),
 		Payload: map[string]any{
 			"blog_id":          input.BlogID,
 			"appended_content": input.AppendedContent,
@@ -114,7 +128,7 @@ func BuildGenerateSeriesTaskResult(input GenerateSeriesTaskResultInput) ([]byte,
 		TaskSubtype:     "generate_series",
 		PersistenceMode: "task_only",
 		FinalStatus:     "succeeded",
-		Usage:           TaskResultUsage{EstimatedTokens: input.EstimatedTokens},
+		Usage:           taskResultUsageWithFallback(input.Usage, input.EstimatedTokens),
 		Payload: map[string]any{
 			"parent_blog": SeriesParentTaskResult{
 				BlogID:  input.ParentBlogID,

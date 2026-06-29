@@ -19,6 +19,7 @@ type ContinueTaskResultSnapshot struct {
 	AppendedContent string
 	FinalContent    string
 	EstimatedTokens int
+	Usage           SeriesChapterUsage
 }
 
 func (s *DecompositionService) ContinueGeneration(ctx context.Context, userID uuid.UUID, blogID uuid.UUID, chunkChan chan<- string, errChan chan<- error) {
@@ -48,10 +49,16 @@ func (s *DecompositionService) ContinueGeneration(ctx context.Context, userID uu
 
 	internalChunkChan := make(chan string, 100)
 	internalErrChan := make(chan error, 1)
+	internalUsageChan := make(chan llm.CompletionUsage, 1)
 
 	go func() {
 		defer close(internalChunkChan)
 		defer close(internalErrChan)
+		var totalUsage llm.CompletionUsage
+		defer func() {
+			internalUsageChan <- totalUsage
+			close(internalUsageChan)
+		}()
 
 		currentMessages := make([]llm.Message, len(messages))
 		copy(currentMessages, messages)
@@ -70,13 +77,16 @@ func (s *DecompositionService) ContinueGeneration(ctx context.Context, userID uu
 				}
 			}()
 
-			finishReason, err := s.llmClient.GenerateStream(streamCtx, llmModel, currentMessages, tempChunkChan)
+			options := llm.DefaultChatOptions()
+			options.UserID = fmt.Sprintf("continue-%s", blogID.String())
+			finishReason, usage, err := s.llmClient.GenerateStreamWithOptions(streamCtx, llmModel, currentMessages, tempChunkChan, options)
 			wg.Wait()
 
 			if err != nil {
 				internalErrChan <- err
 				return
 			}
+			totalUsage = addCompletionUsage(totalUsage, usage)
 
 			currentMessages = append(currentMessages, llm.Message{
 				Role:    "assistant",
@@ -125,6 +135,10 @@ func (s *DecompositionService) ContinueGeneration(ctx context.Context, userID uu
 					if err := s.continuePersistence.SaveContinuedBlog(ctx, blog, updatedContent); err != nil {
 						fmt.Printf("Failed to update blog content: %v\n", err)
 					}
+				} else if finalNewContent != "" {
+					if usage, ok := <-internalUsageChan; ok {
+						s.storeContinueUsage(blogID, finalNewContent, usage)
+					}
 				}
 				return
 			}
@@ -161,5 +175,38 @@ func (s *DecompositionService) BuildContinueTaskResult(
 		AppendedContent: appendedContent,
 		FinalContent:    finalContent,
 		EstimatedTokens: len([]rune(appendedContent)) * 2,
+		Usage:           usageFromCompletionUsage(s.takeContinueUsage(blogID, appendedContent)),
 	}, nil
+}
+
+func continueUsageKey(blogID uuid.UUID, appendedContent string) string {
+	return generatedUsageKey("continue-"+blogID.String(), appendedContent)
+}
+
+func (s *DecompositionService) storeContinueUsage(blogID uuid.UUID, appendedContent string, usage llm.CompletionUsage) {
+	if s == nil {
+		return
+	}
+	s.continueUsageMu.Lock()
+	defer s.continueUsageMu.Unlock()
+	if s.continueUsage == nil {
+		s.continueUsage = make(map[string]llm.CompletionUsage)
+	}
+	key := continueUsageKey(blogID, appendedContent)
+	s.continueUsage[key] = addCompletionUsage(s.continueUsage[key], usage)
+}
+
+func (s *DecompositionService) takeContinueUsage(blogID uuid.UUID, appendedContent string) llm.CompletionUsage {
+	if s == nil {
+		return llm.CompletionUsage{}
+	}
+	s.continueUsageMu.Lock()
+	defer s.continueUsageMu.Unlock()
+	if s.continueUsage == nil {
+		return llm.CompletionUsage{}
+	}
+	key := continueUsageKey(blogID, appendedContent)
+	usage := s.continueUsage[key]
+	delete(s.continueUsage, key)
+	return usage
 }

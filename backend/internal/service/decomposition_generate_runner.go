@@ -44,10 +44,12 @@ func (s *DecompositionService) finalizeSeriesChapterDraft(
 	var finalBuilder strings.Builder
 
 	go func() {
-		_, usage, err := s.llmClient.GenerateStreamWithUsage(ctx, llmModel, []llm.Message{
+		options := llm.DefaultChatOptions()
+		options.UserID = input.UserID
+		_, usage, err := s.llmClient.GenerateStreamWithOptions(ctx, llmModel, []llm.Message{
 			{Role: "system", Content: seriesPrefix + "\n当前阶段：定向补强与轻统稿"},
 			{Role: "user", Content: buildSeriesFinalizePrompt(input, understanding, draft, review)},
-		}, chunkChan)
+		}, chunkChan, options)
 		usageChan <- usage
 		errChan <- err
 	}()
@@ -77,9 +79,12 @@ func (s *DecompositionService) finalizeSeriesChapterDraft(
 	})
 
 	return SeriesChapterFinal{
-		FinalMarkdown:  finalBuilder.String(),
-		ResolvedIssues: append([]string(nil), review.RevisionActions...),
-		ResidualRisks:  nil,
+		FinalMarkdown:    finalBuilder.String(),
+		ResolvedIssues:   append([]string(nil), review.RevisionActions...),
+		ResidualRisks:    nil,
+		Usage:            usageFromCompletionUsage(usage),
+		QualityScorecard: review.Scorecard,
+		RevisionActions:  append([]string(nil), review.RevisionActions...),
 	}, nil
 }
 
@@ -148,7 +153,7 @@ func (s *DecompositionService) streamSeriesChapterContent(
 					}
 				}()
 
-				finishReason, err := s.llmClient.GenerateStream(streamCtx, llmModel, currentMessages, tempChunkChan)
+				finishReason, _, err := s.llmClient.GenerateStreamWithUsage(streamCtx, llmModel, currentMessages, tempChunkChan)
 				waitGroup.Wait()
 				if err != nil {
 					chapterErrChan <- err
@@ -219,6 +224,9 @@ func (s *DecompositionService) streamSeriesChapterContent(
 			break
 		}
 
+		if !llm.IsRetryableError(streamErr) {
+			break
+		}
 		time.Sleep(exponentialBackoff(attempt))
 	}
 
@@ -233,7 +241,7 @@ func (s *DecompositionService) extractSeriesChapterTechStacks(ctx context.Contex
 	var techStacks datatypes.JSON
 	extractPrompt := "请从以下文章内容中提取出涉及的核心技术栈名称（如 React, Go, Docker 等），以 JSON 数组格式返回，不要有任何其他多余字符。\n\n例如：[\"React\", \"Go\"]\n\n文章内容：\n\n" + content
 	extractMessages := []llm.Message{{Role: "user", Content: extractPrompt}}
-	extractedJSON, err := s.llmClient.GenerateJSON(ctx, llmModel, extractMessages)
+	extractedJSON, _, err := s.llmClient.GenerateJSONWithOptions(ctx, llmModel, extractMessages, llm.LightweightChatOptions("", 512))
 	if err != nil || len(extractedJSON) == 0 {
 		return techStacks
 	}
