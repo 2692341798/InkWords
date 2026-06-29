@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, afterEach } from 'vitest'
-import { render, waitFor, cleanup } from '@testing-library/react'
+import { waitFor } from '@testing-library/dom'
+import { render, cleanup } from '@testing-library/react'
 
 import MermaidBlock from './MermaidBlock'
 
