@@ -4,6 +4,7 @@ import (
 	"math/rand"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -29,21 +30,40 @@ func exponentialBackoff(retryCount int) time.Duration {
 }
 
 func maxWorkersFromEnv(taskCount int) int {
-	maxWorkers := 3 // 稳健并发，降低并发量以防止大模型 API 出现 429 或挂起
-	if v := os.Getenv("MAX_CONCURRENT_WORKERS"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			maxWorkers = n
+	return resolveWorkerLimit(taskCount, 3, "MAX_CONCURRENT_WORKERS")
+}
+
+func maxWorkersForModel(model string, taskCount int) int {
+	normalized := strings.ToLower(strings.TrimSpace(model))
+	if strings.Contains(normalized, "pro") {
+		return resolveWorkerLimit(taskCount, 2, "LLM_PRO_CONCURRENCY", "MAX_CONCURRENT_WORKERS")
+	}
+	return resolveWorkerLimit(taskCount, 4, "LLM_FLASH_CONCURRENCY", "MAX_CONCURRENT_WORKERS")
+}
+
+func resolveWorkerLimit(taskCount int, defaultLimit int, envKeys ...string) int {
+	maxWorkers := defaultLimit
+	if maxWorkers <= 0 {
+		maxWorkers = 1
+	}
+
+	for _, key := range envKeys {
+		if v := os.Getenv(key); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n > 0 {
+				maxWorkers = n
+				break
+			}
 		}
 	}
-	//如果大于十0则并发数为50，如果小于10则并发数为50，如果小于10则并发数为10
-	if maxWorkers > 10 {
+
+	if maxWorkers > 50 {
 		maxWorkers = 50
-	} else if maxWorkers < 10 {
-		maxWorkers = 10
 	}
-	//如果任务数量小于并发数，则并发数为任务数量
 	if taskCount > 0 && taskCount < maxWorkers {
 		maxWorkers = taskCount
+	}
+	if maxWorkers < 1 {
+		return 1
 	}
 	return maxWorkers
 }
@@ -74,6 +94,8 @@ type DecompositionService struct {
 
 	seriesTaskResultsMu sync.Mutex
 	seriesTaskResults   map[string][]byte
+	continueUsageMu     sync.Mutex
+	continueUsage       map[string]llm.CompletionUsage
 }
 
 // NewDecompositionService creates a new decomposition service
@@ -121,5 +143,6 @@ func NewDecompositionServiceWithPersistences(
 		continuePersistence: continuePersistence,
 
 		seriesTaskResults: make(map[string][]byte),
+		continueUsage:     make(map[string]llm.CompletionUsage),
 	}
 }

@@ -14,14 +14,19 @@ import (
 )
 
 type seriesChapterTaskResult struct {
-	BlogID       string   `json:"blog_id"`
-	ChapterSort  int      `json:"chapter_sort"`
-	Title        string   `json:"title"`
-	Content      string   `json:"content"`
-	WordCount    int      `json:"word_count"`
-	TechStacks   []string `json:"tech_stacks"`
-	Status       string   `json:"status"`
-	ErrorMessage string   `json:"error_message"`
+	BlogID           string                 `json:"blog_id"`
+	ChapterSort      int                    `json:"chapter_sort"`
+	Title            string                 `json:"title"`
+	Content          string                 `json:"content"`
+	WordCount        int                    `json:"word_count"`
+	TechStacks       []string               `json:"tech_stacks"`
+	Status           string                 `json:"status"`
+	ErrorMessage     string                 `json:"error_message"`
+	Usage            SeriesChapterUsage     `json:"usage,omitempty"`
+	QualityScorecard SeriesChapterScorecard `json:"quality_scorecard,omitempty"`
+	RevisionActions  []string               `json:"revision_actions,omitempty"`
+	ResolvedIssues   []string               `json:"resolved_issues,omitempty"`
+	ResidualRisks    []string               `json:"residual_risks,omitempty"`
 }
 
 type seriesTaskResultCollector struct {
@@ -30,6 +35,7 @@ type seriesTaskResultCollector struct {
 	ParentTitle     string
 	ParentContent   string
 	EstimatedTokens int
+	Usage           SeriesChapterUsage
 	Chapters        []seriesChapterTaskResult
 }
 
@@ -42,6 +48,10 @@ func newSeriesTaskResultCollector(parentBlogID string, parentTitle string) *seri
 }
 
 func (c *seriesTaskResultCollector) AddChapterSuccess(chapter blogcontracts.Chapter, content string, wordCount int, techStacks []string) {
+	c.AddChapterSuccessWithQuality(chapter, content, wordCount, techStacks, SeriesChapterFinal{})
+}
+
+func (c *seriesTaskResultCollector) AddChapterSuccessWithQuality(chapter blogcontracts.Chapter, content string, wordCount int, techStacks []string, qualityResult SeriesChapterFinal) {
 	if c == nil {
 		return
 	}
@@ -50,16 +60,26 @@ func (c *seriesTaskResultCollector) AddChapterSuccess(chapter blogcontracts.Chap
 	defer c.mu.Unlock()
 
 	c.Chapters = append(c.Chapters, seriesChapterTaskResult{
-		BlogID:       chapter.ID,
-		ChapterSort:  chapter.Sort,
-		Title:        chapter.Title,
-		Content:      content,
-		WordCount:    wordCount,
-		TechStacks:   append([]string(nil), techStacks...),
-		Status:       "succeeded",
-		ErrorMessage: "",
+		BlogID:           chapter.ID,
+		ChapterSort:      chapter.Sort,
+		Title:            chapter.Title,
+		Content:          content,
+		WordCount:        wordCount,
+		TechStacks:       append([]string(nil), techStacks...),
+		Status:           "succeeded",
+		ErrorMessage:     "",
+		Usage:            qualityResult.Usage,
+		QualityScorecard: qualityResult.QualityScorecard,
+		RevisionActions:  append([]string(nil), qualityResult.RevisionActions...),
+		ResolvedIssues:   append([]string(nil), qualityResult.ResolvedIssues...),
+		ResidualRisks:    append([]string(nil), qualityResult.ResidualRisks...),
 	})
 	c.EstimatedTokens += wordCount * 2
+	qualityUsage := qualityResult.Usage
+	if qualityUsage.EstimatedTokens == 0 {
+		qualityUsage.EstimatedTokens = wordCount * 2
+	}
+	c.Usage = c.Usage.add(qualityUsage)
 }
 
 func (c *seriesTaskResultCollector) AddChapterFailure(chapter blogcontracts.Chapter, errorMessage string) {
@@ -105,7 +125,12 @@ func (c *seriesTaskResultCollector) BuildTaskResult() ([]byte, error) {
 	parentTitle := c.ParentTitle
 	parentContent := c.ParentContent
 	estimatedTokens := c.EstimatedTokens
+	usage := c.Usage
 	c.mu.Unlock()
+
+	if usage.EstimatedTokens == 0 {
+		usage.EstimatedTokens = estimatedTokens
+	}
 
 	sort.Slice(chapters, func(i, j int) bool {
 		return chapters[i].ChapterSort < chapters[j].ChapterSort
@@ -118,7 +143,11 @@ func (c *seriesTaskResultCollector) BuildTaskResult() ([]byte, error) {
 		"persistence_mode": "task_only",
 		"final_status":     "succeeded",
 		"usage": map[string]any{
-			"estimated_tokens": estimatedTokens,
+			"estimated_tokens":         usage.EstimatedTokens,
+			"prompt_tokens":            usage.PromptTokens,
+			"completion_tokens":        usage.CompletionTokens,
+			"prompt_cache_hit_tokens":  usage.PromptCacheHitTokens,
+			"prompt_cache_miss_tokens": usage.PromptCacheMissTokens,
 		},
 		"payload": map[string]any{
 			"parent_blog": map[string]any{
@@ -237,7 +266,7 @@ func (s *DecompositionService) GenerateSeriesWithProfile(
 		resultCollector = newSeriesTaskResultCollector(parentID.String(), parentTitle)
 	}
 
-	maxWorkers := maxWorkersFromEnv(len(outline))
+	maxWorkers := maxWorkersForModel("deepseek-v4-pro", len(outline))
 	sem := semaphore.NewWeighted(int64(maxWorkers))
 	var wg sync.WaitGroup
 
@@ -281,6 +310,7 @@ func (s *DecompositionService) GenerateSeriesWithProfile(
 				ChapterSourceContent: chapterSourceContent,
 				GitURL:               gitURL,
 				OldContent:           oldContent,
+				UserID:               fmt.Sprintf("series-%s", parentID.String()),
 				ProgressChan:         progressChan,
 			})
 			if streamErr != nil {
@@ -311,6 +341,7 @@ func (s *DecompositionService) GenerateSeriesWithProfile(
 				content,
 				wordCount,
 				techStacks,
+				qualityResult,
 				resultCollector,
 			); err != nil {
 				errMsg := map[string]interface{}{

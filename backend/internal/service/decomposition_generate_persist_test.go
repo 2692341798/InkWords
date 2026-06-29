@@ -351,6 +351,7 @@ func TestHandleSeriesChapterCompletion_TaskOnlyMode_CollectsChapterResultWithout
 		"章节终稿",
 		4,
 		[]string{"Go"},
+		SeriesChapterFinal{},
 		collector,
 	)
 	require.NoError(t, err)
@@ -394,6 +395,7 @@ func TestDecompositionService_HandleSeriesChapterCompletion_UsesInjectedPersiste
 		"章节终稿",
 		4,
 		[]string{"Go"},
+		SeriesChapterFinal{},
 		nil,
 	)
 	require.NoError(t, err)
