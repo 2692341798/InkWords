@@ -131,10 +131,10 @@ Captured on 2026-06-29 after the systematic cleanup was applied. Unless noted ot
 
 | Metric | Before | After | Delta |
 | --- | --- | --- | --- |
-| Duplicate groups | 22 | 12 | -10 (-45%) |
-| Duplicate files | 52 | 24 | -28 (-54%) |
+| Duplicate groups | 22 | 0 | -22 (-100%) |
+| Duplicate files | 52 | 0 | -52 (-100%) |
 
-The remaining 12 groups are domain-level mirrors between `internal/domain/*` and `services/*/domain/*` that share identical DTOs and handler definitions by design.
+The closeout removed the unreachable `internal/domain/*` mirrors. The exact duplicate scan now reports `0 0`.
 
 ### Comparison: `services → internal` Dependency
 
@@ -155,9 +155,10 @@ All service-to-monolith dependencies have been eliminated. The only remaining re
 | --- | --- | --- |
 | `go test ./...` | All passed | All passed |
 | `go vet ./...` | Passed, 0 findings | Passed, 0 findings |
-| `go tool cover -func` total | 37.7% | 35.4% |
+| `go tool cover -func` total | 37.7% | 36.8% |
+| generation package coverage | Not measured | 53.4% |
 
-Note: the slight coverage decrease is expected as some removed code was covered by tests, while the core test suite remains intact.
+The blocking backend floors are 35% total and 50% for `services/llm-stream/app/generation`.
 
 ### Comparison: Frontend
 
@@ -165,16 +166,27 @@ Note: the slight coverage decrease is expected as some removed code was covered 
 | --- | --- | --- |
 | `npm test` | 41 files, 138 tests | All passed |
 | `npm run lint` (--max-warnings=0) | 5 findings (2 errors, 3 warnings) | 0 findings |
-| `npm run deadcode` (knip) | Not measured | 2 unused files, 5 unused deps, 1 unused devDep, 13 unused exports, 11 unused exported types |
-| `npm run test:coverage` statements | Not measured | 38.83% |
-| `npm run build` | 6,862 modules, main JS 1,805.56 kB / 585.91 kB gzip | Passed, main JS 1,103.21 kB / 335.15 kB gzip |
+| `npm run deadcode` (knip) | Not measured | Passed, 0 findings |
+| `npm run test:coverage` | Not measured | 38.99% statements / 65.65% branches / 54.51% functions / 38.99% lines |
+| `npm run build` | 6,862 modules, main JS 1,805.56 kB / 585.91 kB gzip | Passed, main JS 1,104,462 bytes / 333,288 bytes gzip |
+
+The blocking frontend floors are 38/65/54/38. The main bundle budget is 1,160,000 raw bytes and 355,000 gzip bytes.
+
+### Remaining Intentional Internal Bridge
+
+Production dependency inspection now reports only:
+
+- `inkwords-backend/internal/model`
+- `inkwords-backend/internal/infra/db`
+
+`shared/platform/postgres` still delegates database connection and migration initialization to this persistence bridge. Migrating it is intentionally outside this closeout.
 
 ### CI Quality Gates (enforced)
 
 All checks in `.github/workflows/ci.yml` are now blocking (any failure fails the job):
 
-- Backend: `go vet`, `golangci-lint`, `go test ./...`
-- Frontend: `npm run lint` (`--max-warnings=0`), `npm run deadcode`, `npm test`, `npm run test:coverage`, `npm run build`
+- Backend: `go vet`, `golangci-lint`, total coverage >= 35%, generation coverage >= 50%
+- Frontend: `npm run lint` (`--max-warnings=0`), `npm run deadcode`, `npm test`, coverage floors, `npm run build`, bundle budget
 - Config: `docker compose config`
 - Smoke: `docker compose up` + health checks + gateway checks + parser worker check
 

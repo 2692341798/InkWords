@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build --configLoader runner",
     "lint": "eslint . --max-warnings=0",
     "deadcode": "knip",
+    "check:bundle": "node scripts/check-bundle-budget.mjs",
     "test:coverage": "vitest run --coverage --configLoader runner",
     "preview": "vite preview --configLoader runner",
     "test": "vitest run --configLoader runner"

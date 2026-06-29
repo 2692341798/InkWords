@@ -22,13 +22,14 @@ jobs:
         run: go vet ./...
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v8
         with:
+          version: v2.12.2
           working-directory: backend
 
-      - name: backend coverage
+      - name: backend coverage thresholds
         working-directory: backend
-        run: go test ./... -coverprofile=coverage.out
+        run: ./scripts/check_coverage.sh
 
   frontend-test-build:
     runs-on: ubuntu-latest
@@ -66,6 +67,10 @@ jobs:
       - name: npm run build
         working-directory: frontend
         run: npm run build
+
+      - name: frontend bundle budget
+        working-directory: frontend
+        run: npm run check:bundle
 
   docker-compose-config:
     runs-on: ubuntu-latest

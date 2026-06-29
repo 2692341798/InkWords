@@ -35,6 +35,12 @@ export default defineConfig({
       reporter: ['text-summary', 'json-summary', 'lcov'],
       include: ['src/**/*.{ts,tsx}'],
       exclude: ['src/**/*.test.{ts,tsx}', 'src/components/ui/**'],
+      thresholds: {
+        statements: 38,
+        branches: 65,
+        functions: 54,
+        lines: 38,
+      },
     },
   },
 })
