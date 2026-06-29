@@ -1,34 +1,30 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useBlogStore } from '@/store/blogStore'
 import { toast } from 'sonner'
-import { useDebounce } from '@/hooks/useDebounce'
 import { useSyncedScroll } from '@/hooks/useSyncedScroll'
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition'
 import { replaceVoiceSegment } from '@/lib/voiceInsertion'
 import { usePolishStream } from '@/hooks/usePolishStream'
 import { extractPolishedBody } from '@/lib/polishDraft'
 import { normalizeMarkdown } from '@/lib/markdownNormalize'
-import { fetchEventSourceWithAuth } from '@/services/sse'
+import { useContinueStream } from '@/hooks/useContinueStream'
+import { useEditorAutosave } from '@/hooks/useEditorAutosave'
 import { blogService } from '@/services/blog'
-import {
-  buildContinueTaskPayload,
-  buildGenerationTaskRequest,
-  createGenerationTask,
-  extractTaskChunkContent,
-} from '@/services/generationTasks'
 import { EditorHeader } from '@/components/editor/EditorHeader'
 import { EditorBody } from '@/components/editor/EditorBody'
-
-class StopStreamError extends Error {}
 
 export function Editor() {
   const { selectedBlog, updateBlog } = useBlogStore()
   const [title, setTitle] = useState(selectedBlog?.title || '')
   const [content, setContent] = useState(selectedBlog?.content || '')
-  const [isSaving, setIsSaving] = useState(false)
-  const [isContinuing, setIsContinuing] = useState(false)
-  const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const [activePreviewTab, setActivePreviewTab] = useState<'preview' | 'polish'>('preview')
+
+  const { isSaving, lastSaved } = useEditorAutosave({
+    selectedBlog,
+    title,
+    content,
+    updateBlog,
+  })
 
   const {
     isPolishing,
@@ -124,6 +120,17 @@ export function Editor() {
   const { isSupported: isVoiceSupported, isListening: isVoiceListening, start: startVoice, stop: stopVoice } =
     useSpeechRecognition(voiceCallbacks)
 
+  const { isContinuing, handleContinueGenerating } = useContinueStream({
+    blogId: selectedBlog?.id ?? '',
+    getContent: () => content,
+    setContent,
+    onDone: (finalContent) => {
+      if (selectedBlog) {
+        updateBlog(selectedBlog.id, { content: finalContent })
+      }
+    },
+  })
+
   const handleToggleVoiceInput = useCallback(() => {
     if (isContinuing || isPolishing) return
 
@@ -155,48 +162,11 @@ export function Editor() {
     startVoice()
   }, [isContinuing, isPolishing, isVoiceListening, isVoiceSupported, startVoice, stopVoice, editorRef])
 
+  // Why: 切换博客时清空润色预览状态，避免旧博客的润色草稿残留
   useEffect(() => {
     cancelPolishAndClear()
     setActivePreviewTab('preview')
   }, [selectedBlog?.id, cancelPolishAndClear])
-
-  // Track latest state for unmount save
-  const currentStateRef = useRef({ selectedBlog, title, content })
-  useEffect(() => {
-    currentStateRef.current = { selectedBlog, title, content }
-  }, [selectedBlog, title, content])
-
-  // Save on unmount if there are unsaved changes
-  useEffect(() => {
-    return () => {
-      const { selectedBlog: b, title: t, content: c } = currentStateRef.current
-      if (b && (t !== b.title || c !== b.content)) {
-        updateBlog(b.id, { title: t, content: c })
-      }
-    }
-  }, [updateBlog])
-
-  // Debounced values for auto-saving
-  const debouncedTitle = useDebounce(title, 2000)
-  const debouncedContent = useDebounce(content, 2000)
-
-  useEffect(() => {
-    if (selectedBlog && (debouncedTitle !== selectedBlog.title || debouncedContent !== selectedBlog.content)) {
-      const save = async () => {
-        setIsSaving(true)
-        try {
-          await updateBlog(selectedBlog.id, {
-            title: debouncedTitle,
-            content: debouncedContent
-          })
-          setLastSaved(new Date())
-        } finally {
-          setIsSaving(false)
-        }
-      }
-      save()
-    }
-  }, [debouncedTitle, debouncedContent, selectedBlog, updateBlog])
 
   const handleStartPolish = useCallback(() => {
     if (!selectedBlog) return
@@ -239,6 +209,12 @@ export function Editor() {
     toast.success('已应用润色结果')
   }, [cancelPolishAndClear, normalizedPolishedDraft])
 
+  // 继续生成的触发：额外检查语音和润色状态
+  const handleTriggerContinue = useCallback(() => {
+    if (!selectedBlog || isVoiceListening || isPolishing) return
+    handleContinueGenerating()
+  }, [selectedBlog, isVoiceListening, isPolishing, handleContinueGenerating])
+
   if (!selectedBlog) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center text-zinc-400">
@@ -264,7 +240,6 @@ export function Editor() {
 
   const exportSeriesZip = async () => {
     if (!selectedBlog) return
-
     try {
       toast.loading('正在打包系列博客...', { id: 'export-zip' })
       const blob = await blogService.exportSeriesZip(selectedBlog.id)
@@ -281,10 +256,6 @@ export function Editor() {
       console.error('Failed to export zip:', err)
       toast.error('导出系列失败', { id: 'export-zip' })
     }
-  }
-
-  const exportPDF = () => {
-    window.print()
   }
 
   const handleExportToObsidian = async () => {
@@ -311,82 +282,6 @@ export function Editor() {
     }
   }
 
-  const handleContinueGenerating = async () => {
-    if (!selectedBlog || isContinuing || isVoiceListening || isPolishing) return
-    setIsContinuing(true)
-
-    try {
-      let currentContent = content
-
-      const task = await createGenerationTask(
-        buildGenerationTaskRequest('continue', buildContinueTaskPayload(selectedBlog.id)),
-      )
-
-      await fetchEventSourceWithAuth(task.stream_url, {
-        method: 'GET',
-        async onopen(response) {
-          if (response.ok && response.headers.get('content-type')?.startsWith('text/event-stream')) {
-            return
-          }
-          if (response.headers.get('content-type')?.includes('application/json')) {
-            const data = await response.json()
-            throw new StopStreamError(data.error || '请求失败')
-          }
-          const text = await response.text()
-          throw new StopStreamError(text || `请求失败: ${response.status} ${response.statusText}`)
-        },
-        onmessage(msg) {
-          if (msg.event === 'chunk') {
-            currentContent += extractTaskChunkContent(msg.data)
-            setContent(currentContent)
-          } else if (msg.event === 'done') {
-            updateBlog(selectedBlog.id, { content: currentContent })
-            setIsContinuing(false)
-            throw new StopStreamError('done')
-          } else if (msg.event === 'error') {
-            console.error('Continue generating error:', msg.data)
-            setIsContinuing(false)
-            throw new StopStreamError(msg.data)
-          }
-        },
-        onclose() {
-          setIsContinuing(false)
-          throw new StopStreamError('closed by server')
-        },
-        onerror(err: unknown) {
-          if (err instanceof StopStreamError) {
-            throw err
-          }
-          if (err instanceof DOMException && err.name === 'AbortError') {
-            throw new StopStreamError('aborted')
-          }
-          const maybeError = err as { name?: unknown; message?: unknown }
-          const name = typeof maybeError?.name === 'string' ? maybeError.name : ''
-          const message = typeof maybeError?.message === 'string' ? maybeError.message : ''
-          if (name === 'AbortError' || message.includes('AbortError') || message.includes('aborted') || message.includes('Failed to fetch')) {
-            throw new StopStreamError('aborted')
-          }
-          console.error('Continue generating fetch error:', err)
-          setIsContinuing(false)
-          throw err
-        }
-      })
-    } catch (err: unknown) {
-      if (err instanceof StopStreamError) {
-        if (err.message === 'done' || err.message === 'aborted') {
-          return
-        }
-      }
-      const maybeError = err as { name?: unknown; message?: unknown }
-      const name = typeof maybeError?.name === 'string' ? maybeError.name : ''
-      const message = typeof maybeError?.message === 'string' ? maybeError.message : ''
-      if (name === 'AbortError' || message.includes('AbortError') || message.includes('aborted')) return
-      
-      console.error('Failed to continue generating:', err)
-      setIsContinuing(false)
-    }
-  }
-
   return (
     <div className="flex-1 flex flex-col h-screen bg-white print:h-auto print:block">
       <EditorHeader
@@ -400,12 +295,12 @@ export function Editor() {
         isPolishing={isPolishing}
         onToggleVoiceInput={handleToggleVoiceInput}
         onStartPolish={handleStartPolish}
-        onContinueGenerating={handleContinueGenerating}
+        onContinueGenerating={handleTriggerContinue}
         onExportToObsidian={handleExportToObsidian}
         onExportSeriesToObsidian={handleExportSeriesToObsidian}
         onExportSeriesZip={exportSeriesZip}
         onExportMarkdown={exportMarkdown}
-        onExportPDF={exportPDF}
+        onExportPDF={() => window.print()}
       />
 
       <EditorBody
