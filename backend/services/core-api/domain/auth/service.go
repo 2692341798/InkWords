@@ -231,13 +231,17 @@ func (s *Service) Login(ctx context.Context, email, password, captchaID, captcha
 			lockTime := time.Now().Add(15 * time.Minute)
 			user.LockedUntil = &lockTime
 		}
-		_ = s.repo.Save(ctx, user)
+		if err := s.repo.Save(ctx, user); err != nil {
+			return "", nil, fmt.Errorf("persist failed login state: %w", err)
+		}
 		return "", nil, errors.New("邮箱或密码错误")
 	}
 
 	user.FailedLoginAttempts = 0
 	user.LockedUntil = nil
-	_ = s.repo.Save(ctx, user)
+	if err := s.repo.Save(ctx, user); err != nil {
+		return "", nil, fmt.Errorf("persist successful login state: %w", err)
+	}
 
 	jwtToken, err := jwt.GenerateToken(user.ID, 24*time.Hour)
 	if err != nil {
