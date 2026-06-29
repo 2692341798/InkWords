@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"inkwords-backend/internal/infra/llm"
+	llm "inkwords-backend/shared/platform/llm"
 	"inkwords-backend/internal/prompt"
 )
 

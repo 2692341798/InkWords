@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"inkwords-backend/internal/infra/llm"
+	llm "inkwords-backend/shared/platform/llm"
 	"inkwords-backend/internal/prompt"
 )
 

@@ -16,7 +16,7 @@ import (
 	blogdomain "inkwords-backend/internal/domain/blog"
 	blogcontracts "inkwords-backend/internal/domain/blog/contracts"
 	"inkwords-backend/internal/infra/db"
-	"inkwords-backend/internal/infra/llm"
+	llm "inkwords-backend/shared/platform/llm"
 	"inkwords-backend/internal/prompt"
 )
 

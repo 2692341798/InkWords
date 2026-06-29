@@ -7,7 +7,7 @@ import (
 	blogcontracts "inkwords-backend/internal/domain/blog/contracts"
 	"strings"
 
-	"inkwords-backend/internal/infra/llm"
+	llm "inkwords-backend/shared/platform/llm"
 )
 
 type seriesQualityPipelineInput struct {

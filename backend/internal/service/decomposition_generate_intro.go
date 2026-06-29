@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	blogcontracts "inkwords-backend/internal/domain/blog/contracts"
-	"inkwords-backend/internal/infra/llm"
+	llm "inkwords-backend/shared/platform/llm"
 	"inkwords-backend/internal/prompt"
 	"os"
 	"strings"

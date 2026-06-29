@@ -13,7 +13,7 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/datatypes"
 
-	"inkwords-backend/internal/infra/llm"
+	llm "inkwords-backend/shared/platform/llm"
 )
 
 func sendSeriesProgressPayload(progressChan chan<- string, payload map[string]interface{}) {

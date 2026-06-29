@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"inkwords-backend/internal/infra/llm"
+	llm "inkwords-backend/shared/platform/llm"
 	"inkwords-backend/shared/platform/parser"
 )
 

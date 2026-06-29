@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
-	"inkwords-backend/internal/infra/llm"
+	llm "inkwords-backend/shared/platform/llm"
 	"os"
 	"strings"
 	"sync"

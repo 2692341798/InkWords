@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"inkwords-backend/internal/infra/db"
-	"inkwords-backend/internal/infra/llm"
+	llm "inkwords-backend/shared/platform/llm"
 	"inkwords-backend/internal/model"
 	"inkwords-backend/internal/prompt"
 	"inkwords-backend/shared/platform/parser"

@@ -13,7 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"inkwords-backend/internal/infra/llm"
+	llm "inkwords-backend/shared/platform/llm"
 	"inkwords-backend/internal/model"
 )
 
