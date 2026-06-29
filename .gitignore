@@ -23,6 +23,9 @@ frontend/.env
 frontend/.env.*
 !frontend/.env.example
 
+# Generated frontend test coverage
+frontend/coverage/
+
 # Logs
 logs
 *.log
