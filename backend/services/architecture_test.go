@@ -414,3 +414,29 @@ func TestCoreAPIInfraDoesNotImportLegacyInternalPackages(t *testing.T) {
 		t.Fatalf("walk %s: %v", dir, err)
 	}
 }
+
+func TestCoreAPIDoesNotImportLegacyInternalPackages(t *testing.T) {
+	disallowedImport := "inkwords-backend/internal/"
+	serviceDir := "core-api"
+
+	err := filepath.WalkDir(serviceDir, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || !strings.HasSuffix(path, ".go") {
+			return nil
+		}
+
+		contentsBytes, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if strings.Contains(string(contentsBytes), disallowedImport) {
+			t.Fatalf("%s imports legacy internal package %q; core-api must not depend on legacy internal/ packages", path, disallowedImport)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk %s: %v", serviceDir, err)
+	}
+}

@@ -32,6 +32,25 @@ func (s *Service) GetUserByID(ctx context.Context, uid uuid.UUID) (*User, error)
 	return user, nil
 }
 
+// CheckQuota 检查用户的 Token 是否超额，行为与 legacy internal/service.(*UserService).CheckQuota 完全一致。
+func (s *Service) CheckQuota(uid uuid.UUID) error {
+	user, err := s.GetUserByID(context.Background(), uid)
+	if err != nil {
+		return err
+	}
+
+	limit := user.TokenLimit
+	if limit == 0 {
+		limit = 1000000000
+	}
+
+	if user.TokensUsed >= limit {
+		return errors.New("您的 Token 额度已耗尽，请升级订阅或联系管理员")
+	}
+
+	return nil
+}
+
 func (s *Service) GetProfile(ctx context.Context, uid uuid.UUID) (*ProfileData, error) {
 	user, err := s.GetUserByID(ctx, uid)
 	if err != nil {

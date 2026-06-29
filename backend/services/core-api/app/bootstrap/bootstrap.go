@@ -1,7 +1,6 @@
 package bootstrap
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -11,7 +10,6 @@ import (
 	"github.com/gin-gonic/gin"
 	amqp "github.com/rabbitmq/amqp091-go"
 
-	"inkwords-backend/internal/service"
 	authdomain "inkwords-backend/services/core-api/domain/auth"
 	blogdomain "inkwords-backend/services/core-api/domain/blog"
 	projectdomain "inkwords-backend/services/core-api/domain/project"
@@ -19,9 +17,10 @@ import (
 	userdomain "inkwords-backend/services/core-api/domain/user"
 	coremq "inkwords-backend/services/core-api/infra/mq"
 	corev1 "inkwords-backend/services/core-api/transport/http/v1"
+	"inkwords-backend/services/core-api/app/projectanalysis"
 	"inkwords-backend/shared/kernel/httpx"
-	sharedprompt "inkwords-backend/shared/kernel/prompt"
 	"inkwords-backend/shared/platform/cache"
+	llm "inkwords-backend/shared/platform/llm"
 	"inkwords-backend/shared/platform/parser"
 	"inkwords-backend/shared/platform/postgres"
 )
@@ -56,15 +55,9 @@ func BuildRouter() (*gin.Engine, func(), error) {
 		"db": httpx.NewGormReadinessCheck(dbConn),
 	}))
 
-	userService := service.NewUserService(dbConn)
-	promptReqService := service.NewPromptRequirementsService(dbConn)
-	decompositionService := service.NewDecompositionServiceWithPersistences(
-		promptReqService,
-		blogdomain.NewSeriesPersistence(dbConn),
-		blogdomain.NewContinuePersistence(dbConn),
-	)
-	gitFetcher := parser.NewGitFetcher()
-	docParser := parser.NewDocParser()
+	userRepo := userdomain.NewGormRepository(dbConn)
+	userDomainService := userdomain.NewService(userRepo)
+	userDomainHandler := userdomain.NewHandler(userDomainService)
 
 	authRepo := authdomain.NewGormRepository(dbConn)
 	authDomainService := authdomain.NewService(authRepo)
@@ -74,15 +67,17 @@ func BuildRouter() (*gin.Engine, func(), error) {
 	blogDomainService := blogdomain.NewService(blogRepo)
 	blogDomainHandler := blogdomain.NewHandler(blogDomainService)
 
-	userRepo := userdomain.NewGormRepository(dbConn)
-	userDomainService := userdomain.NewService(userRepo)
-	userDomainHandler := userdomain.NewHandler(userDomainService)
+	apiKey := os.Getenv("DEEPSEEK_API_KEY")
+	llmClient := llm.NewDeepSeekClient(apiKey)
+	paService := projectanalysis.NewService(llmClient)
+	gitFetcher := parser.NewGitFetcher()
+	docParser := parser.NewDocParser()
 
 	projectDomainService := projectdomain.NewService(
-		projectAnalyzerAdapter{decomposition: decompositionService},
+		paService,
 		gitFetcher,
 		docParser,
-		userService,
+		userDomainService,
 	)
 	projectDomainHandler := projectdomain.NewHandler(projectDomainService)
 	generationResultRepo := coretask.NewGormGenerationResultRepository(dbConn)
@@ -172,49 +167,4 @@ func envOrDefault(key string, fallback string) string {
 		return value
 	}
 	return fallback
-}
-
-type projectAnalyzerAdapter struct {
-	decomposition *service.DecompositionService
-}
-
-func (a projectAnalyzerAdapter) ScanProjectModules(ctx context.Context, gitURL string) ([]projectdomain.ModuleCard, error) {
-	modules, err := a.decomposition.ScanProjectModules(ctx, gitURL)
-	if err != nil {
-		return nil, err
-	}
-
-	result := make([]projectdomain.ModuleCard, 0, len(modules))
-	for _, module := range modules {
-		result = append(result, projectdomain.ModuleCard{
-			Path:        module.Path,
-			Name:        module.Name,
-			Description: module.Description,
-		})
-	}
-	return result, nil
-}
-
-func (a projectAnalyzerAdapter) GenerateOutline(ctx context.Context, sourceContent string, scenarioMode sharedprompt.ScenarioMode) (projectdomain.OutlineResult, error) {
-	outline, err := a.decomposition.GenerateOutline(ctx, sourceContent, scenarioMode, nil, nil)
-	if err != nil {
-		return projectdomain.OutlineResult{}, err
-	}
-
-	chapters := make([]projectdomain.Chapter, 0, len(outline.Chapters))
-	for _, chapter := range outline.Chapters {
-		chapters = append(chapters, projectdomain.Chapter{
-			ID:      chapter.ID,
-			Title:   chapter.Title,
-			Summary: chapter.Summary,
-			Sort:    chapter.Sort,
-			Files:   chapter.Files,
-			Action:  chapter.Action,
-		})
-	}
-	return projectdomain.OutlineResult{
-		SeriesTitle: outline.SeriesTitle,
-		Chapters:    chapters,
-		ParentID:    outline.ParentID,
-	}, nil
 }
