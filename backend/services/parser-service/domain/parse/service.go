@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	parserinfra "inkwords-backend/services/parser-service/infra/parser"
+	parserinfra "inkwords-backend/shared/platform/parser"
 )
 
 // ParseResult is the normalized parser-service response for plain files and ZIP archives.

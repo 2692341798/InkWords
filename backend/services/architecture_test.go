@@ -182,6 +182,32 @@ func TestReviewDomainOwnsReviewModels(t *testing.T) {
 	}
 }
 
+func TestParserServiceUsesSharedParserPlatform(t *testing.T) {
+	disallowedImport := "inkwords-backend/services/parser-service/infra/parser"
+	serviceDir := "parser-service"
+
+	err := filepath.WalkDir(serviceDir, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || !strings.HasSuffix(path, ".go") {
+			return nil
+		}
+
+		contentsBytes, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if strings.Contains(string(contentsBytes), disallowedImport) {
+			t.Fatalf("%s imports service-owned parser infra %q; parser-service must use shared/platform/parser instead", path, disallowedImport)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk %s: %v", serviceDir, err)
+	}
+}
+
 func TestReviewServiceDoesNotImportLegacyInternalPackages(t *testing.T) {
 	disallowedImport := "inkwords-backend/internal/"
 	serviceDir := "review-service"
