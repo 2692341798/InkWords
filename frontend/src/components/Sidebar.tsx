@@ -174,10 +174,10 @@ export function Sidebar() {
       <div key={node.id} className="flex flex-col">
         <div
           className={cn(
-            'flex items-center py-2 px-3 hover:bg-zinc-100 rounded-md cursor-pointer text-sm gap-2 transition-colors',
-            isSelected && !isBatchMode ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-zinc-700'
+            'flex items-center py-[6px] px-2 mx-2 hover:bg-sidebar-accent rounded-md cursor-pointer text-sm gap-2 transition-colors',
+            isSelected && !isBatchMode ? 'bg-sidebar-accent text-sidebar-foreground font-medium' : 'text-muted-foreground hover:text-sidebar-foreground'
           )}
-          style={{ paddingLeft: `${level * 16 + 12}px` }}
+          style={{ paddingLeft: `${level * 16 + 8}px` }}
           onClick={() => {
             if (isBatchMode) {
               toggleNodeSelection(node)
