@@ -3,7 +3,6 @@ package task
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -64,5 +63,9 @@ func (h *Handler) DownloadTask(c *gin.Context) {
 	c.Header("Content-Type", result.ContentType)
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", result.Filename))
 	c.Status(http.StatusOK)
-	_, _ = io.Copy(c.Writer, file)
+	if err := copyDownload(c.Writer, file); err != nil {
+		_ = c.Error(err)
+		c.Abort()
+		return
+	}
 }
