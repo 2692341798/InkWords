@@ -23,7 +23,7 @@ const sanitizeChart = (chart: string): string => {
   return trimmed
 }
 
-const ErrorFallback: React.FC<{ chart: string }> = ({ chart }) => (
+const ErrorFallback: React.FC = () => (
   <div className="w-full">
     <div className="text-xs text-red-500 mb-2 font-semibold flex items-center gap-1">
       <svg
@@ -43,9 +43,6 @@ const ErrorFallback: React.FC<{ chart: string }> = ({ chart }) => (
       </svg>
       Mermaid 渲染失败: 语法错误
     </div>
-    <pre className="text-xs text-zinc-600 overflow-auto p-4 bg-zinc-50 rounded-lg border border-zinc-200">
-      <code>{chart}</code>
-    </pre>
   </div>
 )
 
@@ -95,7 +92,7 @@ const MermaidBlock: React.FC<{ chart: string }> = ({ chart }) => {
       {svgContent ? (
         <div dangerouslySetInnerHTML={{ __html: svgContent }} />
       ) : renderError ? (
-        <ErrorFallback chart={chart} />
+        <ErrorFallback />
       ) : null}
     </div>
   )

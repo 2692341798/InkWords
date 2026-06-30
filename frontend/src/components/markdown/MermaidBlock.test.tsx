@@ -11,8 +11,8 @@ afterEach(() => {
 
 const waitForStableContent = (container: HTMLElement) =>
   waitFor(() => {
-    const text = container.textContent || ''
-    expect(text.length).toBeGreaterThanOrEqual(0)
+    const mermaidContainer = container.querySelector('.mermaid-container')
+    expect(mermaidContainer?.childElementCount).toBeGreaterThan(0)
   }, { timeout: 5000 })
 
 const renderBlock = (chart: string) => {
@@ -66,8 +66,11 @@ describe('MermaidBlock 回归测试（安全护栏）', () => {
   })
 
   it('失败时不通过 innerHTML 注入错误内容', async () => {
-    const { container } = renderBlock('invalid %% not a chart')
+    const invalidChart = 'invalid %% not a chart <script>alert(1)</script>'
+    const { container } = renderBlock(invalidChart)
     await waitForStableContent(container)
     expect(container.querySelector('.mermaid-container')).toBeTruthy()
+    expect(container.textContent).not.toContain(invalidChart)
+    expect(container.innerHTML).not.toContain('<script>')
   })
 })
