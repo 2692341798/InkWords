@@ -7,7 +7,7 @@ interface ApiEnvelope<T> {
   data: T
 }
 
-export interface UserTechStackStat {
+interface UserTechStackStat {
   name: string
   count: number
 }

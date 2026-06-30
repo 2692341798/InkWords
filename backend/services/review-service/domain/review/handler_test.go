@@ -35,7 +35,7 @@ func TestHandler_GetTodayCard_Returns200(t *testing.T) {
 	})
 	r.GET("/api/v1/review/today", h.GetTodayCard)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/review/today", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/review/today", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -61,7 +61,7 @@ func TestHandler_GetTodayCard_ReturnsUnauthorizedWithoutUser(t *testing.T) {
 	h := NewHandler(&stubHandlerService{})
 	r.GET("/api/v1/review/today", h.GetTodayCard)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/review/today", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/review/today", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -96,7 +96,7 @@ func TestHandler_CreateSession_Returns200(t *testing.T) {
 	})
 	r.POST("/api/v1/review/sessions", h.CreateSession)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/review/sessions", strings.NewReader(`{"note_path":"wiki/concepts/gin.md","mode":"light_recall","entry_type":"today"}`))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/review/sessions", strings.NewReader(`{"note_path":"wiki/concepts/gin.md","mode":"light_recall","entry_type":"today"}`))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -136,7 +136,7 @@ func TestHandler_GetHistory_Returns200(t *testing.T) {
 	})
 	r.GET("/api/v1/review/history", h.GetHistory)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/review/history?limit=5", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/review/history?limit=5", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 

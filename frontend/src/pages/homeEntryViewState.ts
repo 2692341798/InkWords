@@ -1,7 +1,7 @@
 import type { StepStripItem } from '@/components/shared/StepStrip'
 
 export type HomeEntryPath = 'blog' | 'review'
-export type HomeEntryTargetView = 'generator' | 'knowledge-review'
+type HomeEntryTargetView = 'generator' | 'knowledge-review'
 
 interface HomeEntryViewState {
   activePath: HomeEntryPath

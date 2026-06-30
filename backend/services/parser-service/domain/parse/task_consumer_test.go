@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
-	parserinfra "inkwords-backend/services/parser-service/infra/parser"
+	parserinfra "inkwords-backend/shared/platform/parser"
 	sharedmq "inkwords-backend/shared/platform/rabbitmq"
 )
 
@@ -79,12 +79,14 @@ type fakeParseTaskService struct {
 	lastResult        []byte
 	lastErrorMessage  string
 	cancelled         bool
+	markRunningErr    error
+	isCancelledErr    error
 }
 
 func (f *fakeParseTaskService) MarkRunning(_ context.Context, _ uuid.UUID) error {
 	f.markRunningCalled = true
 	f.lastStatus = "running"
-	return nil
+	return f.markRunningErr
 }
 
 func (f *fakeParseTaskService) MarkSucceeded(_ context.Context, _ uuid.UUID, result []byte) error {
@@ -100,7 +102,7 @@ func (f *fakeParseTaskService) MarkFailed(_ context.Context, _ uuid.UUID, messag
 }
 
 func (f *fakeParseTaskService) IsCancelled(_ context.Context, _ uuid.UUID) (bool, error) {
-	return f.cancelled, nil
+	return f.cancelled, f.isCancelledErr
 }
 
 type stubParseTaskService struct {
@@ -128,4 +130,86 @@ func TestDecodeParsePayload_DecodesBase64Content(t *testing.T) {
 	readerBytes, err := io.ReadAll(bytes.NewReader(payload.Content))
 	require.NoError(t, err)
 	require.Equal(t, "hello", string(readerBytes))
+}
+
+func TestConsumeMessage_SuccessButAckFails_ReturnsError(t *testing.T) {
+	tasks := &fakeParseTaskService{}
+	parserService := &stubParseTaskService{
+		parseFunc: func(src io.Reader, filename string) (ParseResult, error) {
+			return ParseResult{SourceContent: "ok"}, nil
+		},
+	}
+	consumer := NewTaskConsumer(tasks, parserService)
+	ack := &fakeDeliveryAcknowledger{ackErr: errors.New("ack io error")}
+
+	body := []byte(`{"task_id":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","kind":"parse_file","user_id":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb","payload":{"filename":"f.md","content_base64":"aGk="}}`)
+
+	err := consumer.ConsumeMessage(context.Background(), body, ack)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "ack for parse task")
+	require.ErrorContains(t, err, "ack io error")
+	require.Equal(t, "succeeded", tasks.lastStatus)
+}
+
+func TestConsumeMessage_WorkFailsAndNackFails_RecordsBoth(t *testing.T) {
+	tasks := &fakeParseTaskService{markRunningErr: errors.New("db unavailable")}
+	parserService := &stubParseTaskService{}
+	consumer := NewTaskConsumer(tasks, parserService)
+	ack := &fakeDeliveryAcknowledger{nackErr: errors.New("nack io error")}
+
+	body := []byte(`{"task_id":"cccccccc-cccc-cccc-cccc-cccccccccccc","kind":"parse_file","user_id":"dddddddd-dddd-dddd-dddd-dddddddddddd","payload":{"filename":"f.md","content_base64":"aGk="}}`)
+
+	err := consumer.ConsumeMessage(context.Background(), body, ack)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "nack for parse task")
+	require.ErrorContains(t, err, "nack io error")
+	require.ErrorContains(t, err, "db unavailable")
+	require.True(t, ack.nackCalled)
+}
+
+func TestConsumeMessage_MalformedPayload_AcksOnce(t *testing.T) {
+	consumer := NewTaskConsumer(&fakeParseTaskService{}, &stubParseTaskService{})
+	ack := &fakeDeliveryAcknowledger{}
+
+	err := consumer.ConsumeMessage(context.Background(), []byte(`not json`), ack)
+	require.NoError(t, err)
+	require.True(t, ack.ackCalled)
+	require.False(t, ack.nackCalled)
+}
+
+func TestConsumeMessage_TransientWorkError_NacksWithRequeue(t *testing.T) {
+	tasks := &fakeParseTaskService{isCancelledErr: errors.New("db timeout")}
+	parserService := &stubParseTaskService{}
+	consumer := NewTaskConsumer(tasks, parserService)
+	ack := &fakeDeliveryAcknowledger{}
+
+	body := []byte(`{"task_id":"eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee","kind":"parse_file","user_id":"ffffffff-ffff-ffff-ffff-ffffffffffff","payload":{"filename":"f.md","content_base64":"aGk="}}`)
+
+	err := consumer.ConsumeMessage(context.Background(), body, ack)
+	require.NoError(t, err)
+	require.True(t, ack.nackCalled)
+	require.True(t, ack.lastNackRequeue)
+	require.False(t, ack.ackCalled)
+}
+
+type fakeDeliveryAcknowledger struct {
+	ackErr    error
+	nackErr   error
+	ackCalled bool
+
+	nackCalled       bool
+	lastNackRequeue  bool
+	lastNackMultiple bool
+}
+
+func (f *fakeDeliveryAcknowledger) Ack(multiple bool) error {
+	f.ackCalled = true
+	return f.ackErr
+}
+
+func (f *fakeDeliveryAcknowledger) Nack(multiple bool, requeue bool) error {
+	f.nackCalled = true
+	f.lastNackMultiple = multiple
+	f.lastNackRequeue = requeue
+	return f.nackErr
 }

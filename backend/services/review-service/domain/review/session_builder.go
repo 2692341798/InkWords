@@ -63,7 +63,7 @@ func initialHints(mode string, outline SessionOutline) []string {
 	}
 }
 
-func currentRoundGoal(mode string, answerCount int, outline SessionOutline) string {
+func currentRoundGoal(mode string, answerCount int) string {
 	if mode == ReviewModeDetailedQA {
 		switch answerCount {
 		case 0:

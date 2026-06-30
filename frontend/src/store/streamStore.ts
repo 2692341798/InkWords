@@ -30,7 +30,7 @@ export interface ResolvedPromptProfile {
   reason: string
 }
 
-export type ChapterPhase =
+type ChapterPhase =
   | 'pending'
   | 'understanding'
   | 'drafting'
@@ -41,7 +41,7 @@ export type ChapterPhase =
   | 'completed'
   | 'error'
 
-export interface ChapterUsage {
+interface ChapterUsage {
   prompt_tokens: number
   completion_tokens: number
   prompt_cache_hit_tokens: number

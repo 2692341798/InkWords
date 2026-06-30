@@ -7,7 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	parsedomain "inkwords-backend/services/parser-service/domain/parse"
-	parserinfra "inkwords-backend/services/parser-service/infra/parser"
+	parserinfra "inkwords-backend/shared/platform/parser"
 	parserroutes "inkwords-backend/services/parser-service/transport/http/v1"
 	"inkwords-backend/shared/kernel/httpx"
 	"inkwords-backend/shared/platform/postgres"

@@ -48,7 +48,7 @@ export interface ReviewTurnResponse {
   content: string
 }
 
-export interface SessionOutline {
+interface SessionOutline {
   summary: string
   main_question: string
   core_concepts: string[]
@@ -57,7 +57,7 @@ export interface SessionOutline {
   checkpoints: string[]
 }
 
-export interface ReviewFeedback {
+interface ReviewFeedback {
   judgement: string
   hit_points: string[]
   missed_points: string[]

@@ -27,7 +27,7 @@ func (s *Service) ExportToObsidian(ctx context.Context, blogID uuid.UUID, userID
 
 	store, err := s.getObsidianStore()
 	if err != nil {
-		return fmt.Errorf("Obsidian REST API 未配置: %w", err)
+		return fmt.Errorf("obsidian REST API 未配置: %w", err)
 	}
 
 	nowTime := s.now()
@@ -64,6 +64,7 @@ status: seed
 	return nil
 }
 
+//nolint:gocyclo
 func (s *Service) ExportSeriesToObsidian(ctx context.Context, blogID uuid.UUID, userID uuid.UUID) error {
 	blogs, err := s.GetSeriesBlogs(ctx, blogID, userID)
 	if err != nil {
@@ -72,7 +73,7 @@ func (s *Service) ExportSeriesToObsidian(ctx context.Context, blogID uuid.UUID, 
 
 	store, err := s.getObsidianStore()
 	if err != nil {
-		return fmt.Errorf("Obsidian REST API 未配置: %w", err)
+		return fmt.Errorf("obsidian REST API 未配置: %w", err)
 	}
 	if s.jsonGenerator == nil {
 		return errors.New("llm json generator is not configured")

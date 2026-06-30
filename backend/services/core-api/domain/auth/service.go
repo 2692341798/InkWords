@@ -66,7 +66,7 @@ func (s *Service) HandleCallback(ctx context.Context, provider, code string) (st
 
 	token, err := config.Exchange(ctx, code)
 	if err != nil {
-		return "", nil, fmt.Errorf("%w: failed to exchange token: %v", ErrOAuthCallback, err)
+		return "", nil, fmt.Errorf("%w: failed to exchange token: %w", ErrOAuthCallback, err)
 	}
 
 	var user *User
@@ -82,7 +82,7 @@ func (s *Service) HandleCallback(ctx context.Context, provider, code string) (st
 
 	jwtToken, err := jwt.GenerateToken(user.ID, 24*time.Hour)
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to generate jwt: %v", err)
+		return "", nil, fmt.Errorf("failed to generate jwt: %w", err)
 	}
 
 	return jwtToken, user, nil
@@ -100,7 +100,7 @@ func (s *Service) fetchGithubUser(ctx context.Context, accessToken string) (*Use
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("github api returned status: %d", resp.StatusCode)
@@ -231,13 +231,17 @@ func (s *Service) Login(ctx context.Context, email, password, captchaID, captcha
 			lockTime := time.Now().Add(15 * time.Minute)
 			user.LockedUntil = &lockTime
 		}
-		_ = s.repo.Save(ctx, user)
+		if err := s.repo.Save(ctx, user); err != nil {
+			return "", nil, fmt.Errorf("persist failed login state: %w", err)
+		}
 		return "", nil, errors.New("邮箱或密码错误")
 	}
 
 	user.FailedLoginAttempts = 0
 	user.LockedUntil = nil
-	_ = s.repo.Save(ctx, user)
+	if err := s.repo.Save(ctx, user); err != nil {
+		return "", nil, fmt.Errorf("persist successful login state: %w", err)
+	}
 
 	jwtToken, err := jwt.GenerateToken(user.ID, 24*time.Hour)
 	if err != nil {

@@ -1,5 +1,5 @@
-export const AUTH_TOKEN_STORAGE_KEY = 'token'
-export const AUTH_TOKEN_CHANGE_EVENT = 'inkwords:auth-token-changed'
+const AUTH_TOKEN_STORAGE_KEY = 'token'
+const AUTH_TOKEN_CHANGE_EVENT = 'inkwords:auth-token-changed'
 
 const getStorage = () => {
   if (typeof window === 'undefined' && typeof globalThis.localStorage === 'undefined') {
@@ -58,4 +58,3 @@ export const authTokenStore = {
   setToken,
   clearToken,
 }
-

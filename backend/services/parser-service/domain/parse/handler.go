@@ -63,7 +63,7 @@ func (h *Handler) Parse(c *gin.Context) {
 		})
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	if header.Size == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{

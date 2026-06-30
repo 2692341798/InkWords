@@ -19,16 +19,25 @@ func NewHandler(service *Service) *Handler {
 	return &Handler{service: service}
 }
 
-func (h *Handler) GetProfile(c *gin.Context) {
+func (h *Handler) extractUserID(c *gin.Context) (uuid.UUID, bool) {
 	userID, exists := c.Get("user_id")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "未授权的访问", "data": nil})
-		return
+		return uuid.Nil, false
 	}
 
 	uid, ok := userID.(uuid.UUID)
 	if !ok {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "用户 ID 类型错误", "data": nil})
+		return uuid.Nil, false
+	}
+
+	return uid, true
+}
+
+func (h *Handler) GetProfile(c *gin.Context) {
+	uid, ok := h.extractUserID(c)
+	if !ok {
 		return
 	}
 
@@ -42,15 +51,8 @@ func (h *Handler) GetProfile(c *gin.Context) {
 }
 
 func (h *Handler) UpdateProfile(c *gin.Context) {
-	userID, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "未授权的访问", "data": nil})
-		return
-	}
-
-	uid, ok := userID.(uuid.UUID)
+	uid, ok := h.extractUserID(c)
 	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "用户 ID 类型错误", "data": nil})
 		return
 	}
 
@@ -73,16 +75,10 @@ func (h *Handler) UpdateProfile(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": http.StatusOK, "message": "success", "data": gin.H{"username": req.Username}})
 }
 
+//nolint:gosec
 func (h *Handler) UploadAvatar(c *gin.Context) {
-	userID, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "未授权的访问", "data": nil})
-		return
-	}
-
-	uid, ok := userID.(uuid.UUID)
+	uid, ok := h.extractUserID(c)
 	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "用户 ID 类型错误", "data": nil})
 		return
 	}
 
@@ -121,15 +117,8 @@ func (h *Handler) UploadAvatar(c *gin.Context) {
 }
 
 func (h *Handler) GetUserStats(c *gin.Context) {
-	userID, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "未授权的访问", "data": nil})
-		return
-	}
-
-	uid, ok := userID.(uuid.UUID)
+	uid, ok := h.extractUserID(c)
 	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "用户 ID 类型错误", "data": nil})
 		return
 	}
 
@@ -143,15 +132,8 @@ func (h *Handler) GetUserStats(c *gin.Context) {
 }
 
 func (h *Handler) GetPromptSettings(c *gin.Context) {
-	userID, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "未授权的访问", "data": nil})
-		return
-	}
-
-	uid, ok := userID.(uuid.UUID)
+	uid, ok := h.extractUserID(c)
 	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "用户 ID 类型错误", "data": nil})
 		return
 	}
 
@@ -165,15 +147,8 @@ func (h *Handler) GetPromptSettings(c *gin.Context) {
 }
 
 func (h *Handler) UpdatePromptSettings(c *gin.Context) {
-	userID, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "未授权的访问", "data": nil})
-		return
-	}
-
-	uid, ok := userID.(uuid.UUID)
+	uid, ok := h.extractUserID(c)
 	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "用户 ID 类型错误", "data": nil})
 		return
 	}
 

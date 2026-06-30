@@ -2,6 +2,10 @@
 
 把资料变成知识，把知识变成能力。
 
+## 最近更新
+- `2026-06-29`：完成代码治理清理收尾：消除 54% 的重复 Go 文件、消除全部 service→monolith 依赖、前端 lint 清零、CI 新增 golangci-lint 与 deadcode 阻塞门禁、前端打包体积缩减 43%（gzip）。质量基线文档已同步更新。
+- `2026-06-08`：完成一轮全仓安全清理，删除 `llm-stream` 下未接入的 generation 占位/空桥接代码，收窄过渡层 `StreamAPI` 依赖，并移除前端 `GeneratorProgressStage` 兼容壳与两处 store 中未消费状态；不改变对外功能、API 和默认访问入口。
+
 [English README](./README_EN.md)
 
 ## 项目简介
@@ -32,7 +36,7 @@ InkWords Trainer 是一个面向个人知识沉淀、知识复习与内容输出
 
 项目采用前后端分离的 Monorepo 结构：
 
-- `frontend/`：React + Vite + Tailwind CSS + shadcn/ui + Zustand
+- `frontend/`：React 19 + Vite + Tailwind CSS + shadcn/ui + Zustand
 - `backend/`：Go + Gin + GORM + PostgreSQL + RabbitMQ + Redis
 - `docker-compose.yml`：项目唯一的容器化编排入口
 
@@ -246,7 +250,6 @@ InkWords/
 ## 技术栈
 
 ### 前端
-
 - React 19
 - Vite 8
 - Tailwind CSS 4
@@ -271,13 +274,18 @@ InkWords/
 - Nginx
 - Obsidian Local REST API
 
-## 当前状态
+## 当前微服务化进度
+当前可以把项目理解为"多服务已落地，旧业务层已退役"：
 
-当前可以把项目理解为“多服务已落地，核心边界仍在持续收口”：
-
-- 已完成：`parser-service`、`review-service`、`export-service` 的服务目录归属与多服务 Compose 运行形态
-- 已落地：Nginx 单入口网关、生成/解析/导出任务中心基础链路
-- 持续推进：`core-api / llm-stream` 深拆分、生成结果的业务事实回收、legacy 共享边界清理
+- 已完成：
+  - 五个后端服务的自有入口、领域与装配收口
+  - Docker Compose 多服务生产形态
+  - Nginx 单入口网关分流
+  - 生成 / 解析 / 导出任务中心基础链路
+  - 删除旧 `cmd/*` 包装与不可达的 domain/service/transport/prompt/cache/mq 代码
+- 进行中：
+  - 生成结果由 `core-api` 逐步回收最终业务落库
+  - 将 `internal/infra/db` 与 `internal/model` 持久化桥接迁移到 shared/service-owned 边界
 
 ## 运行与排障建议
 
@@ -305,6 +313,35 @@ InkWords/
 - [API 接口文档 API](./.trae/documents/InkWords_API.md)
 - [开发计划与日志 Plan & Log](./.trae/documents/InkWords_Development_Plan_and_Log.md)
 - [对话与决策摘要 Conversation Log](./.trae/documents/InkWords_Conversation_Log.md)
+
+## 代码治理与质量门禁
+
+项目采用 CI 强制质量门禁，每次 PR 和 push main 均执行以下阻塞检查：
+
+| 层级 | 检查 | 阻塞 |
+| --- | --- | --- |
+| Backend | `go vet` | ✅ |
+| Backend | `golangci-lint` | ✅ |
+| Backend | `go test ./...` | ✅ |
+| Frontend | `npm run lint` (`--max-warnings=0`) | ✅ |
+| Frontend | `npm run deadcode` (knip) | ✅ |
+| Frontend | `npm test` | ✅ |
+| Frontend | `npm run test:coverage` | ✅ |
+| Frontend | `npm run build` | ✅ |
+| Config | `docker compose config` | ✅ |
+| Smoke | Docker 多服务启动 + 健康检查 + 网关冒烟 | ✅ |
+
+### 当前质量基线
+
+- **重复 Go 文件**：12 组 24 个文件（均为 domain 镜像，已完成 de-duplication，从 22 组 52 文件缩减）
+- **service → monolith 依赖**：0（已全部消除，仅剩测试引用）
+- **后端覆盖**：35.4%
+- **前端覆盖**：38.83%
+- **前端 lint**：0 发现
+- **前端死码**：2 未使用文件、5 未使用依赖、1 未使用 devDep（存量已知）
+- **主 bundle gzip**：335 kB
+
+以上基线与详细验证命令参见 [docs/qa/code-cleanup-baseline.md](docs/qa/code-cleanup-baseline.md)。
 
 ## 开发约束
 

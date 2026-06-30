@@ -1,6 +1,6 @@
 import { buildAuthHeaders } from './auth'
 
-export interface ProjectArchiveSummary {
+interface ProjectArchiveSummary {
   total_files: number
   supported_files?: number
   kept_files: number
@@ -10,7 +10,7 @@ export interface ProjectArchiveSummary {
   kept_paths?: string[]
 }
 
-export interface ParseProjectResponse {
+interface ParseProjectResponse {
   content?: string
   data?: {
     source_content?: string
@@ -18,13 +18,13 @@ export interface ParseProjectResponse {
   }
 }
 
-export interface CreateParseTaskResponse {
+interface CreateParseTaskResponse {
   task_id: string
   status: string
   stream_url: string
 }
 
-export interface TaskSnapshotResponse {
+interface TaskSnapshotResponse {
   id: string
   status: string
   result?: {

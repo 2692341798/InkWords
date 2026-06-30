@@ -2,6 +2,7 @@ package parse
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -15,7 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	parserinfra "inkwords-backend/services/parser-service/infra/parser"
+	parserinfra "inkwords-backend/shared/platform/parser"
 )
 
 func TestHandler_Parse_ReturnsArchiveSummaryForZip(t *testing.T) {
@@ -76,7 +77,7 @@ func TestHandler_Parse_RejectsWhenQuotaExceeded(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, writer.Close())
 
-	request := httptest.NewRequest(http.MethodPost, "/api/v1/project/parse", &body)
+	request := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/project/parse", &body)
 	request.Header.Set("Content-Type", writer.FormDataContentType())
 	recorder := httptest.NewRecorder()
 
@@ -125,7 +126,7 @@ func performMultipartParseRequest(t *testing.T, handler *Handler, filename strin
 	require.NoError(t, err)
 	require.NoError(t, writer.Close())
 
-	request := httptest.NewRequest(http.MethodPost, "/api/v1/project/parse", &body)
+	request := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/project/parse", &body)
 	request.Header.Set("Content-Type", writer.FormDataContentType())
 	recorder := httptest.NewRecorder()
 

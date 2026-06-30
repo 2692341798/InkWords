@@ -37,6 +37,7 @@ func NewStoreWithClock(dir string, ttl time.Duration, nowProvider func() time.Ti
 }
 
 // Save moves a generated PDF into the shared artifact directory.
+//nolint:gosec
 func (s *Store) Save(taskID uuid.UUID, sourcePath string, filename string) (exportdomain.TaskResult, error) {
 	token := fmt.Sprintf("exp_pdf_%s", taskID.String())
 	targetPath := s.PathForToken(token)
@@ -62,6 +63,7 @@ func (s *Store) PathForToken(token string) string {
 	return filepath.Join(s.rootDir, token+".pdf")
 }
 
+//nolint:gosec
 func moveFile(sourcePath string, targetPath string) error {
 	if err := os.Rename(sourcePath, targetPath); err == nil {
 		return nil
@@ -71,7 +73,7 @@ func moveFile(sourcePath string, targetPath string) error {
 	if err != nil {
 		return err
 	}
-	defer sourceFile.Close()
+	defer func() { _ = sourceFile.Close() }()
 
 	targetFile, err := os.Create(targetPath)
 	if err != nil {

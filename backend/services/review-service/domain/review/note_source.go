@@ -83,11 +83,12 @@ func (s *ReviewNoteSource) normalizeConceptNotePath(entry string) (string, bool)
 		return "", false
 	}
 	var notePath string
-	if strings.HasPrefix(trimmed, s.rootDir+"/") {
+	switch {
+	case strings.HasPrefix(trimmed, s.rootDir+"/"):
 		notePath = trimmed
-	} else if strings.HasPrefix(trimmed, "concepts/") {
+	case strings.HasPrefix(trimmed, "concepts/"):
 		notePath = path.Join(s.rootDir, trimmed)
-	} else {
+	default:
 		notePath = path.Join(s.rootDir, "concepts", trimmed)
 	}
 	if isSystemNotePath(notePath) {

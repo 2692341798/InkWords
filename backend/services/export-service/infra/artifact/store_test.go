@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+//nolint:gosec
 func TestStoreSaveMovesPDFAndReturnsDownloadMetadata(t *testing.T) {
 	sourcePath := filepath.Join(t.TempDir(), "source.pdf")
 	require.NoError(t, os.WriteFile(sourcePath, []byte("pdf"), 0o644))

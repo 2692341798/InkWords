@@ -58,7 +58,7 @@ func NewRestAPIStoreFromEnv() (*RestAPIStore, error) {
 
 	caPool := x509.NewCertPool()
 	if certPath != "" {
-		certPEM, err := os.ReadFile(certPath)
+		certPEM, err := os.ReadFile(certPath) //nolint:gosec
 		if err != nil {
 			return nil, fmt.Errorf("读取 Obsidian 证书失败: %w", err)
 		}
@@ -72,7 +72,7 @@ func NewRestAPIStoreFromEnv() (*RestAPIStore, error) {
 			RootCAs:            caPool,
 			ServerName:         "127.0.0.1",
 			MinVersion:         tls.VersionTLS12,
-			InsecureSkipVerify: insecureSkipVerify,
+			InsecureSkipVerify: insecureSkipVerify, //nolint:gosec
 		},
 	}
 
@@ -101,6 +101,7 @@ func (s *RestAPIStore) vaultURL(p string) string {
 	return u.String()
 }
 
+//nolint:unparam
 func (s *RestAPIStore) do(ctx context.Context, method string, p string, headers map[string]string, contentType string, body []byte) ([]byte, int, error) {
 	var reader io.Reader
 	if body != nil {
@@ -124,7 +125,7 @@ func (s *RestAPIStore) do(ctx context.Context, method string, p string, headers 
 	if err != nil {
 		return nil, 0, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {

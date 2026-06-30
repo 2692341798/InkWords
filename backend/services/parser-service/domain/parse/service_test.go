@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	parserinfra "inkwords-backend/services/parser-service/infra/parser"
+	parserinfra "inkwords-backend/shared/platform/parser"
 )
 
 func TestService_Parse_ReturnsArchiveSummaryForZip(t *testing.T) {

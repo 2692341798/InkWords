@@ -1,0 +1,25 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: none
+  enable:
+    - bodyclose
+    - dupl
+    - errcheck
+    - errorlint
+    - gocritic
+    - gocyclo
+    - gosec
+    - govet
+    - ineffassign
+    - nilerr
+    - noctx
+    - staticcheck
+    - unparam
+    - unused
+  settings:
+    gocyclo:
+      min-complexity: 20

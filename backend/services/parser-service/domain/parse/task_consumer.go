@@ -28,6 +28,12 @@ type parseExecutor interface {
 	Parse(src io.Reader, filename string) (ParseResult, error)
 }
 
+// deliveryAcknowledger 将 RabbitMQ amqp.Delivery 的 Ack/Nack 抽象为接口，使无 broker 环境也可测试。
+type deliveryAcknowledger interface {
+	Ack(multiple bool) error
+	Nack(multiple bool, requeue bool) error
+}
+
 // TaskConsumer converts RabbitMQ parse tasks into service-owned parse executions.
 type TaskConsumer struct {
 	tasks  parseTaskService
@@ -101,20 +107,9 @@ func StartParseConsumer(ctx context.Context, taskService parseTaskService, parse
 					return
 				}
 
-				var message sharedmq.ParseRequestedMessage
-				if err := json.Unmarshal(delivery.Body, &message); err != nil {
-					log.Printf("invalid parse message payload: %v", err)
-					_ = delivery.Ack(false)
-					continue
+				if err := consumer.ConsumeMessage(ctx, delivery.Body, delivery); err != nil {
+					log.Printf("consume parse message failed: %v", err)
 				}
-
-				if err := consumer.HandleParseRequested(ctx, message); err != nil {
-					log.Printf("parse task handling failed for %s: %v", message.TaskID, err)
-					_ = delivery.Nack(false, true)
-					continue
-				}
-
-				_ = delivery.Ack(false)
 			}
 		}
 	}()
@@ -123,6 +118,32 @@ func StartParseConsumer(ctx context.Context, taskService parseTaskService, parse
 		_ = channel.Close()
 		_ = conn.Close()
 	}, nil
+}
+
+// ConsumeMessage 消费一条原始消息体，负责反序列化、业务处理、以及投递确认（Ack/Nack）。
+// 将消息生命周期收敛到单一可测试方法中，避免确认逻辑分散在 goroutine 循环里。
+func (c *TaskConsumer) ConsumeMessage(ctx context.Context, body []byte, ack deliveryAcknowledger) error {
+	var message sharedmq.ParseRequestedMessage
+	if err := json.Unmarshal(body, &message); err != nil {
+		log.Printf("invalid parse message payload: %v", err)
+		if ackErr := ack.Ack(false); ackErr != nil {
+			return fmt.Errorf("ack malformed parse message: %w", ackErr)
+		}
+		return nil
+	}
+
+	if err := c.HandleParseRequested(ctx, message); err != nil {
+		log.Printf("parse task handling failed for %s: %v", message.TaskID, err)
+		if nackErr := ack.Nack(false, true); nackErr != nil {
+			return fmt.Errorf("nack for parse task %s: %w (work: %w)", message.TaskID, nackErr, err)
+		}
+		return nil
+	}
+
+	if err := ack.Ack(false); err != nil {
+		return fmt.Errorf("ack for parse task %s: %w", message.TaskID, err)
+	}
+	return nil
 }
 
 // HandleParseRequested consumes one parse.requested message and persists the parse result to the task store.

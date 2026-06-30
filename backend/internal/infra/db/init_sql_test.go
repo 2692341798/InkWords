@@ -10,6 +10,7 @@ import (
 
 // Why: CREATE DATABASE 不能运行在事务块里；这个测试直接锁定 review
 // 初始化脚本必须使用顶层语句，避免 CI 在空 pgdata 首次启动时把 db 容器拉成 unhealthy。
+//nolint:gosec
 func TestCreateReviewDatabaseScript_UsesTopLevelStatement(t *testing.T) {
 	_, currentFile, _, ok := runtime.Caller(0)
 	if !ok {

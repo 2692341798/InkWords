@@ -13,7 +13,7 @@ export interface CancelGenerationTaskResponse {
   status: string
 }
 
-export interface SeriesChapter {
+interface SeriesChapter {
   id?: string
   title: string
   summary: string

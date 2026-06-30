@@ -1,6 +1,6 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { defineConfig } from 'vite'
+import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
@@ -9,7 +9,8 @@ const frontendRootDir = path.dirname(fileURLToPath(import.meta.url))
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  plugins: [react(), tailwindcss()] as any,
   resolve: {
     alias: {
       '@': path.resolve(frontendRootDir, './src'),
@@ -25,6 +26,20 @@ export default defineConfig({
       '/uploads': {
         target: 'http://localhost:8081',
         changeOrigin: true,
+      },
+    },
+  },
+  test: {
+    coverage: {
+      provider: 'v8',
+      reporter: ['text-summary', 'json-summary', 'lcov'],
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: ['src/**/*.test.{ts,tsx}', 'src/components/ui/**'],
+      thresholds: {
+        statements: 38,
+        branches: 65,
+        functions: 54,
+        lines: 38,
       },
     },
   },

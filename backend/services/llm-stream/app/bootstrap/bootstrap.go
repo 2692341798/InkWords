@@ -6,7 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"inkwords-backend/internal/service"
+	generationapp "inkwords-backend/services/llm-stream/app/generation"
 	streamdomain "inkwords-backend/services/llm-stream/domain/stream"
 	streamv1 "inkwords-backend/services/llm-stream/transport/http/v1"
 	"inkwords-backend/shared/kernel/httpx"
@@ -26,7 +26,7 @@ func BuildRouter() (*gin.Engine, *streamdomain.GormTaskStore, *streamdomain.Serv
 		return nil, nil, nil, err
 	}
 	if err := cache.InitRedis(); err != nil {
-		// Why: Redis 在 llm-stream 当前仍是增强项，启动失败不应阻断回滚型流式入口。
+		_ = err // Redis 是增强项而不是启动硬依赖
 	}
 
 	r := gin.New()
@@ -36,19 +36,20 @@ func BuildRouter() (*gin.Engine, *streamdomain.GormTaskStore, *streamdomain.Serv
 		"rabbitmq_config": httpx.NewRequiredValueCheck(os.Getenv("RABBITMQ_URL"), "RABBITMQ_URL is not configured"),
 	}))
 
-	userService := service.NewUserService(dbConn)
-	promptReqService := service.NewPromptRequirementsService(dbConn)
-	generatorService := service.NewGeneratorServiceWithPersistence(
+	quotaService := generationapp.NewQuotaService(dbConn)
+	promptReqService := generationapp.NewPromptRequirements(dbConn)
+	generatorService := generationapp.NewGeneratorServiceWithDB(
+		dbConn,
 		promptReqService,
 		streamdomain.NewGeneratedBlogPersistence(dbConn),
 	)
-	decompositionService := service.NewDecompositionServiceWithPersistences(
+	decompositionService := generationapp.NewDecompositionService(
 		promptReqService,
 		streamdomain.NewSeriesPersistence(dbConn),
 		streamdomain.NewContinuePersistence(dbConn),
 	)
 
-	streamDomainService := streamdomain.NewService(generatorService, decompositionService, userService)
+	streamDomainService := streamdomain.NewService(generatorService, decompositionService, quotaService)
 	taskDomainService := streamdomain.NewGormTaskStore(dbConn)
 	streamDomainHandler := streamdomain.NewHandler(streamDomainService, streamdomain.NewGormBlogReadable(dbConn))
 
