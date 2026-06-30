@@ -2,6 +2,7 @@ import { useCallback } from 'react'
 import { useStreamStore } from '@/store/streamStore'
 import type { Chapter, ResolvedPromptProfile } from '@/store/streamStore'
 import { fetchEventSourceWithAuth } from '@/services/sse'
+import { apiRoutes } from '@/services/apiRoutes'
 import { projectService } from '@/services/project'
 import { toast } from 'sonner'
 import {
@@ -206,7 +207,7 @@ export async function analyzeParsedFileContent(sourceContent: string) {
   store.setAnalyzing(true)
   store.setAnalysisMessage('正在根据创作场景生成大纲...')
 
-  await fetchEventSourceWithAuth('/api/v1/stream/analyze', {
+  await fetchEventSourceWithAuth(apiRoutes.llmStream.analyze, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     signal: ctrl.signal,

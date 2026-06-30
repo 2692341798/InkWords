@@ -117,6 +117,44 @@ curl http://localhost/api/v1/ping
 - `http://localhost` 返回 `200 OK`
 - `/api/v1/ping` 返回成功响应，证明 Nginx 到 `core-api` 的代理仍可用
 
+### 3.5 检查网关路由归属
+
+浏览器与 Vite 始终只访问统一网关。当前路由契约如下：
+
+| 外部路径 | 上游服务 | 关键约束 |
+| --- | --- | --- |
+| `/api/v1/tasks/:id/stream` | `core-api` | SSE 禁用缓冲与缓存 |
+| `/api/v1/stream/*` | `llm-stream` | 兼容旧流式入口 |
+| `/api/v1/blogs/:id/continue` 或 `/polish` | `llm-stream` | 兼容旧编辑器流式入口 |
+| `/api/v1/project/parse` | `parser-service` | 支持大文件上传与长超时 |
+| `/api/v1/review/*` | `review-service` | review 独立领域入口 |
+| `/api/v1/blogs/:id/export*` | `export-service` | 兼容直接导出入口 |
+| 其余 `/api/*` | `core-api` | 鉴权、用户、博客、任务中心 |
+| `/uploads/*` | `core-api` | 上传资源 |
+
+路由专项测试：
+
+```bash
+cd frontend
+npm test -- --run src/gatewayRouting.test.ts
+```
+
+### 3.6 Vite 微服务开发拓扑
+
+需要前端热更新时，通过 Compose 暴露同一个 Nginx 网关，不发布五个后端服务端口：
+
+```bash
+FRONTEND_PORT=8081 \
+FRONTEND_URL=http://localhost:5173 \
+DOCKER_GITHUB_REDIRECT_URL=http://localhost:5173/api/v1/auth/callback/github \
+docker compose --env-file backend/.env up -d --build
+
+cd frontend
+INKWORDS_GATEWAY_ORIGIN=http://localhost:8081 npm run dev
+```
+
+访问 `http://localhost:5173`。预期链路为：`Vite -> Nginx :8081 -> owning service`。
+
 ## 4. 任务中心检查
 
 ### 4.1 生成任务创建
@@ -172,7 +210,7 @@ curl -N \
 
 ```bash
 curl -H "Authorization: Bearer <your-token>" \
-  http://localhost/api/v1/review/cards/random
+  http://localhost/api/v1/review/today
 ```
 
 预期结果：
@@ -226,16 +264,31 @@ docker compose --env-file backend/.env logs --no-color
 - 检查 `frontend` 是否 healthy
 - 检查 `core-api` 是否 healthy
 - 检查 `frontend/nginx.conf` 是否仍代理 `/api/` 到 `core-api`
+- `404`：先核对专用 location 是否位于通用 `/api/` fallback 之前，以及路径是否仍属于对应服务
+- `502/503/504`：检查 owning service 的健康状态、容器名和 `inkwords-network`；前端会统一显示“服务暂时不可用，请稍后重试”
 
-### 8.3 任务创建成功但无推进
+### 8.3 Task SSE 有状态但前端迟迟不更新
+
+- 确认 `/api/v1/tasks/:id/stream` 命中 `core-api` 专用 SSE location，而不是通用 `/api/`
+- 确认该 location 包含 `proxy_buffering off`、`proxy_cache off`、`X-Accel-Buffering: no` 和长读超时
+- 使用 `curl -N` 观察事件是否逐条到达；若容器日志已有事件但客户端批量收到，优先排查代理缓冲
+
+### 8.4 任务创建成功但无推进
 - 检查 `rabbitmq` 是否存活
 - 检查 `core-api` 是否真的发布了任务消息
 - 检查对应 worker（`llm-stream / parser-service / export-service`）日志是否有消费记录
 
-### 8.4 review 不可用
+### 8.5 review 不可用
 - 检查 `review-service` 健康状态
 - 检查 `REVIEW_DATABASE_URL`
 - 检查 `OBSIDIAN_WIKI_DIR` 与 `OBSIDIAN_VAULT_PATH`
+
+### 8.6 Vite 或 OAuth 回调异常
+
+- Vite 请求 `502`：确认 `INKWORDS_GATEWAY_ORIGIN` 与 Compose 的 `FRONTEND_PORT` 指向同一端口
+- OAuth 回到静态网关而不是 Vite：确认 `FRONTEND_URL=http://localhost:5173`
+- GitHub callback 直接 `404`：确认 `DOCKER_GITHUB_REDIRECT_URL=http://localhost:5173/api/v1/auth/callback/github`，并确保 Vite 正在运行、`/api` 正常代理到网关
+- 不要把 `core-api:8080` 或其他容器地址配置进浏览器环境变量；这些名称只在 Compose 网络内可解析
 
 ## 9. 提交前最小核对清单
 

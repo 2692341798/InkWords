@@ -49,7 +49,7 @@ const scanForbiddenInteractions = (filePath: string, fileContent: string): ScanR
 
     lines.forEach((line, index) => {
       if (!hrefRegex.test(line)) return
-      if (allowOAuthJump && line.includes("/api/v1/auth/oauth/github")) return
+      if (allowOAuthJump && line.includes("apiRoutes.coreApi.auth.oauth('github')")) return
       violations.push({
         filePath,
         message: `包含禁止交互：location.href (第 ${index + 1} 行)`,
@@ -88,4 +88,3 @@ describe('Task 4 guardrails', () => {
     expect(content).not.toMatch(/MarkdownEngine\s+content=\{[^}]*:\s*content\s*\}/)
   })
 })
-

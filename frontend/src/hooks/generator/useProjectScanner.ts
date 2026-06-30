@@ -2,6 +2,7 @@ import { useCallback } from 'react'
 import { useStreamStore } from '@/store/streamStore'
 import type { ModuleCard } from '@/store/streamStore'
 import { fetchEventSourceWithAuth } from '@/services/sse'
+import { apiRoutes } from '@/services/apiRoutes'
 import { toast } from 'sonner'
 
 export const useProjectScanner = () => {
@@ -64,7 +65,7 @@ export const useProjectScanner = () => {
     try {
       let modulesResult: unknown = null
       
-      await fetchEventSourceWithAuth('/api/v1/stream/scan', {
+      await fetchEventSourceWithAuth(apiRoutes.llmStream.scan, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: ctrl.signal,

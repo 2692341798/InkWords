@@ -1,4 +1,5 @@
-import { buildAuthHeaders } from './auth'
+import { requestJson } from './apiClient'
+import { apiRoutes } from './apiRoutes'
 
 interface ProjectArchiveSummary {
   total_files: number
@@ -34,39 +35,13 @@ interface TaskSnapshotResponse {
   error_message?: string
 }
 
-interface ParseProjectErrorResponse {
-  error?: string
-  message?: string
-}
-
-const getLocalStorage = () => {
-  if (typeof window === 'undefined' && typeof globalThis.localStorage === 'undefined') {
-    return null
-  }
-  return globalThis.localStorage ?? null
-}
-
 async function parseProjectFile(formData: FormData, signal?: AbortSignal): Promise<ParseProjectResponse> {
-  const response = await fetch('/api/v1/project/parse', {
+  return requestJson<ParseProjectResponse>(apiRoutes.parserService.parseProject, {
     method: 'POST',
-    headers: buildAuthHeaders(),
     body: formData,
     signal,
+    fallbackMessage: '文件解析失败',
   })
-
-  if (response.status === 401) {
-    getLocalStorage()?.removeItem('token')
-    throw new Error('登录已过期，请重新登录')
-  }
-
-  const payload = (await response.json().catch(() => null)) as
-    | (ParseProjectResponse & ParseProjectErrorResponse)
-    | null
-  if (!response.ok) {
-    throw new Error(payload?.error || payload?.message || '文件解析失败')
-  }
-
-  return payload ?? {}
 }
 
 const encodeFileToBase64 = async (file: File): Promise<string> => {
@@ -93,46 +68,18 @@ async function createParseTask(file: File): Promise<CreateParseTaskResponse> {
     idempotency_key: `parse:${file.name}:${file.size}:${file.lastModified}`,
   }
 
-  const response = await fetch('/api/v1/tasks/parse', {
+  return requestJson<CreateParseTaskResponse>(apiRoutes.coreApi.tasks.parse, {
     method: 'POST',
-    headers: buildAuthHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify(body),
+    json: body,
+    fallbackMessage: '创建解析任务失败',
   })
-
-  if (response.status === 401) {
-    getLocalStorage()?.removeItem('token')
-    throw new Error('登录已过期，请重新登录')
-  }
-
-  const payload = (await response.json().catch(() => null)) as
-    | (CreateParseTaskResponse & ParseProjectErrorResponse)
-    | null
-  if (!response.ok) {
-    throw new Error(payload?.error || payload?.message || '创建解析任务失败')
-  }
-
-  return payload as CreateParseTaskResponse
 }
 
 async function getTaskSnapshot(taskID: string): Promise<TaskSnapshotResponse> {
-  const response = await fetch(`/api/v1/tasks/${taskID}`, {
+  return requestJson<TaskSnapshotResponse>(apiRoutes.coreApi.tasks.byId(taskID), {
     method: 'GET',
-    headers: buildAuthHeaders(),
+    fallbackMessage: '查询解析任务失败',
   })
-
-  if (response.status === 401) {
-    getLocalStorage()?.removeItem('token')
-    throw new Error('登录已过期，请重新登录')
-  }
-
-  const payload = (await response.json().catch(() => null)) as
-    | (TaskSnapshotResponse & ParseProjectErrorResponse)
-    | null
-  if (!response.ok) {
-    throw new Error(payload?.error || payload?.message || '查询解析任务失败')
-  }
-
-  return payload as TaskSnapshotResponse
 }
 
 export const projectService = {

@@ -1,3 +1,6 @@
+import { requestEnvelope } from './apiClient'
+import { apiRoutes } from './apiRoutes'
+
 export type ReviewMode = 'light_recall' | 'detailed_qa'
 export type ReviewEntryType = 'today' | 'manual_random' | 'manual_select'
 
@@ -125,12 +128,6 @@ export interface FinishResponse {
   final_feedback: FinalFeedback
 }
 
-interface ApiEnvelope<T> {
-  code: number
-  message: string
-  data: T
-}
-
 interface ListNotesParams {
   query?: string
   seriesTitle?: string
@@ -138,55 +135,17 @@ interface ListNotesParams {
   pageSize?: number
 }
 
-const getLocalStorage = () => {
-  if (typeof window === 'undefined' && typeof globalThis.localStorage === 'undefined') {
-    return null
-  }
-  return globalThis.localStorage ?? null
-}
-
-const buildHeaders = (init?: RequestInit) => {
-  const headers = new Headers(init?.headers)
-  const token = getLocalStorage()?.getItem('token')
-
-  if (token) {
-    headers.set('Authorization', `Bearer ${token}`)
-  }
-
-  if (init?.body && !(init.body instanceof FormData) && !headers.has('Content-Type')) {
-    headers.set('Content-Type', 'application/json')
-  }
-
-  return headers
-}
-
-async function requestJson<T>(url: string, init?: RequestInit) {
-  const response = await fetch(url, {
-    ...init,
-    headers: buildHeaders(init),
-  })
-
-  if (response.status === 401) {
-    getLocalStorage()?.removeItem('token')
-    throw new Error('登录已过期，请重新登录')
-  }
-
-  const payload = (await response.json().catch(() => null)) as ApiEnvelope<T> | null
-  if (!response.ok || !payload || payload.code !== 200) {
-    throw new Error(payload?.message || '请求复习接口失败')
-  }
-
-  return payload.data
-}
-
 export const reviewService = {
   getToday() {
-    return requestJson<ReviewCardResponse>('/api/v1/review/today')
+    return requestEnvelope<ReviewCardResponse>(apiRoutes.reviewService.today, {
+      fallbackMessage: '请求复习接口失败',
+    })
   },
 
   pickRandom() {
-    return requestJson<ReviewCardResponse>('/api/v1/review/pick', {
+    return requestEnvelope<ReviewCardResponse>(apiRoutes.reviewService.pick, {
       method: 'POST',
+      fallbackMessage: '请求复习接口失败',
     })
   },
 
@@ -201,42 +160,53 @@ export const reviewService = {
     search.set('page', String(params.page ?? 1))
     search.set('page_size', String(params.pageSize ?? 20))
 
-    return requestJson<ListNotesResponse>(`/api/v1/review/notes?${search.toString()}`)
+    return requestEnvelope<ListNotesResponse>(`${apiRoutes.reviewService.notes}?${search.toString()}`, {
+      fallbackMessage: '请求复习接口失败',
+    })
   },
 
   getHistory(limit = 5) {
-    return requestJson<ReviewHistoryResponse>(`/api/v1/review/history?limit=${limit}`)
+    const search = new URLSearchParams({ limit: String(limit) })
+    return requestEnvelope<ReviewHistoryResponse>(`${apiRoutes.reviewService.history}?${search.toString()}`, {
+      fallbackMessage: '请求复习接口失败',
+    })
   },
 
   createSession(payload: CreateSessionRequest) {
-    return requestJson<ReviewSessionResponse>('/api/v1/review/sessions', {
+    return requestEnvelope<ReviewSessionResponse>(apiRoutes.reviewService.sessions, {
       method: 'POST',
-      body: JSON.stringify(payload),
+      json: payload,
+      fallbackMessage: '请求复习接口失败',
     })
   },
 
   getSession(sessionId: string) {
-    return requestJson<ReviewSessionResponse>(`/api/v1/review/sessions/${sessionId}`)
+    return requestEnvelope<ReviewSessionResponse>(apiRoutes.reviewService.session(sessionId), {
+      fallbackMessage: '请求复习接口失败',
+    })
   },
 
   respond(sessionId: string, payload: RespondRequest) {
-    return requestJson<RespondResponse>(`/api/v1/review/sessions/${sessionId}/respond`, {
+    return requestEnvelope<RespondResponse>(apiRoutes.reviewService.respond(sessionId), {
       method: 'POST',
-      body: JSON.stringify(payload),
+      json: payload,
+      fallbackMessage: '请求复习接口失败',
     })
   },
 
   requestHint(sessionId: string) {
-    return requestJson<HintResponse>(`/api/v1/review/sessions/${sessionId}/hint`, {
+    return requestEnvelope<HintResponse>(apiRoutes.reviewService.hint(sessionId), {
       method: 'POST',
-      body: JSON.stringify({}),
+      json: {},
+      fallbackMessage: '请求复习接口失败',
     })
   },
 
   finish(sessionId: string) {
-    return requestJson<FinishResponse>(`/api/v1/review/sessions/${sessionId}/finish`, {
+    return requestEnvelope<FinishResponse>(apiRoutes.reviewService.finish(sessionId), {
       method: 'POST',
-      body: JSON.stringify({}),
+      json: {},
+      fallbackMessage: '请求复习接口失败',
     })
   },
 }
