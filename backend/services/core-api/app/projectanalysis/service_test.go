@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	llm "inkwords-backend/shared/platform/llm"
 	sharedprompt "inkwords-backend/shared/kernel/prompt"
+	llm "inkwords-backend/shared/platform/llm"
 
 	"inkwords-backend/services/core-api/app/projectanalysis"
 )
@@ -130,6 +130,15 @@ func TestScanProjectModules_NoGitHubFallback(t *testing.T) {
 	if err := initCmd.Run(); err != nil {
 		t.Fatalf("git init failed: %v", err)
 	}
+	for key, value := range map[string]string{
+		"user.name":  "InkWords Tests",
+		"user.email": "tests@inkwords.local",
+	} {
+		configCmd := exec.Command("git", "-C", tempDir, "config", key, value)
+		if err := configCmd.Run(); err != nil {
+			t.Fatalf("git config %s failed: %v", key, err)
+		}
+	}
 
 	mylibDir := filepath.Join(tempDir, "mylib")
 	if err := os.MkdirAll(mylibDir, 0755); err != nil {
@@ -141,9 +150,13 @@ func TestScanProjectModules_NoGitHubFallback(t *testing.T) {
 	}
 
 	commitCmd := exec.Command("git", "-C", tempDir, "add", "-A")
-	_ = commitCmd.Run()
+	if err := commitCmd.Run(); err != nil {
+		t.Fatalf("git add failed: %v", err)
+	}
 	commitCmd = exec.Command("git", "-C", tempDir, "commit", "-m", "init", "--allow-empty")
-	_ = commitCmd.Run()
+	if err := commitCmd.Run(); err != nil {
+		t.Fatalf("git commit failed: %v", err)
+	}
 
 	modules, err := svc.ScanProjectModules(context.Background(), tempDir)
 	if err != nil {
