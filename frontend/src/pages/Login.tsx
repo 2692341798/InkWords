@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Mail, Lock, User, Loader2, ArrowRight } from 'lucide-react'
 import { authService } from '@/services/auth'
+import { apiRoutes } from '@/services/apiRoutes'
 import { authTokenStore } from '@/lib/authTokenStore'
 
 // Custom GitHub SVG icon since it was removed from lucide-react
@@ -143,8 +144,8 @@ export function Login() {
   }
 
   const handleGithubLogin = () => {
-    // 强制跳转到 API 而不经过前端 React Router 拦截，以便 Nginx 可以将 /api/ 正确代理到 backend:8080
-    window.location.href = '/api/v1/auth/oauth/github'
+    // OAuth 也走同源网关，浏览器不需要知道 core-api 的容器地址。
+    window.location.href = apiRoutes.coreApi.auth.oauth('github')
   }
 
   return (

@@ -1,5 +1,6 @@
-import { fetchEventSource } from '@microsoft/fetch-event-source'
+import { EventStreamContentType, fetchEventSource } from '@microsoft/fetch-event-source'
 import { authTokenStore } from '@/lib/authTokenStore'
+import { assertApiResponse } from './apiClient'
 
 export type SSEOptions = Omit<Parameters<typeof fetchEventSource>[1], 'headers'> & {
   headers?: Record<string, string>
@@ -12,21 +13,35 @@ export const buildAuthHeader = (token: string | null) => {
 }
 
 export const fetchEventSourceWithAuth = (url: string, options: SSEOptions) => {
+  const {
+    headers: inputHeaders,
+    requireAuth = true,
+    onopen,
+    onerror,
+    ...requestOptions
+  } = options
   const token = authTokenStore.getSnapshot()
-  const headers: Record<string, string> = { ...(options.headers ?? {}) }
-  if (options.requireAuth !== false && token) {
+  const headers: Record<string, string> = { ...(inputHeaders ?? {}) }
+  if (requireAuth && token) {
     headers.Authorization = `Bearer ${token}`
   }
 
   return fetchEventSource(url, {
-    ...options,
+    ...requestOptions,
     headers,
     async onopen(response) {
-      if (response.status === 401) {
-        authTokenStore.clearToken()
-        throw new Error('登录已过期，请重新登录')
+      await assertApiResponse(response, '流式请求失败')
+      const contentType = response.headers.get('content-type')
+      if (!contentType?.startsWith(EventStreamContentType)) {
+        throw new Error(`流式响应格式错误：${contentType || '缺少 Content-Type'}`)
       }
-      await options.onopen?.(response)
+      await onopen?.(response)
+    },
+    onerror(error) {
+      onerror?.(error)
+      // Why: task mutations and streams are not safe to replay implicitly.
+      // Callers can expose an explicit retry action with a new idempotency key.
+      throw error
     },
   })
 }

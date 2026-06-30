@@ -1,4 +1,7 @@
 import type { BlogNode } from '@/store/blogStore'
+import { authTokenStore } from '@/lib/authTokenStore'
+import { requestEnvelope } from './apiClient'
+import { apiRoutes } from './apiRoutes'
 import {
   createExportTask as createExportTaskRequest,
   downloadTaskArtifact as downloadTaskArtifactRequest,
@@ -27,10 +30,6 @@ interface SidebarPdfExportResult {
   failed: SidebarPdfExportFailure[]
 }
 
-function getAuthHeaders(token: string | null): Record<string, string> {
-  return token ? { Authorization: `Bearer ${token}` } : {}
-}
-
 function sanitizeDownloadFilename(name: string) {
   return (name || 'series').replaceAll('/', '-').replaceAll('\\', '-').replaceAll(':', '：').trim()
 }
@@ -41,23 +40,16 @@ function sanitizeDownloadFilename(name: string) {
  */
 export async function syncSeriesToObsidian(seriesRoots: BlogNode[], dependencies: SidebarExportDependencies = {}) {
   const fetchImpl = dependencies.fetchImpl ?? fetch
-  const getToken = dependencies.getToken ?? (() => localStorage.getItem('token'))
+  const getToken = dependencies.getToken ?? authTokenStore.getSnapshot
   const token = getToken()
 
   for (const series of seriesRoots) {
-    const response = await fetchImpl(`/api/v1/blogs/${series.id}/export/obsidian/series`, {
+    await requestEnvelope<null>(apiRoutes.exportService.seriesToObsidian(series.id), {
       method: 'POST',
-      headers: getAuthHeaders(token),
+      fetchImpl,
+      token,
+      fallbackMessage: '同步系列失败',
     })
-
-    const data = await response.json().catch(() => null)
-    if (!response.ok || (typeof data === 'object' && data !== null && 'code' in data && data.code !== 200)) {
-      const message =
-        typeof data === 'object' && data !== null && 'message' in data && typeof data.message === 'string'
-          ? data.message
-          : '同步系列失败'
-      throw new Error(message)
-    }
   }
 
   return seriesRoots.length

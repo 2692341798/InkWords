@@ -37,16 +37,10 @@ describe('sidebarExport service', () => {
 
     expect(count).toBe(2)
     expect(fetchImpl).toHaveBeenCalledTimes(2)
-    expect(fetchImpl).toHaveBeenNthCalledWith(
-      1,
-      '/api/v1/blogs/series-a/export/obsidian/series',
-      {
-        method: 'POST',
-        headers: {
-          Authorization: 'Bearer token-123',
-        },
-      },
-    )
+    const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe('/api/v1/blogs/series-a/export/obsidian/series')
+    expect(init.method).toBe('POST')
+    expect(new Headers(init.headers).get('Authorization')).toBe('Bearer token-123')
   })
 
   it('downloads each exported pdf with a sanitized filename and records failures', async () => {

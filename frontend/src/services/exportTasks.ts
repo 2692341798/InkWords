@@ -1,5 +1,7 @@
 import { authTokenStore } from '@/lib/authTokenStore'
-import { buildAuthHeader, fetchEventSourceWithAuth } from './sse'
+import { requestBlob, requestJson } from './apiClient'
+import { apiRoutes } from './apiRoutes'
+import { fetchEventSourceWithAuth } from './sse'
 
 export interface ExportTaskResponse {
   task_id: string
@@ -24,23 +26,6 @@ const downloadBlobWithBrowser = (blob: Blob, filename: string) => {
   document.body.removeChild(anchor)
 }
 
-const readErrorMessage = async (response: Response, fallback: string) => {
-  const payload = (await response.json().catch(() => null)) as { error?: string; message?: string } | null
-  return payload?.message || payload?.error || fallback
-}
-
-const buildHeaders = (token: string | null, contentType?: string) => {
-  const headers: Record<string, string> = {}
-  const authHeader = buildAuthHeader(token)
-  if (authHeader.Authorization) {
-    headers.Authorization = authHeader.Authorization
-  }
-  if (contentType) {
-    headers['Content-Type'] = contentType
-  }
-  return headers
-}
-
 /**
  * Why: PDF 导出改成任务流后，Sidebar 只需要关心“创建任务”这一件事，
  * 具体鉴权头和接口契约由 service 统一维护，避免组件里散落重复实现。
@@ -50,25 +35,18 @@ export async function createExportTask(
   dependencies: Pick<ExportTaskDependencies, 'fetchImpl' | 'getToken'> = {},
 ): Promise<ExportTaskResponse> {
   const fetchImpl = dependencies.fetchImpl ?? fetch
-  const token = dependencies.getToken?.() ?? authTokenStore.getSnapshot()
-  const response = await fetchImpl('/api/v1/tasks/export', {
+  const token = dependencies.getToken ? dependencies.getToken() : authTokenStore.getSnapshot()
+  return requestJson<ExportTaskResponse>(apiRoutes.coreApi.tasks.export, {
     method: 'POST',
-    headers: buildHeaders(token, 'application/json'),
-    body: JSON.stringify({
+    json: {
       kind: 'export_pdf',
       payload: { blog_id: blogID },
       idempotency_key: `export-pdf:${blogID}`,
-    }),
+    },
+    fetchImpl,
+    token,
+    fallbackMessage: '创建导出任务失败',
   })
-
-  if (response.status === 401) {
-    authTokenStore.clearToken()
-    throw new Error('登录已过期，请重新登录')
-  }
-  if (!response.ok) {
-    throw new Error(await readErrorMessage(response, '创建导出任务失败'))
-  }
-  return (await response.json()) as ExportTaskResponse
 }
 
 export async function waitForTaskCompletion(streamURL: string): Promise<void> {
@@ -96,21 +74,13 @@ export async function downloadTaskArtifact(
   dependencies: ExportTaskDependencies = {},
 ): Promise<void> {
   const fetchImpl = dependencies.fetchImpl ?? fetch
-  const token = dependencies.getToken?.() ?? authTokenStore.getSnapshot()
-  const response = await fetchImpl(`/api/v1/tasks/${taskID}/download`, {
+  const token = dependencies.getToken ? dependencies.getToken() : authTokenStore.getSnapshot()
+  const blob = await requestBlob(apiRoutes.coreApi.tasks.download(taskID), {
     method: 'GET',
-    headers: buildHeaders(token),
+    fetchImpl,
+    token,
+    fallbackMessage: 'PDF 下载失败',
   })
-
-  if (response.status === 401) {
-    authTokenStore.clearToken()
-    throw new Error('登录已过期，请重新登录')
-  }
-  if (!response.ok) {
-    throw new Error(await readErrorMessage(response, 'PDF 下载失败'))
-  }
-
-  const blob = await response.blob()
   const downloadBlob = dependencies.downloadBlob ?? downloadBlobWithBrowser
   downloadBlob(blob, filename)
 }

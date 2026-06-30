@@ -65,11 +65,16 @@ InkWords Trainer 是一个面向个人知识沉淀、知识复习与内容输出
 
 前端 Nginx 会按路径把请求分发到不同服务：
 
+- `/api/v1/tasks/:id/stream` -> `core-api`（关闭代理缓冲，支持任务 SSE 即时回放）
 - `/api/v1/stream/*` -> `llm-stream`
+- `/api/v1/blogs/:id/continue|polish` -> `llm-stream`
 - `/api/v1/project/parse` -> `parser-service`
 - `/api/v1/review/*` -> `review-service`
 - `/api/v1/blogs/:id/export*` -> `export-service`
 - 其余 `/api/*` -> `core-api`
+- `/uploads/*` -> `core-api`
+
+浏览器始终只请求同源的 `/api/*` 与 `/uploads/*`，不会直接访问容器名、服务端口或维护多套 CORS 配置。
 
 ## 关键工作流
 
@@ -207,13 +212,26 @@ go run ./cmd/server/main.go
 
 ### 前端开发
 
+推荐让 Vite 复用与生产一致的 Nginx 网关，而不是把请求发给单体聚合入口。先在仓库根目录启动 Compose，并把网关映射到本机 `8081`：
+
+```bash
+FRONTEND_PORT=8081 \
+FRONTEND_URL=http://localhost:5173 \
+DOCKER_GITHUB_REDIRECT_URL=http://localhost:5173/api/v1/auth/callback/github \
+docker compose --env-file backend/.env up -d --build
+```
+
+再启动 Vite：
+
 ```bash
 cd frontend
 npm install
-npm run dev
+INKWORDS_GATEWAY_ORIGIN=http://localhost:8081 npm run dev
 ```
 
 前端开发服务器默认运行在 `http://localhost:5173`。
+
+本地请求链路为：`浏览器 :5173 -> Vite proxy -> Nginx :8081 -> 对应微服务`。`INKWORDS_GATEWAY_ORIGIN` 只由 Vite 开发服务器读取，不会打包进浏览器代码。若换用其他网关端口，`FRONTEND_PORT` 与 `INKWORDS_GATEWAY_ORIGIN` 必须同步修改。
 
 ### 常用前端命令
 
