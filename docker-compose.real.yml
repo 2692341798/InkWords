@@ -1,0 +1,6 @@
+services:
+  obsidian-bridge:
+    command:
+      - /bin/sh
+      - -c
+      - apk add --no-cache socat && socat -d -d TCP-LISTEN:27125,fork,reuseaddr TCP:host.docker.internal:27124

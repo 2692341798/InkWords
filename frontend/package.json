@@ -10,6 +10,9 @@
     "deadcode": "knip",
     "check:bundle": "node scripts/check-bundle-budget.mjs",
     "test:coverage": "vitest run --coverage --configLoader runner",
+    "test:e2e": "playwright test --project=chromium --project=mobile-chromium --grep @core",
+    "test:e2e:smoke": "playwright test --project=chromium --project=firefox --project=webkit --grep @cross-browser",
+    "test:e2e:real": "playwright test --project=chromium --grep '@(deepseek|obsidian|oauth)' --workers=1",
     "preview": "vite preview --configLoader runner",
     "test": "vitest run --configLoader runner"
   },
@@ -43,6 +46,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
+    "@playwright/test": "^1.61.1",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16.3.2",
     "@types/node": "^24.12.2",

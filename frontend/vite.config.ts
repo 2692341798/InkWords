@@ -1,7 +1,7 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { loadEnv } from 'vite'
-import { defineConfig } from 'vitest/config'
+import { configDefaults, defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
@@ -40,6 +40,7 @@ export default defineConfig(({ mode }) => {
       },
     },
     test: {
+      exclude: [...configDefaults.exclude, 'e2e/**'],
       coverage: {
         provider: 'v8',
         reporter: ['text-summary', 'json-summary', 'lcov'],

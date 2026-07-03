@@ -1,0 +1,77 @@
+name: ${COMPOSE_PROJECT_NAME:-inkwords-e2e}
+
+# Isolated test overlay. Named volumes and the network are automatically scoped
+# by COMPOSE_PROJECT_NAME; only the explicitly supplied temporary Vault is bound.
+services:
+  obsidian-bridge:
+    # Deterministic PR runs must not install packages or reach a host service.
+    # docker-compose.real.yml restores the production proxy for real acceptance.
+    command: ["/bin/sh", "-c", "exec tail -f /dev/null"]
+
+  db:
+    environment:
+      POSTGRES_USER: inkwords_e2e
+      # This database is reachable only inside the isolated, unexposed E2E network.
+      POSTGRES_HOST_AUTH_METHOD: trust
+      POSTGRES_DB: inkwords_e2e
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U inkwords_e2e -d inkwords_e2e"]
+
+  core-api:
+    environment:
+      DATABASE_URL: postgres://inkwords_e2e@db:5432/inkwords_e2e?sslmode=disable
+      FRONTEND_URL: http://127.0.0.1:${E2E_PORT:-18080}
+      GITHUB_REDIRECT_URL: http://127.0.0.1:${E2E_PORT:-18080}/api/v1/auth/callback/github
+      DEV_AUTH_USER_ID: ${E2E_DEV_AUTH_USER_ID:-}
+      OBSIDIAN_WIKI_DIR: wiki/e2e/${E2E_RUN_ID:-local}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
+    volumes:
+      - type: bind
+        source: ${E2E_VAULT_PATH:?Set E2E_VAULT_PATH to a disposable directory}
+        target: /app/obsidian
+
+  llm-stream:
+    environment:
+      DATABASE_URL: postgres://inkwords_e2e@db:5432/inkwords_e2e?sslmode=disable
+      FRONTEND_URL: http://127.0.0.1:${E2E_PORT:-18080}
+      DEV_AUTH_USER_ID: ${E2E_DEV_AUTH_USER_ID:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
+
+  parser-service:
+    environment:
+      DATABASE_URL: postgres://inkwords_e2e@db:5432/inkwords_e2e?sslmode=disable
+      DEV_AUTH_USER_ID: ${E2E_DEV_AUTH_USER_ID:-}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
+
+  export-service:
+    environment:
+      DATABASE_URL: postgres://inkwords_e2e@db:5432/inkwords_e2e?sslmode=disable
+      FRONTEND_URL: http://127.0.0.1:${E2E_PORT:-18080}
+      DEV_AUTH_USER_ID: ${E2E_DEV_AUTH_USER_ID:-}
+      OBSIDIAN_WIKI_DIR: wiki/e2e/${E2E_RUN_ID:-local}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
+    volumes:
+      - type: bind
+        source: ${E2E_VAULT_PATH:?Set E2E_VAULT_PATH to a disposable directory}
+        target: /app/obsidian
+
+  review-service:
+    environment:
+      REVIEW_DATABASE_URL: postgres://inkwords_e2e@db:5432/inkwords_review_db?sslmode=disable
+      DEV_AUTH_USER_ID: ${E2E_DEV_AUTH_USER_ID:-}
+      OBSIDIAN_WIKI_DIR: wiki/e2e/${E2E_RUN_ID:-local}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
+    volumes:
+      - type: bind
+        source: ${E2E_VAULT_PATH:?Set E2E_VAULT_PATH to a disposable directory}
+        target: /app/obsidian
+
+  frontend:
+    build:
+      args:
+        VITE_AUTH_BYPASS: ${VITE_AUTH_BYPASS:-true}
+    ports: !override
+      - "127.0.0.1:${E2E_PORT:-18080}:80"

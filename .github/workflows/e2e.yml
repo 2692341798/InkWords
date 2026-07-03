@@ -1,0 +1,107 @@
+name: E2E
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: e2e-chromium
+            command: test:e2e
+            browsers: chromium
+            suffix: chromium
+            port: "18080"
+          - name: e2e-browser-smoke
+            command: test:e2e:smoke
+            browsers: chromium firefox webkit
+            suffix: smoke
+            port: "18081"
+    env:
+      COMPOSE_PROJECT_NAME: inkwords-e2e-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.suffix }}
+      E2E_RUN_ID: ci-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.suffix }}
+      E2E_PORT: ${{ matrix.port }}
+      E2E_VAULT_PATH: /tmp/inkwords-e2e-vault-${{ matrix.suffix }}
+      OBSIDIAN_VAULT_PATH: /tmp/inkwords-e2e-vault-${{ matrix.suffix }}
+      INKWORDS_E2E_BASE_URL: http://127.0.0.1:${{ matrix.port }}
+      E2E_AUTH_MODE: ui
+      E2E_EXTERNAL_MODE: stub
+      DEEPSEEK_API_KEY: ci-placeholder-key
+      JWT_SECRET: ci-placeholder-jwt-secret
+      OBSIDIAN_REST_API_KEY: ci-placeholder-obsidian-key
+      VITE_AUTH_BYPASS: "true"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: frontend
+        run: npx playwright install --with-deps ${{ matrix.browsers }}
+
+      - name: Prepare isolated Vault
+        run: mkdir -p "$E2E_VAULT_PATH/wiki/e2e/$E2E_RUN_ID"
+
+      - name: Start isolated application
+        run: docker compose -f docker-compose.yml -f docker-compose.e2e.yml up -d --build
+
+      - name: Wait for gateway
+        run: |
+          for attempt in $(seq 1 36); do
+            if curl --fail --silent "$INKWORDS_E2E_BASE_URL/api/v1/ping" >/dev/null; then
+              exit 0
+            fi
+            sleep 5
+          done
+          docker compose -f docker-compose.yml -f docker-compose.e2e.yml ps
+          exit 1
+
+      - name: Run Playwright
+        working-directory: frontend
+        run: npm run ${{ matrix.command }}
+
+      - name: Capture service logs
+        if: failure()
+        run: docker compose -f docker-compose.yml -f docker-compose.e2e.yml logs --no-color > compose-e2e.log
+
+      - name: Upload E2E evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: ignore
+          retention-days: 14
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+            compose-e2e.log
+
+      - name: Clean isolated resources
+        if: always()
+        run: |
+          status=0
+          docker compose -f docker-compose.yml -f docker-compose.e2e.yml down -v --remove-orphans || status=$?
+          rm -rf "$E2E_VAULT_PATH"
+          exit "$status"
