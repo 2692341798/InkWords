@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils'
 import { useShallow } from 'zustand/react/shallow'
 import { getGeneratorViewState } from './generatorViewState'
 import { toast } from 'sonner'
+import { Loader2 } from 'lucide-react'
 
 /**
  * Coordinates the step-focused generator workspace, including source input,
@@ -289,7 +290,12 @@ export function Generator() {
                         disabled={!store.sourceContent.trim() || store.isAnalyzing || store.isGenerating}
                         className="min-w-[140px]"
                       >
-                        生成大纲
+                        {store.isAnalyzing ? (
+                          <>
+                            <Loader2 className="animate-spin" />
+                            正在生成大纲
+                          </>
+                        ) : '生成大纲'}
                       </Button>
                     </div>
                   </section>

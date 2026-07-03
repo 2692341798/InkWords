@@ -66,6 +66,7 @@ vi.mock('@/hooks/useBlogStream', () => ({
 
 describe('Generator stage views', () => {
   beforeEach(() => {
+    mockStreamState.sourceType = 'git'
     mockStreamState.isScanning = false
     mockStreamState.isAnalyzing = false
     mockStreamState.isGenerating = false
@@ -176,6 +177,19 @@ describe('Generator stage views', () => {
     expect(html).toContain('场景选择器')
     expect(html).toContain('文件摘要')
     expect(html).toContain('解析进度面板')
+  })
+
+  it('shows immediate progress feedback on the file outline button', () => {
+    mockStreamState.sourceType = 'file'
+    mockStreamState.sourceContent = 'parsed document content'
+    mockStreamState.outline = []
+    mockStreamState.isAnalyzing = true
+
+    const html = renderToStaticMarkup(<Generator />)
+
+    expect(html).toContain('正在生成大纲')
+    expect(html).toContain('disabled')
+    expect(html).toContain('animate-spin')
   })
 
   it('shows outline editor and generation progress in the same stage', () => {

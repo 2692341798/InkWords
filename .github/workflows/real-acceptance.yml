@@ -1,0 +1,88 @@
+name: Real acceptance
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_oauth:
+        description: Run tests requiring a pre-authorized GitHub test session
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: inkwords-real-acceptance
+  cancel-in-progress: false
+
+jobs:
+  real-acceptance:
+    # A dedicated runner provides the temporary Obsidian Vault/API and an
+    # interactive browser when first-time GitHub OAuth approval is required.
+    runs-on: [self-hosted, inkwords-real-acceptance]
+    timeout-minutes: 60
+    environment: real-acceptance
+    env:
+      COMPOSE_PROJECT_NAME: inkwords-real-${{ github.run_id }}-${{ github.run_attempt }}
+      E2E_RUN_ID: real-${{ github.run_id }}-${{ github.run_attempt }}
+      E2E_PORT: "18080"
+      E2E_VAULT_PATH: /tmp/inkwords-real-vault
+      OBSIDIAN_VAULT_PATH: /tmp/inkwords-real-vault
+      INKWORDS_E2E_BASE_URL: http://127.0.0.1:18080
+      E2E_AUTH_MODE: real
+      E2E_EXTERNAL_MODE: real
+      E2E_RUN_OAUTH: ${{ inputs.run_oauth }}
+      E2E_TEST_TOKEN: ${{ secrets.E2E_TEST_TOKEN }}
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      GITHUB_CLIENT_ID: ${{ secrets.TEST_GITHUB_CLIENT_ID }}
+      GITHUB_CLIENT_SECRET: ${{ secrets.TEST_GITHUB_CLIENT_SECRET }}
+      OBSIDIAN_REST_API_KEY: ${{ secrets.OBSIDIAN_REST_API_KEY }}
+      JWT_SECRET: ${{ secrets.TEST_JWT_SECRET }}
+      VITE_AUTH_BYPASS: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install test runtime
+        working-directory: frontend
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Prepare isolated Vault
+        run: mkdir -p "$E2E_VAULT_PATH/wiki/e2e/$E2E_RUN_ID"
+      - name: Start real integration stack
+        run: docker compose -f docker-compose.yml -f docker-compose.e2e.yml -f docker-compose.real.yml up -d --build
+      - name: Wait for gateway
+        run: |
+          for attempt in $(seq 1 36); do
+            curl --fail --silent "$INKWORDS_E2E_BASE_URL/api/v1/ping" >/dev/null && exit 0
+            sleep 5
+          done
+          exit 1
+      - name: Run serial real acceptance
+        working-directory: frontend
+        run: npm run test:e2e:real
+      - name: Capture service logs
+        if: failure()
+        run: docker compose -f docker-compose.yml -f docker-compose.e2e.yml -f docker-compose.real.yml logs --no-color > compose-real.log
+      - name: Upload acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-acceptance-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: ignore
+          retention-days: 14
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+            compose-real.log
+      - name: Clean isolated resources
+        if: always()
+        run: |
+          status=0
+          docker compose -f docker-compose.yml -f docker-compose.e2e.yml -f docker-compose.real.yml down -v --remove-orphans || status=$?
+          rm -rf "$E2E_VAULT_PATH"
+          exit "$status"

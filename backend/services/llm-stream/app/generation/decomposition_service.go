@@ -13,11 +13,11 @@ import (
 
 	"github.com/google/uuid"
 
-	llm "inkwords-backend/shared/platform/llm"
-	"inkwords-backend/shared/platform/parser"
+	streamdomain "inkwords-backend/services/llm-stream/domain/stream"
 	sharedblog "inkwords-backend/shared/kernel/blog"
 	"inkwords-backend/shared/kernel/prompt"
-	streamdomain "inkwords-backend/services/llm-stream/domain/stream"
+	llm "inkwords-backend/shared/platform/llm"
+	"inkwords-backend/shared/platform/parser"
 )
 
 // DecompositionService 实现 stream.Decomposition 接口，处理系列生成、续写、分析与扫描。
@@ -227,13 +227,55 @@ func (s *DecompositionService) AnalyzeFileStream(
 		scenarioMode = prompt.ScenarioModeEbookInterpretation
 	}
 
-	_ = userID
-	_ = sourceContent
+	if strings.TrimSpace(sourceContent) == "" {
+		errChan <- fmt.Errorf("source content is empty")
+		return
+	}
+
+	select {
+	case <-ctx.Done():
+		errChan <- ctx.Err()
+		return
+	default:
+	}
+
+	sendProgressJSON(progressChan, map[string]interface{}{
+		"step": 0, "status": "cloning", "message": "正在读取文件内容...",
+	})
+	sendProgressJSON(progressChan, map[string]interface{}{
+		"step": 1, "status": "scanning", "message": "文件内容读取完成",
+	})
+	sendProgressJSON(progressChan, map[string]interface{}{
+		"step": 2, "status": "analyzing", "message": "正在识别文档内容类型...",
+	})
+
+	profileResolver := NewPromptProfileResolver(s.llmClient)
+	profile, resolvedProfile, err := profileResolver.ResolveForFile(ctx, sourceContent, scenarioMode)
+	if err != nil {
+		errChan <- fmt.Errorf("resolve prompt profile: %w", err)
+		return
+	}
+
+	sendProgressJSON(progressChan, map[string]interface{}{
+		"step": 3, "status": "outline", "message": "正在根据创作场景生成大纲...",
+	})
+
+	outline, err := s.generateOutline(ctx, sourceContent, scenarioMode, profile)
+	if err != nil {
+		errChan <- fmt.Errorf("generate outline: %w", err)
+		return
+	}
 
 	sendProgressJSON(progressChan, map[string]interface{}{
 		"step":    4,
 		"status":  "complete",
-		"message": "分析完成",
+		"message": "大纲生成完成",
+		"content": map[string]interface{}{
+			"series_title":            outline.SeriesTitle,
+			"outline":                 outline.Chapters,
+			"source_content":          sourceContent,
+			"resolved_prompt_profile": resolvedProfile,
+		},
 	})
 }
 

@@ -9,10 +9,12 @@ import { Dashboard } from '@/pages/Dashboard'
 import { KnowledgeReview } from '@/pages/KnowledgeReview'
 import { Toaster } from '@/components/ui/sonner'
 import { authTokenStore } from '@/lib/authTokenStore'
+import { isAuthBypassEnabled } from '@/lib/authBypass'
 
 function App() {
   const { selectedBlog, currentView } = useBlogStore()
   const token = useSyncExternalStore(authTokenStore.subscribe, authTokenStore.getSnapshot, authTokenStore.getServerSnapshot)
+  const authBypassEnabled = isAuthBypassEnabled(import.meta.env.VITE_AUTH_BYPASS)
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search)
@@ -23,7 +25,7 @@ function App() {
     }
   }, [])
 
-  if (!token) {
+  if (!authBypassEnabled && !token) {
     return <Login />
   }
 

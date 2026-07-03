@@ -3,6 +3,7 @@ package httpx
 import (
 	"log"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -23,15 +24,24 @@ func AuthMiddleware() gin.HandlerFunc {
 		authorizationHeader := c.GetHeader(authorizationHeaderKey)
 
 		if len(authorizationHeader) == 0 {
-			// DEV MODE: Allow requests without token in development.
-			if gin.Mode() == gin.DebugMode {
-				dummyID := uuid.New()
-				log.Printf("AuthMiddleware: missing token, generated dummy UUID %v for path %s", dummyID, c.Request.URL.Path)
-				c.Set(authorizationPayloadKey, dummyID)
+			// Why: local Docker testing needs a stable existing user so quota checks
+			// and persisted data keep the same owner across requests.
+			if configuredID := strings.TrimSpace(os.Getenv("DEV_AUTH_USER_ID")); configuredID != "" {
+				userID, err := uuid.Parse(configuredID)
+				if err != nil {
+					log.Printf("AuthMiddleware: invalid DEV_AUTH_USER_ID for path %s", c.Request.URL.Path)
+					c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+						"code":    http.StatusInternalServerError,
+						"message": "development authentication is misconfigured",
+						"data":    nil,
+					})
+					return
+				}
+				c.Set(authorizationPayloadKey, userID)
 				c.Next()
 				return
 			}
-			log.Printf("AuthMiddleware: empty header, gin.Mode()=%s", gin.Mode())
+			log.Printf("AuthMiddleware: empty header")
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"code":    http.StatusUnauthorized,
 				"message": "authorization header is not provided",

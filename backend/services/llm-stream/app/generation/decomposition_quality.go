@@ -4,11 +4,63 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
-	llm "inkwords-backend/shared/platform/llm"
 	sharedblog "inkwords-backend/shared/kernel/blog"
+	llm "inkwords-backend/shared/platform/llm"
 )
+
+const seriesUnderstandingJSONContract = `目标 JSON 结构（所有字段都必须输出）：
+{
+  "chapter_goal": "本章要帮助读者达成的具体目标，非空字符串",
+  "reader_questions": ["读者阅读本章前会提出的问题"],
+  "must_explain": ["本章必须讲透的概念、机制或因果关系，至少一项"],
+  "must_include_examples": ["本章必须包含的案例、计算或演示，至少一项"],
+  "avoid_overlap": ["应避免与其他章节重复的内容"],
+  "bridge_context": {
+    "from_previous": "如何承接上一章，无则为空字符串",
+    "to_next": "如何引出下一章，无则为空字符串"
+  }
+}
+不得省略 must_explain 或 must_include_examples；即使材料简短，也要依据章节标题、摘要和材料提炼具体内容。`
+
+const seriesDraftJSONContract = `目标 JSON 结构（所有字段都必须输出）：
+{
+  "draft_markdown": "完整章节 Markdown，必须实际包含机制解释、示例和复现步骤",
+  "coverage_check": {
+    "goal_covered": true,
+    "mechanism_explained": true,
+    "examples_present": true,
+    "repro_present": true,
+    "edge_cases_present": true
+  },
+  "example_inventory": [{"example_type":"示例类型","supports_claim":"该示例支撑的具体论点"}]
+}
+不得用 false 绕过写作要求；若任一覆盖项尚未满足，先补充 draft_markdown，再把对应布尔值设为 true。example_inventory 至少一项。`
+
+const seriesReviewJSONContract = `目标 JSON 结构（所有字段都必须输出）：
+{
+  "depth_issues": [],
+  "example_issues": [],
+  "structure_issues": [],
+  "revision_actions": ["至少一项具体、可执行的修订动作；无明显缺陷时写明保持哪些优点"],
+  "scorecard": {"depth":4,"examples":4,"reproducibility":4,"clarity":4}
+}
+scorecard 每项使用 1-5 分整数；revision_actions 至少一项。`
+
+func seriesJSONContractForStage(stageName string) string {
+	switch stageName {
+	case "章节理解":
+		return seriesUnderstandingJSONContract
+	case "章节草稿", "章节草稿修复":
+		return seriesDraftJSONContract
+	case "章节审稿":
+		return seriesReviewJSONContract
+	}
+	return ""
+}
+
 //nolint:all
 func buildSeriesSharedPromptPrefix(seriesTitle string, readerProfile string, outline []sharedblog.Chapter) string {
 	var builder strings.Builder
@@ -33,13 +85,15 @@ func (s *DecompositionService) repairSeriesJSONOutput(
 	raw string,
 	validationErr error,
 ) (string, llm.CompletionUsage, error) {
+	contract := seriesJSONContractForStage(stageName)
 	messages := []llm.Message{
 		{Role: "system", Content: seriesPrefix + "\n当前阶段：" + stageName + " JSON 修复"},
 		{
 			Role: "user",
 			Content: fmt.Sprintf(
-				"下面是上一轮输出的 JSON 或近似 JSON，但它未通过结构化校验。\n校验错误：%v\n\n原始输出：\n%s\n\n请只修复缺失字段、布尔门禁或 JSON 格式，保持已有有效内容，不要扩写成新文章，返回严格 JSON。",
+				"下面是上一轮输出的 JSON 或近似 JSON，但它未通过结构化校验。\n校验错误：%v\n\n%s\n\n原始输出：\n%s\n\n请只修复缺失字段、布尔门禁或 JSON 格式，保持已有有效内容，不要扩写成新文章，返回严格 JSON。",
 				validationErr,
+				contract,
 				raw,
 			),
 		},
@@ -61,10 +115,11 @@ func (s *DecompositionService) generateSeriesChapterUnderstanding(
 		{
 			Role: "user",
 			Content: fmt.Sprintf(
-				"当前章节标题：%s\n章节摘要：%s\n材料：\n%s\n\n请返回严格 JSON。",
+				"当前章节标题：%s\n章节摘要：%s\n材料：\n%s\n\n%s\n\n请仅返回符合上述结构的严格 JSON。",
 				chapter.Title,
 				chapter.Summary,
 				chapterSourceContent,
+				seriesUnderstandingJSONContract,
 			),
 		},
 	}
@@ -143,12 +198,128 @@ func (s *DecompositionService) generateSeriesChapterDraft(
 func parseSeriesDraft(raw string) (seriesChapterDraft, error) {
 	var result seriesChapterDraft
 	if err := json.Unmarshal([]byte(raw), &result); err != nil {
+		if strings.Contains(err.Error(), "unexpected end of JSON input") {
+			// Why: 章节草稿正文很长，LLM 偶尔会把 JSON 结尾截断；只要 draft_markdown 已经产出，
+			// 就先本地恢复可用草稿，后续审稿/修订阶段再继续补齐质量，而不是把整章直接判死。
+			salvaged, salvageErr := salvageSeriesDraftFromTruncatedJSON(raw)
+			if salvageErr == nil {
+				return salvaged, nil
+			}
+		}
 		return seriesChapterDraft{}, fmt.Errorf("unmarshal chapter draft: %w", err)
 	}
 	if err := validateSeriesChapterDraft(result); err != nil {
 		return seriesChapterDraft{}, err
 	}
 	return result, nil
+}
+
+func salvageSeriesDraftFromTruncatedJSON(raw string) (seriesChapterDraft, error) {
+	draftMarkdown, ok := extractPossiblyTruncatedJSONStringField(raw, "draft_markdown")
+	if !ok || strings.TrimSpace(draftMarkdown) == "" {
+		return seriesChapterDraft{}, fmt.Errorf("draft_markdown is required")
+	}
+
+	exampleType, hasExampleType := extractPossiblyTruncatedJSONStringField(raw, "example_type")
+	supportsClaim, hasSupportsClaim := extractPossiblyTruncatedJSONStringField(raw, "supports_claim")
+	if !hasExampleType || strings.TrimSpace(exampleType) == "" {
+		exampleType = "recovered_draft"
+	}
+	if !hasSupportsClaim || strings.TrimSpace(supportsClaim) == "" {
+		supportsClaim = "从截断 JSON 中恢复章节草稿，待后续审稿阶段复核"
+	}
+
+	result := seriesChapterDraft{
+		DraftMarkdown: draftMarkdown,
+		CoverageCheck: seriesChapterCoverageCheck{
+			GoalCovered:        coverageFlagOrDefaultTrue(raw, "goal_covered"),
+			MechanismExplained: coverageFlagOrDefaultTrue(raw, "mechanism_explained"),
+			ExamplesPresent:    coverageFlagOrDefaultTrue(raw, "examples_present"),
+			ReproPresent:       coverageFlagOrDefaultTrue(raw, "repro_present"),
+			EdgeCasesPresent:   coverageFlagOrDefaultTrue(raw, "edge_cases_present"),
+		},
+		ExampleInventory: []seriesChapterExample{{
+			ExampleType:   exampleType,
+			SupportsClaim: supportsClaim,
+		}},
+	}
+	if err := validateSeriesChapterDraft(result); err != nil {
+		return seriesChapterDraft{}, err
+	}
+	return result, nil
+}
+
+func coverageFlagOrDefaultTrue(raw string, key string) bool {
+	return !strings.Contains(raw, fmt.Sprintf(`"%s":false`, key))
+}
+
+func extractPossiblyTruncatedJSONStringField(raw string, key string) (string, bool) {
+	anchor := `"` + key + `"`
+	index := strings.Index(raw, anchor)
+	if index < 0 {
+		return "", false
+	}
+
+	remainder := raw[index+len(anchor):]
+	colonIndex := strings.Index(remainder, ":")
+	if colonIndex < 0 {
+		return "", false
+	}
+	remainder = strings.TrimLeft(remainder[colonIndex+1:], " \n\r\t")
+	if !strings.HasPrefix(remainder, `"`) {
+		return "", false
+	}
+
+	return decodePossiblyTruncatedJSONString(remainder[1:])
+}
+
+func decodePossiblyTruncatedJSONString(raw string) (string, bool) {
+	var builder strings.Builder
+	escaped := false
+
+	for i := 0; i < len(raw); i++ {
+		char := raw[i]
+		if escaped {
+			switch char {
+			case '"', '\\', '/':
+				builder.WriteByte(char)
+			case 'b':
+				builder.WriteByte('\b')
+			case 'f':
+				builder.WriteByte('\f')
+			case 'n':
+				builder.WriteByte('\n')
+			case 'r':
+				builder.WriteByte('\r')
+			case 't':
+				builder.WriteByte('\t')
+			case 'u':
+				if i+4 >= len(raw) {
+					return builder.String(), builder.Len() > 0
+				}
+				decoded, err := strconv.ParseInt(raw[i+1:i+5], 16, 32)
+				if err != nil {
+					return builder.String(), builder.Len() > 0
+				}
+				builder.WriteRune(rune(decoded))
+				i += 4
+			default:
+				builder.WriteByte(char)
+			}
+			escaped = false
+			continue
+		}
+		if char == '\\' {
+			escaped = true
+			continue
+		}
+		if char == '"' {
+			return builder.String(), true
+		}
+		builder.WriteByte(char)
+	}
+
+	return builder.String(), builder.Len() > 0
 }
 
 //nolint:all
@@ -161,6 +332,8 @@ func buildSeriesDraftPrompt(
 	builder.WriteString(fmt.Sprintf("章节摘要：%s\n", input.Chapter.Summary))
 	builder.WriteString("请基于以下章节理解结果，先产出「结构化草稿 JSON」，字段必须包含 draft_markdown、coverage_check、example_inventory。\n")
 	builder.WriteString("要求：必须解释机制、给出至少一个可复现案例、补充边界情况，用中文写作，Markdown 要适合直接作为技术博客章节。\n")
+	builder.WriteString(seriesDraftJSONContract)
+	builder.WriteString("\n")
 	builder.WriteString(fmt.Sprintf("chapter_goal：%s\n", understanding.ChapterGoal))
 	builder.WriteString(fmt.Sprintf("must_explain：%s\n", strings.Join(understanding.MustExplain, "；")))
 	builder.WriteString(fmt.Sprintf("must_include_examples：%s\n", strings.Join(understanding.MustIncludeExamples, "；")))
@@ -235,6 +408,8 @@ func buildSeriesReviewPrompt(
 	var builder strings.Builder
 	builder.WriteString(fmt.Sprintf("请审稿当前章节《%s》，返回严格 JSON，字段必须包含 depth_issues、example_issues、structure_issues、revision_actions、scorecard。\n", chapter.Title))
 	builder.WriteString("审稿重点：深度是否足够、案例是否支撑观点、步骤是否可复现、结构是否清晰。\n")
+	builder.WriteString(seriesReviewJSONContract)
+	builder.WriteString("\n")
 	builder.WriteString(fmt.Sprintf("chapter_goal：%s\n", understanding.ChapterGoal))
 	builder.WriteString(fmt.Sprintf("must_explain：%s\n", strings.Join(understanding.MustExplain, "；")))
 	builder.WriteString(fmt.Sprintf("must_include_examples：%s\n", strings.Join(understanding.MustIncludeExamples, "；")))

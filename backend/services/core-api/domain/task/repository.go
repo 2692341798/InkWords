@@ -22,6 +22,12 @@ type Repository interface {
 	ListEventsAfter(ctx context.Context, taskID uuid.UUID, afterID uint64, limit int) ([]JobTaskEvent, error)
 }
 
+type resultPersistenceRepository interface {
+	ClaimResultPersistence(ctx context.Context, taskID uuid.UUID, staleBefore time.Time) (bool, error)
+	CompleteResultPersistence(ctx context.Context, taskID uuid.UUID) error
+	ReleaseResultPersistence(ctx context.Context, taskID uuid.UUID) error
+}
+
 // Publisher 定义任务创建后向外部消息系统发布事件的能力边界。
 type Publisher interface {
 	PublishGenerationRequested(ctx context.Context, payload GenerationRequestedMessage) error
@@ -112,6 +118,26 @@ func (r *GormRepository) UpdateResult(ctx context.Context, taskID uuid.UUID, res
 	return nil
 }
 
+func (r *GormRepository) ClaimResultPersistence(ctx context.Context, taskID uuid.UUID, staleBefore time.Time) (bool, error) {
+	now := time.Now().UTC()
+	result := r.db.WithContext(ctx).Model(&JobTask{}).
+		Where("id = ? AND result_persisted_at IS NULL AND (result_persistence_started_at IS NULL OR result_persistence_started_at < ?)", taskID, staleBefore).
+		Updates(map[string]any{"result_persistence_started_at": now, "updated_at": now})
+	return result.RowsAffected == 1, result.Error
+}
+
+func (r *GormRepository) CompleteResultPersistence(ctx context.Context, taskID uuid.UUID) error {
+	now := time.Now().UTC()
+	return r.db.WithContext(ctx).Model(&JobTask{}).Where("id = ?", taskID).Updates(map[string]any{
+		"result_persisted_at": now, "result_persistence_started_at": nil, "updated_at": now,
+	}).Error
+}
+
+func (r *GormRepository) ReleaseResultPersistence(ctx context.Context, taskID uuid.UUID) error {
+	return r.db.WithContext(ctx).Model(&JobTask{}).Where("id = ? AND result_persisted_at IS NULL", taskID).
+		Updates(map[string]any{"result_persistence_started_at": nil, "updated_at": time.Now().UTC()}).Error
+}
+
 func (r *GormRepository) AppendEvent(ctx context.Context, event *JobTaskEvent) error {
 	return r.db.WithContext(ctx).Create(event).Error
 }
@@ -132,3 +158,4 @@ func (r *GormRepository) ListEventsAfter(ctx context.Context, taskID uuid.UUID, 
 }
 
 var _ Repository = (*GormRepository)(nil)
+var _ resultPersistenceRepository = (*GormRepository)(nil)

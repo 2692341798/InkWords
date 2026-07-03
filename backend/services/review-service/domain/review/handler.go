@@ -266,7 +266,10 @@ func (h *Handler) handleServiceError(c *gin.Context, err error) {
 		errors.Is(err, errReviewHintExhausted):
 		h.writeError(c, http.StatusConflict, err.Error())
 	default:
-		h.writeError(c, http.StatusInternalServerError, err.Error())
+		// Infrastructure failures may contain credentials, internal URLs, or
+		// transport details such as EOF. Keep the public error contract stable
+		// and leave detailed diagnostics to service-side logging/observability.
+		h.writeError(c, http.StatusInternalServerError, "复习服务暂时不可用")
 	}
 }
 

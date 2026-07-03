@@ -3,6 +3,7 @@ package review
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -154,10 +155,38 @@ func TestHandler_GetHistory_Returns200(t *testing.T) {
 	require.Equal(t, "Gin 路由", body.Data.Items[0].Title)
 }
 
+func TestHandler_ListNotes_DoesNotExposeObsidianTransportFailure(t *testing.T) {
+	t.Parallel()
+
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(func(c *gin.Context) {
+		c.Set("user_id", uuid.New())
+		c.Next()
+	})
+
+	h := NewHandler(&stubHandlerService{listNotesErr: errors.New("Get https://127.0.0.1:27124/vault/wiki/concepts: EOF")})
+	r.GET("/api/v1/review/notes", h.ListNotes)
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/review/notes", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusInternalServerError, w.Code)
+	var body struct {
+		Message string `json:"message"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	require.Equal(t, "复习服务暂时不可用", body.Message)
+	require.NotContains(t, w.Body.String(), "127.0.0.1")
+	require.NotContains(t, w.Body.String(), "EOF")
+}
+
 type stubHandlerService struct {
 	todayCard     ReviewCardResponse
 	randomCard    ReviewCardResponse
 	listNotesResp ListNotesResponse
+	listNotesErr  error
 	historyResp   ReviewHistoryResponse
 	sessionResp   ReviewSessionResponse
 	respondResp   RespondResponse
@@ -176,7 +205,7 @@ func (s *stubHandlerService) PickRandomCard(context.Context, uuid.UUID) (ReviewC
 }
 
 func (s *stubHandlerService) ListNotes(context.Context, uuid.UUID, ListNotesQuery) (ListNotesResponse, error) {
-	return s.listNotesResp, nil
+	return s.listNotesResp, s.listNotesErr
 }
 
 func (s *stubHandlerService) GetHistory(context.Context, uuid.UUID, int) (ReviewHistoryResponse, error) {

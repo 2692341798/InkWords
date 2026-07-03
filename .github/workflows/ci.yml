@@ -31,6 +31,20 @@ jobs:
         working-directory: backend
         run: ./scripts/check_coverage.sh
 
+  backend-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache: true
+
+      - name: deterministic backend integration contracts
+        working-directory: backend
+        run: go test -tags=integration ./integration
+
   frontend-test-build:
     runs-on: ubuntu-latest
     env:
@@ -89,11 +103,22 @@ jobs:
 
       - name: docker compose config
         run: |
-          mkdir -p /tmp/obsidian-vault
+          mkdir -p /tmp/obsidian-vault /tmp/e2e-vault
           OBSIDIAN_VAULT_PATH=/tmp/obsidian-vault docker compose config
+          JWT_SECRET="$(openssl rand -hex 32)" E2E_VAULT_PATH=/tmp/e2e-vault OBSIDIAN_VAULT_PATH=/tmp/obsidian-vault \
+            docker compose -f docker-compose.yml -f docker-compose.e2e.yml config
 
   microservices-smoke:
     runs-on: ubuntu-latest
+    env:
+      COMPOSE_PROJECT_NAME: inkwords-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+      E2E_RUN_ID: smoke-${{ github.run_id }}-${{ github.run_attempt }}
+      E2E_PORT: "18080"
+      E2E_VAULT_PATH: /tmp/inkwords-smoke-vault
+      OBSIDIAN_VAULT_PATH: /tmp/inkwords-smoke-vault
+      DEEPSEEK_API_KEY: ci-placeholder-key
+      JWT_SECRET: ci-placeholder-jwt-secret
+      OBSIDIAN_REST_API_KEY: ci-placeholder-obsidian-key
     steps:
       - uses: actions/checkout@v4
 
@@ -109,67 +134,35 @@ jobs:
 
       - name: prepare smoke env
         run: |
-          mkdir -p /tmp/obsidian-vault/wiki
+          mkdir -p "$E2E_VAULT_PATH/wiki/e2e/$E2E_RUN_ID"
 
       - name: docker compose up
-        env:
-          OBSIDIAN_VAULT_PATH: /tmp/obsidian-vault
-          DEEPSEEK_API_KEY: ci-placeholder-key
-          JWT_SECRET: ci-placeholder-jwt-secret
-          OBSIDIAN_REST_API_KEY: ci-placeholder-obsidian-key
         run: |
-          docker compose --env-file backend/.env.example down || true
-          docker compose --env-file backend/.env.example up -d --build
+          docker compose -f docker-compose.yml -f docker-compose.e2e.yml up -d --build
 
       - name: wait for healthy services
-        env:
-          OBSIDIAN_VAULT_PATH: /tmp/obsidian-vault
-          DEEPSEEK_API_KEY: ci-placeholder-key
-          JWT_SECRET: ci-placeholder-jwt-secret
-          OBSIDIAN_REST_API_KEY: ci-placeholder-obsidian-key
         run: |
           for attempt in $(seq 1 30); do
-            unhealthy=0
-            for container in \
-              inkwords-core-api \
-              inkwords-llm-stream \
-              inkwords-parser-service \
-              inkwords-export-service \
-              inkwords-review-service \
-              inkwords-frontend
-            do
-              status=$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' "$container")
-              echo "$container => $status"
-              if [ "$status" != "healthy" ]; then
-                unhealthy=1
-              fi
-            done
-
-            if [ "$unhealthy" -eq 0 ]; then
+            if curl --fail --silent "http://127.0.0.1:${E2E_PORT}/" >/dev/null && \
+               curl --fail --silent "http://127.0.0.1:${E2E_PORT}/api/v1/ping" >/dev/null; then
               exit 0
             fi
-
             sleep 5
           done
 
           echo "Services did not become healthy in time"
-          docker compose --env-file backend/.env.example ps
+          docker compose -f docker-compose.yml -f docker-compose.e2e.yml ps
           exit 1
 
       - name: gateway smoke checks
         run: |
-          docker compose --env-file backend/.env.example ps
-          curl -I --fail http://localhost
-          curl --fail --silent http://localhost/api/v1/ping
+          docker compose -f docker-compose.yml -f docker-compose.e2e.yml ps
+          curl -I --fail "http://127.0.0.1:${E2E_PORT}"
+          curl --fail --silent "http://127.0.0.1:${E2E_PORT}/api/v1/ping"
 
       - name: parser worker smoke marker
-        env:
-          OBSIDIAN_VAULT_PATH: /tmp/obsidian-vault
-          DEEPSEEK_API_KEY: ci-placeholder-key
-          JWT_SECRET: ci-placeholder-jwt-secret
-          OBSIDIAN_REST_API_KEY: ci-placeholder-obsidian-key
         run: |
-          docker compose --env-file backend/.env.example logs --no-color parser-service > /tmp/parser-service.log
+          docker compose -f docker-compose.yml -f docker-compose.e2e.yml logs --no-color parser-service > /tmp/parser-service.log
           if grep -q "parse consumer disabled" /tmp/parser-service.log; then
             echo "parser worker is disabled"
             cat /tmp/parser-service.log
@@ -178,18 +171,12 @@ jobs:
 
       - name: dump compose logs on failure
         if: failure()
-        env:
-          OBSIDIAN_VAULT_PATH: /tmp/obsidian-vault
-          DEEPSEEK_API_KEY: ci-placeholder-key
-          JWT_SECRET: ci-placeholder-jwt-secret
-          OBSIDIAN_REST_API_KEY: ci-placeholder-obsidian-key
-        run: docker compose --env-file backend/.env.example logs --no-color
+        run: docker compose -f docker-compose.yml -f docker-compose.e2e.yml logs --no-color
 
       - name: docker compose down
         if: always()
-        env:
-          OBSIDIAN_VAULT_PATH: /tmp/obsidian-vault
-          DEEPSEEK_API_KEY: ci-placeholder-key
-          JWT_SECRET: ci-placeholder-jwt-secret
-          OBSIDIAN_REST_API_KEY: ci-placeholder-obsidian-key
-        run: docker compose --env-file backend/.env.example down -v
+        run: |
+          status=0
+          docker compose -f docker-compose.yml -f docker-compose.e2e.yml down -v --remove-orphans || status=$?
+          rm -rf "$E2E_VAULT_PATH"
+          exit "$status"

@@ -23,20 +23,22 @@ const (
 
 // JobTask 记录一条生成链路的异步任务主状态。
 type JobTask struct {
-	ID             uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
-	TaskType       string         `gorm:"type:varchar(32);not null;index" json:"task_type"`
-	TaskSubtype    string         `gorm:"type:varchar(64);not null;index" json:"task_subtype"`
-	Status         JobTaskStatus  `gorm:"type:varchar(16);not null;index" json:"status"`
-	RequestedBy    uuid.UUID      `gorm:"type:uuid;not null;index" json:"requested_by"`
-	IdempotencyKey string         `gorm:"type:varchar(255);index" json:"idempotency_key"`
-	PayloadJSON    datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'" json:"payload_json"`
-	ResultJSON     datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'" json:"result_json"`
-	ErrorMessage   string         `gorm:"type:text" json:"error_message"`
-	RetryCount     int            `gorm:"type:integer;not null;default:0" json:"retry_count"`
-	StartedAt      *time.Time     `json:"started_at"`
-	FinishedAt     *time.Time     `json:"finished_at"`
-	CreatedAt      time.Time      `json:"created_at"`
-	UpdatedAt      time.Time      `json:"updated_at"`
+	ID                         uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
+	TaskType                   string         `gorm:"type:varchar(32);not null;index" json:"task_type"`
+	TaskSubtype                string         `gorm:"type:varchar(64);not null;index" json:"task_subtype"`
+	Status                     JobTaskStatus  `gorm:"type:varchar(16);not null;index" json:"status"`
+	RequestedBy                uuid.UUID      `gorm:"type:uuid;not null;index" json:"requested_by"`
+	IdempotencyKey             string         `gorm:"type:varchar(255);index" json:"idempotency_key"`
+	PayloadJSON                datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'" json:"payload_json"`
+	ResultJSON                 datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'" json:"result_json"`
+	ErrorMessage               string         `gorm:"type:text" json:"error_message"`
+	RetryCount                 int            `gorm:"type:integer;not null;default:0" json:"retry_count"`
+	ResultPersistenceStartedAt *time.Time     `json:"result_persistence_started_at"`
+	ResultPersistedAt          *time.Time     `json:"result_persisted_at"`
+	StartedAt                  *time.Time     `json:"started_at"`
+	FinishedAt                 *time.Time     `json:"finished_at"`
+	CreatedAt                  time.Time      `json:"created_at"`
+	UpdatedAt                  time.Time      `json:"updated_at"`
 }
 
 // BeforeCreate 在插入数据库前自动生成 UUID，避免依赖数据库扩展来生成主键。

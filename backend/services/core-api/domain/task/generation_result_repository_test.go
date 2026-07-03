@@ -72,6 +72,35 @@ func TestGormGenerationResultRepository_PersistSingleGenerationResult(t *testing
 	require.Equal(t, 17, user.TokensUsed)
 }
 
+func TestGormGenerationResultRepository_CreatesSingleBlogWhenBlogIDIsMissing(t *testing.T) {
+	testDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, testDB.AutoMigrate(&userRecord{}, &blogRecord{}, &JobTask{}))
+
+	userID := uuid.New()
+	taskID := uuid.New()
+	require.NoError(t, testDB.Create(&userRecord{ID: userID, Username: "tester", Email: "single@example.com"}).Error)
+	require.NoError(t, testDB.Create(&JobTask{
+		ID: taskID, TaskType: taskTypeGeneration, TaskSubtype: "generate_single",
+		Status: JobTaskStatusSucceeded, RequestedBy: userID,
+	}).Error)
+
+	repo := NewGormGenerationResultRepository(testDB)
+	result := map[string]any{
+		"result_version": 1, "task_type": "generation", "task_subtype": "generate_single",
+		"payload": map[string]any{"title": "新文章", "content": "正文", "source_type": "file", "word_count": float64(2)},
+	}
+	require.NoError(t, repo.PersistGenerationResult(context.Background(), taskID, result))
+	require.NoError(t, repo.PersistGenerationResult(context.Background(), taskID, result))
+
+	var blogs []blogRecord
+	require.NoError(t, testDB.Find(&blogs).Error)
+	require.Len(t, blogs, 1)
+	require.Equal(t, taskID, blogs[0].ID)
+	require.Equal(t, userID, blogs[0].UserID)
+	require.Equal(t, "正文", blogs[0].Content)
+}
+
 func TestGormGenerationResultRepository_AccumulateTokensFallsBackToEstimatedTokens(t *testing.T) {
 	testDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)

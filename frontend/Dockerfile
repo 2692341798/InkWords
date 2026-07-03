@@ -3,6 +3,9 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+ARG VITE_AUTH_BYPASS=false
+ENV VITE_AUTH_BYPASS=$VITE_AUTH_BYPASS
+
 # 复制 package 文件
 COPY package*.json ./
 

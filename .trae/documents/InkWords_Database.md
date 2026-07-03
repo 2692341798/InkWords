@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - 数据库设计文档
 
 ## 0. 变更记录
+- 2026-07-03：修复微服务化后的生成链路表名漂移。`llm-stream` 读取用户写作模板覆盖时已重新对齐到真实表 `user_prompt_settings`，不再误查不存在的 `users_prompt_settings`；本次不新增数据库表、字段、索引或迁移，但明确 `user_prompt_settings` 是唯一有效的用户写作模板表名。
 - 2026-06-08：知识漫游复习升级为“先预览原文，再进入复述 + AI 提示兜底”。本次继续仅复用 `review_sessions.metadata_snapshot` 保存 `source_preview` 等会话级快照，并沿用 `review_turns` 存储用户回答与系统反馈；不新增数据库表、字段、索引或迁移脚本。
 - 2026-06-08：执行全仓安全清理首轮。本次主要删除未接入的 generation 占位/空桥接文件，并收窄前后端过渡层依赖；不涉及 PostgreSQL 表结构、字段、索引、迁移或写入语义变更。
 - 2026-06-05：继续推进 blog-domain 内部边界修复。本次将 `SeriesPersistence.SaveSeriesIntro()` 与 `SeriesPersistence.MarkSeriesIntroFailed()` 改为按 `parent_id + user_id` 双重条件更新系列父稿，阻断跨用户导读正文/状态写入；不涉及 PostgreSQL 表结构、字段、索引、迁移变更，但进一步收紧了 `blogs` 系列父稿写入边界。
@@ -156,6 +157,10 @@
 
 ### 2.5 用户写作模板表 (`user_prompt_settings`)
 存储用户针对不同文章类型（如通用技术博客、小白手把手、备考复习）配置的“写作要求”覆盖值。
+
+- 运行约定：
+  - `user_prompt_settings` 是当前系统唯一合法表名。
+  - `llm-stream` 只读该表以合并用户自定义写作要求，缺记录时按默认 prompt 要求回退，不应再依赖历史误写的复数表名。
 
 | 字段名 | 数据类型 | 约束/索引 | 描述 |
 | ------ | -------- | --------- | ---- |

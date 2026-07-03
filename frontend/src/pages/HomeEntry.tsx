@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowRight, BookOpen, Clock3, FileText, Sparkles } from 'lucide-react'
 import { StepStrip } from '@/components/shared/StepStrip'
 import { Button } from '@/components/ui/button'
@@ -13,6 +13,8 @@ export function HomeEntry() {
   const [activePath, setActivePath] = useState<HomeEntryPath>('blog')
   const { blogs, fetchBlogs, setCurrentView } = useBlogStore()
   const reviewStore = useReviewStore()
+  const reviewBootstrapAttempted = useRef(false)
+  const [reviewBootstrapError, setReviewBootstrapError] = useState(false)
   const viewState = getHomeEntryViewState(activePath)
 
   useEffect(() => {
@@ -21,17 +23,33 @@ export function HomeEntry() {
     }
   }, [blogs.length, fetchBlogs])
 
+  const loadReviewSummary = useCallback(async () => {
+    setReviewBootstrapError(false)
+    const requests: Promise<void>[] = []
+    const state = useReviewStore.getState()
+
+    if (!state.recommendationCard) {
+      requests.push(state.loadRecommendation())
+    }
+    if (state.historyItems.length === 0) {
+      requests.push(state.loadHistory(3))
+    }
+
+    const results = await Promise.allSettled(requests)
+    if (results.some((result) => result.status === 'rejected')) {
+      setReviewBootstrapError(true)
+    }
+  }, [])
+
   useEffect(() => {
-    if (!reviewStore.recommendationCard && !reviewStore.isLoadingRecommendation) {
-      void reviewStore.loadRecommendation()
+    // Why: Zustand 会在 loading 变化时产生新快照。初始化只允许自动执行一次，
+    // 否则外部知识库不可用时会形成无上限的请求/渲染循环。
+    if (reviewBootstrapAttempted.current) {
+      return
     }
-    if (reviewStore.historyItems.length === 0 && !reviewStore.isLoadingHistory) {
-      void reviewStore.loadHistory(3)
-    }
-  }, [
-    reviewStore,
-    reviewStore.historyItems.length,
-  ])
+    reviewBootstrapAttempted.current = true
+    void Promise.resolve().then(loadReviewSummary)
+  }, [loadReviewSummary])
 
   const recentBlogs = useMemo(() => blogs.slice(0, 3), [blogs])
   const recentReviews = useMemo(() => reviewStore.historyItems.slice(0, 3), [reviewStore.historyItems])
@@ -89,6 +107,14 @@ export function HomeEntry() {
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
         <section className="space-y-6">
+          {reviewBootstrapError ? (
+            <div role="alert" className="flex flex-col gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-foreground sm:flex-row sm:items-center sm:justify-between">
+              <span>复习摘要暂时加载失败，其他写作功能仍可正常使用。</span>
+              <Button variant="outline" size="sm" onClick={() => void loadReviewSummary()}>
+                重试加载
+              </Button>
+            </div>
+          ) : null}
           <Panel className="p-6">
             <SectionHeader
               eyebrow="工作路径"
