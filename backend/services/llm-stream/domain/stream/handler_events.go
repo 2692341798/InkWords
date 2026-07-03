@@ -2,6 +2,7 @@ package stream
 
 import (
 	"io"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -48,6 +49,7 @@ func sseStreamBody(c *gin.Context, chunkChan chan string, errChan *chan error, o
 			return false
 		case err, ok := <-*errChan:
 			if ok && err != nil {
+				slog.Error("stream operation failed", "operation", operation, "error", err)
 				writeStreamEvent(c, w, "error", externalStreamErrorMessage(operation, err))
 				return false
 			}

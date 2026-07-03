@@ -36,6 +36,79 @@ func TestParseSeriesUnderstandingRejectsInvalidJSON(t *testing.T) {
 	require.ErrorContains(t, err, "must_explain")
 }
 
+func TestSeriesUnderstandingContractMatchesValidationRequirements(t *testing.T) {
+	require.Contains(t, seriesUnderstandingJSONContract, `"must_explain"`)
+	require.Contains(t, seriesUnderstandingJSONContract, `"must_include_examples"`)
+	require.Contains(t, seriesUnderstandingJSONContract, "至少一项")
+	require.Equal(t, seriesUnderstandingJSONContract, seriesJSONContractForStage("章节理解"))
+	require.Contains(t, seriesJSONContractForStage("章节草稿"), `"mechanism_explained": true`)
+	require.Contains(t, seriesJSONContractForStage("章节审稿"), `"revision_actions"`)
+	require.Empty(t, seriesJSONContractForStage("终稿"))
+}
+
+func TestGenerateSeriesChapterUnderstandingRepairsMissingMustExplain(t *testing.T) {
+	h := newQualityPipelineHarness(t, []string{
+		`{"chapter_goal":"理解 KNN 分类","reader_questions":["如何预测"],"must_include_examples":["k=3 与 k=5"],"avoid_overlap":[],"bridge_context":{}}`,
+		`{"chapter_goal":"理解 KNN 分类","reader_questions":["如何预测"],"must_explain":["多数投票与距离度量"],"must_include_examples":["k=3 与 k=5"],"avoid_overlap":[],"bridge_context":{"from_previous":"","to_next":""}}`,
+	}, nil)
+
+	chapter := sharedblog.Chapter{Sort: 2, Title: "KNN 分类基础", Summary: "解释邻居投票"}
+	result, _, err := h.service.generateSeriesChapterUnderstanding(
+		context.Background(),
+		"deepseek-v4-flash",
+		buildSeriesSharedPromptPrefix("KNN", "初学者", []sharedblog.Chapter{chapter}),
+		chapter,
+		"k=3 和 k=5 可能产生不同分类结果",
+		"series-test",
+	)
+
+	require.NoError(t, err)
+	require.Equal(t, []string{"多数投票与距离度量"}, result.MustExplain)
+}
+
+func TestGenerateSeriesChapterDraftRepairsFalseCoverageGate(t *testing.T) {
+	h := newQualityPipelineHarness(t, []string{
+		`{"draft_markdown":"只给结论","coverage_check":{"mechanism_explained":false,"examples_present":true,"repro_present":true},"example_inventory":[{"example_type":"calculation","supports_claim":"k值影响"}]}`,
+		`{"draft_markdown":"解释距离度量和多数投票，并给出k=3与k=5的计算步骤。","coverage_check":{"goal_covered":true,"mechanism_explained":true,"examples_present":true,"repro_present":true,"edge_cases_present":true},"example_inventory":[{"example_type":"calculation","supports_claim":"k值影响"}]}`,
+	}, nil)
+	input := qualityInput(make(chan string, 1))
+	understanding := seriesChapterUnderstanding{
+		ChapterGoal:         "理解 KNN",
+		MustExplain:         []string{"距离度量与多数投票"},
+		MustIncludeExamples: []string{"k=3 与 k=5"},
+	}
+
+	result, _, err := h.service.generateSeriesChapterDraft(
+		context.Background(), "deepseek-v4-flash", "系列契约", input, understanding, "series-test",
+	)
+
+	require.NoError(t, err)
+	require.True(t, result.CoverageCheck.MechanismExplained)
+	require.Contains(t, result.DraftMarkdown, "多数投票")
+}
+
+func TestGenerateSeriesChapterDraftSalvagesUnexpectedEOF(t *testing.T) {
+	h := newQualityPipelineHarness(t, []string{
+		`{"draft_markdown":"## 课程目标与学习成果\n\nKNN 的课程目标包括理解模型原理、掌握 k 值影响，并能独立复现实验步骤。","coverage_check":{"goal_covered":true,"mechanism_explained":true,"examples_present":true,"repro_present":true,"edge_cases_present":true},"example_inventory":[{"example_type":"walkthrough","supports_claim":"课程目标可复现"}`,
+		`{"draft_markdown":"## 课程目标与学习成果\n\nKNN 的课程目标包括理解模型原理、掌握 k 值影响，并能独立复现实验步骤。","coverage_check":{"goal_covered":true,"mechanism_explained":true,"examples_present":true,"repro_present":true,"edge_cases_present":true},"example_inventory":[{"example_type":"walkthrough","supports_claim":"课程目标可复现"}`,
+	}, nil)
+	input := qualityInput(make(chan string, 1))
+	understanding := seriesChapterUnderstanding{
+		ChapterGoal:         "理解 KNN",
+		MustExplain:         []string{"距离度量与多数投票"},
+		MustIncludeExamples: []string{"k=3 与 k=5"},
+	}
+
+	result, _, err := h.service.generateSeriesChapterDraft(
+		context.Background(), "deepseek-v4-flash", "系列契约", input, understanding, "series-test",
+	)
+
+	require.NoError(t, err)
+	require.Contains(t, result.DraftMarkdown, "课程目标")
+	require.True(t, result.CoverageCheck.MechanismExplained)
+	require.Len(t, result.ExampleInventory, 1)
+}
+
 type qualityPipelineHarness struct {
 	service         *DecompositionService
 	server          *httptest.Server

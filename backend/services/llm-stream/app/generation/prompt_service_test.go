@@ -54,6 +54,10 @@ func TestPromptRequirementsResolveWithProfilePrependsProfileRequirements(t *test
 	require.Equal(t, 0, strings.Index(got, profile.GenerateRequirements))
 }
 
+func TestUserPromptSettingsRowUsesSharedTableName(t *testing.T) {
+	require.Equal(t, "user_prompt_settings", userPromptSettingsRow{}.TableName())
+}
+
 type fakePromptProfileLLM struct {
 	payload string
 	err     error

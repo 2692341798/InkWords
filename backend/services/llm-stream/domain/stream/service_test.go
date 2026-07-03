@@ -61,15 +61,15 @@ func (f *fakeTaskService) IsCancelled(_ context.Context, _ uuid.UUID) (bool, err
 
 // fakeStreamService 实现 generationStreamService 接口，用于特征化测试。
 type fakeStreamService struct {
-	generateFunc                      func(ctx context.Context, userID uuid.UUID, req GenerateRequest, chunkChan chan<- string, errChan chan<- error)
-	continueFunc                      func(ctx context.Context, userID uuid.UUID, blogID uuid.UUID, chunkChan chan<- string, errChan chan<- error)
-	polishFunc                        func(ctx context.Context, req PolishRequest, chunkChan chan<- string, errChan chan<- error)
-	buildSingleResultFunc             func(ctx context.Context, req GenerateRequest, content string) ([]byte, error)
-	buildSeriesResultFunc             func(ctx context.Context, req GenerateRequest) ([]byte, error)
-	buildContinueResultFunc           func(ctx context.Context, userID uuid.UUID, blogID uuid.UUID, appendedContent string) ([]byte, error)
-	lastGenerateReq                   GenerateRequest
-	lastContinueBlogID                uuid.UUID
-	lastPolishReq                     PolishRequest
+	generateFunc            func(ctx context.Context, userID uuid.UUID, req GenerateRequest, chunkChan chan<- string, errChan chan<- error)
+	continueFunc            func(ctx context.Context, userID uuid.UUID, blogID uuid.UUID, chunkChan chan<- string, errChan chan<- error)
+	polishFunc              func(ctx context.Context, req PolishRequest, chunkChan chan<- string, errChan chan<- error)
+	buildSingleResultFunc   func(ctx context.Context, req GenerateRequest, content string) ([]byte, error)
+	buildSeriesResultFunc   func(ctx context.Context, req GenerateRequest) ([]byte, error)
+	buildContinueResultFunc func(ctx context.Context, userID uuid.UUID, blogID uuid.UUID, appendedContent string) ([]byte, error)
+	lastGenerateReq         GenerateRequest
+	lastContinueBlogID      uuid.UUID
+	lastPolishReq           PolishRequest
 }
 
 func (f *fakeStreamService) Generate(ctx context.Context, userID uuid.UUID, req GenerateRequest, chunkChan chan<- string, errChan chan<- error) {
@@ -180,6 +180,50 @@ func TestGenerateSingle_StreamOutputAndErrorChannel(t *testing.T) {
 	assert.Contains(t, string(tasks.lastResult), `"estimated_tokens":8`)
 	assert.Contains(t, string(tasks.lastResult), `"prompt_tokens":100`)
 	assert.Contains(t, string(tasks.lastResult), `"completion_tokens":200`)
+}
+
+// 场景 1.1：兼容旧 topic 载荷 — 验证任务消费者会把 topic 映射为实际生成正文。
+func TestGenerateSingle_NormalizesLegacyTopicPayload(t *testing.T) {
+	tasks := &fakeTaskService{}
+	streams := &fakeStreamService{
+		generateFunc: func(ctx context.Context, userID uuid.UUID, req GenerateRequest, chunkChan chan<- string, errChan chan<- error) {
+			require.Equal(t, "topic", req.SourceType)
+			require.Equal(t, "Go context 入门", req.SourceContent)
+			require.Equal(t, "Go context 入门", req.Topic)
+			chunkChan <- "主题正文"
+			close(chunkChan)
+			close(errChan)
+		},
+		buildSingleResultFunc: func(ctx context.Context, req GenerateRequest, content string) ([]byte, error) {
+			require.Equal(t, "topic", req.SourceType)
+			require.Equal(t, "Go context 入门", req.SourceContent)
+			require.Equal(t, "主题正文", content)
+			return json.Marshal(TaskResultEnvelope{
+				ResultVersion:   1,
+				TaskType:        "generation",
+				TaskSubtype:     "generate_single",
+				PersistenceMode: "task_only",
+				FinalStatus:     "succeeded",
+				Payload: map[string]any{
+					"content":     content,
+					"source_type": req.SourceType,
+				},
+			})
+		},
+	}
+
+	consumer := NewTaskConsumer(tasks, streams)
+	message := sharedrabbitmq.GenerationRequestedMessage{
+		TaskID:  newTestTaskID(),
+		Kind:    "generate_single",
+		UserID:  newTestUserID(),
+		Payload: json.RawMessage(`{"source_type":"topic","topic":"Go context 入门","scenario_mode":"ebook_interpretation"}`),
+	}
+
+	err := consumer.HandleGenerationRequested(context.Background(), message)
+	require.NoError(t, err)
+	assert.Equal(t, "Go context 入门", streams.lastGenerateReq.SourceContent)
+	assert.Equal(t, TaskStatusSucceeded, tasks.lastStatus)
 }
 
 // 场景 2：系列生成 — 验证 GenerateSeries 的章节分配和进度推送
@@ -413,12 +457,12 @@ func TestCancel_TaskAlreadyCancelledBeforeRunning(t *testing.T) {
 func TestBuildGenerateSingleTaskResult_UsageAggregation(t *testing.T) {
 	t.Run("完整 usage 字段", func(t *testing.T) {
 		result, err := BuildGenerateSingleTaskResult(GenerateSingleTaskResultInput{
-			BlogID:     "11111111-1111-1111-1111-111111111111",
-			Title:      "Go 并发编程实战",
-			Content:    "# 标题\n\n这是正文内容",
-			SourceType: "file",
-			WordCount:  10,
-			TechStacks: []string{"Go", "Docker", "Kubernetes"},
+			BlogID:          "11111111-1111-1111-1111-111111111111",
+			Title:           "Go 并发编程实战",
+			Content:         "# 标题\n\n这是正文内容",
+			SourceType:      "file",
+			WordCount:       10,
+			TechStacks:      []string{"Go", "Docker", "Kubernetes"},
 			EstimatedTokens: 20,
 			Usage: TaskResultUsage{
 				EstimatedTokens:       30,
@@ -463,8 +507,8 @@ func TestBuildGenerateSingleTaskResult_UsageAggregation(t *testing.T) {
 			TechStacks:      []string{"Python"},
 			EstimatedTokens: 40,
 			Usage: TaskResultUsage{
-				EstimatedTokens: 0, // 零值，应回退
-				PromptTokens:    200,
+				EstimatedTokens:  0, // 零值，应回退
+				PromptTokens:     200,
 				CompletionTokens: 300,
 			},
 		})

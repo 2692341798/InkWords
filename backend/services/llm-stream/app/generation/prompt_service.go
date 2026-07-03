@@ -11,18 +11,18 @@ import (
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 
-	llm "inkwords-backend/shared/platform/llm"
 	"inkwords-backend/shared/kernel/prompt"
+	llm "inkwords-backend/shared/platform/llm"
 )
 
-// userPromptSettingsRow 是 prompt 要求解析查询 users_prompt_settings 表所需的最小投影。
+// userPromptSettingsRow 是 prompt 要求解析查询 user_prompt_settings 表所需的最小投影。
 type userPromptSettingsRow struct {
 	UserID    uuid.UUID      `gorm:"column:user_id"`
 	Overrides datatypes.JSON `gorm:"column:overrides"`
 }
 
 func (userPromptSettingsRow) TableName() string {
-	return "users_prompt_settings"
+	return "user_prompt_settings"
 }
 
 // PromptRequirements 为生成链路组装最终 prompt 写作要求。

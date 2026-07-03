@@ -62,6 +62,25 @@ func TestServiceDockerfilesAreOwnedByEachService(t *testing.T) {
 	}
 }
 
+func TestLLMStreamDefaultsToTaskOnlyPersistence(t *testing.T) {
+	//nolint:gosec
+	composeBytes, err := os.ReadFile(filepath.Join("..", "..", "docker-compose.yml"))
+	if err != nil {
+		t.Fatalf("read docker-compose.yml: %v", err)
+	}
+
+	const expected = "INKWORDS_TASK_PERSISTENCE_MODE: ${INKWORDS_TASK_PERSISTENCE_MODE:-task_only}"
+	compose := string(composeBytes)
+	llmStart := strings.Index(compose, "\n  llm-stream:")
+	parserStart := strings.Index(compose, "\n  parser-service:")
+	if llmStart < 0 || parserStart <= llmStart {
+		t.Fatal("docker-compose.yml must contain ordered llm-stream and parser-service sections")
+	}
+	if !strings.Contains(compose[llmStart:parserStart], expected) {
+		t.Fatalf("llm-stream must default to task-only persistence so generation workers can build final task results")
+	}
+}
+
 func TestServicesDoNotImportPeerServicePackages(t *testing.T) {
 	for _, service := range backendServices {
 		t.Run(service, func(t *testing.T) {

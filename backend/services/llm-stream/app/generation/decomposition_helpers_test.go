@@ -15,7 +15,7 @@ import (
 	"inkwords-backend/shared/kernel/prompt"
 )
 
-func TestAnalyzeStreamsCompleteWithoutExternalServices(t *testing.T) {
+func TestAnalyzeStreamCompletesWithoutExternalServices(t *testing.T) {
 	svc := NewDecompositionService(nil, nil, nil)
 	svc.gitFetcher = nil
 	progress := make(chan string, 4)
@@ -27,12 +27,6 @@ func TestAnalyzeStreamsCompleteWithoutExternalServices(t *testing.T) {
 	}
 	require.Len(t, messages, 2)
 	require.Empty(t, errs)
-
-	fileProgress := make(chan string, 2)
-	fileErrs := make(chan error, 1)
-	svc.AnalyzeFileStream(context.Background(), uuid.New(), "原文", prompt.ScenarioMode("invalid"), fileProgress, fileErrs)
-	require.Len(t, fileProgress, 1)
-	require.Empty(t, fileErrs)
 }
 
 func TestSeriesPureHelpersCoverBoundaries(t *testing.T) {

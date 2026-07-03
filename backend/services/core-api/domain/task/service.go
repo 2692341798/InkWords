@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/datatypes"
@@ -207,6 +208,9 @@ func (s *Service) GetTask(ctx context.Context, taskID uuid.UUID, requestedBy uui
 	if task.RequestedBy != requestedBy {
 		return JobTask{}, ErrTaskAccessDenied
 	}
+	if err := s.reconcileGenerationResult(ctx, task); err != nil {
+		return JobTask{}, err
+	}
 	return *task, nil
 }
 
@@ -222,7 +226,42 @@ func (s *Service) ListStreamEvents(ctx context.Context, taskID uuid.UUID, afterI
 		return nil, false, wrapTaskLookupError(err)
 	}
 
+	if err := s.reconcileGenerationResult(ctx, task); err != nil {
+		return nil, false, err
+	}
 	return events, isTerminalStatus(task.Status), nil
+}
+
+func (s *Service) reconcileGenerationResult(ctx context.Context, task *JobTask) error {
+	if task == nil || task.Status != JobTaskStatusSucceeded || task.TaskType != taskTypeGeneration ||
+		task.ResultPersistedAt != nil || s.resultPersister == nil {
+		return nil
+	}
+	repo, ok := s.repo.(resultPersistenceRepository)
+	if !ok {
+		return nil
+	}
+	claimed, err := repo.ClaimResultPersistence(ctx, task.ID, time.Now().UTC().Add(-5*time.Minute))
+	if err != nil || !claimed {
+		return err
+	}
+
+	var decoded map[string]any
+	if err := json.Unmarshal(task.ResultJSON, &decoded); err != nil {
+		_ = repo.ReleaseResultPersistence(ctx, task.ID)
+		return fmt.Errorf("解析任务结果失败: %w", err)
+	}
+	if err := s.resultPersister.PersistGenerationResult(ctx, task.ID, decoded); err != nil {
+		_ = repo.ReleaseResultPersistence(ctx, task.ID)
+		return fmt.Errorf("持久化 generation 结果失败: %w", err)
+	}
+	if err := repo.CompleteResultPersistence(ctx, task.ID); err != nil {
+		return fmt.Errorf("标记 generation 结果已持久化失败: %w", err)
+	}
+	now := time.Now().UTC()
+	task.ResultPersistedAt = &now
+	task.ResultPersistenceStartedAt = nil
+	return nil
 }
 
 // MarkRunning 把任务切到运行态，供异步 worker 在真正开始消费前回写可观测状态。

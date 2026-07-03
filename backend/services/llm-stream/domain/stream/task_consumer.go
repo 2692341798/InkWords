@@ -211,13 +211,24 @@ func (c *TaskConsumer) buildFinalTaskResult(
 }
 
 func normalizeGenerationMessage(message sharedrabbitmq.GenerationRequestedMessage) (sharedrabbitmq.GenerationRequestedMessage, error) {
-	if strings.TrimSpace(message.Kind) != "generate_series" {
+	kind := strings.TrimSpace(message.Kind)
+	if kind != "generate_single" && kind != "generate_series" {
 		return message, nil
 	}
 
 	var req GenerateRequest
 	if err := json.Unmarshal(message.Payload, &req); err != nil {
 		return message, errors.New("invalid generation payload")
+	}
+	req = req.Normalize()
+
+	if kind != "generate_series" {
+		normalizedPayload, err := json.Marshal(req)
+		if err != nil {
+			return message, errors.New("invalid generation payload")
+		}
+		message.Payload = normalizedPayload
+		return message, nil
 	}
 	if strings.TrimSpace(req.ParentID) == "" {
 		req.ParentID = uuid.NewString()
