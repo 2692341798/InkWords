@@ -248,6 +248,9 @@ export async function analyzeParsedFileContent(sourceContent: string) {
             store.setAnalysisStep(3)
           } else if (data.status === 'complete') {
             store.setAnalysisStep(4)
+            if (!data.content) {
+              throw new Error('大纲响应缺少内容，请重试')
+            }
             let outlineResult = data.content
             if (typeof data.content === 'string') {
               outlineResult = JSON.parse(data.content)
@@ -274,6 +277,8 @@ export async function analyzeParsedFileContent(sourceContent: string) {
           }
         } catch (e) {
           console.error('Failed to parse analysis progress:', e)
+          store.setAnalyzing(false)
+          toast.error(e instanceof Error ? e.message : '大纲响应解析失败，请重试')
         }
       }
     },
@@ -282,10 +287,8 @@ export async function analyzeParsedFileContent(sourceContent: string) {
     },
     onerror(err) {
       store.setAnalyzing(false)
-      if (err instanceof StopStreamError) {
-        toast.error(err.message)
-        throw err
-      }
+      const message = err instanceof Error ? err.message : '生成大纲失败，请稍后重试'
+      toast.error(message)
       throw err
     },
   })

@@ -1,4 +1,5 @@
-import { renderToStaticMarkup } from 'react-dom/server'
+// @vitest-environment jsdom
+import { render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { blogStoreState, reviewStoreState } = vi.hoisted(() => ({
@@ -47,7 +48,9 @@ vi.mock('@/store/blogStore', () => ({
 }))
 
 vi.mock('@/store/reviewStore', () => ({
-  useReviewStore: () => reviewStoreState,
+  useReviewStore: Object.assign(() => reviewStoreState, {
+    getState: () => reviewStoreState,
+  }),
 }))
 
 vi.mock('@/components/shared/StepStrip', () => ({
@@ -59,14 +62,36 @@ import { HomeEntry } from './HomeEntry'
 describe('HomeEntry', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    reviewStoreState.loadRecommendation.mockResolvedValue(undefined)
+    reviewStoreState.loadHistory.mockResolvedValue(undefined)
   })
 
   it('does not render the resume-review card copy for a completed review session', () => {
-    const html = renderToStaticMarkup(<HomeEntry />)
+    render(<HomeEntry />)
 
-    expect(html).not.toContain('会话仍可继续')
-    expect(html).not.toContain('继续知识复习')
-    expect(html).toContain('最近博客任务')
-    expect(html).toContain('进入博客生成')
+    expect(screen.queryByText(/会话仍可继续/)).toBeNull()
+    expect(screen.queryByText('继续知识复习')).toBeNull()
+    expect(screen.getAllByText('最近博客任务')).toHaveLength(2)
+    expect(screen.getAllByText('进入博客生成')).toHaveLength(3)
+  })
+
+  it('does not retry review bootstrap in a render loop and exposes a manual retry', async () => {
+    reviewStoreState.loadRecommendation.mockRejectedValue(new Error('obsidian unavailable'))
+    reviewStoreState.loadHistory.mockRejectedValue(new Error('obsidian unavailable'))
+
+    render(<HomeEntry />)
+
+    expect((await screen.findByRole('alert')).textContent).toContain('复习摘要暂时加载失败')
+    await waitFor(() => {
+      expect(reviewStoreState.loadRecommendation).toHaveBeenCalledTimes(1)
+      expect(reviewStoreState.loadHistory).toHaveBeenCalledTimes(1)
+    })
+
+    screen.getByRole('button', { name: '重试加载' }).click()
+
+    await waitFor(() => {
+      expect(reviewStoreState.loadRecommendation).toHaveBeenCalledTimes(2)
+      expect(reviewStoreState.loadHistory).toHaveBeenCalledTimes(2)
+    })
   })
 })

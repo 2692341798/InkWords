@@ -2,12 +2,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useStreamStore } from '@/store/streamStore'
 import { analyzeParsedFileContent, parseUploadedFile } from './useFileParser'
 
-const { fetchEventSourceWithAuth } = vi.hoisted(() => ({
+const { fetchEventSourceWithAuth, toastError } = vi.hoisted(() => ({
   fetchEventSourceWithAuth: vi.fn(),
+  toastError: vi.fn(),
 }))
 
 vi.mock('@/services/sse', () => ({
   fetchEventSourceWithAuth,
+}))
+
+vi.mock('sonner', () => ({
+  toast: { error: toastError },
 }))
 
 describe('parseUploadedFile', () => {
@@ -28,6 +33,7 @@ describe('parseUploadedFile', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
     fetchEventSourceWithAuth.mockReset()
+    toastError.mockReset()
     useStreamStore.getState().reset()
   })
 
@@ -223,5 +229,31 @@ describe('parseUploadedFile', () => {
         documentKind: 'psychology_communication',
       },
     })
+  })
+
+  it('shows generic stream failures instead of silently swallowing them', async () => {
+    fetchEventSourceWithAuth.mockImplementation(async (_url, options) => {
+      options.onerror?.(new Error('服务暂时不可用，请稍后重试'))
+    })
+
+    await expect(analyzeParsedFileContent('解析后的内容')).rejects.toThrow('服务暂时不可用，请稍后重试')
+
+    expect(toastError).toHaveBeenCalledWith('服务暂时不可用，请稍后重试')
+    expect(useStreamStore.getState().isAnalyzing).toBe(false)
+  })
+
+  it('shows a visible error when the completed event has no outline payload', async () => {
+    fetchEventSourceWithAuth.mockImplementation(async (_url, options) => {
+      options.onmessage?.({
+        event: 'chunk',
+        data: JSON.stringify({ status: 'complete', message: '分析完成' }),
+      })
+      options.onmessage?.({ event: 'done', data: '[DONE]' })
+    })
+
+    await analyzeParsedFileContent('解析后的内容')
+
+    expect(toastError).toHaveBeenCalledWith('大纲响应缺少内容，请重试')
+    expect(useStreamStore.getState().isAnalyzing).toBe(false)
   })
 })

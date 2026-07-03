@@ -10,6 +10,7 @@ import { Button } from './ui/button'
 import { ConfirmDialog } from './ui/confirm-dialog'
 import { toast } from 'sonner'
 import { authTokenStore } from '@/lib/authTokenStore'
+import { isAuthBypassEnabled } from '@/lib/authBypass'
 import { useBatchExportZip } from '@/hooks/useBatchExportZip'
 import { exportSeriesPdfs, syncSeriesToObsidian } from '@/services/sidebarExport'
 import { useSidebarBatchSelection } from '@/hooks/useSidebarBatchSelection'
@@ -19,6 +20,7 @@ import { StreamOutlineSection } from './sidebar/StreamOutlineSection'
 import { BlogTreeDisplay } from './sidebar/BlogTreeDisplay'
 
 export function Sidebar() {
+  const authBypassEnabled = isAuthBypassEnabled(import.meta.env.VITE_AUTH_BYPASS)
   const streamStore = useStreamStore(
     useShallow((state) => ({
       outline: state.outline,
@@ -261,7 +263,7 @@ export function Sidebar() {
     </div>
   )
 
-  const footerContent = (
+  const footerContent = authBypassEnabled ? null : (
     <div className="border-t border-sidebar-border p-4">
       <Button
         variant="ghost"

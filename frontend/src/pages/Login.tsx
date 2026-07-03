@@ -185,13 +185,14 @@ export function Login() {
         <form onSubmit={handleSubmit} className="space-y-4 mb-6">
           {mode === 'register' && (
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-zinc-700">昵称</label>
+              <label htmlFor="auth-name" className="text-sm font-medium text-zinc-700">昵称</label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-zinc-400">
                   <User className="h-4 w-4" />
                 </div>
                 <input
                   type="text"
+                  id="auth-name"
                   name="name"
                   value={formData.name}
                   onChange={handleInputChange}
@@ -204,13 +205,14 @@ export function Login() {
           )}
 
           <div className="space-y-1.5">
-            <label className="text-sm font-medium text-zinc-700">邮箱</label>
+            <label htmlFor="auth-email" className="text-sm font-medium text-zinc-700">邮箱</label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-zinc-400">
                 <Mail className="h-4 w-4" />
               </div>
               <input
                 type="email"
+                id="auth-email"
                 name="email"
                 value={formData.email}
                 onChange={handleInputChange}
@@ -224,10 +226,11 @@ export function Login() {
 
           {(mode === 'register' || loginNeedsCaptcha) && (
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-zinc-700">图形验证码</label>
+              <label htmlFor="auth-captcha" className="text-sm font-medium text-zinc-700">图形验证码</label>
               <div className="flex gap-2">
                 <input
                   type="text"
+                  id="auth-captcha"
                   value={captcha.value}
                   onChange={(e) => setCaptcha(prev => ({ ...prev, value: e.target.value }))}
                   required
@@ -251,7 +254,7 @@ export function Login() {
 
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <label className="text-sm font-medium text-zinc-700">
+              <label htmlFor="auth-password" className="text-sm font-medium text-zinc-700">
                 密码
               </label>
             </div>
@@ -261,6 +264,7 @@ export function Login() {
               </div>
               <input
                 type={showPassword ? 'text' : 'password'}
+                id="auth-password"
                 name="password"
                 value={formData.password}
                 onChange={handleInputChange}
@@ -270,6 +274,7 @@ export function Login() {
               />
               <button
                 type="button"
+                aria-label={showPassword ? '隐藏密码' : '显示密码'}
                 onClick={() => setShowPassword(!showPassword)}
                 className="absolute inset-y-0 right-0 pr-3 flex items-center text-zinc-400 hover:text-zinc-600 focus:outline-none"
               >
