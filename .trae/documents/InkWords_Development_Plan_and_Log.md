@@ -13,6 +13,21 @@
   - `cd frontend && npm test -- ReviewSessionCard KnowledgeReview` 通过
   - `cd frontend && npm test -- ReviewSessionCard useKnowledgeReview review` 通过
 
+### [2026-07-03] Fix - 微服务回归修复：补回 generate_single 的 topic 兼容并纠正 prompt settings 表名
+- **需求背景**：
+  1. 用户反馈“在微服务化和清理异味代码之后，项目有些功能无法使用”，要求做一次真实运行形态下的全量排障并修复。
+  2. 只读排查确认基础设施与多服务编排正常，但发现两处运行态回归：`llm-stream` 仍读取不存在的 `users_prompt_settings`，以及任务式单篇生成在历史 `topic` 载荷下会成功排队却把正文生成到错误主题。
+- **本次完成**：
+  1. 在 `backend/services/llm-stream/app/generation/prompt_service_test.go` 先补红灯测试，锁定用户模板覆盖表名必须与共享模型保持一致，再把 `PromptRequirements` 的读取表名改回真实的 `user_prompt_settings`。
+  2. 在 `backend/services/llm-stream/domain/stream/service_test.go` 先补红灯测试，锁定 `generate_single + source_type=topic + topic=...` 必须能把 `topic` 映射为实际生成源内容。
+  3. 为 `GenerateRequest` 增加 `topic` 兼容字段与 `Normalize()` 归一化逻辑，并把 `task_consumer` 的 generation 消息预处理扩展到 `generate_single`，确保老载荷进入微服务 worker 后仍能还原为统一的 `source_content/source_type` 契约。
+- **验证记录**：
+  - `cd backend && go test ./services/llm-stream/app/generation ./services/llm-stream/domain/stream -count=1` 先失败后通过
+  - `cd backend && go test ./... -count=1` 通过
+  - `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build` 通过
+  - `curl -I http://localhost && curl --fail http://localhost/api/v1/ping && curl -sS http://localhost/api/v1/user/prompt-settings` 通过
+  - 运行态 `POST /api/v1/tasks/generation` 提交 `{"kind":"generate_single","payload":{"source_type":"topic","topic":"Go context 入门"}}` 后，SSE 首段已恢复为 `# Go Context 入门...`
+
 ### [2026-06-08] Fix - 修正 GitHub OAuth 本地回调仍指向 8088 的残留配置
 - **需求背景**：
   1. 用户在项目已切回默认 `http://localhost` 后，访问 GitHub 登录回调仍被浏览器带到 `http://localhost:8088/api/v1/auth/callback/github`，导致 `ERR_CONNECTION_REFUSED`。
