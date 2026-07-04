@@ -23,6 +23,7 @@ func (s *Service) CreateSession(ctx context.Context, userID uuid.UUID, req Creat
 	}
 
 	summarySnapshot, outline, sourcePreview := buildSessionSnapshot(note)
+	readingContent := strings.TrimSpace(note.Body)
 	opening := openingPrompt(req.Mode, outline)
 	hints := initialHints(req.Mode, outline)
 	now := s.now()
@@ -36,6 +37,7 @@ func (s *Service) CreateSession(ctx context.Context, userID uuid.UUID, req Creat
 		EntryType:         req.EntryType,
 		Mode:              req.Mode,
 		Status:            ReviewStatusCreated,
+		Phase:             ReviewPhaseReading,
 		EstimatedMinutes:  defaultReviewCardEstimatedMinutes,
 		SummarySnapshot:   summarySnapshot,
 		KeyPointsSnapshot: mustMarshalJSON(outline.Checkpoints),
@@ -43,8 +45,9 @@ func (s *Service) CreateSession(ctx context.Context, userID uuid.UUID, req Creat
 			PreferredMode:  note.PreferredMode,
 			SessionOutline: outline,
 			SourcePreview:  sourcePreview,
+			ReadingContent: readingContent,
 		}),
-		MaxHintCount: 2,
+		MaxHintCount: 3,
 		TurnCount:    1,
 		StartedAt:    now,
 	}
@@ -67,10 +70,12 @@ func (s *Service) CreateSession(ctx context.Context, userID uuid.UUID, req Creat
 	return ReviewSessionResponse{
 		SessionID:        session.ID,
 		Status:           session.Status,
+		Phase:            session.Phase,
 		Mode:             session.Mode,
 		Title:            session.NoteTitle,
 		SourceTitle:      session.SourceTitle,
 		SourcePreview:    sourcePreview,
+		ReadingContent:   readingContent,
 		ReadyToAnswer:    false,
 		OpeningPrompt:    opening,
 		InitialHints:     hints,
@@ -80,6 +85,28 @@ func (s *Service) CreateSession(ctx context.Context, userID uuid.UUID, req Creat
 		TurnIndex:        openingTurn.TurnIndex,
 		Turns:            []ReviewTurnResponse{toTurnResponse(openingTurn)},
 	}, nil
+}
+
+// CompleteReading 幂等地结束阅读阶段并允许用户开始脱离原文复述。
+func (s *Service) CompleteReading(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID) (ReadingCompleteResponse, error) {
+	session, _, err := s.loadOwnedSession(ctx, userID, sessionID)
+	if err != nil {
+		return ReadingCompleteResponse{}, err
+	}
+	phase := resolveSessionPhase(session)
+	if isClosedStatus(session.Status) {
+		return ReadingCompleteResponse{SessionID: session.ID, Status: session.Status, Phase: phase}, nil
+	}
+	if phase != ReviewPhaseReading {
+		return ReadingCompleteResponse{SessionID: session.ID, Status: session.Status, Phase: phase}, nil
+	}
+	now := s.now()
+	session.Phase = ReviewPhaseRecalling
+	session.ReadingCompletedAt = &now
+	if err := s.repo.UpdateSession(ctx, &session); err != nil {
+		return ReadingCompleteResponse{}, fmt.Errorf("更新阅读状态失败: %w", err)
+	}
+	return ReadingCompleteResponse{SessionID: session.ID, Status: session.Status, Phase: session.Phase}, nil
 }
 
 // GetSession 返回一次复习会话的当前状态与历史轮次。
@@ -106,6 +133,9 @@ func (s *Service) Respond(ctx context.Context, userID uuid.UUID, sessionID uuid.
 	if isClosedStatus(session.Status) {
 		return RespondResponse{}, errReviewSessionClosed
 	}
+	if resolveSessionPhase(session) == ReviewPhaseReading {
+		return RespondResponse{}, errReviewReadingPending
+	}
 
 	answerTurn := ReviewTurn{
 		SessionID: session.ID,
@@ -120,6 +150,7 @@ func (s *Service) Respond(ctx context.Context, userID uuid.UUID, sessionID uuid.
 
 	updatedTurns := append(append([]ReviewTurn(nil), turns...), answerTurn)
 	session.Status = ReviewStatusInProgress
+	session.Phase = ReviewPhaseCoaching
 	session.TurnCount = answerTurn.TurnIndex
 	outline := decodeSessionMetadata(session.MetadataSnapshot).SessionOutline
 	metadata := decodeSessionMetadata(session.MetadataSnapshot)
@@ -169,6 +200,7 @@ func (s *Service) Respond(ctx context.Context, userID uuid.UUID, sessionID uuid.
 			return RespondResponse{
 				SessionID:        session.ID,
 				SessionStatus:    session.Status,
+				Phase:            session.Phase,
 				TurnIndex:        session.TurnCount,
 				CurrentRoundGoal: roundGoal,
 				ReviewFeedback:   reviewFeedback,
@@ -199,6 +231,7 @@ func (s *Service) Respond(ctx context.Context, userID uuid.UUID, sessionID uuid.
 		return RespondResponse{
 			SessionID:        session.ID,
 			SessionStatus:    session.Status,
+			Phase:            session.Phase,
 			TurnIndex:        session.TurnCount,
 			StageFeedback:    stageFeedback,
 			CurrentRoundGoal: currentRoundGoal(session.Mode, answerCount),
@@ -229,6 +262,7 @@ func (s *Service) Respond(ctx context.Context, userID uuid.UUID, sessionID uuid.
 	return RespondResponse{
 		SessionID:        session.ID,
 		SessionStatus:    session.Status,
+		Phase:            session.Phase,
 		TurnIndex:        session.TurnCount,
 		StageFeedback:    stageFeedback,
 		CurrentRoundGoal: roundGoal,
@@ -240,7 +274,7 @@ func (s *Service) Respond(ctx context.Context, userID uuid.UUID, sessionID uuid.
 }
 
 // RequestHint 根据当前会话状态返回一条更具体的提示。
-func (s *Service) RequestHint(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID) (HintResponse, error) {
+func (s *Service) RequestHint(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID, req HintRequest) (HintResponse, error) {
 	session, turns, err := s.loadOwnedSession(ctx, userID, sessionID)
 	if err != nil {
 		return HintResponse{}, err
@@ -248,37 +282,23 @@ func (s *Service) RequestHint(ctx context.Context, userID uuid.UUID, sessionID u
 	if isClosedStatus(session.Status) {
 		return HintResponse{}, errReviewSessionClosed
 	}
+	if resolveSessionPhase(session) == ReviewPhaseReading {
+		return HintResponse{}, errReviewReadingPending
+	}
 	if session.HintUsedCount >= session.MaxHintCount {
 		return HintResponse{}, errReviewHintExhausted
 	}
 
 	metadata := decodeSessionMetadata(session.MetadataSnapshot)
-	outline := metadata.SessionOutline
-	hintText := buildHintText(session, turns, outline)
-	lastAnswer := lastUserAnswer(turns)
-
-	if indicatesMemoryGap(lastAnswer) {
-		hintText = buildMemoryGapHint(outline)
-		excerpt := buildMemoryGapExcerpt(metadata.SourcePreview, outline)
-		if strings.TrimSpace(excerpt) != "" {
-			hintText = hintText + "\n\n" + excerpt
-		}
-	}
-
+	hint := buildLeveledHint(session, turns, metadata)
 	if s.aiFeedback != nil {
-		result, aiErr := s.aiFeedback.Generate(ctx, buildAIFeedbackInput(
-			session.NoteTitle,
-			session.Mode,
-			metadata,
-			toTurnResponses(turns),
-			currentRoundGoal(session.Mode, countUserAnswers(turns)),
-			lastAnswer,
-		))
-		if aiErr == nil {
-			hintText = firstNonEmpty(result.HintText, hintText)
-			if result.ShouldShowQuote && strings.TrimSpace(result.ExcerptText) != "" {
-				hintText = hintText + "\n\n" + result.ExcerptText
+		result, generateErr := s.aiFeedback.Generate(ctx, buildAIHintInput(session, metadata, turns, req.Answer))
+		if generateErr == nil {
+			hint.HintText = firstNonEmpty(result.HintText, result.Suggestion, hint.HintText)
+			if len(result.MissedPoints) > 0 {
+				hint.TargetGap = firstNonEmpty(result.MissedPoints[0], hint.TargetGap)
 			}
+			hint.NextAction = firstNonEmpty(result.Suggestion, hint.NextAction)
 		}
 	}
 	hintTurn := ReviewTurn{
@@ -286,23 +306,25 @@ func (s *Service) RequestHint(ctx context.Context, userID uuid.UUID, sessionID u
 		TurnIndex: nextTurnIndex(turns),
 		Role:      ReviewTurnRoleSystem,
 		TurnType:  ReviewTurnTypeHint,
-		Content:   hintText,
+		Content:   hint.HintText,
 	}
 	if err := s.repo.AppendTurn(ctx, &hintTurn); err != nil {
 		return HintResponse{}, fmt.Errorf("写入提示失败: %w", err)
 	}
 
 	session.HintUsedCount++
+	// A hint requested while recalling should keep the answer surface visible.
+	// Coaching begins after the user has submitted at least one recall answer.
+	if resolveSessionPhase(session) == ReviewPhaseCoaching {
+		session.Phase = ReviewPhaseCoaching
+	}
 	session.TurnCount = hintTurn.TurnIndex
 	if err := s.repo.UpdateSession(ctx, &session); err != nil {
 		return HintResponse{}, fmt.Errorf("更新复习会话失败: %w", err)
 	}
 
-	return HintResponse{
-		SessionID:          session.ID,
-		HintText:           hintText,
-		RemainingHintCount: session.MaxHintCount - session.HintUsedCount,
-	}, nil
+	hint.RemainingHintCount = session.MaxHintCount - session.HintUsedCount
+	return hint, nil
 }
 
 // Finish 显式结束复习训练，并返回最终反馈。
@@ -322,6 +344,9 @@ func (s *Service) Finish(ctx context.Context, userID uuid.UUID, sessionID uuid.U
 				NextFocus: decodeStringSlice(session.NextFocus),
 			},
 		}, nil
+	}
+	if resolveSessionPhase(session) == ReviewPhaseReading {
+		return FinishResponse{}, errReviewReadingPending
 	}
 
 	feedback := buildFinalFeedback(session.Mode, turns)
@@ -382,6 +407,7 @@ func (s *Service) completeSession(ctx context.Context, session *ReviewSession, t
 
 	completedAt := s.now()
 	session.Status = ReviewStatusCompleted
+	session.Phase = ReviewPhaseCompleted
 	session.CompletedAt = &completedAt
 	session.FinalSummary = feedback.Summary
 	session.Strengths = mustMarshalJSON(feedback.Strengths)
@@ -407,11 +433,13 @@ func buildSessionResponse(session ReviewSession, turns []ReviewTurn) ReviewSessi
 	return ReviewSessionResponse{
 		SessionID:            session.ID,
 		Status:               session.Status,
+		Phase:                resolveSessionPhase(session),
 		Mode:                 session.Mode,
 		Title:                session.NoteTitle,
 		SourceTitle:          session.SourceTitle,
 		SourcePreview:        firstNonEmpty(metadata.SourcePreview, session.SummarySnapshot),
-		ReadyToAnswer:        countUserAnswers(turns) > 0 || session.Status != ReviewStatusCreated,
+		ReadingContent:       firstNonEmpty(metadata.ReadingContent, metadata.SourcePreview, session.SummarySnapshot),
+		ReadyToAnswer:        resolveSessionPhase(session) != ReviewPhaseReading,
 		OpeningPrompt:        opening,
 		InitialHints:         initialHints(session.Mode, metadata.SessionOutline),
 		SessionOutline:       metadata.SessionOutline,

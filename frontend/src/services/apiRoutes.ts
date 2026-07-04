@@ -56,6 +56,7 @@ export const apiRoutes = {
     history: '/api/v1/review/history',
     sessions: '/api/v1/review/sessions',
     session: (sessionId: string) => `/api/v1/review/sessions/${pathSegment(sessionId)}`,
+    readingComplete: (sessionId: string) => `/api/v1/review/sessions/${pathSegment(sessionId)}/reading-complete`,
     respond: (sessionId: string) => `/api/v1/review/sessions/${pathSegment(sessionId)}/respond`,
     hint: (sessionId: string) => `/api/v1/review/sessions/${pathSegment(sessionId)}/hint`,
     finish: (sessionId: string) => `/api/v1/review/sessions/${pathSegment(sessionId)}/finish`,

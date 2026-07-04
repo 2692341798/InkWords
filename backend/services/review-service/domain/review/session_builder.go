@@ -12,6 +12,52 @@ func buildSessionSnapshot(note ReviewNote) (string, SessionOutline, string) {
 	return body, outline, sourcePreview
 }
 
+func buildLeveledHint(session ReviewSession, turns []ReviewTurn, metadata sessionMetadata) HintResponse {
+	outline := metadata.SessionOutline
+	feedback := buildReviewFeedback(outline, lastUserAnswer(turns))
+	targetGap := firstNonEmpty(firstSliceItem(feedback.MissedPoints), firstSliceItem(outline.Checkpoints), outline.MainQuestion)
+	level := session.HintUsedCount + 1
+	if level > 3 {
+		level = 3
+	}
+	anchor := hintSourceAnchor(targetGap, outline)
+	response := HintResponse{
+		SessionID:    session.ID,
+		TargetGap:    targetGap,
+		Level:        level,
+		SourceAnchor: anchor,
+		NextAction:   "请用自己的话补充这个遗漏点。",
+	}
+	switch level {
+	case 1:
+		response.HintText = "先回忆这个维度：" + targetGap
+	case 2:
+		keyword := firstNonEmpty(firstSliceItem(outline.CoreConcepts), targetGap)
+		response.HintText = "关键词：" + truncateRunes(keyword, 48) + "。试着说清它与文章主线的关系。"
+	default:
+		excerpt := buildMemoryGapExcerpt(firstNonEmpty(metadata.ReadingContent, metadata.SourcePreview), outline)
+		response.HintText = firstNonEmpty(excerpt, "回到"+anchor+"附近，找出与遗漏点直接相关的一句话。")
+		response.NextAction = "读完这段后请合上原文，再用自己的话复述。"
+	}
+	return response
+}
+
+func firstSliceItem(items []string) string {
+	if len(items) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(items[0])
+}
+
+func hintSourceAnchor(target string, outline SessionOutline) string {
+	for i, checkpoint := range outline.Checkpoints {
+		if checkpoint == target || strings.Contains(checkpoint, target) || strings.Contains(target, checkpoint) {
+			return "关键点 " + string(rune('1'+i))
+		}
+	}
+	return "文章主旨段"
+}
+
 func buildSessionOutline(note ReviewNote) SessionOutline {
 	fragments := splitSentenceFragments(note.Body)
 	checkpoints := pickDistinctFragments(fragments, 3)
@@ -39,10 +85,10 @@ func buildSessionOutline(note ReviewNote) SessionOutline {
 
 func openingPrompt(mode string, outline SessionOutline) string {
 	if mode == ReviewModeDetailedQA {
-		return "先别看原文，我们先围绕这篇文章的主线来回答：" + firstNonEmpty(outline.MainQuestion, "这篇文章最核心在讲什么？")
+		return "浏览完原文后，请先合上文章，再围绕主线回答：" + firstNonEmpty(outline.MainQuestion, "这篇文章最核心在讲什么？")
 	}
 
-	return "先别看原文，试着用自己的话讲讲这篇内容。你不需要一字不差，只要先抓住主线：" + firstNonEmpty(outline.MainQuestion, "这篇内容主要在解决什么问题？")
+	return "浏览完原文后，请合上文章并用自己的话复述。你不需要一字不差，只要先抓住主线：" + firstNonEmpty(outline.MainQuestion, "这篇内容主要在解决什么问题？")
 }
 
 func initialHints(mode string, outline SessionOutline) []string {

@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import {
   type FinalFeedback,
   type ReviewHistoryItem,
+  type HintResponse,
   reviewService,
   type ReviewCardResponse,
   type ReviewMode,
@@ -17,7 +18,7 @@ interface ReviewState {
   historyItems: ReviewHistoryItem[]
   selectedMode: ReviewMode
   latestStageFeedback: string | null
-  latestHint: string | null
+  latestHint: HintResponse | string | null
   finalFeedback: FinalFeedback | null
   isLoadingRecommendation: boolean
   isLoadingNotes: boolean
@@ -30,7 +31,7 @@ interface ReviewState {
   setShouldResumeSessionOnOpen: (shouldResume: boolean) => void
   setCurrentSession: (session: ReviewSessionResponse | null) => void
   setLatestStageFeedback: (feedback: string | null) => void
-  setLatestHint: (hint: string | null) => void
+  setLatestHint: (hint: HintResponse | string | null) => void
   setFinalFeedback: (feedback: FinalFeedback | null) => void
   clearSessionState: () => void
   reset: () => void

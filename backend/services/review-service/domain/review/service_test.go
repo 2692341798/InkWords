@@ -129,6 +129,8 @@ func seedSession(t *testing.T, mode string) seededSession {
 		EntryType: ReviewEntryTypeToday,
 	})
 	require.NoError(t, err)
+	_, err = svc.CompleteReading(context.Background(), userID, resp.SessionID)
+	require.NoError(t, err)
 
 	return seededSession{
 		Service: svc,

@@ -82,7 +82,38 @@ func TestService_CreateSession_ReturnsPreviewContent(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "InkWords 内容生成平台架构解析系列", resp.SourceTitle)
 	require.Contains(t, resp.SourcePreview, "第一段原文")
+	require.Equal(t, "第一段原文。\n\n第二段原文。", resp.ReadingContent)
+	require.Equal(t, ReviewPhaseReading, resp.Phase)
 	require.False(t, resp.ReadyToAnswer)
+}
+
+func TestService_CompleteReading_IsIdempotentAndUnlocksRecall(t *testing.T) {
+	t.Parallel()
+	svc := newTestReviewServiceWithNotes([]ReviewNote{{
+		NotePath: "wiki/test.md", Title: "测试", Body: "这是一段足够完整的测试正文，用于验证阅读阶段。",
+	}})
+	userID := uuid.New()
+	created, err := svc.CreateSession(context.Background(), userID, CreateSessionRequest{
+		NotePath: "wiki/test.md", Mode: ReviewModeLightRecall, EntryType: ReviewEntryTypeManualSelect,
+	})
+	require.NoError(t, err)
+	_, err = svc.Respond(context.Background(), userID, created.SessionID, RespondRequest{Answer: "提前作答"})
+	require.ErrorIs(t, err, errReviewReadingPending)
+	_, err = svc.RequestHint(context.Background(), userID, created.SessionID, HintRequest{})
+	require.ErrorIs(t, err, errReviewReadingPending)
+	_, err = svc.Finish(context.Background(), userID, created.SessionID)
+	require.ErrorIs(t, err, errReviewReadingPending)
+
+	first, err := svc.CompleteReading(context.Background(), userID, created.SessionID)
+	require.NoError(t, err)
+	require.Equal(t, ReviewPhaseRecalling, first.Phase)
+	second, err := svc.CompleteReading(context.Background(), userID, created.SessionID)
+	require.NoError(t, err)
+	require.Equal(t, ReviewPhaseRecalling, second.Phase)
+	got, err := svc.GetSession(context.Background(), userID, created.SessionID)
+	require.NoError(t, err)
+	require.True(t, got.ReadyToAnswer)
+	require.Equal(t, ReviewPhaseRecalling, got.Phase)
 }
 
 func TestService_GetSession_ReturnsPersistedTurns(t *testing.T) {
@@ -139,6 +170,8 @@ func TestService_Respond_ReturnsStructuredStageFeedback(t *testing.T) {
 		EntryType: ReviewEntryTypeToday,
 	})
 	require.NoError(t, err)
+	_, err = svc.CompleteReading(context.Background(), userID, created.SessionID)
+	require.NoError(t, err)
 
 	resp, err := svc.Respond(context.Background(), userID, created.SessionID, RespondRequest{
 		Answer: "这篇文章主要讲如何通过并发控制和信号量保护资源。",
@@ -168,6 +201,8 @@ func TestService_Respond_WhenUserDoesNotRemember_ReturnsHintThenExcerpt(t *testi
 		EntryType: ReviewEntryTypeManualSelect,
 	})
 	require.NoError(t, err)
+	_, err = svc.CompleteReading(context.Background(), userID, created.SessionID)
+	require.NoError(t, err)
 
 	resp, err := svc.Respond(context.Background(), userID, created.SessionID, RespondRequest{
 		Answer: "我不记得了",
@@ -184,17 +219,27 @@ func TestService_RequestHint_StopsAtMaxCount(t *testing.T) {
 
 	session := seedLightRecallSession(t)
 
-	first, err := session.Service.RequestHint(context.Background(), session.UserID, session.ID)
+	first, err := session.Service.RequestHint(context.Background(), session.UserID, session.ID, HintRequest{})
 	require.NoError(t, err)
 	require.NotEmpty(t, first.HintText)
-	require.Equal(t, 1, first.RemainingHintCount)
+	require.Equal(t, 1, first.Level)
+	require.Equal(t, 2, first.RemainingHintCount)
+	require.NotEmpty(t, first.TargetGap)
+	require.NotEmpty(t, first.NextAction)
 
-	second, err := session.Service.RequestHint(context.Background(), session.UserID, session.ID)
+	second, err := session.Service.RequestHint(context.Background(), session.UserID, session.ID, HintRequest{})
 	require.NoError(t, err)
 	require.NotEmpty(t, second.HintText)
-	require.Equal(t, 0, second.RemainingHintCount)
+	require.Equal(t, 2, second.Level)
+	require.Equal(t, 1, second.RemainingHintCount)
 
-	_, err = session.Service.RequestHint(context.Background(), session.UserID, session.ID)
+	third, err := session.Service.RequestHint(context.Background(), session.UserID, session.ID, HintRequest{})
+	require.NoError(t, err)
+	require.Equal(t, 3, third.Level)
+	require.Equal(t, 0, third.RemainingHintCount)
+	require.NotEmpty(t, third.SourceAnchor)
+
+	_, err = session.Service.RequestHint(context.Background(), session.UserID, session.ID, HintRequest{})
 	require.ErrorContains(t, err, "提示次数已用尽")
 }
 
@@ -206,10 +251,10 @@ func TestService_RequestHint_DetailedQAFollowsCurrentQuestion(t *testing.T) {
 	_, err := session.Service.Respond(context.Background(), session.UserID, session.ID, RespondRequest{Answer: "这是主旨"})
 	require.NoError(t, err)
 
-	hint, err := session.Service.RequestHint(context.Background(), session.UserID, session.ID)
+	hint, err := session.Service.RequestHint(context.Background(), session.UserID, session.ID, HintRequest{})
 	require.NoError(t, err)
-	require.Contains(t, hint.HintText, "当前追问是：")
-	require.Contains(t, hint.HintText, "概念")
+	require.Equal(t, 1, hint.Level)
+	require.NotEmpty(t, hint.TargetGap)
 }
 
 func TestService_RequestHint_WhenUserIsStuck_ReturnsConcreteContext(t *testing.T) {
@@ -230,14 +275,59 @@ func TestService_RequestHint_WhenUserIsStuck_ReturnsConcreteContext(t *testing.T
 		EntryType: ReviewEntryTypeManualSelect,
 	})
 	require.NoError(t, err)
+	_, err = svc.CompleteReading(context.Background(), userID, created.SessionID)
+	require.NoError(t, err)
 
 	_, err = svc.Respond(context.Background(), userID, created.SessionID, RespondRequest{Answer: "我不记得了"})
 	require.NoError(t, err)
 
-	hint, err := svc.RequestHint(context.Background(), userID, created.SessionID)
+	hint, err := svc.RequestHint(context.Background(), userID, created.SessionID, HintRequest{Answer: "我只记得并发控制"})
 	require.NoError(t, err)
-	require.Contains(t, hint.HintText, "并发控制")
-	require.Contains(t, hint.HintText, "原文")
+	require.Equal(t, 1, hint.Level)
+	require.NotEmpty(t, hint.TargetGap)
+	require.NotContains(t, hint.HintText, "原文摘录")
+}
+
+type capturingAIFeedbackGenerator struct {
+	input AIFeedbackInput
+}
+
+func (g *capturingAIFeedbackGenerator) Generate(_ context.Context, input AIFeedbackInput) (AIFeedbackResult, error) {
+	g.input = input
+	return AIFeedbackResult{
+		HintText:     "想一想：限制同时执行数量与限制单位时间请求数，分别解决什么问题？",
+		MissedPoints: []string{"并发控制与速率限制的区别"},
+		Suggestion:   "先补充两者各自约束的维度。",
+	}, nil
+}
+
+func TestService_RequestHint_UsesArticleAndDraftAnswerForAIHint(t *testing.T) {
+	t.Parallel()
+
+	const article = "并发控制限制同时执行的任务数量；速率限制控制单位时间内的请求频率。"
+	svc := newTestReviewServiceWithNotes([]ReviewNote{{
+		NotePath:      "wiki/concepts/并发控制.md",
+		Title:         "并发控制",
+		Body:          article,
+		PreferredMode: ReviewModeLightRecall,
+	}})
+	generator := &capturingAIFeedbackGenerator{}
+	svc.aiFeedback = generator
+	userID := uuid.New()
+	created, err := svc.CreateSession(context.Background(), userID, CreateSessionRequest{
+		NotePath: "wiki/concepts/并发控制.md", Mode: ReviewModeLightRecall, EntryType: ReviewEntryTypeManualSelect,
+	})
+	require.NoError(t, err)
+	_, err = svc.CompleteReading(context.Background(), userID, created.SessionID)
+	require.NoError(t, err)
+
+	hint, err := svc.RequestHint(context.Background(), userID, created.SessionID, HintRequest{Answer: "我记得它们都用于保护系统"})
+	require.NoError(t, err)
+	require.Equal(t, "hint", generator.input.Task)
+	require.Equal(t, article, generator.input.SourceContent)
+	require.Equal(t, "我记得它们都用于保护系统", generator.input.CurrentAnswer)
+	require.Equal(t, "想一想：限制同时执行数量与限制单位时间请求数，分别解决什么问题？", hint.HintText)
+	require.Equal(t, "并发控制与速率限制的区别", hint.TargetGap)
 }
 
 func TestService_Finish_ProducesFinalFeedback(t *testing.T) {
