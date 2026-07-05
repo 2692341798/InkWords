@@ -12,7 +12,6 @@ const {
   requestHintMock,
   respondMock,
   setShouldResumeSessionOnOpenMock,
-  setSelectedModeMock,
   startSessionMock,
   storeState,
 } = vi.hoisted(() => {
@@ -76,7 +75,6 @@ const {
     requestHintMock: vi.fn(),
     respondMock: vi.fn(),
     setShouldResumeSessionOnOpenMock: state.setShouldResumeSessionOnOpen,
-    setSelectedModeMock: state.setSelectedMode,
     startSessionMock: vi.fn(),
     storeState: state,
   }
@@ -148,25 +146,18 @@ describe('KnowledgeReview', () => {
     storeState.selectedMode = 'light_recall'
   })
 
-  it('点击提问开始时先切到细致提问模式，再用推荐卡片开启会话', async () => {
+  it('从推荐文章直接开始沉浸阅读，不再要求预选训练模式', async () => {
     renderToStaticMarkup(<KnowledgeReview />)
 
     const props = capturedEntryCardsProps.current as null | {
-      onStartQuestionRecommendation?: () => Promise<void>
+      onStartRecommendation?: () => Promise<void>
     }
 
-    expect(props?.onStartQuestionRecommendation).toBeTypeOf('function')
-
-    await props?.onStartQuestionRecommendation?.()
-
-    expect(setSelectedModeMock).toHaveBeenCalledWith('detailed_qa')
+    expect(props?.onStartRecommendation).toBeTypeOf('function')
+    await props?.onStartRecommendation?.()
     expect(startSessionMock).toHaveBeenCalledWith(
       expect.objectContaining({ note_path: 'wiki/concepts/random.md' }),
       'manual_random',
-      'detailed_qa',
-    )
-    expect(setSelectedModeMock.mock.invocationCallOrder[0]).toBeLessThan(
-      startSessionMock.mock.invocationCallOrder[0],
     )
   })
 
@@ -192,12 +183,12 @@ describe('KnowledgeReview', () => {
 
     const html = renderToStaticMarkup(<KnowledgeReview />)
 
-    expect(html).toContain('继续当前会话')
-    await buttonClickHandlers.get('继续当前会话')?.()
+    expect(html).toContain('继续上次的复习')
+    await buttonClickHandlers.get('继续')?.()
     expect(setShouldResumeSessionOnOpenMock).toHaveBeenCalledWith(true)
   })
 
-  it('当存在当前会话时右侧摘要优先显示 session.mode', () => {
+  it('入口态不再展示会话模式与任务摘要', () => {
     storeState.currentSession = {
       session_id: 'session-1',
       status: 'in_progress',
@@ -220,7 +211,7 @@ describe('KnowledgeReview', () => {
 
     const html = renderToStaticMarkup(<KnowledgeReview />)
 
-    expect(html).toContain('当前模式')
-    expect(html).toContain('细致提问')
+    expect(html).not.toContain('当前模式')
+    expect(html).not.toContain('任务摘要')
   })
 })

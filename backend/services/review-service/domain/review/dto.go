@@ -104,10 +104,12 @@ type ReviewFeedback struct {
 type ReviewSessionResponse struct {
 	SessionID            uuid.UUID            `json:"session_id"`
 	Status               string               `json:"status"`
+	Phase                string               `json:"phase"`
 	Mode                 string               `json:"mode"`
 	Title                string               `json:"title"`
 	SourceTitle          string               `json:"source_title"`
 	SourcePreview        string               `json:"source_preview"`
+	ReadingContent       string               `json:"reading_content"`
 	ReadyToAnswer        bool                 `json:"ready_to_answer"`
 	OpeningPrompt        string               `json:"opening_prompt"`
 	InitialHints         []string             `json:"initial_hints"`
@@ -124,6 +126,11 @@ type RespondRequest struct {
 	Answer string `json:"answer"`
 }
 
+// HintRequest 描述用户请求智能提示时已经写下的内容。
+type HintRequest struct {
+	Answer string `json:"answer"`
+}
+
 // FinalFeedback 表示一次复习结束后的结构化反馈。
 type FinalFeedback struct {
 	Summary   string   `json:"summary"`
@@ -136,6 +143,7 @@ type FinalFeedback struct {
 type RespondResponse struct {
 	SessionID        uuid.UUID      `json:"session_id"`
 	SessionStatus    string         `json:"session_status"`
+	Phase            string         `json:"phase"`
 	TurnIndex        int            `json:"turn_index"`
 	StageFeedback    string         `json:"stage_feedback,omitempty"`
 	CurrentRoundGoal string         `json:"current_round_goal,omitempty"`
@@ -151,7 +159,18 @@ type RespondResponse struct {
 type HintResponse struct {
 	SessionID          uuid.UUID `json:"session_id"`
 	HintText           string    `json:"hint_text"`
+	TargetGap          string    `json:"target_gap"`
+	Level              int       `json:"level"`
+	SourceAnchor       string    `json:"source_anchor,omitempty"`
+	NextAction         string    `json:"next_action"`
 	RemainingHintCount int       `json:"remaining_hint_count"`
+}
+
+// ReadingCompleteResponse 表示用户结束原文浏览后的阶段状态。
+type ReadingCompleteResponse struct {
+	SessionID uuid.UUID `json:"session_id"`
+	Status    string    `json:"status"`
+	Phase     string    `json:"phase"`
 }
 
 // FinishResponse 表示显式结束训练后的最终反馈。

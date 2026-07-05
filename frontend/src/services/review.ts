@@ -3,6 +3,7 @@ import { apiRoutes } from './apiRoutes'
 
 export type ReviewMode = 'light_recall' | 'detailed_qa'
 export type ReviewEntryType = 'today' | 'manual_random' | 'manual_select'
+export type ReviewPhase = 'reading' | 'recalling' | 'coaching' | 'completed'
 
 export interface ReviewCardResponse {
   note_path: string
@@ -70,10 +71,12 @@ interface ReviewFeedback {
 export interface ReviewSessionResponse {
   session_id: string
   status: string
+  phase?: ReviewPhase
   mode: ReviewMode
   title: string
   source_title?: string
   source_preview?: string
+  reading_content?: string
   ready_to_answer?: boolean
   opening_prompt: string
   initial_hints: string[]
@@ -105,6 +108,7 @@ export interface FinalFeedback {
 export interface RespondResponse {
   session_id: string
   session_status: string
+  phase?: ReviewPhase
   turn_index: number
   stage_feedback?: string
   current_round_goal?: string
@@ -120,6 +124,16 @@ export interface HintResponse {
   session_id: string
   hint_text: string
   remaining_hint_count: number
+  target_gap?: string
+  level?: number
+  source_anchor?: string
+  next_action?: string
+}
+
+export interface ReadingCompleteResponse {
+  session_id: string
+  status: string
+  phase: ReviewPhase
 }
 
 export interface FinishResponse {
@@ -186,6 +200,14 @@ export const reviewService = {
     })
   },
 
+  completeReading(sessionId: string) {
+    return requestEnvelope<ReadingCompleteResponse>(apiRoutes.reviewService.readingComplete(sessionId), {
+      method: 'POST',
+      json: {},
+      fallbackMessage: '请求复习接口失败',
+    })
+  },
+
   respond(sessionId: string, payload: RespondRequest) {
     return requestEnvelope<RespondResponse>(apiRoutes.reviewService.respond(sessionId), {
       method: 'POST',
@@ -194,10 +216,10 @@ export const reviewService = {
     })
   },
 
-  requestHint(sessionId: string) {
+  requestHint(sessionId: string, answer: string) {
     return requestEnvelope<HintResponse>(apiRoutes.reviewService.hint(sessionId), {
       method: 'POST',
-      json: {},
+      json: { answer },
       fallbackMessage: '请求复习接口失败',
     })
   },

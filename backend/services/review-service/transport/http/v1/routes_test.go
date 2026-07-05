@@ -33,6 +33,7 @@ func TestRegisterReviewRoutes_RegistersReviewRoutes(t *testing.T) {
 		{method: http.MethodGet, path: "/api/v1/review/notes"},
 		{method: http.MethodPost, path: "/api/v1/review/sessions"},
 		{method: http.MethodGet, path: "/api/v1/review/sessions/123e4567-e89b-12d3-a456-426614174000"},
+		{method: http.MethodPost, path: "/api/v1/review/sessions/123e4567-e89b-12d3-a456-426614174000/reading-complete"},
 		{method: http.MethodPost, path: "/api/v1/review/sessions/123e4567-e89b-12d3-a456-426614174000/respond"},
 		{method: http.MethodPost, path: "/api/v1/review/sessions/123e4567-e89b-12d3-a456-426614174000/hint"},
 		{method: http.MethodPost, path: "/api/v1/review/sessions/123e4567-e89b-12d3-a456-426614174000/finish"},
@@ -80,11 +81,15 @@ func (stubReviewService) GetSession(context.Context, uuid.UUID, uuid.UUID) (revi
 	return reviewdomain.ReviewSessionResponse{}, nil
 }
 
+func (stubReviewService) CompleteReading(context.Context, uuid.UUID, uuid.UUID) (reviewdomain.ReadingCompleteResponse, error) {
+	return reviewdomain.ReadingCompleteResponse{}, nil
+}
+
 func (stubReviewService) Respond(context.Context, uuid.UUID, uuid.UUID, reviewdomain.RespondRequest) (reviewdomain.RespondResponse, error) {
 	return reviewdomain.RespondResponse{}, nil
 }
 
-func (stubReviewService) RequestHint(context.Context, uuid.UUID, uuid.UUID) (reviewdomain.HintResponse, error) {
+func (stubReviewService) RequestHint(context.Context, uuid.UUID, uuid.UUID, reviewdomain.HintRequest) (reviewdomain.HintResponse, error) {
 	return reviewdomain.HintResponse{}, nil
 }
 

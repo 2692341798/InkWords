@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useState } from 'react'
 import {
   reviewService,
   type ReviewCardResponse,
@@ -41,6 +41,7 @@ const appendTurn = (
  */
 // Why: 复习会话需要把“创建 / 继续 / 回答 / 提示 / 结束”封装成单一交互入口，页面只关心触发动作和展示状态。
 export function useKnowledgeReview() {
+  const [isPendingAction, setIsPendingAction] = useState(false)
   const {
     currentSession,
     selectedMode,
@@ -68,7 +69,7 @@ export function useKnowledgeReview() {
   }, [])
 
   const initialize = useCallback(async () => {
-    await Promise.all([
+    await Promise.allSettled([
       useReviewStore.getState().loadRecommendation(),
       useReviewStore.getState().loadHistory(5),
     ])
@@ -116,10 +117,11 @@ export function useKnowledgeReview() {
 
   const respond = useCallback(
     async (answer: string) => {
-      if (!currentSession) {
+      if (!currentSession || isPendingAction) {
         return
       }
-
+      setIsPendingAction(true)
+      try {
       const response = await reviewService.respond(currentSession.session_id, { answer })
       let nextTurns = appendTurn(currentSession.turns, 'user', 'answer', answer)
 
@@ -128,15 +130,6 @@ export function useKnowledgeReview() {
         setLatestStageFeedback(response.stage_feedback)
       } else {
         setLatestStageFeedback(null)
-      }
-
-      if (response.hint_text) {
-        setLatestHint(response.hint_text)
-        nextTurns = appendTurn(nextTurns, 'system', 'hint', response.hint_text)
-      }
-
-      if (response.excerpt_text) {
-        nextTurns = appendTurn(nextTurns, 'system', 'excerpt', response.excerpt_text)
       }
 
       if (response.next_question) {
@@ -153,61 +146,79 @@ export function useKnowledgeReview() {
       setCurrentSession({
         ...currentSession,
         status: response.session_status,
-        ready_to_answer: true,
+        phase: response.completed ? 'completed' : 'coaching',
         current_round_goal: response.current_round_goal,
         latest_review_feedback: response.review_feedback ?? null,
         next_question: response.next_question,
         turn_index: response.turn_index,
         turns: nextTurns,
       })
+      } finally {
+        setIsPendingAction(false)
+      }
     },
-    [currentSession, loadHistory, persistSessionID, setCurrentSession, setFinalFeedback, setLatestHint, setLatestStageFeedback],
+    [currentSession, isPendingAction, loadHistory, persistSessionID, setCurrentSession, setFinalFeedback, setLatestStageFeedback],
   )
 
-  const startAnswering = useCallback(() => {
-    if (!currentSession || currentSession.ready_to_answer) {
+  const completeReading = useCallback(async () => {
+    if (!currentSession || isPendingAction) {
       return
     }
+    setIsPendingAction(true)
+    try {
+      const result = await reviewService.completeReading(currentSession.session_id)
+      setCurrentSession({
+        ...currentSession,
+        status: result.status,
+        phase: result.phase,
+      })
+    } finally {
+      setIsPendingAction(false)
+    }
+  }, [currentSession, isPendingAction, setCurrentSession])
 
-    setCurrentSession({
-      ...currentSession,
-      ready_to_answer: true,
-    })
-  }, [currentSession, setCurrentSession])
-
-  const requestHint = useCallback(async () => {
-    if (!currentSession) {
+  const requestHint = useCallback(async (answer = '') => {
+    if (!currentSession || isPendingAction) {
       return
     }
-
-    const response = await reviewService.requestHint(currentSession.session_id)
-    setLatestHint(response.hint_text)
-    setCurrentSession({
-      ...currentSession,
-      current_round_goal: currentSession.current_round_goal,
-      latest_review_feedback: currentSession.latest_review_feedback ?? null,
-      turn_index: Math.max(currentSession.turn_index + 1, currentSession.turn_index),
-      turns: appendTurn(currentSession.turns, 'system', 'hint', response.hint_text),
-    })
-  }, [currentSession, setCurrentSession, setLatestHint])
+    setIsPendingAction(true)
+    try {
+      const response = await reviewService.requestHint(currentSession.session_id, answer.trim())
+      setLatestHint(response)
+      setCurrentSession({
+        ...currentSession,
+        current_round_goal: currentSession.current_round_goal,
+        latest_review_feedback: currentSession.latest_review_feedback ?? null,
+        turn_index: currentSession.turn_index + 1,
+        turns: appendTurn(currentSession.turns, 'system', 'hint', response.hint_text),
+      })
+    } finally {
+      setIsPendingAction(false)
+    }
+  }, [currentSession, isPendingAction, setCurrentSession, setLatestHint])
 
   const finish = useCallback(async () => {
-    if (!currentSession) {
+    if (!currentSession || isPendingAction) {
       return
     }
-
-    const response = await reviewService.finish(currentSession.session_id)
-    setFinalFeedback(response.final_feedback)
-    setCurrentSession({
-      ...currentSession,
-      status: response.session_status,
-      current_round_goal: currentSession.current_round_goal,
-      latest_review_feedback: currentSession.latest_review_feedback ?? null,
-      turns: appendTurn(currentSession.turns, 'system', 'completion', response.final_feedback.summary),
-    })
-    persistSessionID(null)
-    await loadHistory(5)
-  }, [currentSession, loadHistory, persistSessionID, setCurrentSession, setFinalFeedback])
+    setIsPendingAction(true)
+    try {
+      const response = await reviewService.finish(currentSession.session_id)
+      setFinalFeedback(response.final_feedback)
+      setCurrentSession({
+        ...currentSession,
+        status: response.session_status,
+        phase: 'completed',
+        current_round_goal: currentSession.current_round_goal,
+        latest_review_feedback: currentSession.latest_review_feedback ?? null,
+        turns: appendTurn(currentSession.turns, 'system', 'completion', response.final_feedback.summary),
+      })
+      persistSessionID(null)
+      await loadHistory(5)
+    } finally {
+      setIsPendingAction(false)
+    }
+  }, [currentSession, isPendingAction, loadHistory, persistSessionID, setCurrentSession, setFinalFeedback])
 
   const clearSession = useCallback(() => {
     clearSessionState()
@@ -217,10 +228,11 @@ export function useKnowledgeReview() {
   return {
     initialize,
     startSession,
-    startAnswering,
+    completeReading,
     respond,
     requestHint,
     finish,
     clearSession,
+    isPendingAction,
   }
 }

@@ -62,12 +62,6 @@ export function ReviewNotePicker({ notes, isLoading, onSearch, onModeSync, onSel
               </div>
               <div className="flex gap-3">
                 <Button
-                  variant="outline"
-                  onClick={() => onModeSync(note.preferred_mode)}
-                >
-                  推荐模式：{note.preferred_mode === 'detailed_qa' ? '细致提问' : '轻提示复述'}
-                </Button>
-                <Button
                   onClick={() => {
                     onModeSync(note.preferred_mode)
                     void onSelect({

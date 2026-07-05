@@ -17,21 +17,20 @@ describe('ReviewEntryCards', () => {
         isLoadingRecommendation={false}
         onRefreshRecommendation={vi.fn()}
         onStartRecommendation={vi.fn()}
-        onStartQuestionRecommendation={vi.fn()}
         onOpenPicker={vi.fn()}
       />,
     )
 
     expect(html).toContain('随机抽一篇')
     expect(html).toContain('用这篇开始')
-    expect(html).toContain('提问开始')
+    expect(html).not.toContain('提问开始')
     expect(html).toContain('再抽一篇')
     expect(html).not.toContain('推荐一篇')
     expect(html).not.toContain('开始今日复习')
     expect(html).toContain('选择文章复习')
   })
 
-  it('disables the question-start action when the recommendation card does not support detailed qa', () => {
+  it('does not expose training modes before the reading stage', () => {
     const html = renderToStaticMarkup(
       <ReviewEntryCards
         recommendationCard={{
@@ -45,11 +44,12 @@ describe('ReviewEntryCards', () => {
         isLoadingRecommendation={false}
         onRefreshRecommendation={vi.fn()}
         onStartRecommendation={vi.fn()}
-        onStartQuestionRecommendation={vi.fn()}
         onOpenPicker={vi.fn()}
       />,
     )
 
-    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>提问开始<\/button>/)
+    expect(html).not.toContain('提问开始')
+    expect(html).not.toContain('推荐模式')
+    expect(html).toContain('用这篇开始')
   })
 })

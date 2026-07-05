@@ -21,6 +21,7 @@ var (
 	errReviewSessionClosed   = errors.New("复习会话已结束")
 	errReviewHintExhausted   = errors.New("提示次数已用尽")
 	errEmptyReviewAnswer     = errors.New("回答内容不能为空")
+	errReviewReadingPending  = errors.New("请先浏览完原文再开始复述")
 )
 
 // NoteSource 定义 review 领域所需的笔记读取能力。
@@ -40,6 +41,21 @@ type sessionMetadata struct {
 	PreferredMode  string         `json:"preferred_mode"`
 	SessionOutline SessionOutline `json:"session_outline"`
 	SourcePreview  string         `json:"source_preview"`
+	ReadingContent string         `json:"reading_content"`
+}
+
+func resolveSessionPhase(session ReviewSession) string {
+	if isClosedStatus(session.Status) {
+		return ReviewPhaseCompleted
+	}
+	if session.Phase != "" {
+		return session.Phase
+	}
+	// 兼容上线前创建、尚未持久化 phase 的会话；这些会话原本允许直接作答。
+	if session.Status == ReviewStatusInProgress {
+		return ReviewPhaseCoaching
+	}
+	return ReviewPhaseRecalling
 }
 
 // NewService 创建 review 领域服务。

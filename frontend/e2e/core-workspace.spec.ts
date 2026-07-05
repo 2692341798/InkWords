@@ -5,7 +5,7 @@ test('@core @cross-browser renders the workspace and navigates primary views', a
   await expect(page.getByRole('heading', { name: '从资料到博客，从博客到复习' })).toBeVisible()
 
   await page.getByRole('button', { name: '知识复习' }).first().click()
-  await expect(page.getByRole('heading', { name: '像整理笔记一样，把重点重新讲出来' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '选一篇，读完，再用自己的话讲出来' })).toBeVisible()
 
   await page.getByRole('button', { name: '个人中心' }).click()
   await expect(page.getByRole('heading', { name: '个人中心' })).toBeVisible()
@@ -23,5 +23,5 @@ test('@core mobile keeps primary navigation reachable', async ({ appPage: page }
   test.skip(!testInfo.project.name.startsWith('mobile'), 'Mobile-only layout assertion')
   await expect(page.getByRole('button', { name: '新建' })).toBeVisible()
   await page.getByRole('button', { name: '知识复习' }).first().click()
-  await expect(page.getByText('当前步骤：选择入口')).toBeVisible()
+  await expect(page.getByText('知识漫游复习')).toBeVisible()
 })

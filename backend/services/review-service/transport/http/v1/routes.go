@@ -17,6 +17,7 @@ func RegisterReviewRoutes(r *gin.Engine, authMiddleware gin.HandlerFunc, handler
 	reviewGroup.GET("/notes", handler.ListNotes)
 	reviewGroup.POST("/sessions", handler.CreateSession)
 	reviewGroup.GET("/sessions/:id", handler.GetSession)
+	reviewGroup.POST("/sessions/:id/reading-complete", handler.CompleteReading)
 	reviewGroup.POST("/sessions/:id/respond", handler.Respond)
 	reviewGroup.POST("/sessions/:id/hint", handler.RequestHint)
 	reviewGroup.POST("/sessions/:id/finish", handler.Finish)

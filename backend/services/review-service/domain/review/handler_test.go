@@ -221,11 +221,15 @@ func (s *stubHandlerService) GetSession(context.Context, uuid.UUID, uuid.UUID) (
 	return s.sessionResp, nil
 }
 
+func (s *stubHandlerService) CompleteReading(context.Context, uuid.UUID, uuid.UUID) (ReadingCompleteResponse, error) {
+	return ReadingCompleteResponse{}, nil
+}
+
 func (s *stubHandlerService) Respond(context.Context, uuid.UUID, uuid.UUID, RespondRequest) (RespondResponse, error) {
 	return s.respondResp, nil
 }
 
-func (s *stubHandlerService) RequestHint(context.Context, uuid.UUID, uuid.UUID) (HintResponse, error) {
+func (s *stubHandlerService) RequestHint(context.Context, uuid.UUID, uuid.UUID, HintRequest) (HintResponse, error) {
 	return s.hintResp, nil
 }
 

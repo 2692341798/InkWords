@@ -20,4 +20,13 @@ describe('index.css markdown prose styles', () => {
     expect(css).toContain('div.prose th')
     expect(css).toContain('div.prose td')
   })
+
+  test('keeps fenced code blocks readable without inline-code backgrounds', () => {
+    const css = readIndexCss()
+    expect(css).toContain('.prose :where(pre):not')
+    expect(css).toContain('background-color: var(--secondary)')
+    expect(css).toContain('.prose :where(pre code):not')
+    expect(css).toContain('background-color: transparent')
+    expect(css).toContain('color: inherit')
+  })
 })

@@ -18,9 +18,24 @@ type reviewService interface {
 	ListNotes(context.Context, uuid.UUID, ListNotesQuery) (ListNotesResponse, error)
 	CreateSession(context.Context, uuid.UUID, CreateSessionRequest) (ReviewSessionResponse, error)
 	GetSession(context.Context, uuid.UUID, uuid.UUID) (ReviewSessionResponse, error)
+	CompleteReading(context.Context, uuid.UUID, uuid.UUID) (ReadingCompleteResponse, error)
 	Respond(context.Context, uuid.UUID, uuid.UUID, RespondRequest) (RespondResponse, error)
-	RequestHint(context.Context, uuid.UUID, uuid.UUID) (HintResponse, error)
+	RequestHint(context.Context, uuid.UUID, uuid.UUID, HintRequest) (HintResponse, error)
 	Finish(context.Context, uuid.UUID, uuid.UUID) (FinishResponse, error)
+}
+
+// CompleteReading 标记原文已浏览完毕，并进入关书复述阶段。
+func (h *Handler) CompleteReading(c *gin.Context) {
+	userID, sessionID, ok := h.requireSessionContext(c)
+	if !ok {
+		return
+	}
+	resp, err := h.service.CompleteReading(c.Request.Context(), userID, sessionID)
+	if err != nil {
+		h.handleServiceError(c, err)
+		return
+	}
+	h.writeSuccess(c, resp)
 }
 
 // Handler 提供 review 领域的 HTTP 适配层。
@@ -176,7 +191,13 @@ func (h *Handler) RequestHint(c *gin.Context) {
 		return
 	}
 
-	resp, err := h.service.RequestHint(c.Request.Context(), userID, sessionID)
+	var req HintRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.writeError(c, http.StatusBadRequest, "请求参数格式错误")
+		return
+	}
+
+	resp, err := h.service.RequestHint(c.Request.Context(), userID, sessionID, req)
 	if err != nil {
 		h.handleServiceError(c, err)
 		return
@@ -263,7 +284,8 @@ func (h *Handler) handleServiceError(c *gin.Context, err error) {
 	case errors.Is(err, errReviewSessionDenied):
 		h.writeError(c, http.StatusForbidden, err.Error())
 	case errors.Is(err, errReviewSessionClosed),
-		errors.Is(err, errReviewHintExhausted):
+		errors.Is(err, errReviewHintExhausted),
+		errors.Is(err, errReviewReadingPending):
 		h.writeError(c, http.StatusConflict, err.Error())
 	default:
 		// Infrastructure failures may contain credentials, internal URLs, or

@@ -9,7 +9,8 @@ interface ReviewEntryCardsProps {
   isLoadingRecommendation: boolean
   onRefreshRecommendation: () => Promise<void> | void
   onStartRecommendation: () => Promise<void> | void
-  onStartQuestionRecommendation: () => Promise<void> | void
+  /** @deprecated Detailed questioning now starts after the first recall. */
+  onStartQuestionRecommendation?: () => Promise<void> | void
   onOpenPicker: () => Promise<void> | void
 }
 
@@ -25,10 +26,8 @@ function ReviewCard({
   detail,
   loading,
   actionLabel,
-  questionActionLabel,
   refreshLabel,
   onAction,
-  onQuestionAction,
   onRefresh,
 }: {
   title: string
@@ -37,15 +36,11 @@ function ReviewCard({
   detail: ReviewCardResponse | null
   loading: boolean
   actionLabel: string
-  questionActionLabel: string
   refreshLabel: string
   onAction: () => Promise<void> | void
-  onQuestionAction: () => Promise<void> | void
   onRefresh: () => Promise<void> | void
 }) {
   const Icon = icon
-  const supportsDetailedQuestionMode = detail?.available_modes.includes('detailed_qa') ?? false
-
   return (
     <Panel className="p-6">
       <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-secondary text-foreground">
@@ -69,14 +64,6 @@ function ReviewCard({
         <Button className="sm:flex-1" onClick={onAction} disabled={loading}>
           {actionLabel}
         </Button>
-        <Button
-          variant="outline"
-          className="sm:flex-1"
-          onClick={onQuestionAction}
-          disabled={loading || !supportsDetailedQuestionMode}
-        >
-          {questionActionLabel}
-        </Button>
         <Button variant="outline" className="sm:flex-1" onClick={onRefresh} disabled={loading}>
           {refreshLabel}
         </Button>
@@ -95,10 +82,8 @@ export function ReviewEntryCards(props: ReviewEntryCardsProps) {
         detail={props.recommendationCard}
         loading={props.isLoadingRecommendation}
         actionLabel="用这篇开始"
-        questionActionLabel="提问开始"
         refreshLabel="再抽一篇"
         onAction={props.onStartRecommendation}
-        onQuestionAction={props.onStartQuestionRecommendation}
         onRefresh={props.onRefreshRecommendation}
       />
       <Panel className="p-6">

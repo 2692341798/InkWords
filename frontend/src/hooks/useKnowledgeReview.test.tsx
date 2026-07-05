@@ -1,18 +1,21 @@
 // @vitest-environment jsdom
 import { act, renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ReviewSessionResponse } from '@/services/review'
 
 const {
+  completeReadingMock,
   createSessionMock,
   getSessionMock,
   loadHistoryMock,
   loadRecommendationMock,
+  requestHintMock,
   setCurrentSessionMock,
   setShouldResumeSessionOnOpenMock,
   storeState,
 } = vi.hoisted(() => {
   const state = {
-    currentSession: null,
+    currentSession: null as ReviewSessionResponse | null,
     selectedMode: 'light_recall' as const,
     clearSessionState: vi.fn(),
     setCurrentSession: vi.fn(),
@@ -25,10 +28,12 @@ const {
   }
 
   return {
+    completeReadingMock: vi.fn(),
     createSessionMock: vi.fn(),
     getSessionMock: vi.fn(),
     loadHistoryMock: state.loadHistory,
     loadRecommendationMock: state.loadRecommendation,
+    requestHintMock: vi.fn(),
     setCurrentSessionMock: state.setCurrentSession,
     setShouldResumeSessionOnOpenMock: state.setShouldResumeSessionOnOpen,
     storeState: state,
@@ -37,8 +42,10 @@ const {
 
 vi.mock('@/services/review', () => ({
   reviewService: {
+    completeReading: completeReadingMock,
     createSession: createSessionMock,
     getSession: getSessionMock,
+    requestHint: requestHintMock,
   },
 }))
 
@@ -137,5 +144,36 @@ describe('useKnowledgeReview', () => {
       }),
     )
     expect(setShouldResumeSessionOnOpenMock).not.toHaveBeenCalledWith(false)
+  })
+
+  it('preserves the session when completing the reading phase', async () => {
+    const session: ReviewSessionResponse = {
+      session_id: 'session-1', status: 'created', phase: 'reading', mode: 'light_recall', title: '并发控制',
+      reading_content: '完整原文', opening_prompt: '请先阅读', initial_hints: [],
+      session_outline: { summary: '摘要', main_question: '主旨是什么？', core_concepts: [], process_steps: [], application_cases: [], checkpoints: [] },
+      turn_index: 1,
+    }
+    storeState.currentSession = session
+    completeReadingMock.mockResolvedValue({ session_id: 'session-1', status: 'created', phase: 'recalling' })
+    const { result } = renderHook(() => useKnowledgeReview())
+
+    await act(async () => { await result.current.completeReading() })
+
+    expect(setCurrentSessionMock).toHaveBeenCalledWith({ ...session, phase: 'recalling' })
+  })
+
+  it('sends the current draft answer when requesting an AI hint', async () => {
+    storeState.currentSession = {
+      session_id: 'session-1', status: 'created', phase: 'recalling', mode: 'light_recall', title: '并发控制',
+      reading_content: '完整原文', opening_prompt: '请复述', initial_hints: [],
+      session_outline: { summary: '摘要', main_question: '主旨是什么？', core_concepts: [], process_steps: [], application_cases: [], checkpoints: [] },
+      turn_index: 1, turns: [],
+    }
+    requestHintMock.mockResolvedValue({ session_id: 'session-1', hint_text: '想想它限制的是数量还是频率。', remaining_hint_count: 2 })
+    const { result } = renderHook(() => useKnowledgeReview())
+
+    await act(async () => { await result.current.requestHint('  我记得它用于保护系统  ') })
+
+    expect(requestHintMock).toHaveBeenCalledWith('session-1', '我记得它用于保护系统')
   })
 })

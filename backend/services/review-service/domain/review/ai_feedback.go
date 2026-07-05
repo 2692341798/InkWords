@@ -16,9 +16,10 @@ type AIFeedbackGenerator interface {
 
 // AIFeedbackInput 描述一次 AI 反馈生成的最小上下文。
 type AIFeedbackInput struct {
+	Task          string
 	Title         string
 	Mode          string
-	SourcePreview string
+	SourceContent string
 	MainQuestion  string
 	CurrentGoal   string
 	CurrentAnswer string
@@ -70,6 +71,12 @@ func (g *DeepSeekAIFeedbackGenerator) Generate(ctx context.Context, input AIFeed
 3. 当用户明确表达“不记得/忘了/记不清”等语义时，优先返回 hint_text；如果还需要更直接帮助，再返回 excerpt_text。
 4. excerpt_text 只能摘录提供的原文，不允许编造。
 5. 如果信息不足，不要编造，允许字段为空字符串或空数组。`)
+	if input.Task == "hint" {
+		systemPrompt += "\n" + strings.TrimSpace(`
+6. 当前任务是生成启发式提示。必须认真对照完整原文与用户当前回答，找出一个最值得补充的具体遗漏点。
+7. hint_text 必须给出能唤起回忆的线索或问题，不要直接复述完整答案，不要输出“请补充这个遗漏点”之类空泛模板。
+8. missed_points 返回该遗漏点；suggestion 给出用户下一步应该回忆的方向。`)
+	}
 
 	payload, _ := json.Marshal(input)
 	userPrompt := "请根据以下 JSON 输入输出结果 JSON，不要附加解释：\n" + string(payload)
@@ -133,12 +140,30 @@ func buildAIFeedbackInput(sessionTitle string, sessionMode string, metadata sess
 	}
 
 	return AIFeedbackInput{
+		Task:          "feedback",
 		Title:         sessionTitle,
 		Mode:          sessionMode,
-		SourcePreview: metadata.SourcePreview,
+		SourceContent: metadata.ReadingContent,
 		MainQuestion:  metadata.SessionOutline.MainQuestion,
 		CurrentGoal:   currentGoal,
 		CurrentAnswer: answer,
+		RecentTurns:   recentTurns,
+	}
+}
+
+func buildAIHintInput(session ReviewSession, metadata sessionMetadata, turns []ReviewTurn, answer string) AIFeedbackInput {
+	recentTurns := toTurnResponses(turns)
+	if len(recentTurns) > 6 {
+		recentTurns = recentTurns[len(recentTurns)-6:]
+	}
+	return AIFeedbackInput{
+		Task:          "hint",
+		Title:         session.NoteTitle,
+		Mode:          session.Mode,
+		SourceContent: metadata.ReadingContent,
+		MainQuestion:  metadata.SessionOutline.MainQuestion,
+		CurrentGoal:   currentRoundGoal(session.Mode, countUserAnswers(turns)),
+		CurrentAnswer: strings.TrimSpace(answer),
 		RecentTurns:   recentTurns,
 	}
 }
