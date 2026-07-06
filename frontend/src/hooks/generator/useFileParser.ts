@@ -206,6 +206,7 @@ export async function analyzeParsedFileContent(sourceContent: string) {
 
   store.setAnalyzing(true)
   store.setAnalysisMessage('正在根据创作场景生成大纲...')
+  let receivedComplete = false
 
   await fetchEventSourceWithAuth(apiRoutes.llmStream.analyze, {
     method: 'POST',
@@ -247,7 +248,6 @@ export async function analyzeParsedFileContent(sourceContent: string) {
           } else if (data.status === 'outline') {
             store.setAnalysisStep(3)
           } else if (data.status === 'complete') {
-            store.setAnalysisStep(4)
             if (!data.content) {
               throw new Error('大纲响应缺少内容，请重试')
             }
@@ -255,6 +255,12 @@ export async function analyzeParsedFileContent(sourceContent: string) {
             if (typeof data.content === 'string') {
               outlineResult = JSON.parse(data.content)
             }
+            const outline = outlineResult.outline || outlineResult.chapters
+            if (!Array.isArray(outline) || outline.length === 0) {
+              throw new Error('大纲响应缺少章节，请重试')
+            }
+            receivedComplete = true
+            store.setAnalysisStep(4)
             store.setSource('file', outlineResult.source_content || outlineResult.series_title || '')
             const resolvedProfile = outlineResult.resolved_prompt_profile
             if (resolvedProfile) {
@@ -271,7 +277,7 @@ export async function analyzeParsedFileContent(sourceContent: string) {
               store.setResolvedPromptProfile(null)
             }
             store.setSeriesTitle(outlineResult.series_title || '')
-            store.setOutline(outlineResult.outline || outlineResult.chapters)
+            store.setOutline(outline)
             store.setAnalyzing(false)
             store.setAnalysisMessage('')
           }
@@ -279,11 +285,15 @@ export async function analyzeParsedFileContent(sourceContent: string) {
           console.error('Failed to parse analysis progress:', e)
           store.setAnalyzing(false)
           toast.error(e instanceof Error ? e.message : '大纲响应解析失败，请重试')
+          throw e
         }
       }
     },
     onclose() {
       store.setAnalyzing(false)
+      if (!receivedComplete && !ctrl.signal.aborted) {
+        throw new StopStreamError('文件分析连接提前结束，请重试')
+      }
     },
     onerror(err) {
       store.setAnalyzing(false)

@@ -251,7 +251,7 @@ describe('parseUploadedFile', () => {
       options.onmessage?.({ event: 'done', data: '[DONE]' })
     })
 
-    await analyzeParsedFileContent('解析后的内容')
+    await expect(analyzeParsedFileContent('解析后的内容')).rejects.toThrow('大纲响应缺少内容，请重试')
 
     expect(toastError).toHaveBeenCalledWith('大纲响应缺少内容，请重试')
     expect(useStreamStore.getState().isAnalyzing).toBe(false)

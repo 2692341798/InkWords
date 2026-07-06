@@ -38,6 +38,7 @@ export const useProjectAnalyzer = () => {
     }
     const ctrl = new AbortController()
     store.setAbortController(ctrl)
+    let receivedComplete = false
     
     try {
       await fetchEventSourceWithAuth(apiRoutes.llmStream.analyze, {
@@ -83,18 +84,25 @@ export const useProjectAnalyzer = () => {
               } else if (data.status === 'outline') {
                 store.setAnalysisStep(3)
               } else if (data.status === 'complete') {
-                store.setAnalysisStep(4)
-                
-                // data.content might be an object directly now due to the backend change,
-                // or it might still be a JSON string. Let's handle both.
+                // data.content might be an object directly or a JSON string.
                 let outlineResult = data.content;
                 if (typeof data.content === 'string') {
                   outlineResult = JSON.parse(data.content);
                 }
+                if (!outlineResult || typeof outlineResult !== 'object') {
+                  throw new Error('大纲响应缺少内容，请重试')
+                }
+                const outline = outlineResult.outline || outlineResult.chapters
+                if (!Array.isArray(outline) || outline.length === 0) {
+                  throw new Error('大纲响应缺少章节，请重试')
+                }
+
+                receivedComplete = true
+                store.setAnalysisStep(4)
                 
                 store.setSource('git', outlineResult.source_content || '', gitUrl)
                 store.setSeriesTitle(outlineResult.series_title || '')
-                store.setOutline(outlineResult.outline || outlineResult.chapters)
+                store.setOutline(outline)
                 if (outlineResult.parent_id || data.parent_id) {
                   store.setParentBlogId(outlineResult.parent_id || data.parent_id)
                 } else {
@@ -105,11 +113,15 @@ export const useProjectAnalyzer = () => {
               }
             } catch (e) {
               console.error('Failed to parse analysis progress:', e)
+              throw e
             }
           }
         },
         onclose() {
           store.setAnalyzing(false)
+          if (!receivedComplete && !ctrl.signal.aborted) {
+            throw new StopStreamError('项目分析连接提前结束，请重试')
+          }
         },
         onerror(err) {
           store.setAnalyzing(false)
