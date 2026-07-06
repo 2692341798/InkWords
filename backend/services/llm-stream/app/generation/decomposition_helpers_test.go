@@ -15,18 +15,28 @@ import (
 	"inkwords-backend/shared/kernel/prompt"
 )
 
-func TestAnalyzeStreamCompletesWithoutExternalServices(t *testing.T) {
+func TestAnalyzeStreamRejectsMissingRepositoryInput(t *testing.T) {
 	svc := NewDecompositionService(nil, nil, nil)
 	svc.gitFetcher = nil
 	progress := make(chan string, 4)
 	errs := make(chan error, 1)
 	svc.AnalyzeStream(context.Background(), uuid.New(), "", nil, prompt.ScenarioMode("invalid"), progress, errs)
-	var messages []string
-	for message := range progress {
-		messages = append(messages, message)
-	}
-	require.Len(t, messages, 2)
-	require.Empty(t, errs)
+	require.Empty(t, progress)
+	require.ErrorContains(t, <-errs, "git url is required")
+}
+
+func TestTaskOnlyPersistenceModeDefaultsToTaskOnly(t *testing.T) {
+	t.Setenv("INKWORDS_TASK_PERSISTENCE_MODE", "")
+	require.True(t, taskOnlyPersistenceMode())
+	t.Setenv("INKWORDS_TASK_PERSISTENCE_MODE", "legacy")
+	require.False(t, taskOnlyPersistenceMode())
+}
+
+func TestDecodeGeneratedOutlineAcceptsOutlineAlias(t *testing.T) {
+	outline, err := decodeGeneratedOutline(`{"title":"脚本工具系列","outline":[{"title":"构建脚本","summary":"说明构建流程","sort":1}]}`)
+	require.NoError(t, err)
+	require.Equal(t, "脚本工具系列", outline.SeriesTitle)
+	require.Len(t, outline.Chapters, 1)
 }
 
 func TestSeriesPureHelpersCoverBoundaries(t *testing.T) {

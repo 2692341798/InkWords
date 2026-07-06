@@ -13,6 +13,25 @@
   - `cd frontend && npm test -- ReviewSessionCard KnowledgeReview` 通过
   - `cd frontend && npm test -- ReviewSessionCard useKnowledgeReview review` 通过
 
+### [2026-07-06] Fix & Feat - 生成链路可靠性加固：修复 SSE 死等、接通 AnalyzeStream 源码分析、默认启用 task_only 持久化模式
+- **需求背景**：
+  1. 任务队列在发布消息失败后，SSE 会永久等待一个永远不会到达 worker 的任务，需要标记为失败而非留在 queued。
+  2. `AnalyzeStream` 此前只克隆仓库但不读取内容，需要真正接通 `FetchWithSubDir` 与 `generateOutline`。
+  3. 生产环境需要默认启用 `task_only` 模式，避免 worker 生成全部内容后才因缺少结构化结果而失败。
+  4. 前端需要检测 SSE 流提前断开和空大纲的边界情况。
+- **本次完成**：
+  1. `core-api/domain/task/service.go`：`createTask` 在发布失败时调用 `s.repo.UpdateStatus(task.ID, JobTaskStatusFailed, "发布任务消息失败")` 将任务标记为终端失败态；新增 `TestCreateTaskMarksStoredTaskFailedWhenPublishFails` 测试验证。
+  2. `llm-stream/app/generation/decomposition_service.go`：`AnalyzeStream` 正式通过 `gitFetcher.FetchWithSubDir` 遍历选中模块读取仓库源码文本，并调用 `generateOutline` 生成系列大纲，在 `complete` 事件中返回 `series_title`、`outline`、`source_content`。
+  3. `llm-stream/app/generation/decomposition_outline.go`：新增 `decodeGeneratedOutline` 函数与 `generatedOutlineEnvelope` 结构体，支持 `outline` ↔ `chapters`、`title` ↔ `series_title` 的别名兼容解析。
+  4. `llm-stream/app/generation/generator_service.go`：`taskOnlyPersistenceMode()` 现在在环境变量为空时默认返回 `true`（启用 `task_only`），避免生产环境误用 legacy 直接写库路径。
+  5. `frontend/src/hooks/generator/useFileParser.ts` 与 `useProjectAnalyzer.ts`：新增 `receivedComplete` 标志 + `onclose` 提前断开检测 + `outline`/`chapters` 数组非空校验，抛出明确的中文错误提示。
+- **验证记录**：
+  - `cd backend && go test ./services/core-api/domain/task -run TestCreateTaskMarksStoredTaskFailedWhenPublishFails -count=1` 通过
+  - `cd backend && go test ./services/llm-stream/app/generation -count=1` 通过
+  - `cd backend && go test ./... -count=1` 待验证
+  - `cd frontend && npm test -- --run` 待验证
+  - `docker compose --env-file backend/.env down && docker compose --env-file backend/.env up -d --build` 待验证
+
 ### [2026-07-03] Fix - 微服务回归修复：补回 generate_single 的 topic 兼容并纠正 prompt settings 表名
 - **需求背景**：
   1. 用户反馈“在微服务化和清理异味代码之后，项目有些功能无法使用”，要求做一次真实运行形态下的全量排障并修复。

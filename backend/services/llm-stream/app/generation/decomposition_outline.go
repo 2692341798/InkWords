@@ -19,6 +19,13 @@ type generatedOutline struct {
 	Chapters    []sharedblog.Chapter `json:"chapters"`
 }
 
+type generatedOutlineEnvelope struct {
+	SeriesTitle string               `json:"series_title"`
+	Title       string               `json:"title"`
+	Chapters    []sharedblog.Chapter `json:"chapters"`
+	Outline     []sharedblog.Chapter `json:"outline"`
+}
+
 func (s *DecompositionService) generateOutline(
 	ctx context.Context,
 	sourceContent string,
@@ -77,9 +84,20 @@ func (s *DecompositionService) generateOutline(
 	content = strings.TrimSuffix(content, "```")
 	content = strings.TrimSpace(content)
 
-	var outline generatedOutline
-	if err := json.Unmarshal([]byte(content), &outline); err != nil {
+	return decodeGeneratedOutline(content)
+}
+
+func decodeGeneratedOutline(content string) (generatedOutline, error) {
+	var envelope generatedOutlineEnvelope
+	if err := json.Unmarshal([]byte(content), &envelope); err != nil {
 		return generatedOutline{}, fmt.Errorf("decode llm outline: %w", err)
+	}
+	outline := generatedOutline{SeriesTitle: strings.TrimSpace(envelope.SeriesTitle), Chapters: envelope.Chapters}
+	if outline.SeriesTitle == "" {
+		outline.SeriesTitle = strings.TrimSpace(envelope.Title)
+	}
+	if len(outline.Chapters) == 0 {
+		outline.Chapters = envelope.Outline
 	}
 	if strings.TrimSpace(outline.SeriesTitle) == "" || len(outline.Chapters) == 0 {
 		return generatedOutline{}, fmt.Errorf("llm outline is empty")

@@ -14,17 +14,17 @@ import (
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 
-	llm "inkwords-backend/shared/platform/llm"
+	streamdomain "inkwords-backend/services/llm-stream/domain/stream"
 	sharedblog "inkwords-backend/shared/kernel/blog"
 	"inkwords-backend/shared/kernel/prompt"
-	streamdomain "inkwords-backend/services/llm-stream/domain/stream"
+	llm "inkwords-backend/shared/platform/llm"
 )
 
 // GeneratorService 实现 stream.Generator 接口，处理单篇博客生成与润色。
 type GeneratorService struct {
-	llmClient       *llm.DeepSeekClient
-	promptReq       *PromptRequirements
-	persistence     sharedblog.GeneratedBlogPersistence
+	llmClient        *llm.DeepSeekClient
+	promptReq        *PromptRequirements
+	persistence      sharedblog.GeneratedBlogPersistence
 	generatedUsageMu sync.Mutex
 	generatedUsage   map[string]llm.CompletionUsage
 }
@@ -385,7 +385,11 @@ func (s *GeneratorService) GeneratePolishDraftStream(ctx context.Context, title 
 }
 
 func taskOnlyPersistenceMode() bool {
-	return strings.EqualFold(os.Getenv("INKWORDS_TASK_PERSISTENCE_MODE"), "task_only")
+	mode := strings.TrimSpace(os.Getenv("INKWORDS_TASK_PERSISTENCE_MODE"))
+	// Production generation is task-based. Defaulting to task_only prevents a
+	// stale or partially configured worker from generating all chapters and only
+	// then failing because no structured task result was collected.
+	return mode == "" || strings.EqualFold(mode, "task_only")
 }
 
 // BuildGenerateSingleTaskResult 为 task_only 单篇生成构造结构化任务结果。

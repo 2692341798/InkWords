@@ -33,6 +33,7 @@ func (r *continuePersistenceRecorder) SaveContinuedBlog(_ context.Context, _ sha
 }
 
 func TestContinueGenerationUsesInjectedPersistence(t *testing.T) {
+	t.Setenv("INKWORDS_TASK_PERSISTENCE_MODE", "legacy")
 	server := newGenerationLLMServer(t, "追加内容")
 	defer server.Close()
 	persistence := &continuePersistenceRecorder{blog: sharedblog.ContinueBlog{ID: uuid.New(), UserID: uuid.New(), Content: "旧内容"}}

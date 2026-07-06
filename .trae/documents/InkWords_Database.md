@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - 数据库设计文档
 
 ## 0. 变更记录
+- 2026-07-06：生成链路可靠性加固。本次不新增数据库表、字段、索引或迁移。其一，`core-api` 的任务服务在发布消息失败后，现在会立即把已创建的 `job_tasks` 记录从 `queued` 更新为 `failed`（设置 `error_message` 与 `finished_at`），避免 SSE 消费者对已入队但永远不会被 worker 取走的任务永久等待；其二，`taskOnlyPersistenceMode` 在环境变量为空时默认设为 `task_only`，生产者不再直写 `blogs`/`users` 而是通过 `core-api` 消费结构化 `job_tasks.result_json` 完成落库，收紧了跨服务写入边界。
 - 2026-07-03：修复微服务化后的生成链路表名漂移。`llm-stream` 读取用户写作模板覆盖时已重新对齐到真实表 `user_prompt_settings`，不再误查不存在的 `users_prompt_settings`；本次不新增数据库表、字段、索引或迁移，但明确 `user_prompt_settings` 是唯一有效的用户写作模板表名。
 - 2026-06-08：知识漫游复习升级为“先预览原文，再进入复述 + AI 提示兜底”。本次继续仅复用 `review_sessions.metadata_snapshot` 保存 `source_preview` 等会话级快照，并沿用 `review_turns` 存储用户回答与系统反馈；不新增数据库表、字段、索引或迁移脚本。
 - 2026-06-08：执行全仓安全清理首轮。本次主要删除未接入的 generation 占位/空桥接文件，并收窄前后端过渡层依赖；不涉及 PostgreSQL 表结构、字段、索引、迁移或写入语义变更。

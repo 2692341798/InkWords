@@ -186,28 +186,88 @@ func (s *DecompositionService) AnalyzeStream(
 	}
 
 	_ = userID
+	if strings.TrimSpace(gitURL) == "" {
+		errChan <- fmt.Errorf("git url is required")
+		return
+	}
+	if s.gitFetcher == nil {
+		errChan <- fmt.Errorf("git fetcher is not available")
+		return
+	}
 
 	sendProgressJSON(progressChan, map[string]interface{}{"step": 0, "status": "cloning", "message": "正在克隆仓库..."})
 
 	progressAdapter := func(msg string) {
 		sendProgressJSON(progressChan, map[string]interface{}{"step": 0, "status": "cloning", "message": msg})
 	}
-	var dirPath string
-	if s.gitFetcher != nil {
-		var err error
-		dirPath, err = s.gitFetcher.GetCachedRepoPath(gitURL, progressAdapter)
-		if err != nil {
-			errChan <- fmt.Errorf("clone repo: %w", err)
+	var sourceBuilder strings.Builder
+	modules := selectedModules
+	if len(modules) == 0 {
+		modules = []string{"/"}
+	}
+	for _, module := range modules {
+		select {
+		case <-ctx.Done():
+			errChan <- ctx.Err()
 			return
+		default:
+		}
+
+		module = strings.TrimSpace(module)
+		if module == "" {
+			continue
+		}
+		tree, chunks, err := s.gitFetcher.FetchWithSubDir(gitURL, module, progressAdapter)
+		if err != nil {
+			errChan <- fmt.Errorf("read repo module %s: %w", module, err)
+			return
+		}
+		if tree != "" {
+			sourceBuilder.WriteString(tree)
+			sourceBuilder.WriteString("\n")
+		}
+		for _, chunk := range chunks {
+			sourceBuilder.WriteString("\n=== Module: ")
+			sourceBuilder.WriteString(chunk.Dir)
+			sourceBuilder.WriteString(" ===\n")
+			sourceBuilder.WriteString(chunk.Content)
+			sourceBuilder.WriteString("\n")
 		}
 	}
 
-	_ = dirPath
+	sourceContent := strings.TrimSpace(sourceBuilder.String())
+	if sourceContent == "" {
+		errChan <- fmt.Errorf("repository contains no supported text content")
+		return
+	}
+
+	sendProgressJSON(progressChan, map[string]interface{}{
+		"step": 1, "status": "scanning", "message": "仓库内容读取完成",
+	})
+	sendProgressJSON(progressChan, map[string]interface{}{
+		"step": 2, "status": "analyzing", "message": "正在分析项目结构与核心模块...",
+	})
+
+	profile := prompt.FallbackPromptProfileForScenario(scenarioMode)
+	outline, err := s.generateOutline(ctx, sourceContent, scenarioMode, profile)
+	if err != nil {
+		errChan <- fmt.Errorf("generate outline: %w", err)
+		return
+	}
+
+	sendProgressJSON(progressChan, map[string]interface{}{
+		"step": 3, "status": "outline", "message": "项目大纲生成完成",
+	})
 
 	sendProgressJSON(progressChan, map[string]interface{}{
 		"step":    4,
 		"status":  "complete",
 		"message": "分析完成",
+		"content": map[string]interface{}{
+			"series_title":   outline.SeriesTitle,
+			"outline":        outline.Chapters,
+			"source_content": sourceContent,
+		},
 	})
 }
 

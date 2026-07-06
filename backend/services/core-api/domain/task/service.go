@@ -139,6 +139,10 @@ func (s *Service) createTask(ctx context.Context, params createTaskParams) (JobT
 
 	if params.publish != nil {
 		if err := params.publish(task); err != nil {
+			// The task already exists at this point. Leaving it queued makes every
+			// idempotent retry reuse an item that was never delivered to a worker,
+			// so SSE waits forever. Persist a terminal failure instead.
+			_ = s.repo.UpdateStatus(ctx, task.ID, JobTaskStatusFailed, "发布任务消息失败")
 			return JobTask{}, fmt.Errorf("发布任务消息失败: %w", err)
 		}
 	}

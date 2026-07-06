@@ -1,6 +1,7 @@
 # 墨言知识训练平台 (InkWords Trainer) - API 接口文档
 
 ## 0. 变更记录
+- 2026-07-06：生成链路流式可靠性加固。本次不新增、不修改任何对外 API 路由、请求字段或响应字段。其一，`POST /api/v1/stream/analyze`（Git 仓库分析）的后端实现正式接通源码读取与大模型大纲生成，不再返回空结构体；`complete` 事件现在稳定返回 `series_title`、`outline`（章节列表）与 `source_content`（仓库源码文本）；其二，前端流式消费端在 `complete` 事件到达前检测到 SSE 连接提前关闭时，会抛出明确的错误提示（"文件分析连接提前结束，请重试" / "项目分析连接提前结束，请重试"），并对空 `outline`/`chapters` 数组给出 "大纲响应缺少章节，请重试" 提示。
 - 2026-07-03：修复微服务化后的两处生成链路回归。其一，`llm-stream` 读取用户写作模板覆盖时重新对齐到真实表 `user_prompt_settings`；其二，任务式单篇生成 `POST /api/v1/tasks/generation` 在 `kind=generate_single` 下补回对历史 `payload.topic` 的兼容映射：当旧调用方传 `source_type=topic` 且未带 `source_content` 时，后端会自动把 `topic` 视为生成源内容，避免任务成功排队但正文跑偏。
 - 2026-06-08：知识漫游复习进一步升级为“先预览原文，再进入复述 + AI 针对性提示”。`POST /api/v1/review/sessions` 与 `GET /api/v1/review/sessions/:id` 新增 `source_title`、`source_preview`、`ready_to_answer`；`POST /api/v1/review/sessions/:id/respond` 新增 `hint_text`、`excerpt_text`，用于承接“用户自然表达记不清时，先给简短提示，再返回相关原文摘录”的反馈链路。
 - 2026-06-08：执行全仓安全清理首轮。本次删除 `llm-stream` 下未接入的 generation 占位/空桥接文件，并收窄过渡层 `StreamAPI` 的内部依赖；不新增也不修改任何对外 API 路由、请求字段或响应字段。
