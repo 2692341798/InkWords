@@ -142,6 +142,7 @@ cp backend/.env.example backend/.env
 至少需要检查以下变量：
 
 - `DEEPSEEK_API_KEY`
+- `DEEPSEEK_API_URL`（可选；用于本地 mock 或受控 OpenAI-compatible 网关，默认 `https://api.deepseek.com/chat/completions`）
 - `JWT_SECRET`
 - `OBSIDIAN_REST_API_KEY`
 - `OBSIDIAN_VAULT_PATH`

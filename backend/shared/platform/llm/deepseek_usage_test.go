@@ -28,6 +28,14 @@ func TestParseCompletionUsage_ReadsPromptCacheFields(t *testing.T) {
 	require.Equal(t, 300, usage.PromptCacheMissTokens)
 }
 
+func TestNewDeepSeekClientUsesConfiguredAPIURL(t *testing.T) {
+	t.Setenv("DEEPSEEK_API_URL", "http://127.0.0.1:18080/v1/chat/completions")
+
+	client := NewDeepSeekClient("test-key")
+
+	require.Equal(t, "http://127.0.0.1:18080/v1/chat/completions", client.APIURL)
+}
+
 func TestDeepSeekClient_GenerateStreamWithUsage_ReadsUsageFromFinalChunk(t *testing.T) {
 	var capturedBody []byte
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
