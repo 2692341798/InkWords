@@ -32,18 +32,31 @@ type generationStreamService interface {
 	Polish(ctx context.Context, req PolishRequest, chunkChan chan<- string, errChan chan<- error)
 }
 
+// projectCourseRunner isolates the new course pipeline from the legacy article stream.
+// It must return a task-only JSON result and must never execute the analyzed repository.
+type projectCourseRunner interface {
+	Run(ctx context.Context, message sharedrabbitmq.GenerationRequestedMessage) ([]byte, error)
+}
+
 // TaskConsumer 把 RabbitMQ 中的 generation task 转换成现有 stream.Service 的执行调用。
 type TaskConsumer struct {
 	tasks                    taskService
 	streams                  generationStreamService
+	projectCourse            projectCourseRunner
 	cancellationPollInterval time.Duration
 }
 
 // NewTaskConsumer 通过依赖注入组装 llm-stream 使用的 generation worker consumer。
-func NewTaskConsumer(tasks taskService, streams generationStreamService) *TaskConsumer {
+
+func NewTaskConsumer(tasks taskService, streams generationStreamService, projectCourse ...projectCourseRunner) *TaskConsumer {
+	var courseRunner projectCourseRunner
+	if len(projectCourse) > 0 {
+		courseRunner = projectCourse[0]
+	}
 	return &TaskConsumer{
 		tasks:                    tasks,
 		streams:                  streams,
+		projectCourse:            courseRunner,
 		cancellationPollInterval: defaultTaskCancellationPollInterval,
 	}
 }
@@ -54,6 +67,9 @@ func NewTaskConsumer(tasks taskService, streams generationStreamService) *TaskCo
 func (c *TaskConsumer) HandleGenerationRequested(ctx context.Context, message sharedrabbitmq.GenerationRequestedMessage) error {
 	if c == nil || c.tasks == nil || c.streams == nil {
 		return errors.New("task consumer dependencies are not configured")
+	}
+	if isProjectCourseKind(message.Kind) {
+		return c.handleProjectCourse(ctx, message)
 	}
 
 	if !supportsGenerationKind(message.Kind) {
@@ -142,6 +158,39 @@ func (c *TaskConsumer) HandleGenerationRequested(ctx context.Context, message sh
 		return c.tasks.MarkFailed(ctx, message.TaskID, err.Error())
 	}
 
+	return c.tasks.MarkSucceeded(ctx, message.TaskID, result)
+}
+
+func isProjectCourseKind(kind string) bool {
+	switch strings.TrimSpace(kind) {
+	case "project_course_analyze", "project_course_generate":
+		return true
+	default:
+		return false
+	}
+}
+
+func (c *TaskConsumer) handleProjectCourse(ctx context.Context, message sharedrabbitmq.GenerationRequestedMessage) error {
+	if c.projectCourse == nil {
+		return c.tasks.MarkFailed(ctx, message.TaskID, "project course worker is not configured")
+	}
+	cancelled, err := c.tasks.IsCancelled(ctx, message.TaskID)
+	if err != nil {
+		return err
+	}
+	if cancelled {
+		return nil
+	}
+	if err := c.tasks.MarkRunning(ctx, message.TaskID); err != nil {
+		return err
+	}
+	if err := c.tasks.AppendEvent(ctx, message.TaskID, AppendEventInput{EventType: "project_course_phase", Status: TaskStatusRunning, Payload: []byte(`{"kind":"project_course"}`)}); err != nil {
+		return err
+	}
+	result, err := c.projectCourse.Run(ctx, message)
+	if err != nil {
+		return c.tasks.MarkFailed(ctx, message.TaskID, err.Error())
+	}
 	return c.tasks.MarkSucceeded(ctx, message.TaskID, result)
 }
 

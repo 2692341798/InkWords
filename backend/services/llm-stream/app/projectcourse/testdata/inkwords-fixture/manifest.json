@@ -1,0 +1,16 @@
+{
+  "name": "inkwords-fixture",
+  "description": "脱敏的最小离线夹具，仅用于项目课程清单和证据合同测试。",
+  "source": "InkWords",
+  "files": [
+    {"path": "backend/services/core-api/transport/http/v1/routes.go", "role": "transport", "disposition": "covered"},
+    {"path": "backend/services/core-api/domain/task/service.go", "role": "application", "disposition": "covered"},
+    {"path": "backend/services/llm-stream/domain/stream/task_consumer.go", "role": "infrastructure", "disposition": "covered"},
+    {"path": "frontend/src/hooks/generator/useProjectAnalyzer.ts", "role": "application", "disposition": "covered"},
+    {"path": "frontend/src/store/streamStore.ts", "role": "application", "disposition": "covered"},
+    {"path": "docker-compose.yml", "role": "build_deploy", "disposition": "indexed"},
+    {"path": "README.md", "role": "documentation", "disposition": "indexed"},
+    {"path": "scripts/test_reader.py", "role": "example", "disposition": "indexed"},
+    {"path": "backend/services/core-api/domain/task/service_test.go", "role": "test", "disposition": "indexed"}
+  ]
+}

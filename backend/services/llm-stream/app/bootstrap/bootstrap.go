@@ -7,23 +7,25 @@ import (
 	"github.com/gin-gonic/gin"
 
 	generationapp "inkwords-backend/services/llm-stream/app/generation"
+	projectcourseapp "inkwords-backend/services/llm-stream/app/projectcourse"
 	streamdomain "inkwords-backend/services/llm-stream/domain/stream"
 	streamv1 "inkwords-backend/services/llm-stream/transport/http/v1"
 	"inkwords-backend/shared/kernel/httpx"
 	"inkwords-backend/shared/platform/cache"
+	"inkwords-backend/shared/platform/parser"
 	"inkwords-backend/shared/platform/postgres"
 )
 
 // BuildRouter assembles the llm-stream owned router plus the services required by its consumer worker.
-func BuildRouter() (*gin.Engine, *streamdomain.GormTaskStore, *streamdomain.Service, error) {
+func BuildRouter() (*gin.Engine, *streamdomain.GormTaskStore, *streamdomain.Service, *projectcourseapp.CourseTaskRunner, error) {
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
-		return nil, nil, nil, errors.New("DATABASE_URL environment variable is not set")
+		return nil, nil, nil, nil, errors.New("DATABASE_URL environment variable is not set")
 	}
 
 	dbConn, err := postgres.InitCore(dsn)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	if err := cache.InitRedis(); err != nil {
 		_ = err // Redis 是增强项而不是启动硬依赖
@@ -51,6 +53,7 @@ func BuildRouter() (*gin.Engine, *streamdomain.GormTaskStore, *streamdomain.Serv
 
 	streamDomainService := streamdomain.NewService(generatorService, decompositionService, quotaService)
 	taskDomainService := streamdomain.NewGormTaskStore(dbConn)
+	projectCourseRunner := projectcourseapp.NewCourseTaskRunner(projectcourseapp.GitRepositoryAnalyzer{Fetcher: parser.NewGitFetcher()})
 	streamDomainHandler := streamdomain.NewHandler(streamDomainService, streamdomain.NewGormBlogReadable(dbConn))
 
 	streamv1.RegisterStreamRoutes(r, httpx.AuthMiddleware(), streamv1.StreamHandlers{
@@ -61,5 +64,5 @@ func BuildRouter() (*gin.Engine, *streamdomain.GormTaskStore, *streamdomain.Serv
 		Generate:     streamDomainHandler.GenerateBlogStreamHandler,
 	})
 
-	return r, taskDomainService, streamDomainService, nil
+	return r, taskDomainService, streamDomainService, projectCourseRunner, nil
 }

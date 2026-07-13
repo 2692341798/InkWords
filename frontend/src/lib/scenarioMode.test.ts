@@ -33,6 +33,15 @@ describe('scenarioMode', () => {
         label: '小白教程',
         description: '适合开源项目与实战教程，突出环境准备、主链路和排错说明。',
       },
+      {
+        value: 'project_mastery_course',
+        label: '项目精通课程',
+        description: '适合系统掌握 GitHub 项目，围绕固定源码快照、证据和累积实验组织课程。',
+      },
     ])
+  })
+
+  it('keeps project mastery as an explicit independent scenario', () => {
+    expect(scenarioModeLabelMap.project_mastery_course).toBe('项目精通课程')
   })
 })

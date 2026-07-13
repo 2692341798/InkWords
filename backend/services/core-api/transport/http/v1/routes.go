@@ -4,31 +4,35 @@ import "github.com/gin-gonic/gin"
 
 // CoreHandlers defines the service-owned core-api HTTP surface.
 type CoreHandlers struct {
-	AuthRegister         gin.HandlerFunc
-	AuthLogin            gin.HandlerFunc
-	AuthBindGithub       gin.HandlerFunc
-	AuthGetCaptcha       gin.HandlerFunc
-	AuthOAuthRedirect    gin.HandlerFunc
-	AuthOAuthCallback    gin.HandlerFunc
-	UserProfile          gin.HandlerFunc
-	UserUpdateProfile    gin.HandlerFunc
-	UserUploadAvatar     gin.HandlerFunc
-	UserStats            gin.HandlerFunc
-	UserGetPromptSetting gin.HandlerFunc
-	UserPutPromptSetting gin.HandlerFunc
-	BlogList             gin.HandlerFunc
-	BlogCreateDraft      gin.HandlerFunc
-	BlogBatchDelete      gin.HandlerFunc
-	BlogUpdate           gin.HandlerFunc
-	ProjectScan          gin.HandlerFunc
-	ProjectAnalyze       gin.HandlerFunc
-	TaskCreateGeneration gin.HandlerFunc
-	TaskCreateParse      gin.HandlerFunc
-	TaskCreateExport     gin.HandlerFunc
-	TaskGet              gin.HandlerFunc
-	TaskCancel           gin.HandlerFunc
-	TaskStream           gin.HandlerFunc
-	TaskDownload         gin.HandlerFunc
+	AuthRegister                 gin.HandlerFunc
+	AuthLogin                    gin.HandlerFunc
+	AuthBindGithub               gin.HandlerFunc
+	AuthGetCaptcha               gin.HandlerFunc
+	AuthOAuthRedirect            gin.HandlerFunc
+	AuthOAuthCallback            gin.HandlerFunc
+	UserProfile                  gin.HandlerFunc
+	UserUpdateProfile            gin.HandlerFunc
+	UserUploadAvatar             gin.HandlerFunc
+	UserStats                    gin.HandlerFunc
+	UserGetPromptSetting         gin.HandlerFunc
+	UserPutPromptSetting         gin.HandlerFunc
+	BlogList                     gin.HandlerFunc
+	BlogCreateDraft              gin.HandlerFunc
+	BlogBatchDelete              gin.HandlerFunc
+	BlogUpdate                   gin.HandlerFunc
+	ProjectScan                  gin.HandlerFunc
+	ProjectAnalyze               gin.HandlerFunc
+	ProjectCourseCreate          gin.HandlerFunc
+	ProjectCourseGet             gin.HandlerFunc
+	ProjectCourseBlueprintUpdate gin.HandlerFunc
+	ProjectCourseApprove         gin.HandlerFunc
+	TaskCreateGeneration         gin.HandlerFunc
+	TaskCreateParse              gin.HandlerFunc
+	TaskCreateExport             gin.HandlerFunc
+	TaskGet                      gin.HandlerFunc
+	TaskCancel                   gin.HandlerFunc
+	TaskStream                   gin.HandlerFunc
+	TaskDownload                 gin.HandlerFunc
 }
 
 // RegisterCoreRoutes wires the core-api owned routes without depending on the shared transport aggregator.
@@ -55,6 +59,10 @@ func RegisterCoreRoutes(r *gin.Engine, authMiddleware gin.HandlerFunc, h CoreHan
 	must(h.BlogUpdate, "BlogUpdate")
 	must(h.ProjectScan, "ProjectScan")
 	must(h.ProjectAnalyze, "ProjectAnalyze")
+	must(h.ProjectCourseCreate, "ProjectCourseCreate")
+	must(h.ProjectCourseGet, "ProjectCourseGet")
+	must(h.ProjectCourseBlueprintUpdate, "ProjectCourseBlueprintUpdate")
+	must(h.ProjectCourseApprove, "ProjectCourseApprove")
 	must(h.TaskCreateGeneration, "TaskCreateGeneration")
 	must(h.TaskCreateParse, "TaskCreateParse")
 	must(h.TaskCreateExport, "TaskCreateExport")
@@ -93,6 +101,13 @@ func RegisterCoreRoutes(r *gin.Engine, authMiddleware gin.HandlerFunc, h CoreHan
 	projectGroup.Use(authMiddleware)
 	projectGroup.POST("/scan", h.ProjectScan)
 	projectGroup.POST("/analyze", h.ProjectAnalyze)
+
+	projectCourseGroup := v1.Group("/project-courses")
+	projectCourseGroup.Use(authMiddleware)
+	projectCourseGroup.POST("", h.ProjectCourseCreate)
+	projectCourseGroup.GET("/:id", h.ProjectCourseGet)
+	projectCourseGroup.PUT("/:id/blueprint", h.ProjectCourseBlueprintUpdate)
+	projectCourseGroup.POST("/:id/approve", h.ProjectCourseApprove)
 
 	taskGroup := v1.Group("/tasks")
 	taskGroup.Use(authMiddleware)

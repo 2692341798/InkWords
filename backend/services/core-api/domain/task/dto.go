@@ -10,9 +10,12 @@ import (
 )
 
 const (
-	taskTypeGeneration      = "generation"
-	taskTypeParse           = "parse"
-	defaultStreamEventLimit = 200
+	taskTypeGeneration               = "generation"
+	taskTypeParse                    = "parse"
+	defaultStreamEventLimit          = 200
+	ProjectCourseAnalyzeTaskSubtype  = "project_course_analyze"
+	ProjectCourseGenerateTaskSubtype = "project_course_generate"
+	ProjectCoursePackageTaskSubtype  = "project_course_package"
 )
 
 var (
@@ -35,6 +38,13 @@ type CreateGenerationTaskInput struct {
 type CreateParseTaskInput struct {
 	RequestedBy    uuid.UUID
 	TaskSubtype    string
+	IdempotencyKey string
+	Payload        []byte
+}
+
+// CreateProjectCourseTaskInput is shared by the three project-course phases.
+type CreateProjectCourseTaskInput struct {
+	RequestedBy    uuid.UUID
 	IdempotencyKey string
 	Payload        []byte
 }

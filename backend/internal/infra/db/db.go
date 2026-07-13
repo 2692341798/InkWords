@@ -7,6 +7,7 @@ import (
 	"gorm.io/gorm"
 
 	"inkwords-backend/internal/model"
+	projectcourse "inkwords-backend/services/core-api/domain/projectcourse"
 )
 
 // DB 全局数据库实例
@@ -57,6 +58,7 @@ func autoMigrateCore(database *gorm.DB) error {
 		&model.UserPromptSettings{},
 		&model.JobTask{},
 		&model.JobTaskEvent{},
+		&projectcourse.ProjectCourse{},
 	)
 }
 

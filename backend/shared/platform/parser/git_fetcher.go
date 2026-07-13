@@ -30,13 +30,27 @@ func (f *GitFetcher) Fetch(repoURL string, progressCallback func(string)) (strin
 }
 
 func (f *GitFetcher) FetchWithSubDir(repoURL string, subDir string, progressCallback func(string)) (string, []FileChunk, error) {
+	result, err := f.FetchSnapshot(repoURL, subDir, "HEAD", progressCallback)
+	if err != nil {
+		return "", nil, err
+	}
+	return result.TreeContent, result.Chunks, nil
+}
+
+// FetchSnapshot 在读取内容前锁定 requestedRef 对应的 commit SHA。
+// 旧 Fetch/FetchWithSubDir 保持原有返回值，但内部也经过该路径，避免 HEAD 内容在一次任务内漂移。
+func (f *GitFetcher) FetchSnapshot(repoURL string, subDir string, requestedRef string, progressCallback func(string)) (GitFetchResult, error) {
 	subDir = filepath.ToSlash(filepath.Clean(strings.TrimSpace(subDir)))
 	subDir = strings.TrimPrefix(subDir, "/")
+	requestedRef = strings.TrimSpace(requestedRef)
+	if requestedRef == "" {
+		requestedRef = "HEAD"
+	}
 
 	if owner, repo, ok := ParseGithubOwnerRepo(repoURL); ok {
-		treeContent, chunks, err := f.fetchWithGithubAPI(owner, repo, subDir, progressCallback)
+		resolvedSHA, treeContent, chunks, err := f.fetchWithGithubAPI(owner, repo, subDir, requestedRef, progressCallback)
 		if err == nil {
-			return treeContent, chunks, nil
+			return GitFetchResult{RequestedRef: requestedRef, ResolvedCommitSHA: resolvedSHA, TreeContent: treeContent, Chunks: chunks}, nil
 		}
 		if progressCallback != nil {
 			progressCallback(fmt.Sprintf("GitHub API failed for %s/%s. Falling back to git sparse-checkout clone...", owner, repo))
@@ -44,5 +58,9 @@ func (f *GitFetcher) FetchWithSubDir(repoURL string, subDir string, progressCall
 		fmt.Printf("GitHub API failed for %s/%s: %v. Falling back to git sparse-checkout clone...\n", owner, repo, err)
 	}
 
-	return f.fetchWithGitCLI(repoURL, subDir, progressCallback)
+	resolvedSHA, treeContent, chunks, err := f.fetchWithGitCLI(repoURL, subDir, requestedRef, progressCallback)
+	if err != nil {
+		return GitFetchResult{}, err
+	}
+	return GitFetchResult{RequestedRef: requestedRef, ResolvedCommitSHA: resolvedSHA, TreeContent: treeContent, Chunks: chunks}, nil
 }

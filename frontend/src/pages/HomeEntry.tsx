@@ -123,7 +123,7 @@ export function HomeEntry() {
               action={<StatusPill>{activePath === 'blog' ? '推荐路径' : '内化路径'}</StatusPill>}
             />
 
-            <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <div className="mt-5 grid gap-4 md:grid-cols-3">
               <button
                 type="button"
                 onClick={() => setActivePath('blog')}
@@ -157,6 +157,23 @@ export function HomeEntry() {
                 </div>
                 <p className="mt-3 text-sm leading-6 text-muted-foreground">
                   从知识库中抽取重点内容，进入复述、提示与反馈会话。
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCurrentView('project-course')}
+                className="choice-tile choice-tile-muted"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <BookOpen className="h-5 w-5 text-[var(--brand)]" />
+                    <h3 className="text-base font-semibold text-foreground">项目精通课程</h3>
+                  </div>
+                  <StatusPill>新场景</StatusPill>
+                </div>
+                <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                  固定 GitHub commit，围绕证据、主链路和累积实验掌握项目。
                 </p>
               </button>
             </div>

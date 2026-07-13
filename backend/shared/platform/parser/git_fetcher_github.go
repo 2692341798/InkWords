@@ -18,13 +18,13 @@ import (
 )
 
 //nolint:gocyclo
-func (f *GitFetcher) fetchWithGithubAPI(owner, repo, subDir string, progressCallback func(string)) (string, []FileChunk, error) {
+func (f *GitFetcher) fetchWithGithubAPI(owner, repo, subDir, requestedRef string, progressCallback func(string)) (string, string, []FileChunk, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/git/trees/HEAD?recursive=1", owner, repo)
+	commitURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/commits/%s", owner, repo, requestedRef)
 	client := &http.Client{Timeout: 30 * time.Second}
-	req, _ := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
+	req, _ := http.NewRequestWithContext(ctx, "GET", commitURL, nil)
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
 	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
@@ -32,17 +32,38 @@ func (f *GitFetcher) fetchWithGithubAPI(owner, repo, subDir string, progressCall
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to fetch tree: %w", err)
+		return "", "", nil, fmt.Errorf("failed to resolve commit: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", nil, fmt.Errorf("github api returned status %d", resp.StatusCode)
+		return "", "", nil, fmt.Errorf("github api returned status %d", resp.StatusCode)
 	}
-
+	var commitResp GitCommitResponse
+	if err := json.NewDecoder(resp.Body).Decode(&commitResp); err != nil {
+		return "", "", nil, fmt.Errorf("failed to decode commit: %w", err)
+	}
+	resolvedSHA := commitResp.SHA
+	if resolvedSHA == "" {
+		return "", "", nil, fmt.Errorf("github commit response did not contain sha")
+	}
+	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/git/trees/%s?recursive=1", owner, repo, resolvedSHA)
+	reqTree, _ := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
+	reqTree.Header.Set("Accept", "application/vnd.github.v3+json")
+	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
+		reqTree.Header.Set("Authorization", "Bearer "+token)
+	}
+	respTree, err := client.Do(reqTree)
+	if err != nil {
+		return "", "", nil, fmt.Errorf("failed to fetch tree: %w", err)
+	}
+	defer func() { _ = respTree.Body.Close() }()
+	if respTree.StatusCode != http.StatusOK {
+		return "", "", nil, fmt.Errorf("github tree api returned status %d", respTree.StatusCode)
+	}
 	var treeResp GitTreeResponse
-	if err := json.NewDecoder(resp.Body).Decode(&treeResp); err != nil {
-		return "", nil, fmt.Errorf("failed to decode tree: %w", err)
+	if err := json.NewDecoder(respTree.Body).Decode(&treeResp); err != nil {
+		return "", "", nil, fmt.Errorf("failed to decode tree: %w", err)
 	}
 
 	var filesToFetch []string
@@ -66,7 +87,7 @@ func (f *GitFetcher) fetchWithGithubAPI(owner, repo, subDir string, progressCall
 	}
 
 	if len(filesToFetch) == 0 {
-		return "", nil, fmt.Errorf("no valid files found in directory %s", subDir)
+		return "", "", nil, fmt.Errorf("no valid files found in directory %s", subDir)
 	}
 
 	if progressCallback != nil {
@@ -95,7 +116,7 @@ func (f *GitFetcher) fetchWithGithubAPI(owner, repo, subDir string, progressCall
 			}
 			defer sem.Release(1)
 
-			rawURL := fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/HEAD/%s", owner, repo, path)
+			rawURL := fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/%s/%s", owner, repo, resolvedSHA, path)
 			reqRaw, _ := http.NewRequestWithContext(ctx, "GET", rawURL, nil)
 			if token := os.Getenv("GITHUB_TOKEN"); token != "" {
 				reqRaw.Header.Set("Authorization", "token "+token)
@@ -103,7 +124,7 @@ func (f *GitFetcher) fetchWithGithubAPI(owner, repo, subDir string, progressCall
 
 			var data []byte
 			var fetchErr error
-			attemptLoop:
+		attemptLoop:
 			for attempt := 0; attempt < 3; attempt++ {
 				if progressCallback != nil {
 					progressCallback(fmt.Sprintf("Downloading %s (attempt %d/3)...", path, attempt+1))
@@ -163,7 +184,7 @@ func (f *GitFetcher) fetchWithGithubAPI(owner, repo, subDir string, progressCall
 	wg.Wait()
 
 	if len(dirContents) == 0 && len(fetchErrs) > 0 {
-		return "", nil, fmt.Errorf("failed to fetch any files, errors: %w", fetchErrs[0])
+		return "", "", nil, fmt.Errorf("failed to fetch any files, errors: %w", fetchErrs[0])
 	}
 
 	chunks := buildChunksFromDirContents(dirContents)
@@ -172,5 +193,5 @@ func (f *GitFetcher) fetchWithGithubAPI(owner, repo, subDir string, progressCall
 		treeBuilder.WriteString("\n\n" + largeRepoTruncationHint)
 	}
 
-	return treeBuilder.String(), chunks, nil
+	return resolvedSHA, treeBuilder.String(), chunks, nil
 }

@@ -5,6 +5,14 @@ type FileChunk struct {
 	Content string
 }
 
+// GitFetchResult 绑定一次读取到的内容与解析时固化的 commit。
+type GitFetchResult struct {
+	RequestedRef      string
+	ResolvedCommitSHA string
+	TreeContent       string
+	Chunks            []FileChunk
+}
+
 type GitFetcher struct{}
 
 func NewGitFetcher() *GitFetcher {
@@ -25,4 +33,13 @@ type GitTreeResponse struct {
 		Size int    `json:"size"`
 	} `json:"tree"`
 	Truncated bool `json:"truncated"`
+}
+
+type GitCommitResponse struct {
+	SHA    string `json:"sha"`
+	Commit struct {
+		Tree struct {
+			SHA string `json:"sha"`
+		} `json:"tree"`
+	} `json:"commit"`
 }

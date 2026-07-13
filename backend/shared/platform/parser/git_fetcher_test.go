@@ -91,6 +91,11 @@ func TestGitFetcher_Fetch(t *testing.T) {
 	assert.NotContains(t, allText, "ignore me")
 	assert.NotContains(t, allText, "image.png")
 	assert.NotContains(t, content, "node_modules")
+
+	snapshot, err := fetcher.FetchSnapshot(repoURL, "/", "HEAD", nil)
+	require.NoError(t, err)
+	assert.Len(t, snapshot.ResolvedCommitSHA, 40)
+	assert.Equal(t, "HEAD", snapshot.RequestedRef)
 }
 
 //nolint:gosec,noctx

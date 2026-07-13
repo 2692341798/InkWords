@@ -8,7 +8,7 @@ import (
 func isIgnoredPath(path string) bool {
 	ignoredDirs := []string{
 		"node_modules", "vendor", "dist", "build", "out", "target", "bin",
-		".git", ".svn", ".idea", ".vscode", "__pycache__", "testdata", "docs", "examples", "scripts", "assets",
+		".git", ".svn", ".idea", ".vscode", "__pycache__",
 	}
 
 	for _, dir := range ignoredDirs {
