@@ -20,7 +20,7 @@ func (f *fakeExecutor) Execute(_ context.Context, _ string, command string, _ ti
 }
 
 func validManifest() sharedkernel.LabManifest {
-	return sharedkernel.LabManifest{Language: "go", ToolchainVersion: "1.25", AllowedCommands: []string{"test", "test -run TestCheckpoint"}, Starter: []sharedkernel.LabFile{{Path: "main.go", Content: "package main"}}, Checkpoints: []sharedkernel.LabCheckpoint{{ID: "checkpoint-01", Verified: true}}, Solution: []sharedkernel.LabFile{{Path: "main.go", Content: "package main"}}, Tests: []sharedkernel.LabFile{{Path: "main_test.go", Content: "package main"}}}
+	return sharedkernel.LabManifest{Language: "go", ToolchainVersion: "1.25", AllowedCommands: []string{"test", "test -run TestCheckpoint"}, ResourceLimits: map[string]string{"timeout_seconds": "30"}, Starter: []sharedkernel.LabFile{{Path: "main.go", Content: "package main"}}, Checkpoints: []sharedkernel.LabCheckpoint{{ID: "checkpoint-01", Verified: true}}, Solution: []sharedkernel.LabFile{{Path: "main.go", Content: "package main"}}, Tests: []sharedkernel.LabFile{{Path: "main_test.go", Content: "package main"}}}
 }
 
 func TestRunnerUsesAllowlistedCommandsWithCleanEnvironment(t *testing.T) {

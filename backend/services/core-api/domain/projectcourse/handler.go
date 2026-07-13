@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 
@@ -15,6 +16,7 @@ import (
 // Handler 是 ProjectCourse 的 HTTP 适配层；不允许客户端提交事实、证据或覆盖矩阵。
 type analyzeTaskCreator interface {
 	CreateProjectCourseAnalyzeTask(context.Context, coretask.CreateProjectCourseTaskInput) (coretask.JobTask, error)
+	CreateProjectCourseGenerateTask(context.Context, coretask.CreateProjectCourseTaskInput) (coretask.JobTask, error)
 }
 
 type Handler struct {
@@ -112,13 +114,11 @@ func (h *Handler) UpdateBlueprint(c *gin.Context) {
 		writeError(c, http.StatusBadRequest, "expected_version and chapters are required")
 		return
 	}
-	// 仅把允许编辑的四个字段序列化为内部更新载荷；客户端无法注入证据、事实或学习目标。
-	blob, err := json.Marshal(req.Chapters)
-	if err != nil {
-		writeError(c, http.StatusBadRequest, "invalid blueprint chapters")
-		return
+	updates := make([]ChapterUpdate, 0, len(req.Chapters))
+	for _, chapter := range req.Chapters {
+		updates = append(updates, ChapterUpdate{ChapterID: chapter.ChapterID, Title: chapter.Title, Sort: chapter.Sort, Enabled: chapter.Enabled})
 	}
-	err = h.service.UpdateBlueprint(c.Request.Context(), userID, courseID, BlueprintUpdate{ExpectedVersion: req.ExpectedVersion, BlueprintJSON: blob, CoverageJSON: []byte(`{}`)})
+	err := h.service.UpdateBlueprint(c.Request.Context(), userID, courseID, BlueprintUpdate{ExpectedVersion: req.ExpectedVersion, ChapterUpdates: updates})
 	if err != nil {
 		h.writeDomainError(c, err)
 		return
@@ -129,6 +129,10 @@ func (h *Handler) UpdateBlueprint(c *gin.Context) {
 func (h *Handler) Approve(c *gin.Context) {
 	userID, courseID, ok := h.ids(c)
 	if !ok {
+		return
+	}
+	if h.taskCreator == nil {
+		writeError(c, http.StatusServiceUnavailable, "project course generator is unavailable")
 		return
 	}
 	var req struct {
@@ -142,7 +146,27 @@ func (h *Handler) Approve(c *gin.Context) {
 		h.writeDomainError(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"code": 0, "data": gin.H{"status": StatusApproved}})
+	course, err := h.service.Get(c.Request.Context(), userID, courseID)
+	if err != nil {
+		h.writeDomainError(c, err)
+		return
+	}
+	payload, err := json.Marshal(gin.H{
+		"course_id":           course.ID,
+		"repository_url":      course.RepositoryURL,
+		"resolved_commit_sha": course.ResolvedCommitSHA,
+		"blueprint":           json.RawMessage(course.BlueprintJSON),
+	})
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "failed to create project course generation task")
+		return
+	}
+	task, err := h.taskCreator.CreateProjectCourseGenerateTask(c.Request.Context(), coretask.CreateProjectCourseTaskInput{RequestedBy: userID, IdempotencyKey: "project-course:generate:" + course.ID.String() + ":" + fmt.Sprint(course.BlueprintVersion), Payload: payload})
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "failed to create project course generation task")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": gin.H{"status": StatusApproved, "task_id": task.ID}})
 }
 
 func (h *Handler) ids(c *gin.Context) (uuid.UUID, uuid.UUID, bool) {

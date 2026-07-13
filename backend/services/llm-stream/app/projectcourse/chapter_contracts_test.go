@@ -14,12 +14,33 @@ func validChapterDocument() ChapterDocument {
 
 func TestChapterContractAndQualityGate(t *testing.T) {
 	document := validChapterDocument()
+	document.Markdown = "# 主链路\n## 主链路\n## 数据流\n## 练习\n正文"
 	require.NoError(t, document.ValidateContract())
 	report := RunChapterQualityGates(document, false)
 	require.Equal(t, sharedkernel.GatePass, report.Result)
 	document.Claims[0].Status = sharedkernel.ClaimUnsupported
 	report = RunChapterQualityGates(document, false)
 	require.Equal(t, sharedkernel.GateHardFail, report.Result)
+}
+
+func TestEveryChapterTypeHasAnIndependentContract(t *testing.T) {
+	for chapterType, expected := range map[sharedkernel.ChapterType][]string{
+		sharedkernel.ChapterProjectMap:      {"项目地图", "主链路"},
+		sharedkernel.ChapterTechnicalTheory: {"原理", "项目中的应用", "替代方案"},
+		sharedkernel.ChapterMainFlow:        {"主链路", "数据流", "练习"},
+		sharedkernel.ChapterModuleDeepDive:  {"模块职责", "源码证据", "练习"},
+		sharedkernel.ChapterDesignTradeoff:  {"设计取舍", "替代方案", "边界"},
+		sharedkernel.ChapterHandsOnLab:      {"任务", "提示", "验收"},
+		sharedkernel.ChapterTroubleshooting: {"故障现象", "排查", "修复"},
+		sharedkernel.ChapterChallenge:       {"挑战", "验收标准", "变式"},
+	} {
+		required, _, requiresLab, ok := chapterContractFor(chapterType)
+		require.True(t, ok)
+		require.Equal(t, expected, required)
+		if chapterType == sharedkernel.ChapterHandsOnLab || chapterType == sharedkernel.ChapterChallenge {
+			require.True(t, requiresLab)
+		}
+	}
 }
 
 func TestQualityGateRequiresOfficialSourceForTheoryAndLabVerification(t *testing.T) {

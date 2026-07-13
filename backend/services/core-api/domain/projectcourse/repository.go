@@ -78,6 +78,40 @@ func (r *GormRepository) PersistProjectCourseResult(ctx context.Context, result 
 	return nil
 }
 
+// PersistProjectCourseGenerationResult stores the structured generation report
+// and advances the course only after the worker has produced a task result.
+func (r *GormRepository) PersistProjectCourseGenerationResult(ctx context.Context, result map[string]any) error {
+	var payload struct {
+		CourseID string `json:"course_id"`
+		Status   string `json:"status"`
+	}
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(encoded, &payload); err != nil {
+		return err
+	}
+	courseID, err := uuid.Parse(payload.CourseID)
+	if err != nil {
+		return ErrNotFound
+	}
+	status := StatusBlocked
+	if payload.Status == string(sharedkernel.CourseCompleted) {
+		status = StatusCompleted
+	}
+	dbResult := r.db.WithContext(ctx).Model(&ProjectCourse{}).
+		Where("id = ? AND status IN ?", courseID, []string{StatusApproved, StatusGenerating}).
+		Updates(map[string]any{"quality_report_json": datatypes.JSON(encoded), "status": status, "updated_at": gorm.Expr("CURRENT_TIMESTAMP")})
+	if dbResult.Error != nil {
+		return dbResult.Error
+	}
+	if dbResult.RowsAffected == 0 {
+		return ErrVersionConflict
+	}
+	return nil
+}
+
 type GormRepository struct{ db *gorm.DB }
 
 func NewGormRepository(db *gorm.DB) *GormRepository { return &GormRepository{db: db} }

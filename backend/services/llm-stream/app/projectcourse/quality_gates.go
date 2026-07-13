@@ -25,8 +25,9 @@ func RunChapterQualityGates(document ChapterDocument, verifiedLab bool) QualityG
 	} else {
 		add("chapter_contract", sharedkernel.GatePass, "contract valid")
 	}
-	if document.ChapterType == sharedkernel.ChapterTechnicalTheory && len(document.EvidencePack.OfficialSources) == 0 {
-		add("official_source", sharedkernel.GateHardFail, "technical theory chapter requires an official source")
+	_, requiresOfficial, _, _ := chapterContractFor(document.ChapterType)
+	if requiresOfficial && len(document.EvidencePack.OfficialSources) == 0 {
+		add("official_source", sharedkernel.GateHardFail, "chapter type requires an official source")
 	} else {
 		add("official_source", sharedkernel.GatePass, "official source requirement satisfied")
 	}

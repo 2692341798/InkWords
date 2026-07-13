@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { flattenBlueprintChapters, type BlueprintChapterUpdate, type ProjectCourse, type ProjectCourseBlueprint } from '@/lib/projectCourse'
-import { projectCourseService, type CreateProjectCourseInput } from '@/services/projectCourse'
+import { projectCourseService, streamProjectCourseTask, type CreateProjectCourseInput } from '@/services/projectCourse'
 
 interface ProjectCourseState {
   course: ProjectCourse | null
@@ -8,6 +8,7 @@ interface ProjectCourseState {
   isLoading: boolean
   error: string | null
   taskId: string | null
+  taskMessage: string | null
   create: (input: CreateProjectCourseInput) => Promise<void>
   load: (courseId: string) => Promise<void>
   updateChapter: (chapterId: string, updates: Partial<Omit<BlueprintChapterUpdate, 'chapter_id'>>) => void
@@ -22,13 +23,17 @@ export const useProjectCourseStore = create<ProjectCourseState>((set, get) => ({
   isLoading: false,
   error: null,
   taskId: null,
+  taskMessage: null,
   create: async (input) => {
     set({ isLoading: true, error: null, taskId: null })
     try {
       const response = await projectCourseService.create(input)
       const course = response.data.course
       const blueprint = course.blueprint_json as ProjectCourseBlueprint
-      set({ course, chapters: blueprint?.volumes ? flattenBlueprintChapters(blueprint) : [], taskId: response.data.task_id, isLoading: false })
+      set({ course, chapters: blueprint?.volumes ? flattenBlueprintChapters(blueprint) : [], taskId: response.data.task_id, taskMessage: '分析任务已排队', isLoading: false })
+      void streamProjectCourseTask(response.data.task_id, (message) => set({ taskMessage: message }))
+        .then(() => get().load(course.id))
+        .catch((error) => set({ taskMessage: error instanceof Error ? error.message : '课程任务流已断开' }))
     } catch (error) {
       set({ isLoading: false, error: error instanceof Error ? error.message : '创建项目课程失败' })
     }
@@ -54,7 +59,12 @@ export const useProjectCourseStore = create<ProjectCourseState>((set, get) => ({
     const { course } = get()
     if (!course) return
     const response = await projectCourseService.approve(course.id, course.blueprint_version)
-    set((state) => ({ course: state.course ? { ...state.course, status: response.data.status as ProjectCourse['status'] } : null }))
+    set((state) => ({ course: state.course ? { ...state.course, status: response.data.status as ProjectCourse['status'] } : null, taskId: response.data.task_id ?? null, taskMessage: response.data.task_id ? '正文生成任务已排队' : null }))
+    if (response.data.task_id) {
+      void streamProjectCourseTask(response.data.task_id, (message) => set({ taskMessage: message }))
+        .then(() => get().load(course.id))
+        .catch((error) => set({ taskMessage: error instanceof Error ? error.message : '课程生成任务流已断开' }))
+    }
   },
-  reset: () => set({ course: null, chapters: [], isLoading: false, error: null, taskId: null }),
+  reset: () => set({ course: null, chapters: [], isLoading: false, error: null, taskId: null, taskMessage: null }),
 }))

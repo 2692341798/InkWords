@@ -34,3 +34,17 @@ func TestPersistProjectCourseResultTransitionsAnalyzingCourse(t *testing.T) {
 	require.NoError(t, json.Unmarshal(updated.BlueprintJSON, &stored))
 	require.Equal(t, course.ID.String(), stored["course_id"])
 }
+
+func TestPersistProjectCourseGenerationResultTransitionsApprovedCourse(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:project-course-generation-result-test?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&ProjectCourse{}))
+	repo := NewGormRepository(db)
+	course := &ProjectCourse{UserID: uuid.New(), RepositoryURL: "https://github.com/example/repo", RequestedRef: "main", ResolvedCommitSHA: "0123456789abcdef0123456789abcdef01234567", AudienceLevel: "programming", Status: StatusApproved, BlueprintVersion: 1, BlueprintJSON: []byte(`{}`), CoverageJSON: []byte(`{}`), QualityReportJSON: []byte(`{}`)}
+	require.NoError(t, repo.Create(context.Background(), course))
+	require.NoError(t, repo.PersistProjectCourseGenerationResult(context.Background(), map[string]any{"course_id": course.ID.String(), "status": "completed", "chapters": []any{map[string]any{"chapter_id": "chapter-1", "status": "succeeded"}}}))
+	updated, err := repo.GetByID(context.Background(), course.UserID, course.ID)
+	require.NoError(t, err)
+	require.Equal(t, StatusCompleted, updated.Status)
+	require.Contains(t, string(updated.QualityReportJSON), "chapter-1")
+}

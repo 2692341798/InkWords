@@ -1,7 +1,10 @@
 package projectcourse
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"path"
 	"strings"
 )
 
@@ -58,6 +61,9 @@ func (m LabManifest) Validate() error {
 			return fmt.Errorf("unsafe lab command %q", command)
 		}
 	}
+	if len(m.ResourceLimits) == 0 {
+		return fmt.Errorf("lab resource limits are required")
+	}
 	if len(m.Starter) == 0 || len(m.Checkpoints) == 0 || len(m.Solution) == 0 || len(m.Tests) == 0 {
 		return fmt.Errorf("lab must include starter, checkpoints, solution and tests")
 	}
@@ -70,14 +76,50 @@ func (m LabManifest) Validate() error {
 		if checkpoint.PreviousID != "" && !seen[checkpoint.PreviousID] {
 			return fmt.Errorf("checkpoint %q has a forward dependency", checkpoint.ID)
 		}
+		if err := validateLabFiles(checkpoint.Files); err != nil {
+			return fmt.Errorf("checkpoint %q: %w", checkpoint.ID, err)
+		}
+	}
+	if err := validateLabFiles(m.Starter); err != nil {
+		return fmt.Errorf("starter: %w", err)
+	}
+	if err := validateLabFiles(m.Solution); err != nil {
+		return fmt.Errorf("solution: %w", err)
+	}
+	if err := validateLabFiles(m.Tests); err != nil {
+		return fmt.Errorf("tests: %w", err)
 	}
 	for _, exercise := range m.Exercises {
+		if strings.TrimSpace(exercise.ExerciseID) == "" || strings.TrimSpace(exercise.Task) == "" || strings.TrimSpace(exercise.SolutionRef) == "" || len(exercise.AcceptanceTests) == 0 {
+			return fmt.Errorf("exercise %q is incomplete", exercise.ExerciseID)
+		}
 		if !seen[exercise.CheckpointBefore] || !seen[exercise.CheckpointAfter] {
 			return fmt.Errorf("exercise %q references unknown checkpoint", exercise.ExerciseID)
 		}
 		for _, hint := range exercise.Hints {
 			if hint.Level < 1 || hint.Level > 3 {
 				return fmt.Errorf("exercise %q has invalid hint level", exercise.ExerciseID)
+			}
+		}
+	}
+	return nil
+}
+
+func validateLabFiles(files []LabFile) error {
+	seen := make(map[string]struct{}, len(files))
+	for _, file := range files {
+		clean := path.Clean(strings.ReplaceAll(strings.TrimSpace(file.Path), "\\", "/"))
+		if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") || strings.HasPrefix(clean, "/") || clean != file.Path {
+			return fmt.Errorf("unsafe lab file path %q", file.Path)
+		}
+		if _, ok := seen[clean]; ok {
+			return fmt.Errorf("duplicate lab file path %q", clean)
+		}
+		seen[clean] = struct{}{}
+		if file.Hash != "" {
+			sum := sha256.Sum256([]byte(file.Content))
+			if file.Hash != "sha256:"+hex.EncodeToString(sum[:]) {
+				return fmt.Errorf("file %q hash does not match content", file.Path)
 			}
 		}
 	}

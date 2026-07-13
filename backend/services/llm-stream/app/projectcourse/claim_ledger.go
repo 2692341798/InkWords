@@ -10,6 +10,7 @@ import (
 type EvidencePack struct {
 	ChapterID       string                     `json:"chapter_id"`
 	SourceEvidence  []sharedkernel.EvidenceRef `json:"source_evidence"`
+	SourceContent   map[string]string          `json:"source_content,omitempty"`
 	OfficialSources []OfficialSource           `json:"official_sources"`
 }
 
@@ -20,6 +21,9 @@ func (p EvidencePack) Validate() error {
 	for _, evidence := range p.SourceEvidence {
 		if err := evidence.Validate(); err != nil {
 			return err
+		}
+		if p.SourceContent != nil && strings.TrimSpace(p.SourceContent[evidence.EvidenceID]) == "" {
+			return fmt.Errorf("source content for evidence %q is empty", evidence.EvidenceID)
 		}
 	}
 	for _, source := range p.OfficialSources {

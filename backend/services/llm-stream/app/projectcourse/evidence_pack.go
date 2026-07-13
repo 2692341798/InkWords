@@ -34,7 +34,7 @@ func BuildEvidencePack(snapshot sharedkernel.SourceSnapshot, chapterID string, e
 		})
 	}
 
-	pack := EvidencePack{ChapterID: chapterID, OfficialSources: append([]OfficialSource(nil), official...)}
+	pack := EvidencePack{ChapterID: chapterID, SourceContent: make(map[string]string), OfficialSources: append([]OfficialSource(nil), official...)}
 	seen := make(map[string]bool, len(evidenceIDs))
 	for _, evidenceID := range evidenceIDs {
 		file, ok := byID[evidenceID]
@@ -62,12 +62,30 @@ func BuildEvidencePack(snapshot sharedkernel.SourceSnapshot, chapterID string, e
 			EvidenceID: evidenceID, CommitSHA: snapshot.ResolvedCommitSHA, Path: file.Path,
 			StartLine: start, EndLine: end, ContentHash: file.ContentHash,
 		})
+		pack.SourceContent[evidenceID] = evidenceExcerpt(file.Content, start, end)
 	}
 	sort.Slice(pack.SourceEvidence, func(i, j int) bool { return pack.SourceEvidence[i].EvidenceID < pack.SourceEvidence[j].EvidenceID })
 	if err := pack.Validate(); err != nil {
 		return EvidencePack{}, err
 	}
 	return pack, nil
+}
+
+func evidenceExcerpt(content string, start, end int) string {
+	lines := strings.Split(content, "\n")
+	if len(lines) == 0 {
+		return ""
+	}
+	if start < 1 {
+		start = 1
+	}
+	if end > len(lines) {
+		end = len(lines)
+	}
+	if end < start {
+		return ""
+	}
+	return strings.Join(lines[start-1:end], "\n")
 }
 
 func lineCount(content string) int {

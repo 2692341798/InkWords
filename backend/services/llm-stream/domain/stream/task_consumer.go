@@ -2,6 +2,8 @@ package stream
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -181,17 +183,50 @@ func (c *TaskConsumer) handleProjectCourse(ctx context.Context, message sharedra
 	if cancelled {
 		return nil
 	}
+	var payload struct {
+		CourseID string `json:"course_id"`
+	}
+	if len(message.Payload) > 0 {
+		if err := json.Unmarshal(message.Payload, &payload); err != nil {
+			return c.tasks.MarkFailed(ctx, message.TaskID, "invalid project course payload")
+		}
+	}
+	if strings.TrimSpace(payload.CourseID) == "" {
+		return c.tasks.MarkFailed(ctx, message.TaskID, "project course payload requires course_id")
+	}
 	if err := c.tasks.MarkRunning(ctx, message.TaskID); err != nil {
 		return err
 	}
-	if err := c.tasks.AppendEvent(ctx, message.TaskID, AppendEventInput{EventType: "project_course_phase", Status: TaskStatusRunning, Payload: []byte(`{"kind":"project_course"}`)}); err != nil {
+	stage := "analysis"
+	if message.Kind == "project_course_generate" {
+		stage = "generation"
+	}
+	if err := c.appendProjectCourseEvent(ctx, message.TaskID, payload.CourseID, stage, "started", 1, message.Payload); err != nil {
 		return err
 	}
 	result, err := c.projectCourse.Run(ctx, message)
 	if err != nil {
 		return c.tasks.MarkFailed(ctx, message.TaskID, err.Error())
 	}
+	if err := c.appendProjectCourseEvent(ctx, message.TaskID, payload.CourseID, stage, "result_ready", 2, result); err != nil {
+		return err
+	}
 	return c.tasks.MarkSucceeded(ctx, message.TaskID, result)
+}
+
+func (c *TaskConsumer) appendProjectCourseEvent(ctx context.Context, taskID uuid.UUID, courseID, stage, checkpoint string, sequence int, content []byte) error {
+	sum := sha256.Sum256(content)
+	payload, err := json.Marshal(map[string]any{
+		"course_id":  courseID,
+		"stage":      stage,
+		"checkpoint": checkpoint,
+		"sequence":   sequence,
+		"input_hash": "sha256:" + hex.EncodeToString(sum[:]),
+	})
+	if err != nil {
+		return err
+	}
+	return c.tasks.AppendEvent(ctx, taskID, AppendEventInput{EventType: "project_course_phase", Status: TaskStatusRunning, Payload: payload})
 }
 
 func (c *TaskConsumer) watchCancellation(taskCtx context.Context, cancel context.CancelFunc, taskID uuid.UUID) {

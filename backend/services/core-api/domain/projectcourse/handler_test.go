@@ -37,6 +37,11 @@ func (f *fakeAnalyzeTaskCreator) CreateProjectCourseAnalyzeTask(_ context.Contex
 	return coretask.JobTask{ID: uuid.New(), Status: coretask.JobTaskStatusQueued}, nil
 }
 
+func (f *fakeAnalyzeTaskCreator) CreateProjectCourseGenerateTask(_ context.Context, input coretask.CreateProjectCourseTaskInput) (coretask.JobTask, error) {
+	f.input = input
+	return coretask.JobTask{ID: uuid.New(), Status: coretask.JobTaskStatusQueued}, nil
+}
+
 func TestCreateStartsAnalyzeTaskWithoutClientSuppliedSHA(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	repository := &fakeCourseRepository{}

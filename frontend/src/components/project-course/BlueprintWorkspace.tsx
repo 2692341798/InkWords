@@ -3,7 +3,7 @@ import { Panel, SectionHeader, StatusPill } from '@/components/ui/workspace'
 import { useProjectCourseStore } from '@/store/projectCourseStore'
 
 export function BlueprintWorkspace() {
-  const { course, chapters, isLoading, error, updateChapter, saveBlueprint, approve } = useProjectCourseStore()
+  const { course, chapters, isLoading, error, taskMessage, updateChapter, saveBlueprint, approve } = useProjectCourseStore()
 
   if (isLoading) return <Panel className="p-6 text-sm text-muted-foreground">正在加载课程蓝图...</Panel>
   if (error) return <Panel className="p-6 text-sm text-destructive" role="alert">{error}</Panel>
@@ -19,6 +19,7 @@ export function BlueprintWorkspace() {
           action={<StatusPill tone={course.status === 'approved' ? 'success' : 'brand'}>{course.status}</StatusPill>}
         />
         <p className="mt-4 break-all font-mono text-xs text-muted-foreground">commit: {course.resolved_commit_sha}</p>
+        {course.status === 'analyzing' && taskMessage ? <p className="mt-3 text-sm text-muted-foreground" role="status">课程任务：{taskMessage}</p> : null}
       </Panel>
 
       <Panel className="p-6">

@@ -12,6 +12,7 @@ import (
 	streamv1 "inkwords-backend/services/llm-stream/transport/http/v1"
 	"inkwords-backend/shared/kernel/httpx"
 	"inkwords-backend/shared/platform/cache"
+	platformllm "inkwords-backend/shared/platform/llm"
 	"inkwords-backend/shared/platform/parser"
 	"inkwords-backend/shared/platform/postgres"
 )
@@ -53,7 +54,10 @@ func BuildRouter() (*gin.Engine, *streamdomain.GormTaskStore, *streamdomain.Serv
 
 	streamDomainService := streamdomain.NewService(generatorService, decompositionService, quotaService)
 	taskDomainService := streamdomain.NewGormTaskStore(dbConn)
-	projectCourseRunner := projectcourseapp.NewCourseTaskRunner(projectcourseapp.GitRepositoryAnalyzer{Fetcher: parser.NewGitFetcher()})
+	projectCourseRunner := projectcourseapp.NewCourseTaskRunnerWithGenerator(
+		projectcourseapp.GitRepositoryAnalyzer{Fetcher: parser.NewGitFetcher()},
+		projectcourseapp.JSONChapterGenerator{Client: platformllm.NewDeepSeekClient(os.Getenv("DEEPSEEK_API_KEY")), Model: os.Getenv("DEEPSEEK_MODEL")},
+	)
 	streamDomainHandler := streamdomain.NewHandler(streamDomainService, streamdomain.NewGormBlogReadable(dbConn))
 
 	streamv1.RegisterStreamRoutes(r, httpx.AuthMiddleware(), streamv1.StreamHandlers{

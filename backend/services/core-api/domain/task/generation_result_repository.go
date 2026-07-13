@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"gorm.io/datatypes"
@@ -38,6 +39,68 @@ func (r *GormGenerationResultRepository) PersistGenerationResult(ctx context.Con
 	default:
 		return nil
 	}
+}
+
+// PersistProjectCourseGenerationBlogs materializes one deterministic parent
+// blog and idempotent chapter children. It intentionally keeps the existing
+// one-level blog tree; volume metadata remains in the course result.
+func (r *GormGenerationResultRepository) PersistProjectCourseGenerationBlogs(ctx context.Context, taskID uuid.UUID, result map[string]any) error {
+	courseID, err := uuid.Parse(readPayloadString(result, "course_id"))
+	if err != nil {
+		return fmt.Errorf("parse project course id: %w", err)
+	}
+	ownerID, err := r.taskOwnerUserID(ctx, taskID)
+	if err != nil {
+		return err
+	}
+	rawChapters, ok := result["chapters"].([]any)
+	if !ok {
+		return fmt.Errorf("read project course chapters: invalid payload")
+	}
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var toc strings.Builder
+		toc.WriteString("# 项目精通课程\n\n")
+		for _, raw := range rawChapters {
+			chapter, ok := raw.(map[string]any)
+			if !ok {
+				return fmt.Errorf("read project course chapter: invalid payload")
+			}
+			if readPayloadString(chapter, "status") == "succeeded" {
+				document, _ := chapter["document"].(map[string]any)
+				toc.WriteString(fmt.Sprintf("- %s\n", readPayloadString(document, "title")))
+			}
+		}
+		parent := blogRecord{ID: courseID, UserID: ownerID, Title: "项目精通课程", Content: toc.String(), SourceType: "project_mastery_course", IsSeries: true, Status: 1, TechStacks: datatypes.JSON([]byte(`[]`))}
+		if err := tx.Where("id = ?", courseID).Assign(parent).FirstOrCreate(&parent).Error; err != nil {
+			return fmt.Errorf("persist project course parent blog: %w", err)
+		}
+		for _, raw := range rawChapters {
+			chapter, ok := raw.(map[string]any)
+			if !ok {
+				return fmt.Errorf("read project course chapter: invalid payload")
+			}
+			chapterID := readPayloadString(chapter, "chapter_id")
+			if chapterID == "" {
+				return fmt.Errorf("project course chapter id is required")
+			}
+			childID := uuid.NewSHA1(uuid.Nil, []byte(courseID.String()+"/"+chapterID))
+			status := int16(2)
+			content := readPayloadString(chapter, "error")
+			title := chapterID
+			if document, ok := chapter["document"].(map[string]any); ok {
+				title = readPayloadString(document, "title")
+				content = readPayloadString(document, "markdown")
+				if readPayloadString(chapter, "status") == "succeeded" {
+					status = 1
+				}
+			}
+			child := blogRecord{ID: childID, UserID: ownerID, ParentID: &courseID, ChapterSort: readPayloadInt(chapter, "sort"), Title: title, Content: content, SourceType: "project_mastery_course", Status: status, WordCount: len(strings.Fields(content)), TechStacks: datatypes.JSON([]byte(`[]`))}
+			if err := tx.Where("id = ?", childID).Assign(child).FirstOrCreate(&child).Error; err != nil {
+				return fmt.Errorf("persist project course chapter %s: %w", chapterID, err)
+			}
+		}
+		return nil
+	})
 }
 
 func (r *GormGenerationResultRepository) persistSingleResult(ctx context.Context, taskID uuid.UUID, payload map[string]any) error {

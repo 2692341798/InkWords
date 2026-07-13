@@ -1,6 +1,7 @@
 import type { BlueprintChapterUpdate, ProjectCourse } from '@/lib/projectCourse'
 import { requestJson } from './apiClient'
 import { apiRoutes } from './apiRoutes'
+import { fetchEventSourceWithAuth } from './sse'
 
 interface ApiResponse<T> { code: number; data: T; message?: string }
 
@@ -27,6 +28,21 @@ export const projectCourseService = {
     return requestJson<ApiResponse<{ blueprint_version: number }>>(apiRoutes.coreApi.projectCourses.blueprint(courseId), { method: 'PUT', json: { expected_version: expectedVersion, chapters }, fallbackMessage: '更新课程蓝图失败' })
   },
   approve(courseId: string, expectedVersion: number) {
-    return requestJson<ApiResponse<{ status: string }>>(apiRoutes.coreApi.projectCourses.approve(courseId), { method: 'POST', json: { expected_version: expectedVersion }, fallbackMessage: '批准课程蓝图失败' })
+    return requestJson<ApiResponse<{ status: string; task_id?: string }>>(apiRoutes.coreApi.projectCourses.approve(courseId), { method: 'POST', json: { expected_version: expectedVersion }, fallbackMessage: '批准课程蓝图失败' })
   },
+}
+
+export function streamProjectCourseTask(taskId: string, onPhase: (message: string) => void) {
+  return fetchEventSourceWithAuth(apiRoutes.coreApi.tasks.stream(taskId), {
+    method: 'GET',
+    onmessage(event) {
+      if (event.event === 'done') return
+      try {
+        const payload = JSON.parse(event.data) as { stage?: string; checkpoint?: string }
+        if (payload.stage || payload.checkpoint) onPhase([payload.stage, payload.checkpoint].filter(Boolean).join(' · '))
+      } catch {
+        // Task event payloads are best-effort UI metadata; terminal status is reloaded from the API.
+      }
+    },
+  })
 }
