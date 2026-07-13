@@ -48,3 +48,23 @@ func TestPersistProjectCourseGenerationResultTransitionsApprovedCourse(t *testin
 	require.Equal(t, StatusCompleted, updated.Status)
 	require.Contains(t, string(updated.QualityReportJSON), "chapter-1")
 }
+
+func TestPersistProjectCourseGenerationResultPreservesPartiallyBlockedStatus(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:project-course-partial-result-test?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&ProjectCourse{}))
+	repo := NewGormRepository(db)
+	course := &ProjectCourse{UserID: uuid.New(), RepositoryURL: "https://github.com/example/repo", RequestedRef: "main", ResolvedCommitSHA: "0123456789abcdef0123456789abcdef01234567", AudienceLevel: "programming", Status: StatusApproved, BlueprintVersion: 1, BlueprintJSON: []byte(`{}`), CoverageJSON: []byte(`{}`), QualityReportJSON: []byte(`{}`)}
+	require.NoError(t, repo.Create(context.Background(), course))
+	require.NoError(t, repo.PersistProjectCourseGenerationResult(context.Background(), map[string]any{
+		"result_version":    1,
+		"course_id":         course.ID.String(),
+		"blueprint_version": 1,
+		"commit_sha":        course.ResolvedCommitSHA,
+		"status":            string(sharedkernel.CoursePartiallyBlocked),
+		"chapters":          []any{map[string]any{"chapter_id": "lab-1", "status": "blocked"}},
+	}))
+	updated, err := repo.GetByID(context.Background(), course.UserID, course.ID)
+	require.NoError(t, err)
+	require.Equal(t, StatusPartiallyBlocked, updated.Status)
+}
