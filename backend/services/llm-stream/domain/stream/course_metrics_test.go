@@ -16,3 +16,14 @@ func TestCourseMetricsSnapshotsStageRunsAndFailures(t *testing.T) {
 	require.Equal(t, 1, snapshot.CompletedStages["project_course_analyze"])
 	require.Equal(t, 1, snapshot.StageFailures["project_course_generate"])
 }
+
+func TestCourseMetricsObservesGatesClaimsAndCoverage(t *testing.T) {
+	metrics := NewCourseMetrics()
+	metrics.ObserveResult([]byte(`{"quality_report":[{"name":"official_source","result":"hard_fail"}],"chapters":[{"document":{"claims":[{"status":"verified"},{"status":"unsupported"}]}}],"coverage":{"files":[{"covered":true},{"covered":false}]}}`))
+	snapshot := metrics.Snapshot()
+	require.Equal(t, 1, snapshot.GateFailures["official_source"])
+	require.Equal(t, 1, snapshot.ClaimStatuses["verified"])
+	require.Equal(t, 1, snapshot.ClaimStatuses["unsupported"])
+	require.Equal(t, 1, snapshot.CoverageItems["files:covered"])
+	require.Equal(t, 1, snapshot.CoverageItems["files:uncovered"])
+}

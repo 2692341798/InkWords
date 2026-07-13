@@ -233,6 +233,7 @@ func (c *TaskConsumer) handleProjectCourse(ctx context.Context, message sharedra
 		return nil
 	}
 	c.metrics.Observe(strings.TrimSpace(message.Kind), time.Since(started), true)
+	c.metrics.ObserveResult(result)
 	if err := c.appendProjectCourseEvent(ctx, message.TaskID, payload.CourseID, stage, "result_ready", 2, projectCourseBlueprintVersion(result), inputHash, true, result); err != nil {
 		return err
 	}
