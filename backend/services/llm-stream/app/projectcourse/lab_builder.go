@@ -17,8 +17,8 @@ type LabPatch struct {
 }
 
 // BuildLabManifest builds structure only. Verification is a separate, sandboxed concern.
-func BuildLabManifest(language, toolchain string, starter []LabPatch, checkpointPatches [][]LabPatch, tests []LabPatch) (sharedkernel.LabManifest, error) {
-	manifest := sharedkernel.LabManifest{Language: language, ToolchainVersion: toolchain, CoreTechnologies: []string{language}, ExcludedScope: []string{"生产环境部署编排、外部凭据和非核心集成"}, StarterExpectedFailure: true, VariantTask: "在不复制最终答案的前提下修改一个可观察行为并保持验收测试通过", AllowedCommands: []string{"test"}, ResourceLimits: map[string]string{"timeout_seconds": "30", "memory_mb": "256", "pids": "64", "output_bytes": "1048576"}, DependencyGraph: map[string][]string{}}
+func BuildLabManifest(language, toolchain string, starter []LabPatch, checkpointPatches [][]LabPatch, tests []LabPatch, variantTests ...[]LabPatch) (sharedkernel.LabManifest, error) {
+	manifest := sharedkernel.LabManifest{Language: language, ToolchainVersion: toolchain, CoreTechnologies: []string{language}, ExcludedScope: []string{"生产环境部署编排、外部凭据和非核心集成"}, StarterExpectedFailure: true, VariantTask: "在不复制最终答案的前提下修改一个可观察行为并保持验收测试通过", TestFirst: true, AllowedCommands: []string{"test"}, ResourceLimits: map[string]string{"timeout_seconds": "30", "memory_mb": "256", "pids": "64", "output_bytes": "1048576"}, DependencyGraph: map[string][]string{}}
 	var err error
 	manifest.Tests, err = toLabFiles(tests)
 	if err != nil {
@@ -31,6 +31,14 @@ func BuildLabManifest(language, toolchain string, starter []LabPatch, checkpoint
 	if len(manifest.Starter) == 0 || len(manifest.Tests) == 0 {
 		return sharedkernel.LabManifest{}, fmt.Errorf("starter and tests are required")
 	}
+	if len(variantTests) == 0 || len(variantTests[0]) == 0 {
+		return sharedkernel.LabManifest{}, fmt.Errorf("independent variant tests are required")
+	}
+	variantFiles, err := toLabFiles(variantTests[0])
+	if err != nil {
+		return sharedkernel.LabManifest{}, fmt.Errorf("variant tests: %w", err)
+	}
+	manifest.Variants = []sharedkernel.LabVariant{{VariantID: "variant-01", Task: manifest.VariantTask, AcceptanceTests: []string{"test"}, Tests: variantFiles}}
 	if len(checkpointPatches) == 0 {
 		return sharedkernel.LabManifest{}, fmt.Errorf("at least one checkpoint is required")
 	}

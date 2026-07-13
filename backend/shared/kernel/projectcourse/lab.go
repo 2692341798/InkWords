@@ -36,6 +36,13 @@ type LabExercise struct {
 	SolutionRef      string    `json:"solution_ref"`
 }
 
+type LabVariant struct {
+	VariantID       string    `json:"variant_id"`
+	Task            string    `json:"task"`
+	AcceptanceTests []string  `json:"acceptance_tests"`
+	Tests           []LabFile `json:"tests"`
+}
+
 type LabManifest struct {
 	Language               string              `json:"language"`
 	ToolchainVersion       string              `json:"toolchain_version"`
@@ -43,6 +50,7 @@ type LabManifest struct {
 	ExcludedScope          []string            `json:"excluded_scope,omitempty"`
 	StarterExpectedFailure bool                `json:"starter_expected_failure,omitempty"`
 	VariantTask            string              `json:"variant_task,omitempty"`
+	TestFirst              bool                `json:"test_first"`
 	AllowedCommands        []string            `json:"allowed_commands"`
 	ResourceLimits         map[string]string   `json:"resource_limits"`
 	Starter                []LabFile           `json:"starter"`
@@ -50,6 +58,7 @@ type LabManifest struct {
 	Exercises              []LabExercise       `json:"exercises"`
 	Solution               []LabFile           `json:"solution"`
 	Tests                  []LabFile           `json:"tests"`
+	Variants               []LabVariant        `json:"variants"`
 	DependencyGraph        map[string][]string `json:"dependency_graph"`
 }
 
@@ -60,8 +69,8 @@ func (m LabManifest) Validate() error {
 	if len(m.CoreTechnologies) > 0 && len(m.ExcludedScope) == 0 {
 		return fmt.Errorf("lab scope must document excluded complexity")
 	}
-	if len(m.CoreTechnologies) > 0 && (!m.StarterExpectedFailure || strings.TrimSpace(m.VariantTask) == "") {
-		return fmt.Errorf("lab must define a starter failure and variant task")
+	if len(m.CoreTechnologies) > 0 && (!m.StarterExpectedFailure || strings.TrimSpace(m.VariantTask) == "" || !m.TestFirst || len(m.Variants) == 0) {
+		return fmt.Errorf("lab must define a starter failure, test-first plan and variant task")
 	}
 	if len(m.AllowedCommands) == 0 {
 		return fmt.Errorf("lab allowed commands are required")
@@ -98,6 +107,14 @@ func (m LabManifest) Validate() error {
 	}
 	if err := validateLabFiles(m.Tests); err != nil {
 		return fmt.Errorf("tests: %w", err)
+	}
+	for _, variant := range m.Variants {
+		if strings.TrimSpace(variant.VariantID) == "" || strings.TrimSpace(variant.Task) == "" || len(variant.AcceptanceTests) == 0 {
+			return fmt.Errorf("variant task is incomplete")
+		}
+		if err := validateLabFiles(variant.Tests); err != nil {
+			return fmt.Errorf("variant %q: %w", variant.VariantID, err)
+		}
 	}
 	for _, exercise := range m.Exercises {
 		if strings.TrimSpace(exercise.ExerciseID) == "" || strings.TrimSpace(exercise.Task) == "" || strings.TrimSpace(exercise.SolutionRef) == "" || len(exercise.AcceptanceTests) == 0 {
