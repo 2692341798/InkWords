@@ -55,8 +55,14 @@ export const useProjectCourseStore = create<ProjectCourseState>((set, get) => ({
   saveBlueprint: async () => {
     const { course, chapters } = get()
     if (!course) return
-    const response = await projectCourseService.updateBlueprint(course.id, course.blueprint_version, chapters)
-    set((state) => ({ course: state.course ? { ...state.course, blueprint_version: response.data.blueprint_version } : null }))
+    try {
+      const response = await projectCourseService.updateBlueprint(course.id, course.blueprint_version, chapters)
+      set((state) => ({ course: state.course ? { ...state.course, blueprint_version: response.data.blueprint_version } : null, error: null }))
+    } catch (error) {
+      // A stale tab must never overwrite a newer approved or edited blueprint.
+      await get().load(course.id)
+      set({ error: error instanceof Error ? `${error.message}，已刷新服务器版本` : '蓝图版本冲突，已刷新服务器版本' })
+    }
   },
   approve: async () => {
     const { course } = get()

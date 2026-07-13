@@ -5,6 +5,13 @@ import { useProjectCourseStore } from '@/store/projectCourseStore'
 export function BlueprintWorkspace() {
   const { course, chapters, isLoading, error, taskMessage, packageMessage, updateChapter, saveBlueprint, approve, packageCourse } = useProjectCourseStore()
 
+  const coverage = course?.coverage_json ?? {}
+  const coverageItems = ['modules', 'main_flows', 'technologies', 'files'].map((key) => {
+    const items = Array.isArray(coverage[key]) ? coverage[key] as Array<{ covered?: boolean }> : []
+    const covered = items.filter((item) => item.covered).length
+    return { key, covered, total: items.length }
+  })
+
   if (isLoading) return <Panel className="p-6 text-sm text-muted-foreground">正在加载课程蓝图...</Panel>
   if (error) return <Panel className="p-6 text-sm text-destructive" role="alert">{error}</Panel>
   if (!course) return <Panel className="p-6 text-sm text-muted-foreground">输入课程 ID 后加载蓝图。</Panel>
@@ -24,6 +31,9 @@ export function BlueprintWorkspace() {
 
       <Panel className="p-6">
         <SectionHeader title="课程蓝图" description="只能编辑章节标题、顺序和启用状态；证据、学习目标与事实由系统维护。" />
+        <div className="mt-4 grid gap-2 text-xs text-muted-foreground sm:grid-cols-4" aria-label="覆盖概览">
+          {coverageItems.map((item) => <div key={item.key} className="rounded-md border border-border/70 px-3 py-2"><span className="capitalize">{item.key.replace('_', ' ')}</span><strong className="ml-2 text-foreground">{item.total ? `${item.covered}/${item.total}` : '—'}</strong></div>)}
+        </div>
         <div className="mt-5 space-y-3">
           {chapters.map((chapter) => (
             <div key={chapter.chapter_id} className="grid gap-3 rounded-xl border border-border/70 bg-background/60 p-4 md:grid-cols-[minmax(0,1fr)_90px_auto] md:items-center">
