@@ -114,6 +114,8 @@ func BuildRouter() (*gin.Engine, func(), error) {
 		ProjectAnalyze:               projectDomainHandler.Analyze,
 		ProjectCourseCreate:          projectCourseHandler.Create,
 		ProjectCourseGet:             projectCourseHandler.Get,
+		ProjectCourseCoverage:        projectCourseHandler.Coverage,
+		ProjectCourseQualityReport:   projectCourseHandler.QualityReport,
 		ProjectCourseBlueprintUpdate: projectCourseHandler.UpdateBlueprint,
 		ProjectCourseApprove:         projectCourseHandler.Approve,
 		ProjectCoursePackage:         projectCourseHandler.Package,

@@ -38,6 +38,8 @@ func TestRegisterCoreRoutes_RegistersCoreServiceSurface(t *testing.T) {
 		ProjectAnalyze:               ok,
 		ProjectCourseCreate:          ok,
 		ProjectCourseGet:             ok,
+		ProjectCourseCoverage:        ok,
+		ProjectCourseQualityReport:   ok,
 		ProjectCourseBlueprintUpdate: ok,
 		ProjectCourseApprove:         ok,
 		ProjectCoursePackage:         ok,

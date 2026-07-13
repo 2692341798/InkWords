@@ -36,6 +36,7 @@ export interface ProjectCourse {
   blueprint_version: number
   blueprint_json: ProjectCourseBlueprint | Record<string, unknown>
   coverage_json: Record<string, unknown>
+  quality_report_json?: Record<string, unknown>
 }
 
 export interface BlueprintChapterUpdate {

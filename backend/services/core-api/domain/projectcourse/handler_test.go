@@ -97,3 +97,18 @@ func TestCreateRejectsClientSuppliedResolvedSHA(t *testing.T) {
 	router.ServeHTTP(response, req)
 	require.Equal(t, http.StatusBadRequest, response.Code)
 }
+
+func TestReportsAreReadOnlyAndScopedToTheAuthenticatedCourse(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	owner := uuid.New()
+	repository := &fakeCourseRepository{created: &ProjectCourse{ID: uuid.New(), UserID: owner, CoverageJSON: []byte(`{"modules":[]}`), QualityReportJSON: []byte(`{"status":"completed"}`)}}
+	handler := NewHandler(NewService(repository))
+	router := gin.New()
+	router.GET("/project-courses/:id/coverage", func(c *gin.Context) { c.Set("user_id", owner); handler.Coverage(c) })
+	router.GET("/project-courses/:id/quality-report", func(c *gin.Context) { c.Set("user_id", owner); handler.QualityReport(c) })
+	for _, path := range []string{"/project-courses/" + repository.created.ID.String() + "/coverage", "/project-courses/" + repository.created.ID.String() + "/quality-report"} {
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+		require.Equal(t, http.StatusOK, response.Code)
+	}
+}

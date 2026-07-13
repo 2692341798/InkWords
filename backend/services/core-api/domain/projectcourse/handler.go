@@ -102,6 +102,31 @@ func (h *Handler) Get(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 0, "data": course})
 }
 
+func (h *Handler) Coverage(c *gin.Context) {
+	h.getReport(c, true)
+}
+
+func (h *Handler) QualityReport(c *gin.Context) {
+	h.getReport(c, false)
+}
+
+func (h *Handler) getReport(c *gin.Context, coverage bool) {
+	userID, courseID, ok := h.ids(c)
+	if !ok {
+		return
+	}
+	course, err := h.service.Get(c.Request.Context(), userID, courseID)
+	if err != nil {
+		h.writeDomainError(c, err)
+		return
+	}
+	if coverage {
+		c.JSON(http.StatusOK, gin.H{"code": 0, "data": json.RawMessage(course.CoverageJSON)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": json.RawMessage(course.QualityReportJSON)})
+}
+
 func (h *Handler) UpdateBlueprint(c *gin.Context) {
 	userID, courseID, ok := h.ids(c)
 	if !ok {

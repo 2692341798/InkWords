@@ -24,6 +24,8 @@ type CoreHandlers struct {
 	ProjectAnalyze               gin.HandlerFunc
 	ProjectCourseCreate          gin.HandlerFunc
 	ProjectCourseGet             gin.HandlerFunc
+	ProjectCourseCoverage        gin.HandlerFunc
+	ProjectCourseQualityReport   gin.HandlerFunc
 	ProjectCourseBlueprintUpdate gin.HandlerFunc
 	ProjectCourseApprove         gin.HandlerFunc
 	ProjectCoursePackage         gin.HandlerFunc
@@ -62,6 +64,8 @@ func RegisterCoreRoutes(r *gin.Engine, authMiddleware gin.HandlerFunc, h CoreHan
 	must(h.ProjectAnalyze, "ProjectAnalyze")
 	must(h.ProjectCourseCreate, "ProjectCourseCreate")
 	must(h.ProjectCourseGet, "ProjectCourseGet")
+	must(h.ProjectCourseCoverage, "ProjectCourseCoverage")
+	must(h.ProjectCourseQualityReport, "ProjectCourseQualityReport")
 	must(h.ProjectCourseBlueprintUpdate, "ProjectCourseBlueprintUpdate")
 	must(h.ProjectCourseApprove, "ProjectCourseApprove")
 	must(h.ProjectCoursePackage, "ProjectCoursePackage")
@@ -108,6 +112,8 @@ func RegisterCoreRoutes(r *gin.Engine, authMiddleware gin.HandlerFunc, h CoreHan
 	projectCourseGroup.Use(authMiddleware)
 	projectCourseGroup.POST("", h.ProjectCourseCreate)
 	projectCourseGroup.GET("/:id", h.ProjectCourseGet)
+	projectCourseGroup.GET("/:id/coverage", h.ProjectCourseCoverage)
+	projectCourseGroup.GET("/:id/quality-report", h.ProjectCourseQualityReport)
 	projectCourseGroup.PUT("/:id/blueprint", h.ProjectCourseBlueprintUpdate)
 	projectCourseGroup.POST("/:id/approve", h.ProjectCourseApprove)
 	projectCourseGroup.POST("/:id/package", h.ProjectCoursePackage)

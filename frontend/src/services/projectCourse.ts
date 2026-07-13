@@ -25,6 +25,12 @@ export const projectCourseService = {
   get(courseId: string) {
     return requestJson<ApiResponse<ProjectCourse>>(apiRoutes.coreApi.projectCourses.byId(courseId), { method: 'GET', fallbackMessage: '获取项目课程失败' })
   },
+  coverage(courseId: string) {
+    return requestJson<ApiResponse<Record<string, unknown>>>(apiRoutes.coreApi.projectCourses.coverage(courseId), { method: 'GET', fallbackMessage: '获取课程覆盖报告失败' })
+  },
+  qualityReport(courseId: string) {
+    return requestJson<ApiResponse<Record<string, unknown>>>(apiRoutes.coreApi.projectCourses.qualityReport(courseId), { method: 'GET', fallbackMessage: '获取课程质量报告失败' })
+  },
   updateBlueprint(courseId: string, expectedVersion: number, chapters: BlueprintChapterUpdate[]) {
     return requestJson<ApiResponse<{ blueprint_version: number }>>(apiRoutes.coreApi.projectCourses.blueprint(courseId), { method: 'PUT', json: { expected_version: expectedVersion, chapters }, fallbackMessage: '更新课程蓝图失败' })
   },

@@ -35,6 +35,8 @@ export const apiRoutes = {
     projectCourses: {
       collection: '/api/v1/project-courses',
       byId: (courseId: string) => `/api/v1/project-courses/${pathSegment(courseId)}`,
+      coverage: (courseId: string) => `/api/v1/project-courses/${pathSegment(courseId)}/coverage`,
+      qualityReport: (courseId: string) => `/api/v1/project-courses/${pathSegment(courseId)}/quality-report`,
       blueprint: (courseId: string) => `/api/v1/project-courses/${pathSegment(courseId)}/blueprint`,
       approve: (courseId: string) => `/api/v1/project-courses/${pathSegment(courseId)}/approve`,
       package: (courseId: string) => `/api/v1/project-courses/${pathSegment(courseId)}/package`,
