@@ -348,7 +348,7 @@ WHERE id = $1 AND user_id = $2 AND blueprint_version = $3 AND status = 'draft'
 
 受影响行数为 0 时返回稳定的 version conflict 或 invalid state 错误。
 
-- [ ] **Step 4：验证关键 SQL**
+- [x] **Step 4：验证关键 SQL**
 
 在 PostgreSQL 测试环境运行：
 
@@ -666,7 +666,7 @@ Expected: PASS。
 
 每章输出从 previous checkpoint 到 next checkpoint 的文件变化，服务端应用到单一 workspace，避免多个章节各自生成冲突的全量项目。
 
-- [ ] **Step 4：生成测试优先**
+- [x] **Step 4：生成测试优先**
 
 先从学习成果生成可观察验收测试，再生成 solution；starter 应至少有一个预期失败测试，solution 必须全部通过。
 
@@ -674,7 +674,7 @@ Expected: PASS。
 
 Level 1 只提示方向，Level 2 指向模块或接口，Level 3 给骨架或关键伪代码；完整答案只在 solution。
 
-- [ ] **Step 6：变式与故障任务**
+- [x] **Step 6：变式与故障任务**
 
 每个核心技术至少生成一种变式或故障任务，并带独立测试，不把“复制最终代码”作为唯一通关方式。
 
@@ -741,7 +741,7 @@ request 只能引用已落盘且经过 manifest 校验的课程 artifact，不�
 
 沙箱未完成安全验收前 `PROJECT_COURSE_LAB_VERIFICATION_ENABLED=false`。关闭时只能生成“未验证”产物，不能通过课程完整成功硬门禁。
 
-- [ ] **Step 8：运行测试与安全冒烟**
+- [x] **Step 8：运行测试与安全冒烟**
 
 Run:
 
@@ -851,15 +851,15 @@ Expected: PASS。
 
 事件带 course/volume/chapter/stage/sequence，中文消息只用于展示，前端逻辑使用稳定枚举。
 
-- [ ] **Step 2：阶段检查点**
+- [x] **Step 2：阶段检查点**
 
 保存 snapshot、inventory、knowledge graph、blueprint、evidence pack、claim plan、draft、review、lab manifest 和 verification result 的完成状态与 hash。
 
-- [ ] **Step 3：幂等重试**
+- [x] **Step 3：幂等重试**
 
 输入 hash 未变化时复用已完成阶段；commit、blueprint version、chapter contract 或 evidence hash 变化时只使相关下游阶段失效。
 
-- [ ] **Step 4：观测指标**
+- [x] **Step 4：观测指标**
 
 至少记录：
 
