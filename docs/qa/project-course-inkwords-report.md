@@ -24,11 +24,11 @@
 | 幂等查询索引 | PostgreSQL core migration 增加仅覆盖 `project_course_phase` 的 JSON 表达式索引；事务内临时同构表 `EXPLAIN (COSTS OFF)` 验证查询语法和排序路径。索引增加少量写放大/存储，适用相同输入哈希的结果复用查询 |
 | 离线课程验收 | `go test ./services/llm-stream/app/projectcourse -run TestOfflineInkWordsAcceptance -v`：三种读者等级证据/覆盖稳定，夹具章节合同与硬门禁通过，variant manifest 合同通过 |
 | 浏览器入口验收 | 内置浏览器打开 `http://127.0.0.1:4173/`：课程入口、仓库/ref/读者等级控件和分析按钮均唯一可操作；输入 239 字符长仓库/ref 后页面无横向溢出 |
-| 自动化测试 | 后端全量 Go 测试、前端全量测试、lint、build 和 Compose config 已通过（详见 baseline） |
+| 自动化测试 | 后端全量 Go 测试、前端全量测试、lint、build 和 Compose config 已通过（详见 baseline）；本轮 Compose 构建已实际拉取基础镜像并进入多服务构建，但 Docker daemon 在构建阶段断开 |
 
 ## 尚未通过或无法执行
 
-- 本机 Docker daemon 未启动，因此没有伪造 `docker compose up -d --build`、容器内实验验证和微服务冒烟结果。
+- 本轮已启动 Colima 并实际执行 `docker compose --env-file backend/.env up -d --build`：基础镜像拉取、Compose 配置解析和多服务 Dockerfile 阶段均开始成功，但在并行构建阶段 Docker daemon 返回 `rpc error: code = Unavailable desc = error reading from server: EOF`，重启 Colima 后 Docker socket 仍无响应。因此没有声称容器构建、容器内实验验证或微服务冒烟通过。
 - DeepSeek 真实章节生成需要受控的 API 凭据和配额；当前只验证了生成器合同、证据门禁和任务路由，没有声称完整正文生成成功。
 - 三种读者等级的真实生成对比、人工完成三个累积 checkpoint、变式任务和故障排查 dogfood 尚未完成。
 - 浏览器深度交互验收未完成：当前沙箱中的 Playwright Chrome 进程无法启动；已有页面截图和组件测试不替代真实浏览器流程证据。
