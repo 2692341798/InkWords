@@ -31,6 +31,12 @@ type AppendEventInput struct {
 	Payload   []byte
 }
 
+// projectCourseResultReuseStore is optional so legacy task-store fakes and
+// deployments can continue to process non-course tasks without this lookup.
+type projectCourseResultReuseStore interface {
+	FindCompletedProjectCourseResult(ctx context.Context, courseID, stage, inputHash string) ([]byte, bool, error)
+}
+
 type jobTask struct {
 	ID           uuid.UUID      `gorm:"type:uuid;primaryKey"`
 	Status       TaskStatus     `gorm:"type:varchar(16);not null;index"`
@@ -176,6 +182,22 @@ func (s *GormTaskStore) IsCancelled(ctx context.Context, taskID uuid.UUID) (bool
 		return false, err
 	}
 	return task.Status == TaskStatusCancelled, nil
+}
+
+func (s *GormTaskStore) FindCompletedProjectCourseResult(ctx context.Context, courseID, stage, inputHash string) ([]byte, bool, error) {
+	var resultJSON datatypes.JSON
+	query := s.db.WithContext(ctx).Table("job_tasks AS task").
+		Select("task.result_json").
+		Joins("JOIN job_task_events AS event ON event.task_id = task.id").
+		Where("task.status = ? AND event.event_type = ? AND event.payload->>'course_id' = ? AND event.payload->>'stage' = ? AND event.payload->>'checkpoint' = ? AND event.payload->>'input_hash' = ?", TaskStatusSucceeded, "project_course_phase", courseID, stage, "result_ready", inputHash).
+		Order("event.created_at DESC").Limit(1).Scan(&resultJSON)
+	if query.Error != nil {
+		return nil, false, query.Error
+	}
+	if query.RowsAffected == 0 || len(resultJSON) == 0 || string(resultJSON) == "{}" {
+		return nil, false, nil
+	}
+	return append([]byte(nil), resultJSON...), true, nil
 }
 
 func (s *GormTaskStore) getByID(ctx context.Context, taskID uuid.UUID) (jobTask, error) {

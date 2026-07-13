@@ -23,6 +23,24 @@ func (cancellableProjectCourseRunner) Run(ctx context.Context, _ sharedrabbitmq.
 	return nil, ctx.Err()
 }
 
+type countingProjectCourseRunner struct {
+	calls int
+}
+
+func (r *countingProjectCourseRunner) Run(context.Context, sharedrabbitmq.GenerationRequestedMessage) ([]byte, error) {
+	r.calls++
+	return []byte(`{"status":"unexpected"}`), nil
+}
+
+type reusableCourseTaskService struct {
+	*fakeTaskService
+	cachedResult []byte
+}
+
+func (s *reusableCourseTaskService) FindCompletedProjectCourseResult(context.Context, string, string, string) ([]byte, bool, error) {
+	return append([]byte(nil), s.cachedResult...), true, nil
+}
+
 func TestTaskConsumerRoutesProjectCourseToDedicatedRunner(t *testing.T) {
 	tasks := &fakeTaskService{}
 	consumer := NewTaskConsumer(tasks, &fakeStreamService{}, fakeProjectCourseRunner{})
@@ -54,4 +72,28 @@ func TestTaskConsumerCancelsProjectCourseRunnerWithoutMarkingFailure(t *testing.
 	err := consumer.HandleGenerationRequested(context.Background(), sharedrabbitmq.GenerationRequestedMessage{TaskID: uuid.New(), Kind: "project_course_generate", UserID: uuid.New(), Payload: []byte(`{"course_id":"course-1"}`)})
 	require.NoError(t, err)
 	require.NotEqual(t, TaskStatusFailed, tasks.lastStatus)
+}
+
+func TestTaskConsumerReusesCompletedProjectCourseResult(t *testing.T) {
+	tasks := &reusableCourseTaskService{
+		fakeTaskService: &fakeTaskService{},
+		cachedResult:    []byte(`{"status":"completed","result_version":1}`),
+	}
+	runner := &countingProjectCourseRunner{}
+	consumer := NewTaskConsumer(tasks, &fakeStreamService{}, runner)
+
+	err := consumer.HandleGenerationRequested(context.Background(), sharedrabbitmq.GenerationRequestedMessage{
+		TaskID:  uuid.New(),
+		Kind:    "project_course_generate",
+		UserID:  uuid.New(),
+		Payload: []byte(`{"course_id":"course-1","blueprint_version":2}`),
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, 0, runner.calls)
+	require.Equal(t, TaskStatusSucceeded, tasks.lastStatus)
+	require.JSONEq(t, `{"status":"completed","result_version":1}`, string(tasks.lastResult))
+	require.Len(t, tasks.appendEvents, 1)
+	require.Contains(t, string(tasks.appendEvents[0].Payload), `"checkpoint":"cache_hit"`)
+	require.Contains(t, string(tasks.appendEvents[0].Payload), `"completed":true`)
 }

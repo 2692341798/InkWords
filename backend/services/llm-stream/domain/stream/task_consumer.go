@@ -207,6 +207,19 @@ func (c *TaskConsumer) handleProjectCourse(ctx context.Context, message sharedra
 		stage = "generation"
 	}
 	inputHash := hashCourseContent(message.Payload)
+	if reuse, ok := c.tasks.(projectCourseResultReuseStore); ok {
+		cachedResult, found, reuseErr := reuse.FindCompletedProjectCourseResult(ctx, payload.CourseID, stage, inputHash)
+		if reuseErr != nil {
+			return reuseErr
+		}
+		if found {
+			c.metrics.Observe(strings.TrimSpace(message.Kind), time.Since(started), true)
+			if err := c.appendProjectCourseEvent(ctx, message.TaskID, payload.CourseID, stage, "cache_hit", 1, projectCourseBlueprintVersion(message.Payload), inputHash, true, cachedResult); err != nil {
+				return err
+			}
+			return c.tasks.MarkSucceeded(ctx, message.TaskID, cachedResult)
+		}
+	}
 	if err := c.appendProjectCourseEvent(ctx, message.TaskID, payload.CourseID, stage, "started", 1, projectCourseBlueprintVersion(message.Payload), inputHash, false, message.Payload); err != nil {
 		return err
 	}
