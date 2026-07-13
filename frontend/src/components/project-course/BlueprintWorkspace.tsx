@@ -16,6 +16,12 @@ export function BlueprintWorkspace() {
   if (error) return <Panel className="p-6 text-sm text-destructive" role="alert">{error}</Panel>
   if (!course) return <Panel className="p-6 text-sm text-muted-foreground">输入课程 ID 后加载蓝图。</Panel>
 
+  const statusTone = course.status === 'approved' || course.status === 'completed'
+    ? 'success'
+    : course.status === 'partially_blocked' || course.status === 'blocked' || course.status === 'failed'
+      ? 'warning'
+      : 'brand'
+
   return (
     <div className="space-y-6">
       <Panel className="p-6">
@@ -23,7 +29,7 @@ export function BlueprintWorkspace() {
           eyebrow="固定源码快照"
           title={course.repository_url}
           description={`ref: ${course.requested_ref}`}
-          action={<StatusPill tone={course.status === 'approved' ? 'success' : 'brand'}>{course.status}</StatusPill>}
+          action={<StatusPill tone={statusTone}>{course.status}</StatusPill>}
         />
         <p className="mt-4 break-all font-mono text-xs text-muted-foreground">commit: {course.resolved_commit_sha}</p>
         {course.status === 'analyzing' && taskMessage ? <p className="mt-3 text-sm text-muted-foreground" role="status">课程任务：{taskMessage}</p> : null}

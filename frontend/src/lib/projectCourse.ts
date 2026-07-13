@@ -1,5 +1,5 @@
 export type ProjectCourseAudience = 'foundation' | 'programming' | 'stack_familiar'
-export type ProjectCourseStatus = 'draft' | 'analyzing' | 'awaiting_approval' | 'approved' | 'generating' | 'completed' | 'blocked' | 'failed'
+export type ProjectCourseStatus = 'draft' | 'analyzing' | 'awaiting_approval' | 'approved' | 'generating' | 'completed' | 'partially_blocked' | 'blocked' | 'failed'
 
 export interface ProjectCourseChapter {
   chapter_id: string
