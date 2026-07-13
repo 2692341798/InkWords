@@ -18,7 +18,7 @@ type LabPatch struct {
 
 // BuildLabManifest builds structure only. Verification is a separate, sandboxed concern.
 func BuildLabManifest(language, toolchain string, starter []LabPatch, checkpointPatches [][]LabPatch, tests []LabPatch) (sharedkernel.LabManifest, error) {
-	manifest := sharedkernel.LabManifest{Language: language, ToolchainVersion: toolchain, CoreTechnologies: []string{language}, ExcludedScope: []string{"生产环境部署编排、外部凭据和非核心集成"}, AllowedCommands: []string{"test"}, ResourceLimits: map[string]string{"timeout_seconds": "30", "memory_mb": "256", "pids": "64", "output_bytes": "1048576"}, DependencyGraph: map[string][]string{}}
+	manifest := sharedkernel.LabManifest{Language: language, ToolchainVersion: toolchain, CoreTechnologies: []string{language}, ExcludedScope: []string{"生产环境部署编排、外部凭据和非核心集成"}, StarterExpectedFailure: true, VariantTask: "在不复制最终答案的前提下修改一个可观察行为并保持验收测试通过", AllowedCommands: []string{"test"}, ResourceLimits: map[string]string{"timeout_seconds": "30", "memory_mb": "256", "pids": "64", "output_bytes": "1048576"}, DependencyGraph: map[string][]string{}}
 	var err error
 	manifest.Tests, err = toLabFiles(tests)
 	if err != nil {

@@ -13,6 +13,8 @@ func TestBuildLabManifestCreatesOrderedHashBoundCheckpoints(t *testing.T) {
 	require.Equal(t, "checkpoint-01", manifest.Checkpoints[1].PreviousID)
 	require.Equal(t, []string{"go"}, manifest.CoreTechnologies)
 	require.NotEmpty(t, manifest.ExcludedScope)
+	require.True(t, manifest.StarterExpectedFailure)
+	require.NotEmpty(t, manifest.VariantTask)
 	require.NotEmpty(t, manifest.Checkpoints[0].Files[0].Hash)
 	require.Len(t, manifest.Exercises, 2)
 	require.Len(t, manifest.Checkpoints[1].Files, 1)

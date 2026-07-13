@@ -37,18 +37,20 @@ type LabExercise struct {
 }
 
 type LabManifest struct {
-	Language         string              `json:"language"`
-	ToolchainVersion string              `json:"toolchain_version"`
-	CoreTechnologies []string            `json:"core_technologies,omitempty"`
-	ExcludedScope    []string            `json:"excluded_scope,omitempty"`
-	AllowedCommands  []string            `json:"allowed_commands"`
-	ResourceLimits   map[string]string   `json:"resource_limits"`
-	Starter          []LabFile           `json:"starter"`
-	Checkpoints      []LabCheckpoint     `json:"checkpoints"`
-	Exercises        []LabExercise       `json:"exercises"`
-	Solution         []LabFile           `json:"solution"`
-	Tests            []LabFile           `json:"tests"`
-	DependencyGraph  map[string][]string `json:"dependency_graph"`
+	Language               string              `json:"language"`
+	ToolchainVersion       string              `json:"toolchain_version"`
+	CoreTechnologies       []string            `json:"core_technologies,omitempty"`
+	ExcludedScope          []string            `json:"excluded_scope,omitempty"`
+	StarterExpectedFailure bool                `json:"starter_expected_failure,omitempty"`
+	VariantTask            string              `json:"variant_task,omitempty"`
+	AllowedCommands        []string            `json:"allowed_commands"`
+	ResourceLimits         map[string]string   `json:"resource_limits"`
+	Starter                []LabFile           `json:"starter"`
+	Checkpoints            []LabCheckpoint     `json:"checkpoints"`
+	Exercises              []LabExercise       `json:"exercises"`
+	Solution               []LabFile           `json:"solution"`
+	Tests                  []LabFile           `json:"tests"`
+	DependencyGraph        map[string][]string `json:"dependency_graph"`
 }
 
 func (m LabManifest) Validate() error {
@@ -57,6 +59,9 @@ func (m LabManifest) Validate() error {
 	}
 	if len(m.CoreTechnologies) > 0 && len(m.ExcludedScope) == 0 {
 		return fmt.Errorf("lab scope must document excluded complexity")
+	}
+	if len(m.CoreTechnologies) > 0 && (!m.StarterExpectedFailure || strings.TrimSpace(m.VariantTask) == "") {
+		return fmt.Errorf("lab must define a starter failure and variant task")
 	}
 	if len(m.AllowedCommands) == 0 {
 		return fmt.Errorf("lab allowed commands are required")

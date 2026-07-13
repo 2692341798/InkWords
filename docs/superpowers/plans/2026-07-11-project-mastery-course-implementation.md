@@ -955,7 +955,7 @@ cd frontend && npm run build
 
 Expected: 全部通过；任何环境原因导致的未验证项必须写入 QA 报告，不得伪造完成。
 
-- [ ] **Step 9：文档同步**
+- [x] **Step 9：文档同步**
 
 更新 README、API、架构、运行方式、环境变量、沙箱安全边界和课程 ZIP 结构。
 
