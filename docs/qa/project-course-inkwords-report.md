@@ -28,6 +28,7 @@
 | 浏览器课程流程 | 使用受控开发 bypass 入口 `http://127.0.0.1:4174/`：从工作入口进入课程，提交 InkWords 分析，等待 `awaiting_approval` 与固定 SHA，修改标题、交换前两章排序、关闭非核心章节并保存；页面重新显示修改后的蓝图状态。未点击“批准并继续生成”。 |
 | 容器集成冒烟 | Colima 调整为 4 CPU/8 GiB 后，全部 7 个应用镜像构建成功；Compose 服务均健康，首页返回 200，`/api/v1/ping` 返回 `pong`，core-api、RabbitMQ、Redis、Postgres 与 worker 就绪。course-runner 已补入 Go 工具链，但默认 Compose 安全策略下 bubblewrap 无法创建 namespace，实验验证仍保持关闭 |
 | 本地生成器合同 | `TestJSONChapterGeneratorBuildsEvidenceBoundChapterFromLocalMock`：本地 httptest JSON 响应经过 EvidenceRef、Claim Ledger、章节合同和质量门禁；不代表真实 DeepSeek 生成 |
+| 任务编排合同回归 | `TestCourseTaskRunnerCoversEveryChapterContractWithDeferredLabs`：8 类章节合同全部进入 runner；6 类本地生成并通过硬门禁，2 类实验章节因隔离验证未完成而阻塞，所有 checkpoints 通过校验 |
 | 自动化测试 | 后端全量 Go 测试、前端全量测试、lint、build 和 Compose config 已通过（详见 baseline）；路径解析回归测试通过，修复后的 `llm-stream` 镜像已重新构建并运行 |
 
 ## 尚未通过或无法执行
