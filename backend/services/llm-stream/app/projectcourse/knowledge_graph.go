@@ -21,6 +21,7 @@ type KnowledgeGraph struct {
 	Symbols   []SymbolRecord   `json:"symbols"`
 	Relations []RelationRecord `json:"relations"`
 	Modules   []ModuleRecord   `json:"modules"`
+	Precision []string         `json:"precision,omitempty"`
 }
 
 func BuildKnowledgeGraph(ctx context.Context, snapshot projectcourse.SourceSnapshot, files []InventoryEntry, analyzers []SemanticAnalyzer) (KnowledgeGraph, error) {
@@ -35,6 +36,9 @@ func BuildKnowledgeGraph(ctx context.Context, snapshot projectcourse.SourceSnaps
 		}
 		graph.Symbols = append(graph.Symbols, facts.Symbols...)
 		graph.Relations = append(graph.Relations, facts.Relations...)
+		if facts.Precision != "" {
+			graph.Precision = append(graph.Precision, facts.Precision)
+		}
 	}
 	for _, file := range files {
 		var symbolIDs []string
@@ -46,6 +50,7 @@ func BuildKnowledgeGraph(ctx context.Context, snapshot projectcourse.SourceSnaps
 		graph.Modules = append(graph.Modules, ModuleRecord{ID: file.Path, Path: file.Path, Role: file.Role, SymbolIDs: symbolIDs})
 	}
 	sortFacts(&SemanticFacts{Symbols: graph.Symbols, Relations: graph.Relations})
+	sort.Strings(graph.Precision)
 	sort.Slice(graph.Modules, func(i, j int) bool { return graph.Modules[i].Path < graph.Modules[j].Path })
 	return graph, nil
 }

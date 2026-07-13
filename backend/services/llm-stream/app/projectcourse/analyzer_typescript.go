@@ -20,7 +20,7 @@ func (a TypeScriptAnalyzer) Analyze(ctx context.Context, snapshot projectcourse.
 	if err := snapshot.Validate(); err != nil {
 		return SemanticFacts{}, err
 	}
-	var facts SemanticFacts
+	facts := SemanticFacts{Precision: "low_precision"}
 	for _, file := range files {
 		select {
 		case <-ctx.Done():

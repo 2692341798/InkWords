@@ -43,6 +43,9 @@ func TestKnowledgeGraphKeepsSnapshotAndFileCoverage(t *testing.T) {
 	if graph.CommitSHA != snapshot.ResolvedCommitSHA || len(graph.Modules) != 1 {
 		t.Fatalf("unexpected graph: %#v", graph)
 	}
+	if len(graph.Precision) != 1 || graph.Precision[0] != "high_precision" {
+		t.Fatalf("unexpected analyzer precision: %#v", graph.Precision)
+	}
 }
 
 func TestLowPrecisionTypeScriptAndConfigAdaptersStayFileScoped(t *testing.T) {
@@ -54,6 +57,9 @@ func TestLowPrecisionTypeScriptAndConfigAdaptersStayFileScoped(t *testing.T) {
 	tsFacts, err := (TypeScriptAnalyzer{}).Analyze(context.Background(), snapshot, files)
 	if err != nil || len(tsFacts.Symbols) != 2 {
 		t.Fatalf("unexpected TypeScript facts: %#v %v", tsFacts, err)
+	}
+	if tsFacts.Precision != "low_precision" {
+		t.Fatalf("expected low precision TypeScript facts, got %q", tsFacts.Precision)
 	}
 	configFacts, err := (ConfigAnalyzer{}).Analyze(context.Background(), snapshot, files)
 	if err != nil || len(configFacts.Symbols) != 1 || configFacts.Symbols[0].Path != "docker-compose.yml" {

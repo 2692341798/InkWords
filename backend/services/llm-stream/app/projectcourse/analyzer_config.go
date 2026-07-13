@@ -19,7 +19,7 @@ func (a ConfigAnalyzer) Analyze(ctx context.Context, snapshot projectcourse.Sour
 	if err := snapshot.Validate(); err != nil {
 		return SemanticFacts{}, err
 	}
-	var facts SemanticFacts
+	facts := SemanticFacts{Precision: "observed_config"}
 	for _, file := range files {
 		select {
 		case <-ctx.Done():

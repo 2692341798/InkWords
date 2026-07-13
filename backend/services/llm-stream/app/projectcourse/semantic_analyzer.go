@@ -46,6 +46,7 @@ type RelationRecord struct {
 }
 
 type SemanticFacts struct {
+	Precision string           `json:"precision,omitempty"`
 	Symbols   []SymbolRecord   `json:"symbols"`
 	Relations []RelationRecord `json:"relations"`
 }

@@ -22,7 +22,7 @@ func (a GoAnalyzer) Analyze(ctx context.Context, snapshot projectcourse.SourceSn
 		return SemanticFacts{}, err
 	}
 	fset := token.NewFileSet()
-	var facts SemanticFacts
+	facts := SemanticFacts{Precision: "high_precision"}
 	for _, file := range files {
 		select {
 		case <-ctx.Done():

@@ -281,7 +281,7 @@ Expected: PASS；现有 Git 分析路径行为保持兼容。
 - 路由注册、构造函数和明显调用关系；
 - 文件与 symbol 的精确行范围。
 
-- [ ] **Step 3：选择 TypeScript/JavaScript 成熟解析方案**
+- [x] **Step 3：选择 TypeScript/JavaScript 成熟解析方案**
 
 在引入依赖前记录：许可证、维护状态、安全记录、二进制/CGO 要求、镜像体积和 React/TSX 支持。禁止用正则手写通用 TS/TSX parser。
 
