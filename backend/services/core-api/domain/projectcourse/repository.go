@@ -2,11 +2,13 @@ package projectcourse
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 
 	"github.com/google/uuid"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
+	sharedkernel "inkwords-backend/shared/kernel/projectcourse"
 )
 
 var (
@@ -20,6 +22,60 @@ type Repository interface {
 	GetByID(ctx context.Context, userID, courseID uuid.UUID) (*ProjectCourse, error)
 	UpdateBlueprintCAS(ctx context.Context, userID, courseID uuid.UUID, update BlueprintUpdate) error
 	Approve(ctx context.Context, userID, courseID uuid.UUID, expectedVersion int) error
+}
+
+// PersistProjectCourseResult is the core-api write boundary used by the task
+// result reconciler. The worker owns computation; this repository owns facts.
+func (r *GormRepository) PersistProjectCourseResult(ctx context.Context, result map[string]any) error {
+	var payload struct {
+		CourseID  string                      `json:"course_id"`
+		Status    string                      `json:"status"`
+		Snapshot  sharedkernel.SourceSnapshot `json:"snapshot"`
+		Blueprint sharedkernel.Blueprint      `json:"blueprint"`
+		Coverage  sharedkernel.CoverageMatrix `json:"coverage"`
+	}
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(encoded, &payload); err != nil {
+		return err
+	}
+	courseID, err := uuid.Parse(payload.CourseID)
+	if err != nil {
+		return ErrNotFound
+	}
+	if err := payload.Snapshot.Validate(); err != nil {
+		return err
+	}
+	if err := payload.Blueprint.Validate(); err != nil {
+		return err
+	}
+	blueprintJSON, err := json.Marshal(payload.Blueprint)
+	if err != nil {
+		return err
+	}
+	coverageJSON, err := json.Marshal(payload.Coverage)
+	if err != nil {
+		return err
+	}
+	dbResult := r.db.WithContext(ctx).Model(&ProjectCourse{}).
+		Where("id = ? AND status = ?", courseID, StatusAnalyzing).
+		Updates(map[string]any{
+			"resolved_commit_sha": payload.Snapshot.ResolvedCommitSHA,
+			"blueprint_json":      datatypes.JSON(blueprintJSON),
+			"coverage_json":       datatypes.JSON(coverageJSON),
+			"blueprint_version":   payload.Blueprint.BlueprintVersion,
+			"status":              StatusAwaitingApproval,
+			"updated_at":          gorm.Expr("CURRENT_TIMESTAMP"),
+		})
+	if dbResult.Error != nil {
+		return dbResult.Error
+	}
+	if dbResult.RowsAffected == 0 {
+		return ErrVersionConflict
+	}
+	return nil
 }
 
 type GormRepository struct{ db *gorm.DB }

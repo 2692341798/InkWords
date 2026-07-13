@@ -7,13 +7,18 @@ interface ApiResponse<T> { code: number; data: T; message?: string }
 export interface CreateProjectCourseInput {
   repository_url: string
   requested_ref: string
-  resolved_commit_sha: string
   audience_level: 'foundation' | 'programming' | 'stack_familiar'
+}
+
+export interface CreateProjectCourseResponse {
+  course: ProjectCourse
+  task_id: string
+  status: string
 }
 
 export const projectCourseService = {
   create(input: CreateProjectCourseInput) {
-    return requestJson<ApiResponse<ProjectCourse>>(apiRoutes.coreApi.projectCourses.collection, { method: 'POST', json: input, fallbackMessage: '创建项目课程失败' })
+    return requestJson<ApiResponse<CreateProjectCourseResponse>>(apiRoutes.coreApi.projectCourses.collection, { method: 'POST', json: input, fallbackMessage: '创建项目课程失败' })
   },
   get(courseId: string) {
     return requestJson<ApiResponse<ProjectCourse>>(apiRoutes.coreApi.projectCourses.byId(courseId), { method: 'GET', fallbackMessage: '获取项目课程失败' })

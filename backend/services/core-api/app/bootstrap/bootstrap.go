@@ -82,9 +82,8 @@ func BuildRouter() (*gin.Engine, func(), error) {
 	)
 	projectDomainHandler := projectdomain.NewHandler(projectDomainService)
 	projectCourseRepo := projectcoursedomain.NewGormRepository(dbConn)
-	projectCourseHandler := projectcoursedomain.NewHandler(projectcoursedomain.NewService(projectCourseRepo))
 	generationResultRepo := coretask.NewGormGenerationResultRepository(dbConn)
-	resultPersister := coretask.NewResultPersister(generationResultRepo, generationResultRepo)
+	resultPersister := coretask.NewResultPersister(generationResultRepo, generationResultRepo, projectCourseRepo)
 
 	taskRepo := coretask.NewGormRepository(dbConn)
 	taskDomainService := coretask.NewService(taskRepo, taskPublisher, resultPersister)
@@ -92,6 +91,7 @@ func BuildRouter() (*gin.Engine, func(), error) {
 		taskDomainService,
 		envOrDefault("EXPORT_ARTIFACTS_DIR", "/app/export-artifacts"),
 	)
+	projectCourseHandler := projectcoursedomain.NewHandler(projectcoursedomain.NewService(projectCourseRepo), taskDomainService)
 
 	corev1.RegisterCoreRoutes(r, httpx.AuthMiddleware(), corev1.CoreHandlers{
 		AuthRegister:                 authDomainHandler.Register,

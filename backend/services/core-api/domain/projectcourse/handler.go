@@ -1,6 +1,7 @@
 package projectcourse
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -8,18 +9,31 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	coretask "inkwords-backend/services/core-api/domain/task"
 )
 
 // Handler 是 ProjectCourse 的 HTTP 适配层；不允许客户端提交事实、证据或覆盖矩阵。
-type Handler struct{ service *Service }
+type analyzeTaskCreator interface {
+	CreateProjectCourseAnalyzeTask(context.Context, coretask.CreateProjectCourseTaskInput) (coretask.JobTask, error)
+}
 
-func NewHandler(service *Service) *Handler { return &Handler{service: service} }
+type Handler struct {
+	service     *Service
+	taskCreator analyzeTaskCreator
+}
+
+func NewHandler(service *Service, taskCreators ...analyzeTaskCreator) *Handler {
+	var taskCreator analyzeTaskCreator
+	if len(taskCreators) > 0 {
+		taskCreator = taskCreators[0]
+	}
+	return &Handler{service: service, taskCreator: taskCreator}
+}
 
 type createRequest struct {
-	RepositoryURL     string `json:"repository_url" binding:"required"`
-	RequestedRef      string `json:"requested_ref" binding:"required"`
-	ResolvedCommitSHA string `json:"resolved_commit_sha" binding:"required"`
-	AudienceLevel     string `json:"audience_level" binding:"required"`
+	RepositoryURL string `json:"repository_url" binding:"required"`
+	RequestedRef  string `json:"requested_ref" binding:"required"`
+	AudienceLevel string `json:"audience_level" binding:"required"`
 }
 
 type blueprintUpdateRequest struct {
@@ -45,16 +59,30 @@ func (h *Handler) Create(c *gin.Context) {
 		writeError(c, http.StatusBadRequest, "invalid project course request")
 		return
 	}
-	if req.RepositoryURL == "" || req.RequestedRef == "" || req.ResolvedCommitSHA == "" || req.AudienceLevel == "" {
+	if req.RepositoryURL == "" || req.RequestedRef == "" || req.AudienceLevel == "" {
 		writeError(c, http.StatusBadRequest, "required project course fields are missing")
 		return
 	}
-	course, err := h.service.Create(c.Request.Context(), CreateInput{UserID: userID, RepositoryURL: req.RepositoryURL, RequestedRef: req.RequestedRef, ResolvedCommitSHA: req.ResolvedCommitSHA, AudienceLevel: req.AudienceLevel})
+	if h.taskCreator == nil {
+		writeError(c, http.StatusServiceUnavailable, "project course analyzer is unavailable")
+		return
+	}
+	course, err := h.service.Create(c.Request.Context(), CreateInput{UserID: userID, RepositoryURL: req.RepositoryURL, RequestedRef: req.RequestedRef, AudienceLevel: req.AudienceLevel})
 	if err != nil {
 		writeError(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	c.JSON(http.StatusCreated, gin.H{"code": 0, "data": course})
+	payload, err := json.Marshal(gin.H{"course_id": course.ID, "repository_url": course.RepositoryURL, "requested_ref": course.RequestedRef, "audience_level": course.AudienceLevel})
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "failed to create project course task")
+		return
+	}
+	task, err := h.taskCreator.CreateProjectCourseAnalyzeTask(c.Request.Context(), coretask.CreateProjectCourseTaskInput{RequestedBy: userID, IdempotencyKey: "project-course:analyze:" + course.ID.String(), Payload: payload})
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "failed to create project course task")
+		return
+	}
+	c.JSON(http.StatusAccepted, gin.H{"code": 0, "data": gin.H{"course": course, "task_id": task.ID, "status": task.Status}})
 }
 
 func (h *Handler) Get(c *gin.Context) {

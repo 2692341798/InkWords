@@ -2,11 +2,11 @@ package projectcourse
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
+	sharedkernel "inkwords-backend/shared/kernel/projectcourse"
 )
 
 type Service struct{ repository Repository }
@@ -17,13 +17,10 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (*ProjectCourse
 	if input.UserID == uuid.Nil || strings.TrimSpace(input.RepositoryURL) == "" || strings.TrimSpace(input.RequestedRef) == "" {
 		return nil, fmt.Errorf("user, repository URL and requested ref are required")
 	}
-	if len(input.ResolvedCommitSHA) != 40 {
-		return nil, fmt.Errorf("resolved commit SHA must be 40 characters")
+	if err := sharedkernel.AudienceLevel(input.AudienceLevel).Validate(); err != nil {
+		return nil, err
 	}
-	if _, err := hex.DecodeString(input.ResolvedCommitSHA); err != nil {
-		return nil, fmt.Errorf("resolved commit SHA must be hexadecimal")
-	}
-	course := &ProjectCourse{UserID: input.UserID, RepositoryURL: strings.TrimSpace(input.RepositoryURL), RequestedRef: strings.TrimSpace(input.RequestedRef), ResolvedCommitSHA: strings.ToLower(input.ResolvedCommitSHA), AudienceLevel: input.AudienceLevel, Status: StatusAwaitingApproval, BlueprintVersion: 1, BlueprintJSON: []byte(`{}`), CoverageJSON: []byte(`{}`), QualityReportJSON: []byte(`{}`)}
+	course := &ProjectCourse{UserID: input.UserID, RepositoryURL: strings.TrimSpace(input.RepositoryURL), RequestedRef: strings.TrimSpace(input.RequestedRef), AudienceLevel: input.AudienceLevel, Status: StatusAnalyzing, BlueprintVersion: 1, BlueprintJSON: []byte(`{}`), CoverageJSON: []byte(`{}`), QualityReportJSON: []byte(`{}`)}
 	if err := s.repository.Create(ctx, course); err != nil {
 		return nil, err
 	}
