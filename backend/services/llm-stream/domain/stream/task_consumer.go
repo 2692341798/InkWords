@@ -45,6 +45,7 @@ type TaskConsumer struct {
 	tasks                    taskService
 	streams                  generationStreamService
 	projectCourse            projectCourseRunner
+	metrics                  *CourseMetrics
 	cancellationPollInterval time.Duration
 }
 
@@ -59,6 +60,7 @@ func NewTaskConsumer(tasks taskService, streams generationStreamService, project
 		tasks:                    tasks,
 		streams:                  streams,
 		projectCourse:            courseRunner,
+		metrics:                  NewCourseMetrics(),
 		cancellationPollInterval: defaultTaskCancellationPollInterval,
 	}
 }
@@ -173,7 +175,9 @@ func isProjectCourseKind(kind string) bool {
 }
 
 func (c *TaskConsumer) handleProjectCourse(ctx context.Context, message sharedrabbitmq.GenerationRequestedMessage) error {
+	started := time.Now()
 	if c.projectCourse == nil {
+		c.metrics.Observe(strings.TrimSpace(message.Kind), time.Since(started), false)
 		return c.tasks.MarkFailed(ctx, message.TaskID, "project course worker is not configured")
 	}
 	cancelled, err := c.tasks.IsCancelled(ctx, message.TaskID)
@@ -206,8 +210,10 @@ func (c *TaskConsumer) handleProjectCourse(ctx context.Context, message sharedra
 	}
 	result, err := c.projectCourse.Run(ctx, message)
 	if err != nil {
+		c.metrics.Observe(strings.TrimSpace(message.Kind), time.Since(started), false)
 		return c.tasks.MarkFailed(ctx, message.TaskID, err.Error())
 	}
+	c.metrics.Observe(strings.TrimSpace(message.Kind), time.Since(started), true)
 	if err := c.appendProjectCourseEvent(ctx, message.TaskID, payload.CourseID, stage, "result_ready", 2, result); err != nil {
 		return err
 	}
