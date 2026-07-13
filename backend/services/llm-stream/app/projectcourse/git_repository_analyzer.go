@@ -44,16 +44,38 @@ func (a GitRepositoryAnalyzer) Analyze(ctx context.Context, repositoryURL, reque
 func inventoryInputsFromChunks(chunks []parser.FileChunk) []InventoryInput {
 	var inputs []InventoryInput
 	for _, chunk := range chunks {
-		parts := strings.Split(chunk.Content, "--- File: ")
-		for _, part := range parts[1:] {
-			lineEnd := strings.Index(part, " ---\n")
-			if lineEnd < 0 {
+		var currentPath string
+		var content strings.Builder
+		for _, line := range strings.SplitAfter(chunk.Content, "\n") {
+			if filePath, ok := parseFileHeader(line); ok {
+				if currentPath != "" {
+					inputs = append(inputs, InventoryInput{Path: currentPath, Content: []byte(content.String())})
+				}
+				currentPath = filePath
+				content.Reset()
 				continue
 			}
-			path := strings.TrimSpace(part[:lineEnd])
-			content := part[lineEnd+len(" ---\n"):]
-			inputs = append(inputs, InventoryInput{Path: path, Content: []byte(content)})
+			if currentPath != "" {
+				content.WriteString(line)
+			}
+		}
+		if currentPath != "" {
+			inputs = append(inputs, InventoryInput{Path: currentPath, Content: []byte(content.String())})
 		}
 	}
 	return inputs
+}
+
+func parseFileHeader(line string) (string, bool) {
+	const prefix = "--- File: "
+	if !strings.HasPrefix(line, prefix) {
+		return "", false
+	}
+	line = strings.TrimSuffix(line, "\n")
+	line = strings.TrimSuffix(line, "\r")
+	if !strings.HasSuffix(line, " ---") {
+		return "", false
+	}
+	filePath := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(line, prefix), " ---"))
+	return filePath, filePath != ""
 }

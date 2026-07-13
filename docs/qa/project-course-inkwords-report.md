@@ -23,14 +23,16 @@
 | 阶段事件 | `CourseCheckpoint` 校验 course、blueprint version、input/output hash 和完成状态 |
 | 幂等查询索引 | PostgreSQL core migration 增加仅覆盖 `project_course_phase` 的 JSON 表达式索引；事务内临时同构表 `EXPLAIN (COSTS OFF)` 验证查询语法和排序路径。索引增加少量写放大/存储，适用相同输入哈希的结果复用查询 |
 | 离线课程验收 | `go test ./services/llm-stream/app/projectcourse -run TestOfflineInkWordsAcceptance -v`：三种读者等级证据/覆盖稳定，夹具章节合同与硬门禁通过，variant manifest 合同通过 |
+| 真实分析链路 | Docker Compose 中通过网关创建 `programming` 课程任务；首次运行暴露源码内嵌 `--- File: ... ---` 标记被误解析为路径的问题，修复为仅识别行首文件头后重跑成功，任务进入 `awaiting_approval`，固定 SHA 为 `f14bd1dbc1e568a2335341dd4df0f6c0574bee35`，生成 48 个章节蓝图与覆盖矩阵 |
 | 浏览器入口验收 | 内置浏览器打开 `http://127.0.0.1:4173/`：课程入口、仓库/ref/读者等级控件和分析按钮均唯一可操作；输入 239 字符长仓库/ref 后页面无横向溢出 |
-| 自动化测试 | 后端全量 Go 测试、前端全量测试、lint、build 和 Compose config 已通过（详见 baseline）；本轮 Compose 构建已实际拉取基础镜像并进入多服务构建，但 Docker daemon 在构建阶段断开 |
+| 容器集成冒烟 | Colima 调整为 4 CPU/8 GiB 后，全部 7 个应用镜像构建成功；Compose 服务均健康，首页返回 200，`/api/v1/ping` 返回 `pong`，core-api、RabbitMQ、Redis、Postgres 与 worker 就绪 |
+| 自动化测试 | 后端全量 Go 测试、前端全量测试、lint、build 和 Compose config 已通过（详见 baseline）；路径解析回归测试通过，修复后的 `llm-stream` 镜像已重新构建并运行 |
 
 ## 尚未通过或无法执行
 
-- 本轮已启动 Colima 并实际执行 `docker compose --env-file backend/.env up -d --build`：基础镜像拉取、Compose 配置解析和多服务 Dockerfile 阶段均开始成功，但在并行构建阶段 Docker daemon 返回 `rpc error: code = Unavailable desc = error reading from server: EOF`，重启 Colima 后 Docker socket 仍无响应。因此没有声称容器构建、容器内实验验证或微服务冒烟通过。
+- 首次并行 Compose 构建曾触发 Docker daemon EOF；调整 Colima 资源后已用缓存完成全部镜像构建并通过容器健康与网关冒烟。课程实验验证仍按 fail-closed 配置保持关闭，尚未声称真实 sandbox 实验通过。
 - DeepSeek 真实章节生成需要受控的 API 凭据和配额；当前只验证了生成器合同、证据门禁和任务路由，没有声称完整正文生成成功。
-- 三种读者等级的真实生成对比、人工完成三个累积 checkpoint、变式任务和故障排查 dogfood 尚未完成。
+- 三种读者等级的真实生成对比、蓝图人工审阅批准、完整正文生成、人工完成三个累积 checkpoint、变式任务和故障排查 dogfood 尚未完成；批准操作会向外部 DeepSeek 服务发送仓库衍生内容，本轮未在未获用户明确授权时执行。
 - 浏览器深度交互验收未完成：当前沙箱中的 Playwright Chrome 进程无法启动；已有页面截图和组件测试不替代真实浏览器流程证据。
 - 本轮内置浏览器入口检查发现后端未启动，背景博客请求返回“服务暂时不可用”；移动视口覆盖未能在当前浏览器后端保持，因此未宣称移动端完整验收通过。
 - 需要在 Docker 和受控凭据可用后补录完整 ZIP 的自动硬门禁结果；本报告不把“代码路径存在”当作运行时通过。
