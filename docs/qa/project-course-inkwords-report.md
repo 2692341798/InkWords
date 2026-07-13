@@ -25,6 +25,7 @@
 | 离线课程验收 | `go test ./services/llm-stream/app/projectcourse -run TestOfflineInkWordsAcceptance -v`：三种读者等级证据/覆盖稳定，夹具章节合同与硬门禁通过，variant manifest 合同通过 |
 | 真实分析链路 | Docker Compose 中通过网关创建 `programming` 课程任务；首次运行暴露源码内嵌 `--- File: ... ---` 标记被误解析为路径的问题，修复为仅识别行首文件头后重跑成功，任务进入 `awaiting_approval`，固定 SHA 为 `f14bd1dbc1e568a2335341dd4df0f6c0574bee35`，生成 48 个章节蓝图与覆盖矩阵；覆盖接口显示 47/47 文件已覆盖 |
 | 浏览器入口验收 | 内置浏览器打开 `http://127.0.0.1:4173/`：课程入口、仓库/ref/读者等级控件和分析按钮均唯一可操作；输入 239 字符长仓库/ref 后页面无横向溢出 |
+| 浏览器课程流程 | 使用受控开发 bypass 入口 `http://127.0.0.1:4174/`：从工作入口进入课程，提交 InkWords 分析，等待 `awaiting_approval` 与固定 SHA，修改标题、交换前两章排序、关闭非核心章节并保存；页面重新显示修改后的蓝图状态。未点击“批准并继续生成”。 |
 | 容器集成冒烟 | Colima 调整为 4 CPU/8 GiB 后，全部 7 个应用镜像构建成功；Compose 服务均健康，首页返回 200，`/api/v1/ping` 返回 `pong`，core-api、RabbitMQ、Redis、Postgres 与 worker 就绪。course-runner 已补入 Go 工具链，但默认 Compose 安全策略下 bubblewrap 无法创建 namespace，实验验证仍保持关闭 |
 | 本地生成器合同 | `TestJSONChapterGeneratorBuildsEvidenceBoundChapterFromLocalMock`：本地 httptest JSON 响应经过 EvidenceRef、Claim Ledger、章节合同和质量门禁；不代表真实 DeepSeek 生成 |
 | 自动化测试 | 后端全量 Go 测试、前端全量测试、lint、build 和 Compose config 已通过（详见 baseline）；路径解析回归测试通过，修复后的 `llm-stream` 镜像已重新构建并运行 |
