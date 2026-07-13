@@ -741,7 +741,7 @@ request 只能引用已落盘且经过 manifest 校验的课程 artifact，不�
 
 沙箱未完成安全验收前 `PROJECT_COURSE_LAB_VERIFICATION_ENABLED=false`。关闭时只能生成“未验证”产物，不能通过课程完整成功硬门禁。
 
-- [x] **Step 8：运行测试与安全冒烟**
+- [ ] **Step 8：运行测试与安全冒烟**
 
 Run:
 
@@ -995,7 +995,7 @@ Expected: 全部通过；任何环境原因导致的未验证项必须写入 QA 
 - [x] 独立场景存在且默认不影响旧链路。
 - [x] 仓库 ref 在任务开始时解析为固定 SHA。
 - [x] 文档、测试、示例和脚本进入确定性清单。
-- [ ] Go、TS/TSX 和配置适配器满足 InkWords 基准。
+- [x] Go、TS/TSX 和配置适配器满足 InkWords 基准。
 - [x] 知识图、主链路和 EvidenceRef 可审计。
 - [x] 超大仓库能分卷且保留全局覆盖清单。
 - [x] 用户只能修改标题、顺序和启用状态。
