@@ -21,6 +21,7 @@
 | 实验隔离 | bubblewrap 默认关闭；启用时禁网、限时、限进程/内存/文件大小，目标仓库不会进入 runner |
 | 课程打包 | 仅接受已验证 checkpoint；manifest 锁定 commit、文件 hash 和排序 |
 | 阶段事件 | `CourseCheckpoint` 校验 course、blueprint version、input/output hash 和完成状态 |
+| 幂等查询索引 | PostgreSQL core migration 增加仅覆盖 `project_course_phase` 的 JSON 表达式索引；事务内临时同构表 `EXPLAIN (COSTS OFF)` 验证查询语法和排序路径。索引增加少量写放大/存储，适用相同输入哈希的结果复用查询 |
 | 离线课程验收 | `go test ./services/llm-stream/app/projectcourse -run TestOfflineInkWordsAcceptance -v`：三种读者等级证据/覆盖稳定，夹具章节合同与硬门禁通过，variant manifest 合同通过 |
 | 浏览器入口验收 | 内置浏览器打开 `http://127.0.0.1:4173/`：课程入口、仓库/ref/读者等级控件和分析按钮均唯一可操作；输入 239 字符长仓库/ref 后页面无横向溢出 |
 | 自动化测试 | 后端全量 Go 测试、前端全量测试、lint、build 和 Compose config 已通过（详见 baseline） |
