@@ -21,6 +21,7 @@
 | 实验隔离 | bubblewrap 默认关闭；启用时禁网、限时、限进程/内存/文件大小，目标仓库不会进入 runner |
 | 课程打包 | 仅接受已验证 checkpoint；manifest 锁定 commit、文件 hash 和排序 |
 | 阶段事件 | `CourseCheckpoint` 校验 course、blueprint version、input/output hash 和完成状态 |
+| 离线课程验收 | `go test ./services/llm-stream/app/projectcourse -run TestOfflineInkWordsAcceptance -v`：三种读者等级证据/覆盖稳定，夹具章节合同与硬门禁通过，variant manifest 合同通过 |
 | 自动化测试 | 后端全量 Go 测试、前端全量测试、lint、build 和 Compose config 已通过（详见 baseline） |
 
 ## 尚未通过或无法执行
@@ -28,12 +29,14 @@
 - 本机 Docker daemon 未启动，因此没有伪造 `docker compose up -d --build`、容器内实验验证和微服务冒烟结果。
 - DeepSeek 真实章节生成需要受控的 API 凭据和配额；当前只验证了生成器合同、证据门禁和任务路由，没有声称完整正文生成成功。
 - 三种读者等级的真实生成对比、人工完成三个累积 checkpoint、变式任务和故障排查 dogfood 尚未完成。
+- 浏览器深度交互验收未完成：当前沙箱中的 Playwright Chrome 进程无法启动；已有页面截图和组件测试不替代真实浏览器流程证据。
 - 需要在 Docker 和受控凭据可用后补录完整 ZIP 的自动硬门禁结果；本报告不把“代码路径存在”当作运行时通过。
 
 ## 复现命令
 
 ```bash
 cd backend && GOCACHE=/tmp/inkwords-go-build go test ./...
+cd backend && GOCACHE=/tmp/inkwords-go-build go test ./services/llm-stream/app/projectcourse -run TestOfflineInkWordsAcceptance -v
 cd frontend && npm test -- --run
 cd frontend && npm run lint
 cd frontend && npm run build
