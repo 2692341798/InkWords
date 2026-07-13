@@ -24,7 +24,10 @@ func TestTaskConsumerRoutesProjectCourseToDedicatedRunner(t *testing.T) {
 	require.JSONEq(t, `{"status":"awaiting_approval"}`, string(tasks.lastResult))
 	require.Len(t, tasks.appendEvents, 2)
 	require.Contains(t, string(tasks.appendEvents[0].Payload), `"stage":"analysis"`)
+	require.Contains(t, string(tasks.appendEvents[0].Payload), `"blueprint_version":1`)
 	require.Contains(t, string(tasks.appendEvents[1].Payload), `"checkpoint":"result_ready"`)
+	require.Contains(t, string(tasks.appendEvents[1].Payload), `"completed":true`)
+	require.Contains(t, string(tasks.appendEvents[1].Payload), `"output_hash":"sha256:`)
 }
 
 func TestTaskConsumerFailsProjectCourseWhenRunnerIsNotConfigured(t *testing.T) {

@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
+	sharedkernel "inkwords-backend/shared/kernel/projectcourse"
 	sharedrabbitmq "inkwords-backend/shared/platform/rabbitmq"
 )
 
@@ -205,7 +206,8 @@ func (c *TaskConsumer) handleProjectCourse(ctx context.Context, message sharedra
 	if message.Kind == "project_course_generate" {
 		stage = "generation"
 	}
-	if err := c.appendProjectCourseEvent(ctx, message.TaskID, payload.CourseID, stage, "started", 1, message.Payload); err != nil {
+	inputHash := hashCourseContent(message.Payload)
+	if err := c.appendProjectCourseEvent(ctx, message.TaskID, payload.CourseID, stage, "started", 1, projectCourseBlueprintVersion(message.Payload), inputHash, false, message.Payload); err != nil {
 		return err
 	}
 	result, err := c.projectCourse.Run(ctx, message)
@@ -214,25 +216,53 @@ func (c *TaskConsumer) handleProjectCourse(ctx context.Context, message sharedra
 		return c.tasks.MarkFailed(ctx, message.TaskID, err.Error())
 	}
 	c.metrics.Observe(strings.TrimSpace(message.Kind), time.Since(started), true)
-	if err := c.appendProjectCourseEvent(ctx, message.TaskID, payload.CourseID, stage, "result_ready", 2, result); err != nil {
+	if err := c.appendProjectCourseEvent(ctx, message.TaskID, payload.CourseID, stage, "result_ready", 2, projectCourseBlueprintVersion(result), inputHash, true, result); err != nil {
 		return err
 	}
 	return c.tasks.MarkSucceeded(ctx, message.TaskID, result)
 }
 
-func (c *TaskConsumer) appendProjectCourseEvent(ctx context.Context, taskID uuid.UUID, courseID, stage, checkpoint string, sequence int, content []byte) error {
-	sum := sha256.Sum256(content)
-	payload, err := json.Marshal(map[string]any{
-		"course_id":  courseID,
-		"stage":      stage,
-		"checkpoint": checkpoint,
-		"sequence":   sequence,
-		"input_hash": "sha256:" + hex.EncodeToString(sum[:]),
-	})
+func (c *TaskConsumer) appendProjectCourseEvent(ctx context.Context, taskID uuid.UUID, courseID, stage, checkpoint string, sequence, blueprintVersion int, inputHash string, completed bool, content []byte) error {
+	outputHash := ""
+	if completed {
+		outputHash = hashCourseContent(content)
+	}
+	checkpointPayload := sharedkernel.CourseCheckpoint{
+		CourseID: courseID, BlueprintVersion: blueprintVersion, Stage: stage,
+		Sequence: sequence, Checkpoint: checkpoint, InputHash: inputHash,
+		OutputHash: outputHash, Completed: completed,
+	}
+	if err := checkpointPayload.Validate(); err != nil {
+		return err
+	}
+	payload, err := json.Marshal(checkpointPayload)
 	if err != nil {
 		return err
 	}
 	return c.tasks.AppendEvent(ctx, taskID, AppendEventInput{EventType: "project_course_phase", Status: TaskStatusRunning, Payload: payload})
+}
+
+func hashCourseContent(content []byte) string {
+	sum := sha256.Sum256(content)
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+func projectCourseBlueprintVersion(content []byte) int {
+	var payload struct {
+		BlueprintVersion int `json:"blueprint_version"`
+		Blueprint        struct {
+			BlueprintVersion int `json:"blueprint_version"`
+		} `json:"blueprint"`
+	}
+	if json.Unmarshal(content, &payload) == nil {
+		if payload.BlueprintVersion > 0 {
+			return payload.BlueprintVersion
+		}
+		if payload.Blueprint.BlueprintVersion > 0 {
+			return payload.Blueprint.BlueprintVersion
+		}
+	}
+	return 1
 }
 
 func (c *TaskConsumer) watchCancellation(taskCtx context.Context, cancel context.CancelFunc, taskID uuid.UUID) {
