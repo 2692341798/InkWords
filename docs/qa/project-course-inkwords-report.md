@@ -23,7 +23,7 @@
 | 阶段事件 | `CourseCheckpoint` 校验 course、blueprint version、input/output hash 和完成状态 |
 | 幂等查询索引 | PostgreSQL core migration 增加仅覆盖 `project_course_phase` 的 JSON 表达式索引；事务内临时同构表 `EXPLAIN (COSTS OFF)` 验证查询语法和排序路径。索引增加少量写放大/存储，适用相同输入哈希的结果复用查询 |
 | 离线课程验收 | `go test ./services/llm-stream/app/projectcourse -run TestOfflineInkWordsAcceptance -v`：三种读者等级证据/覆盖稳定，夹具章节合同与硬门禁通过，variant manifest 合同通过 |
-| 真实分析链路 | Docker Compose 中通过网关创建 `programming` 课程任务；首次运行暴露源码内嵌 `--- File: ... ---` 标记被误解析为路径的问题，修复为仅识别行首文件头后重跑成功，任务进入 `awaiting_approval`，固定 SHA 为 `f14bd1dbc1e568a2335341dd4df0f6c0574bee35`，生成 48 个章节蓝图与覆盖矩阵 |
+| 真实分析链路 | Docker Compose 中通过网关创建 `programming` 课程任务；首次运行暴露源码内嵌 `--- File: ... ---` 标记被误解析为路径的问题，修复为仅识别行首文件头后重跑成功，任务进入 `awaiting_approval`，固定 SHA 为 `f14bd1dbc1e568a2335341dd4df0f6c0574bee35`，生成 48 个章节蓝图与覆盖矩阵；覆盖接口显示 47/47 文件已覆盖 |
 | 浏览器入口验收 | 内置浏览器打开 `http://127.0.0.1:4173/`：课程入口、仓库/ref/读者等级控件和分析按钮均唯一可操作；输入 239 字符长仓库/ref 后页面无横向溢出 |
 | 容器集成冒烟 | Colima 调整为 4 CPU/8 GiB 后，全部 7 个应用镜像构建成功；Compose 服务均健康，首页返回 200，`/api/v1/ping` 返回 `pong`，core-api、RabbitMQ、Redis、Postgres 与 worker 就绪 |
 | 自动化测试 | 后端全量 Go 测试、前端全量测试、lint、build 和 Compose config 已通过（详见 baseline）；路径解析回归测试通过，修复后的 `llm-stream` 镜像已重新构建并运行 |
