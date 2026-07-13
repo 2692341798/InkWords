@@ -111,14 +111,17 @@ type generatedChapterResult struct {
 }
 
 type generateTaskResult struct {
-	ResultVersion    int                      `json:"result_version"`
-	TaskSubtype      string                   `json:"task_subtype"`
-	CourseID         string                   `json:"course_id"`
-	BlueprintVersion int                      `json:"blueprint_version"`
-	CommitSHA        string                   `json:"commit_sha"`
-	Status           string                   `json:"status"`
-	BlogParentID     string                   `json:"blog_parent_id"`
-	Chapters         []generatedChapterResult `json:"chapters"`
+	ResultVersion    int                                `json:"result_version"`
+	TaskSubtype      string                             `json:"task_subtype"`
+	CourseID         string                             `json:"course_id"`
+	BlueprintVersion int                                `json:"blueprint_version"`
+	CommitSHA        string                             `json:"commit_sha"`
+	Status           string                             `json:"status"`
+	BlogParentID     string                             `json:"blog_parent_id"`
+	Chapters         []generatedChapterResult           `json:"chapters"`
+	QualityReport    []sharedkernel.GateReport          `json:"quality_report,omitempty"`
+	Coverage         sharedkernel.CoverageMatrix        `json:"coverage,omitempty"`
+	Usage            sharedkernel.CourseGenerationUsage `json:"usage"`
 }
 
 func (r *CourseTaskRunner) runGenerate(ctx context.Context, message sharedrabbitmq.GenerationRequestedMessage) ([]byte, error) {
@@ -145,7 +148,13 @@ func (r *CourseTaskRunner) runGenerate(ctx context.Context, message sharedrabbit
 	if analysis.Snapshot.ResolvedCommitSHA != payload.ResolvedCommitSHA {
 		return nil, fmt.Errorf("repository analyzer returned a different commit SHA")
 	}
-	result := generateTaskResult{ResultVersion: 1, TaskSubtype: message.Kind, CourseID: payload.CourseID, BlueprintVersion: payload.Blueprint.BlueprintVersion, CommitSHA: payload.ResolvedCommitSHA, Status: string(sharedkernel.CourseCompleted), BlogParentID: payload.CourseID}
+	allChapters := make([]sharedkernel.Chapter, 0)
+	for _, volume := range payload.Blueprint.Volumes {
+		allChapters = append(allChapters, volume.Chapters...)
+	}
+	result := generateTaskResult{ResultVersion: 1, TaskSubtype: message.Kind, CourseID: payload.CourseID, BlueprintVersion: payload.Blueprint.BlueprintVersion, CommitSHA: payload.ResolvedCommitSHA, Status: string(sharedkernel.CourseCompleted), BlogParentID: payload.CourseID, Coverage: buildCoverage(analysis.Graph, allChapters)}
+	succeededChapters := 0
+	blockedChapters := 0
 	for _, volume := range payload.Blueprint.Volumes {
 		for _, chapter := range volume.Chapters {
 			if !chapter.Enabled {
@@ -153,23 +162,33 @@ func (r *CourseTaskRunner) runGenerate(ctx context.Context, message sharedrabbit
 			}
 			official, officialErr := r.officialSourcesForChapter(chapter)
 			if officialErr != nil {
-				result.Status = string(sharedkernel.CourseBlocked)
+				blockedChapters++
 				result.Chapters = append(result.Chapters, generatedChapterResult{ChapterID: chapter.ID, VolumeID: volume.ID, VolumeTitle: volume.Title, Sort: chapter.Sort, Status: "blocked", Error: officialErr.Error()})
 				continue
 			}
 			pack, packErr := BuildEvidencePack(analysis.Snapshot, chapter.ID, chapter.EvidenceIDs, analysis.Graph, official)
 			if packErr != nil {
-				result.Status = string(sharedkernel.CourseBlocked)
+				blockedChapters++
 				result.Chapters = append(result.Chapters, generatedChapterResult{ChapterID: chapter.ID, VolumeID: volume.ID, VolumeTitle: volume.Title, Sort: chapter.Sort, Status: "blocked", Error: packErr.Error()})
 				continue
 			}
 			document, generateErr := r.generator.Generate(ctx, chapter, pack, payload.Blueprint.AudienceLevel)
 			if generateErr != nil {
-				result.Status = string(sharedkernel.CourseBlocked)
+				blockedChapters++
 				result.Chapters = append(result.Chapters, generatedChapterResult{ChapterID: chapter.ID, VolumeID: volume.ID, VolumeTitle: volume.Title, Sort: chapter.Sort, Status: "blocked", Error: generateErr.Error()})
 				continue
 			}
 			result.Chapters = append(result.Chapters, generatedChapterResult{ChapterID: chapter.ID, VolumeID: volume.ID, VolumeTitle: volume.Title, Sort: chapter.Sort, Status: "succeeded", Document: &document})
+			quality := RunChapterQualityGates(document, false)
+			result.QualityReport = append(result.QualityReport, quality.Checks...)
+			succeededChapters++
+		}
+	}
+	if blockedChapters > 0 {
+		if succeededChapters > 0 {
+			result.Status = string(sharedkernel.CoursePartiallyBlocked)
+		} else {
+			result.Status = string(sharedkernel.CourseBlocked)
 		}
 	}
 	return json.Marshal(result)

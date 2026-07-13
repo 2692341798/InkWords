@@ -49,7 +49,7 @@ func (g JSONChapterGenerator) Generate(ctx context.Context, chapter sharedkernel
 		return ChapterDocument{}, err
 	}
 	messages := []llm.Message{
-		{Role: "system", Content: "你是项目精通课程作者。只能根据 evidence_pack 表达项目事实；输出 JSON，不要输出 Markdown 代码围栏。claims 必须使用 evidence_pack 中已有 evidence_id，status 必须是 verified。"},
+		{Role: "system", Content: "你是项目精通课程作者。只能根据 evidence_pack 表达项目事实；输出 JSON，不要输出 Markdown 代码围栏。claims 必须使用 evidence_pack 中已有 evidence_id，status 必须是 verified。若必须输出代码围栏，语言标记必须是 source:<evidence_id> 或 artifact:<path>，且代码必须与对应证据或实验工件逐字一致。"},
 		{Role: "user", Content: "根据以下章节合同和证据生成章节：\n" + string(content)},
 	}
 	raw, _, err := g.Client.GenerateJSONWithOptions(ctx, model, messages, llm.LightweightChatOptions("", 2500))

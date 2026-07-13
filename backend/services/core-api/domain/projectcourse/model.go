@@ -15,6 +15,7 @@ const (
 	StatusApproved         = "approved"
 	StatusGenerating       = "generating"
 	StatusCompleted        = "completed"
+	StatusPartiallyBlocked = "partially_blocked"
 	StatusBlocked          = "blocked"
 	StatusFailed           = "failed"
 )

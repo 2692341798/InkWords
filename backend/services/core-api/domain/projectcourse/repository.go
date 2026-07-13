@@ -106,6 +106,8 @@ func (r *GormRepository) PersistProjectCourseGenerationResult(ctx context.Contex
 	status := StatusBlocked
 	if payload.Status == string(sharedkernel.CourseCompleted) {
 		status = StatusCompleted
+	} else if payload.Status == string(sharedkernel.CoursePartiallyBlocked) {
+		status = StatusPartiallyBlocked
 	}
 	dbResult := r.db.WithContext(ctx).Model(&ProjectCourse{}).
 		Where("id = ? AND status IN ? AND blueprint_version = ? AND resolved_commit_sha = ?", courseID, []string{StatusApproved, StatusGenerating}, payload.BlueprintVersion, payload.CommitSHA).

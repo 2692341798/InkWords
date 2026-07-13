@@ -53,3 +53,12 @@ func TestQualityGateRequiresOfficialSourceForTheoryAndLabVerification(t *testing
 	report = RunChapterQualityGates(document, false)
 	require.Equal(t, sharedkernel.GateHardFail, report.Result)
 }
+
+func TestQualityGateRequiresExactCodeFenceProvenance(t *testing.T) {
+	document := validChapterDocument()
+	document.EvidencePack.SourceContent = map[string]string{"ev-1": "package main\nfunc main() {}"}
+	document.Markdown = "# 主链路\n## 主链路\n## 数据流\n## 练习\n```source:ev-1\npackage main\nfunc main() {}\n```"
+	require.Equal(t, sharedkernel.GatePass, RunChapterQualityGates(document, false).Result)
+	document.Markdown = "# 主链路\n## 主链路\n## 数据流\n## 练习\n```go\npackage main\n```"
+	require.Equal(t, sharedkernel.GateHardFail, RunChapterQualityGates(document, false).Result)
+}

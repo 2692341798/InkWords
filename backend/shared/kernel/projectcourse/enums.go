@@ -58,6 +58,7 @@ const (
 	CourseApproved         CourseStatus = "approved"
 	CourseGenerating       CourseStatus = "generating"
 	CourseCompleted        CourseStatus = "completed"
+	CoursePartiallyBlocked CourseStatus = "partially_blocked"
 	CourseBlocked          CourseStatus = "blocked"
 	CourseFailed           CourseStatus = "failed"
 )
@@ -97,7 +98,7 @@ func (s ClaimStatus) Validate() error {
 }
 
 func (s CourseStatus) Validate() error {
-	return validateEnum(s, []CourseStatus{CourseDraft, CourseAnalyzing, CourseAwaitingApproval, CourseApproved, CourseGenerating, CourseCompleted, CourseBlocked, CourseFailed}, "course status")
+	return validateEnum(s, []CourseStatus{CourseDraft, CourseAnalyzing, CourseAwaitingApproval, CourseApproved, CourseGenerating, CourseCompleted, CoursePartiallyBlocked, CourseBlocked, CourseFailed}, "course status")
 }
 
 func (r GateResult) Validate() error {

@@ -172,7 +172,7 @@ Expected: PASS。把实际耗时和失败项写入 baseline；不要为了计划
 - Test: `backend/shared/kernel/projectcourse/*_test.go`
 - Test: `frontend/src/lib/scenarioMode.test.ts`
 
-- [ ] **Step 1：先写枚举与 JSON 合同失败测试**
+- [x] **Step 1：先写枚举与 JSON 合同失败测试**
 
 锁定：
 
@@ -181,19 +181,19 @@ Expected: PASS。把实际耗时和失败项写入 baseline；不要为了计划
 - 章节类型、证据置信度、课程状态、门禁结果的 JSON 值稳定；
 - 未知枚举必须显式报错，不能静默回退到电子书场景。
 
-- [ ] **Step 2：定义不可变 SourceSnapshot**
+- [x] **Step 2：定义不可变 SourceSnapshot**
 
 要求 `resolved_commit_sha` 为必填 40 位十六进制 SHA；任何下游合同必须带 `course_id`、`blueprint_version` 和 SHA。
 
-- [ ] **Step 3：定义 EvidenceRef 与 Claim**
+- [x] **Step 3：定义 EvidenceRef 与 Claim**
 
 EvidenceRef 至少包含 path、symbol、line range、content hash。Claim 必须包含类型、置信度、证据 ID 和验证状态。
 
-- [ ] **Step 4：定义 Blueprint 与 Coverage**
+- [x] **Step 4：定义 Blueprint 与 Coverage**
 
 蓝图包含 volumes、chapters、dependencies、learning outcomes、evidence IDs、lab spec 和 coverage matrix。对外更新 DTO 只暴露 title、sort、enabled。
 
-- [ ] **Step 5：运行合同测试**
+- [x] **Step 5：运行合同测试**
 
 Run:
 
@@ -219,11 +219,11 @@ Expected: PASS。
 - Modify: `backend/shared/platform/parser/git_fetcher_github.go`
 - Modify: `backend/shared/platform/parser/git_fetcher_types.go`
 
-- [ ] **Step 1：写失败测试复现非确定性截断**
+- [x] **Step 1：写失败测试复现非确定性截断**
 
 对相同输入重复构建清单 100 次，要求路径、角色、顺序和纳入状态完全一致。
 
-- [ ] **Step 2：把“忽略”改为“分类与处置”**
+- [x] **Step 2：把“忽略”改为“分类与处置”**
 
 为文档、示例、脚本、测试、generated、binary 建立 FileRole 与 disposition：
 
@@ -233,19 +233,19 @@ covered | indexed | excluded
 
 每个 excluded 项必须带机器可读 reason。
 
-- [ ] **Step 3：解析并锁定 commit SHA**
+- [x] **Step 3：解析并锁定 commit SHA**
 
 GitHub API 和 Git CLI 两条路径都返回 resolved SHA。禁止后续请求继续使用 `HEAD` 读取正文；统一使用固定 SHA。
 
-- [ ] **Step 4：稳定排序与预算**
+- [x] **Step 4：稳定排序与预算**
 
 按 role priority、normalized path、content hash 排序。超预算时保留完整元数据，只延迟正文读取；不得随机删除模块。
 
-- [ ] **Step 5：保护路径和大文件**
+- [x] **Step 5：保护路径和大文件**
 
 增加 path traversal、symlink、非 UTF-8、超大单文件、Git LFS pointer 和 submodule 的显式处置测试。
 
-- [ ] **Step 6：运行测试**
+- [x] **Step 6：运行测试**
 
 Run:
 
@@ -268,11 +268,11 @@ Expected: PASS；现有 Git 分析路径行为保持兼容。
 - Create: `backend/services/llm-stream/app/projectcourse/knowledge_graph.go`
 - Create: `backend/services/llm-stream/app/projectcourse/knowledge_graph_test.go`
 
-- [ ] **Step 1：定义适配器接口和确定性输出**
+- [x] **Step 1：定义适配器接口和确定性输出**
 
 接口只接收文件内容和固定 SHA，不执行 build、test、install 或项目脚本。
 
-- [ ] **Step 2：实现 Go 适配器**
+- [x] **Step 2：实现 Go 适配器**
 
 优先使用标准库 `go/parser`、`go/ast`、`go/token` 提取：
 
@@ -287,19 +287,19 @@ Expected: PASS；现有 Git 分析路径行为保持兼容。
 
 验收最少提取 imports/exports、函数、组件、hooks 和调用引用。若选型未通过，先提供 `low_precision` 文件级适配器并阻止把关系推断写成确定事实。
 
-- [ ] **Step 4：实现配置适配器**
+- [x] **Step 4：实现配置适配器**
 
 解析 `docker-compose.yml`、Dockerfile、Nginx、Go module 和 package manifest，提取服务拓扑、端口、依赖和技术版本证据。
 
-- [ ] **Step 5：构建知识图**
+- [x] **Step 5：构建知识图**
 
 合并静态事实与受证据约束的 LLM 模块摘要。LLM 输出不得创建没有 EvidenceRef 的 symbol 或 relation。
 
-- [ ] **Step 6：建立主链路候选**
+- [x] **Step 6：建立主链路候选**
 
 从入口、route、consumer、command、React event handler 等开始，生成到持久化、消息发布、外部 API 或 UI 状态的候选链路。
 
-- [ ] **Step 7：测试 InkWords 关键事实**
+- [x] **Step 7：测试 InkWords 关键事实**
 
 断言至少能识别 core-api route、llm-stream consumer、RabbitMQ 配置、React generator hook 和 Docker Compose 服务边界。
 
@@ -325,11 +325,11 @@ Expected: PASS。
 - Modify: `backend/db/init/00-create-review-db.sql` 或新增独立初始化 SQL（按现有初始化约定选择）
 - Modify: `docs/runbooks/core-blog-task-boundary.md`
 
-- [ ] **Step 1：先写 repository 测试**
+- [x] **Step 1：先写 repository 测试**
 
 覆盖创建、按 owner 读取、蓝图版本 CAS 更新、批准后不可原地修改、跨用户不可读取。
 
-- [ ] **Step 2：新增 `project_courses` 模型**
+- [x] **Step 2：新增 `project_courses` 模型**
 
 实现设计文档中的字段，并增加：
 
@@ -338,7 +338,7 @@ Expected: PASS。
 - `status` 检查约束；
 - `blueprint_version > 0` 检查约束。
 
-- [ ] **Step 3：实现乐观锁更新**
+- [x] **Step 3：实现乐观锁更新**
 
 更新条件必须包含：
 
@@ -361,11 +361,11 @@ LIMIT 20;
 
 记录是否命中索引。说明索引带来的写放大和存储成本。
 
-- [ ] **Step 5：说明回滚策略**
+- [x] **Step 5：说明回滚策略**
 
 功能开关关闭即可停止新写入；数据库回滚只删除尚未对外使用的 `project_courses` 表。已产生课程数据后不自动 drop，改用前向迁移。
 
-- [ ] **Step 6：运行测试**
+- [x] **Step 6：运行测试**
 
 Run:
 
@@ -390,31 +390,31 @@ Expected: PASS。
 - Modify: `backend/services/core-api/domain/task/dto.go`
 - Modify: `backend/services/core-api/domain/task/service.go`
 
-- [ ] **Step 1：写 API 契约测试**
+- [x] **Step 1：写 API 契约测试**
 
 覆盖创建、读取、更新蓝图、批准、生成、覆盖报告、质量报告和打包。
 
-- [ ] **Step 2：创建分析任务**
+- [x] **Step 2：创建分析任务**
 
 `POST /project-courses` 校验 URL/ref/audience，创建 course draft 和 `project_course_analyze` task，消息只携带 course ID、owner ID 和不可变请求字段。
 
-- [ ] **Step 3：限制蓝图更新字段**
+- [x] **Step 3：限制蓝图更新字段**
 
 服务端只应用 title、sort、enabled；若客户端提交 evidence、learning outcomes 或 coverage，返回 400，不做静默忽略。
 
-- [ ] **Step 4：批准前校验**
+- [x] **Step 4：批准前校验**
 
 批准必须确认：无依赖断裂、蓝图版本匹配、覆盖报告已计算、至少一个启用章节。若禁用核心章节，允许批准但状态标记为 customized coverage。
 
-- [ ] **Step 5：创建生成任务**
+- [x] **Step 5：创建生成任务**
 
 生成任务固定 course ID、blueprint version、commit SHA。批准后的蓝图版本不可被后台读取为“最新版本”。
 
-- [ ] **Step 6：鉴权与错误码**
+- [x] **Step 6：鉴权与错误码**
 
 跨用户统一返回 404；版本冲突返回 409；状态冲突返回稳定业务错误码，不泄漏内部 SQL。
 
-- [ ] **Step 7：运行测试**
+- [x] **Step 7：运行测试**
 
 Run:
 
@@ -437,33 +437,33 @@ Expected: PASS。
 - Modify: `backend/services/llm-stream/domain/stream/task_consumer.go`
 - Modify: `backend/services/llm-stream/domain/stream/dto.go`
 
-- [ ] **Step 1：先写 Blueprint 结构与门禁测试**
+- [x] **Step 1：先写 Blueprint 结构与门禁测试**
 
 要求每个启用章节具备类型、学习成果、依赖、证据、技术主题和练习信息；项目地图章必须为第一卷前置。
 
-- [ ] **Step 2：实现依赖优先的分卷算法**
+- [x] **Step 2：实现依赖优先的分卷算法**
 
 先根据知识图生成主题簇，再按主链路完整性、卷容量和累积实验检查点拆卷。不要直接按根目录一目录一章。
 
-- [ ] **Step 3：实现三层依赖分类**
+- [x] **Step 3：实现三层依赖分类**
 
 - core technology：必须原理与实验覆盖；
 - important library：必须用途、原因、替代方案和边界；
 - ordinary dependency：只进索引。
 
-- [ ] **Step 4：计算全局 Coverage Matrix**
+- [x] **Step 4：计算全局 Coverage Matrix**
 
 所有 module、main flow、technology、decision、file、exercise 都有 disposition 和 chapter IDs。
 
-- [ ] **Step 5：修复或阻断错误蓝图**
+- [x] **Step 5：修复或阻断错误蓝图**
 
 模型生成后先做确定性校验；缺证据、循环依赖、孤立核心模块时进行一次定向修复，仍失败则任务失败，不用空章节补位。
 
-- [ ] **Step 6：持久化 Analyze 任务结果**
+- [x] **Step 6：持久化 Analyze 任务结果**
 
 结果包含 source snapshot、knowledge graph 摘要、blueprint、coverage 和成本估算。由 core-api 归并到 course 实体。
 
-- [ ] **Step 7：运行测试**
+- [x] **Step 7：运行测试**
 
 Run:
 
@@ -494,19 +494,19 @@ Expected: PASS。
 - Create: `frontend/src/components/project-course/ApprovalBar.tsx`
 - Modify: `frontend/src/pages/Generator.tsx` 或当前生成器入口文件
 
-- [ ] **Step 1：先写 store 与 request builder 测试**
+- [x] **Step 1：先写 store 与 request builder 测试**
 
 覆盖 analyze/create、乐观版本、蓝图有限编辑、批准与 generation task 请求。
 
-- [ ] **Step 2：增加独立场景入口**
+- [x] **Step 2：增加独立场景入口**
 
 中文文案明确：完整仓库、质量优先、先生成蓝图、耗时和成本高于小白教程。
 
-- [ ] **Step 3：实现读者等级选择**
+- [x] **Step 3：实现读者等级选择**
 
 默认 `programming`，解释三个等级只改变脚手架深度，不改变事实和能力目标。
 
-- [ ] **Step 4：实现卷册树和有限编辑**
+- [x] **Step 4：实现卷册树和有限编辑**
 
 只允许：
 
@@ -520,7 +520,7 @@ Expected: PASS。
 
 禁用或移动章节后调用后端 dry-run 校验，显示断裂依赖、覆盖率下降和 complete/customized 状态。
 
-- [ ] **Step 6：处理版本冲突**
+- [x] **Step 6：处理版本冲突**
 
 409 时刷新服务器蓝图并提示用户重新应用修改，不覆盖另一窗口或后台的新版本。
 
@@ -528,7 +528,7 @@ Expected: PASS。
 
 验证桌面和移动端：长标题、数十章节、多卷折叠、键盘操作、拖拽替代按钮、焦点可见、错误与空状态。
 
-- [ ] **Step 8：运行测试**
+- [x] **Step 8：运行测试**
 
 Run:
 
@@ -625,7 +625,7 @@ Expected: PASS。
 
 禁止沿用现有“只给草稿和 review actions”的终稿模式。终稿后再次解析 Claim Ledger 并运行硬门禁。
 
-- [ ] **Step 7：代码块来源一致性**
+- [x] **Step 7：代码块来源一致性**
 
 项目源码代码块从 EvidenceRef 渲染；教学代码块从课程代码工件渲染。模型不得独立生成一份与 artifact 不同的同名代码。
 
@@ -804,7 +804,7 @@ Expected: PASS。
 - Modify: `backend/services/core-api/domain/blog/persistence.go`
 - Test: corresponding `*_test.go`
 
-- [ ] **Step 1：定义 result schema v1**
+- [x] **Step 1：定义 result schema v1**
 
 结果包含 course、volumes、chapters、quality report、coverage、blog mapping、lab artifact references 和 usage。每章有显式 succeeded/blocked/failed 状态。
 
@@ -816,7 +816,7 @@ Expected: PASS。
 
 若现有 blogs 只支持一层 parent/child，首期使用一个课程父博客，卷册信息写入章节 metadata 和导读目录；不要未经评审扩展任意深度树。
 
-- [ ] **Step 4：部分失败语义**
+- [x] **Step 4：部分失败语义**
 
 成功章节可以持久化，但存在硬失败章节时课程状态为 `partially_blocked`，不能标为完整成功。重试只替换目标章节。
 
@@ -824,7 +824,7 @@ Expected: PASS。
 
 使用 course ID、blueprint version、chapter ID 做幂等键；重复消费不得重复创建博客或累计 token。
 
-- [ ] **Step 6：运行测试**
+- [x] **Step 6：运行测试**
 
 Run:
 
@@ -992,22 +992,22 @@ Expected: 全部通过；任何环境原因导致的未验证项必须写入 QA 
 
 ## 20. 最终完成检查表
 
-- [ ] 独立场景存在且默认不影响旧链路。
-- [ ] 仓库 ref 在任务开始时解析为固定 SHA。
-- [ ] 文档、测试、示例和脚本进入确定性清单。
+- [x] 独立场景存在且默认不影响旧链路。
+- [x] 仓库 ref 在任务开始时解析为固定 SHA。
+- [x] 文档、测试、示例和脚本进入确定性清单。
 - [ ] Go、TS/TSX 和配置适配器满足 InkWords 基准。
-- [ ] 知识图、主链路和 EvidenceRef 可审计。
-- [ ] 超大仓库能分卷且保留全局覆盖清单。
-- [ ] 用户只能修改标题、顺序和启用状态。
-- [ ] 蓝图批准和生成绑定精确版本。
-- [ ] 每种章节类型使用独立合同。
-- [ ] 项目事实和核心原理来源通过硬门禁。
-- [ ] 终稿仍使用 Evidence Pack。
-- [ ] 累积实验包含 starter、检查点、提示、答案和测试。
-- [ ] 目标仓库从未被执行。
+- [x] 知识图、主链路和 EvidenceRef 可审计。
+- [x] 超大仓库能分卷且保留全局覆盖清单。
+- [x] 用户只能修改标题、顺序和启用状态。
+- [x] 蓝图批准和生成绑定精确版本。
+- [x] 每种章节类型使用独立合同。
+- [x] 项目事实和核心原理来源通过硬门禁。
+- [x] 终稿仍使用 Evidence Pack。
+- [x] 累积实验包含 starter、检查点、提示、答案和测试。
+- [x] 目标仓库从未被执行。
 - [ ] 实验在成熟隔离方案中禁网、限时、限资源运行。
-- [ ] ZIP 受控下载且 manifest 锁定 SHA 与文件 hash。
-- [ ] task-only 结果由 core-api 幂等归并。
+- [x] ZIP 受控下载且 manifest 锁定 SHA 与文件 hash。
+- [x] task-only 结果由 core-api 幂等归并。
 - [ ] InkWords 自动指标和人工 dogfood 均通过。
-- [ ] 全量 Go/前端测试、lint 和 build 通过。
-- [ ] README、API、架构和 runbook 已同步。
+- [x] 全量 Go/前端测试、lint 和 build 通过。
+- [x] README、API、架构和 runbook 已同步。
