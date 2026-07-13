@@ -213,12 +213,14 @@ func (c *TaskConsumer) handleProjectCourse(ctx context.Context, message sharedra
 			return reuseErr
 		}
 		if found {
+			c.metrics.ObserveCache(true)
 			c.metrics.Observe(strings.TrimSpace(message.Kind), time.Since(started), true)
 			if err := c.appendProjectCourseEvent(ctx, message.TaskID, payload.CourseID, stage, "cache_hit", 1, projectCourseBlueprintVersion(message.Payload), inputHash, true, cachedResult); err != nil {
 				return err
 			}
 			return c.tasks.MarkSucceeded(ctx, message.TaskID, cachedResult)
 		}
+		c.metrics.ObserveCache(false)
 	}
 	if err := c.appendProjectCourseEvent(ctx, message.TaskID, payload.CourseID, stage, "started", 1, projectCourseBlueprintVersion(message.Payload), inputHash, false, message.Payload); err != nil {
 		return err

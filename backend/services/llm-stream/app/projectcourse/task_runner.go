@@ -159,7 +159,9 @@ func (r *CourseTaskRunner) runGenerate(ctx context.Context, message sharedrabbit
 	inputHash := hashProjectCourseValue(payload)
 	result.Checkpoints = append(result.Checkpoints,
 		projectCourseCheckpoint(payload.CourseID, payload.Blueprint.BlueprintVersion, "analysis", 1, "snapshot", inputHash, hashProjectCourseValue(analysis.Snapshot)),
-		projectCourseCheckpoint(payload.CourseID, payload.Blueprint.BlueprintVersion, "blueprint", 2, "blueprint", hashProjectCourseValue(analysis.Snapshot), hashProjectCourseValue(payload.Blueprint)),
+		projectCourseCheckpoint(payload.CourseID, payload.Blueprint.BlueprintVersion, "analysis", 2, "inventory", hashProjectCourseValue(analysis.Snapshot), hashProjectCourseValue(analysis.Graph.Files)),
+		projectCourseCheckpoint(payload.CourseID, payload.Blueprint.BlueprintVersion, "analysis", 3, "knowledge_graph", hashProjectCourseValue(analysis.Graph.Files), hashProjectCourseValue(analysis.Graph)),
+		projectCourseCheckpoint(payload.CourseID, payload.Blueprint.BlueprintVersion, "blueprint", 1, "blueprint", hashProjectCourseValue(analysis.Snapshot), hashProjectCourseValue(payload.Blueprint)),
 	)
 	succeededChapters := 0
 	blockedChapters := 0
@@ -193,8 +195,13 @@ func (r *CourseTaskRunner) runGenerate(ctx context.Context, message sharedrabbit
 			result.QualityReport = append(result.QualityReport, quality.Checks...)
 			result.Checkpoints = append(result.Checkpoints,
 				projectCourseCheckpoint(payload.CourseID, payload.Blueprint.BlueprintVersion, "generation", len(result.Checkpoints)+1, "claim_plan:"+chapter.ID, packHash, hashProjectCourseValue(document.Claims)),
+				projectCourseCheckpoint(payload.CourseID, payload.Blueprint.BlueprintVersion, "generation", len(result.Checkpoints)+1, "draft:"+chapter.ID, hashProjectCourseValue(document.Claims), hashProjectCourseValue(document.Markdown)),
+				projectCourseCheckpoint(payload.CourseID, payload.Blueprint.BlueprintVersion, "generation", len(result.Checkpoints)+1, "review:"+chapter.ID, hashProjectCourseValue(document.Markdown), hashProjectCourseValue(quality)),
 				projectCourseCheckpoint(payload.CourseID, payload.Blueprint.BlueprintVersion, "generation", len(result.Checkpoints)+1, "final_gate:"+chapter.ID, hashProjectCourseValue(document.Claims), hashProjectCourseValue(quality)),
 			)
+			if document.Lab != nil {
+				result.Checkpoints = append(result.Checkpoints, projectCourseCheckpoint(payload.CourseID, payload.Blueprint.BlueprintVersion, "lab", len(result.Checkpoints)+1, "lab_manifest:"+chapter.ID, hashProjectCourseValue(document.Markdown), hashProjectCourseValue(document.Lab)))
+			}
 			succeededChapters++
 		}
 	}

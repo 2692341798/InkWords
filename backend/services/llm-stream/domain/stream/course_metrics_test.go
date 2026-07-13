@@ -19,8 +19,16 @@ func TestCourseMetricsSnapshotsStageRunsAndFailures(t *testing.T) {
 
 func TestCourseMetricsObservesGatesClaimsAndCoverage(t *testing.T) {
 	metrics := NewCourseMetrics()
-	metrics.ObserveResult([]byte(`{"quality_report":[{"name":"official_source","result":"hard_fail"}],"chapters":[{"document":{"claims":[{"status":"verified"},{"status":"unsupported"}]}}],"coverage":{"files":[{"covered":true},{"covered":false}]}}`))
+	metrics.ObserveCache(true)
+	metrics.ObserveCache(false)
+	metrics.ObserveResult([]byte(`{"quality_report":[{"name":"official_source","result":"hard_fail"}],"chapters":[{"document":{"claims":[{"status":"verified"},{"status":"unsupported"}]}}],"coverage":{"files":[{"covered":true},{"covered":false}]},"usage":{"prompt_tokens":11,"completion_tokens":7,"prompt_cache_hit_tokens":3,"prompt_cache_miss_tokens":8}}`))
 	snapshot := metrics.Snapshot()
+	require.Equal(t, 1, snapshot.CacheHits)
+	require.Equal(t, 1, snapshot.CacheMisses)
+	require.Equal(t, 11, snapshot.PromptTokens)
+	require.Equal(t, 7, snapshot.CompletionTokens)
+	require.Equal(t, 3, snapshot.PromptCacheHitTokens)
+	require.Equal(t, 8, snapshot.PromptCacheMissTokens)
 	require.Equal(t, 1, snapshot.GateFailures["official_source"])
 	require.Equal(t, 1, snapshot.ClaimStatuses["verified"])
 	require.Equal(t, 1, snapshot.ClaimStatuses["unsupported"])

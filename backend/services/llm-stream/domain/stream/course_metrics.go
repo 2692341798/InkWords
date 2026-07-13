@@ -7,13 +7,19 @@ import (
 )
 
 type CourseMetricsSnapshot struct {
-	StageRuns       map[string]int   `json:"stage_runs"`
-	StageFailures   map[string]int   `json:"stage_failures"`
-	CompletedStages map[string]int   `json:"completed_stages"`
-	TotalDurationMS map[string]int64 `json:"total_duration_ms"`
-	GateFailures    map[string]int   `json:"gate_failures"`
-	ClaimStatuses   map[string]int   `json:"claim_statuses"`
-	CoverageItems   map[string]int   `json:"coverage_items"`
+	StageRuns             map[string]int   `json:"stage_runs"`
+	StageFailures         map[string]int   `json:"stage_failures"`
+	CompletedStages       map[string]int   `json:"completed_stages"`
+	TotalDurationMS       map[string]int64 `json:"total_duration_ms"`
+	CacheHits             int              `json:"cache_hits"`
+	CacheMisses           int              `json:"cache_misses"`
+	PromptTokens          int              `json:"prompt_tokens"`
+	CompletionTokens      int              `json:"completion_tokens"`
+	PromptCacheHitTokens  int              `json:"prompt_cache_hit_tokens"`
+	PromptCacheMissTokens int              `json:"prompt_cache_miss_tokens"`
+	GateFailures          map[string]int   `json:"gate_failures"`
+	ClaimStatuses         map[string]int   `json:"claim_statuses"`
+	CoverageItems         map[string]int   `json:"coverage_items"`
 }
 
 type CourseMetrics struct {
@@ -44,12 +50,22 @@ func (m *CourseMetrics) ObserveResult(result []byte) {
 		Coverage map[string][]struct {
 			Covered bool `json:"covered"`
 		} `json:"coverage"`
+		Usage struct {
+			PromptTokens          int `json:"prompt_tokens"`
+			CompletionTokens      int `json:"completion_tokens"`
+			PromptCacheHitTokens  int `json:"prompt_cache_hit_tokens"`
+			PromptCacheMissTokens int `json:"prompt_cache_miss_tokens"`
+		} `json:"usage"`
 	}
 	if json.Unmarshal(result, &payload) != nil {
 		return
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.snapshot.PromptTokens += payload.Usage.PromptTokens
+	m.snapshot.CompletionTokens += payload.Usage.CompletionTokens
+	m.snapshot.PromptCacheHitTokens += payload.Usage.PromptCacheHitTokens
+	m.snapshot.PromptCacheMissTokens += payload.Usage.PromptCacheMissTokens
 	for _, gate := range payload.QualityReport {
 		if gate.Result == "hard_fail" || gate.Result == "soft_fail" {
 			m.snapshot.GateFailures[gate.Name]++
@@ -74,6 +90,19 @@ func (m *CourseMetrics) ObserveResult(result []byte) {
 	}
 }
 
+func (m *CourseMetrics) ObserveCache(hit bool) {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if hit {
+		m.snapshot.CacheHits++
+		return
+	}
+	m.snapshot.CacheMisses++
+}
+
 func (m *CourseMetrics) Observe(stage string, duration time.Duration, completed bool) {
 	if m == nil {
 		return
@@ -92,7 +121,7 @@ func (m *CourseMetrics) Observe(stage string, duration time.Duration, completed 
 func (m *CourseMetrics) Snapshot() CourseMetricsSnapshot {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	clone := CourseMetricsSnapshot{StageRuns: map[string]int{}, StageFailures: map[string]int{}, CompletedStages: map[string]int{}, TotalDurationMS: map[string]int64{}, GateFailures: map[string]int{}, ClaimStatuses: map[string]int{}, CoverageItems: map[string]int{}}
+	clone := CourseMetricsSnapshot{StageRuns: map[string]int{}, StageFailures: map[string]int{}, CompletedStages: map[string]int{}, TotalDurationMS: map[string]int64{}, CacheHits: m.snapshot.CacheHits, CacheMisses: m.snapshot.CacheMisses, PromptTokens: m.snapshot.PromptTokens, CompletionTokens: m.snapshot.CompletionTokens, PromptCacheHitTokens: m.snapshot.PromptCacheHitTokens, PromptCacheMissTokens: m.snapshot.PromptCacheMissTokens, GateFailures: map[string]int{}, ClaimStatuses: map[string]int{}, CoverageItems: map[string]int{}}
 	for key, value := range m.snapshot.StageRuns {
 		clone.StageRuns[key] = value
 	}

@@ -28,7 +28,7 @@ func PlanBlueprint(courseID string, snapshot projectcourse.SourceSnapshot, graph
 
 	chapters := []projectcourse.Chapter{{
 		ID: "chapter-" + stableID("project-map"), Title: "项目地图与主链路", Sort: 1, Enabled: true,
-		Type: projectcourse.ChapterProjectMap, EvidenceIDs: evidenceIDsForFiles(graph.Files),
+		Type: projectcourse.ChapterProjectMap, EvidenceIDs: evidenceIDsForFiles(graph.Files), LearningOutcomes: learningOutcomesForAudience(audience, "解释项目入口、主链路和边界"),
 	}}
 	files := append([]InventoryEntry(nil), graph.Files...)
 	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
@@ -41,7 +41,7 @@ func PlanBlueprint(courseID string, snapshot projectcourse.SourceSnapshot, graph
 		id := "chapter-" + stableID(file.Path)
 		chapters = append(chapters, projectcourse.Chapter{
 			ID: id, Title: chapterTitle(file), Sort: index + 2, Enabled: true, Type: chapterType,
-			PrerequisiteIDs: []string{previousID}, EvidenceIDs: evidenceIDsForFiles([]InventoryEntry{file}),
+			PrerequisiteIDs: []string{previousID}, EvidenceIDs: evidenceIDsForFiles([]InventoryEntry{file}), LearningOutcomes: learningOutcomesForAudience(audience, "说明该模块的职责、边界和关键行为"),
 		})
 		previousID = id
 	}
@@ -72,6 +72,15 @@ func chapterTypeForRole(role FileRole) projectcourse.ChapterType {
 }
 
 func chapterTitle(file InventoryEntry) string { return "模块实践：" + file.Path }
+
+func learningOutcomesForAudience(audience projectcourse.AudienceLevel, base string) []projectcourse.LearningOutcome {
+	texts := map[projectcourse.AudienceLevel]string{
+		projectcourse.AudienceFoundation:    base + "，并能按提示完成最小复现。",
+		projectcourse.AudienceProgramming:   base + "，并能沿源码证据定位实现。",
+		projectcourse.AudienceStackFamiliar: base + "，并能比较替代方案与工程取舍。",
+	}
+	return []projectcourse.LearningOutcome{{ID: "outcome-" + stableID(string(audience)+"\x00"+base), Text: texts[audience]}}
+}
 
 func stableID(value string) string {
 	sum := sha256.Sum256([]byte(value))

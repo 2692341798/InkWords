@@ -60,9 +60,18 @@ func TestCourseTaskRunnerGeneratesOnlyAgainstPinnedCommit(t *testing.T) {
 	require.Len(t, decoded.Chapters, 1)
 	require.Equal(t, "succeeded", decoded.Chapters[0].Status)
 	require.NotEmpty(t, decoded.Checkpoints)
+	checkpoints := make(map[string]bool, len(decoded.Checkpoints))
 	for _, checkpoint := range decoded.Checkpoints {
 		require.NoError(t, checkpoint.Validate())
+		checkpoints[checkpoint.Checkpoint] = true
 	}
+	require.True(t, checkpoints["snapshot"])
+	require.True(t, checkpoints["inventory"])
+	require.True(t, checkpoints["knowledge_graph"])
+	require.True(t, checkpoints["blueprint"])
+	require.True(t, checkpoints["draft:chapter-1"])
+	require.True(t, checkpoints["review:chapter-1"])
+	require.True(t, checkpoints["final_gate:chapter-1"])
 }
 
 func TestCourseTaskRunnerPreservesSuccessfulChaptersWhenAnotherIsBlocked(t *testing.T) {
