@@ -4,38 +4,39 @@ import "github.com/gin-gonic/gin"
 
 // CoreHandlers defines the service-owned core-api HTTP surface.
 type CoreHandlers struct {
-	AuthRegister                 gin.HandlerFunc
-	AuthLogin                    gin.HandlerFunc
-	AuthBindGithub               gin.HandlerFunc
-	AuthGetCaptcha               gin.HandlerFunc
-	AuthOAuthRedirect            gin.HandlerFunc
-	AuthOAuthCallback            gin.HandlerFunc
-	UserProfile                  gin.HandlerFunc
-	UserUpdateProfile            gin.HandlerFunc
-	UserUploadAvatar             gin.HandlerFunc
-	UserStats                    gin.HandlerFunc
-	UserGetPromptSetting         gin.HandlerFunc
-	UserPutPromptSetting         gin.HandlerFunc
-	BlogList                     gin.HandlerFunc
-	BlogCreateDraft              gin.HandlerFunc
-	BlogBatchDelete              gin.HandlerFunc
-	BlogUpdate                   gin.HandlerFunc
-	ProjectScan                  gin.HandlerFunc
-	ProjectAnalyze               gin.HandlerFunc
-	ProjectCourseCreate          gin.HandlerFunc
-	ProjectCourseGet             gin.HandlerFunc
-	ProjectCourseCoverage        gin.HandlerFunc
-	ProjectCourseQualityReport   gin.HandlerFunc
-	ProjectCourseBlueprintUpdate gin.HandlerFunc
-	ProjectCourseApprove         gin.HandlerFunc
-	ProjectCoursePackage         gin.HandlerFunc
-	TaskCreateGeneration         gin.HandlerFunc
-	TaskCreateParse              gin.HandlerFunc
-	TaskCreateExport             gin.HandlerFunc
-	TaskGet                      gin.HandlerFunc
-	TaskCancel                   gin.HandlerFunc
-	TaskStream                   gin.HandlerFunc
-	TaskDownload                 gin.HandlerFunc
+	AuthRegister                  gin.HandlerFunc
+	AuthLogin                     gin.HandlerFunc
+	AuthBindGithub                gin.HandlerFunc
+	AuthGetCaptcha                gin.HandlerFunc
+	AuthOAuthRedirect             gin.HandlerFunc
+	AuthOAuthCallback             gin.HandlerFunc
+	UserProfile                   gin.HandlerFunc
+	UserUpdateProfile             gin.HandlerFunc
+	UserUploadAvatar              gin.HandlerFunc
+	UserStats                     gin.HandlerFunc
+	UserGetPromptSetting          gin.HandlerFunc
+	UserPutPromptSetting          gin.HandlerFunc
+	BlogList                      gin.HandlerFunc
+	BlogCreateDraft               gin.HandlerFunc
+	BlogBatchDelete               gin.HandlerFunc
+	BlogUpdate                    gin.HandlerFunc
+	ProjectScan                   gin.HandlerFunc
+	ProjectAnalyze                gin.HandlerFunc
+	ProjectCourseCreate           gin.HandlerFunc
+	ProjectCourseGet              gin.HandlerFunc
+	ProjectCourseCoverage         gin.HandlerFunc
+	ProjectCourseQualityReport    gin.HandlerFunc
+	ProjectCourseBlueprintPreview gin.HandlerFunc
+	ProjectCourseBlueprintUpdate  gin.HandlerFunc
+	ProjectCourseApprove          gin.HandlerFunc
+	ProjectCoursePackage          gin.HandlerFunc
+	TaskCreateGeneration          gin.HandlerFunc
+	TaskCreateParse               gin.HandlerFunc
+	TaskCreateExport              gin.HandlerFunc
+	TaskGet                       gin.HandlerFunc
+	TaskCancel                    gin.HandlerFunc
+	TaskStream                    gin.HandlerFunc
+	TaskDownload                  gin.HandlerFunc
 }
 
 // RegisterCoreRoutes wires the core-api owned routes without depending on the shared transport aggregator.
@@ -66,6 +67,7 @@ func RegisterCoreRoutes(r *gin.Engine, authMiddleware gin.HandlerFunc, h CoreHan
 	must(h.ProjectCourseGet, "ProjectCourseGet")
 	must(h.ProjectCourseCoverage, "ProjectCourseCoverage")
 	must(h.ProjectCourseQualityReport, "ProjectCourseQualityReport")
+	must(h.ProjectCourseBlueprintPreview, "ProjectCourseBlueprintPreview")
 	must(h.ProjectCourseBlueprintUpdate, "ProjectCourseBlueprintUpdate")
 	must(h.ProjectCourseApprove, "ProjectCourseApprove")
 	must(h.ProjectCoursePackage, "ProjectCoursePackage")
@@ -114,6 +116,7 @@ func RegisterCoreRoutes(r *gin.Engine, authMiddleware gin.HandlerFunc, h CoreHan
 	projectCourseGroup.GET("/:id", h.ProjectCourseGet)
 	projectCourseGroup.GET("/:id/coverage", h.ProjectCourseCoverage)
 	projectCourseGroup.GET("/:id/quality-report", h.ProjectCourseQualityReport)
+	projectCourseGroup.POST("/:id/blueprint/preview", h.ProjectCourseBlueprintPreview)
 	projectCourseGroup.PUT("/:id/blueprint", h.ProjectCourseBlueprintUpdate)
 	projectCourseGroup.POST("/:id/approve", h.ProjectCourseApprove)
 	projectCourseGroup.POST("/:id/package", h.ProjectCoursePackage)

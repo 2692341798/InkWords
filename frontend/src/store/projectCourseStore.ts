@@ -56,8 +56,9 @@ export const useProjectCourseStore = create<ProjectCourseState>((set, get) => ({
     const { course, chapters } = get()
     if (!course) return
     try {
+      const preview = await projectCourseService.previewBlueprint(course.id, course.blueprint_version, chapters)
       const response = await projectCourseService.updateBlueprint(course.id, course.blueprint_version, chapters)
-      set((state) => ({ course: state.course ? { ...state.course, blueprint_version: response.data.blueprint_version } : null, error: null }))
+      set((state) => ({ course: state.course ? { ...state.course, blueprint_version: response.data.blueprint_version, coverage_json: preview.data.coverage } : null, error: null }))
     } catch (error) {
       // A stale tab must never overwrite a newer approved or edited blueprint.
       await get().load(course.id)

@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	coretask "inkwords-backend/services/core-api/domain/task"
+	sharedkernel "inkwords-backend/shared/kernel/projectcourse"
 )
 
 type fakeCourseRepository struct{ created *ProjectCourse }
@@ -111,4 +112,20 @@ func TestReportsAreReadOnlyAndScopedToTheAuthenticatedCourse(t *testing.T) {
 		router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
 		require.Equal(t, http.StatusOK, response.Code)
 	}
+}
+
+func TestPreviewBlueprintReportsCustomizedCoverageWithoutWriting(t *testing.T) {
+	owner := uuid.New()
+	courseID := uuid.New()
+	blueprint := sharedkernel.Blueprint{CourseID: courseID.String(), BlueprintVersion: 1, CommitSHA: "0123456789abcdef0123456789abcdef01234567", AudienceLevel: sharedkernel.AudienceProgramming, Volumes: []sharedkernel.Volume{{ID: "v1", Title: "基础", Sort: 1, Chapters: []sharedkernel.Chapter{{ID: "map", Title: "项目地图", Sort: 1, Enabled: false, Type: sharedkernel.ChapterProjectMap}, {ID: "flow", Title: "主链路", Sort: 2, Enabled: true, Type: sharedkernel.ChapterMainFlow}}}}}
+	blueprintJSON, err := json.Marshal(blueprint)
+	require.NoError(t, err)
+	coverageJSON, err := json.Marshal(sharedkernel.CoverageMatrix{Files: []sharedkernel.CoverageItem{{ID: "main.go", Kind: "file", Label: "main.go", ChapterIDs: []string{"flow"}, Covered: true}}})
+	require.NoError(t, err)
+	repository := &fakeCourseRepository{created: &ProjectCourse{ID: courseID, UserID: owner, BlueprintVersion: 1, BlueprintJSON: blueprintJSON, CoverageJSON: coverageJSON}}
+	preview, err := NewService(repository).PreviewBlueprint(context.Background(), owner, courseID, BlueprintUpdate{ExpectedVersion: 1, ChapterUpdates: []ChapterUpdate{{ChapterID: "flow", Title: "主链路", Sort: 1, Enabled: false}}})
+	require.NoError(t, err)
+	require.Equal(t, "customized_coverage", preview.Status)
+	require.False(t, preview.Coverage.Files[0].Covered)
+	require.Equal(t, 1, repository.created.BlueprintVersion)
 }

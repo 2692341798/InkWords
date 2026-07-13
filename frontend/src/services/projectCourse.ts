@@ -31,6 +31,9 @@ export const projectCourseService = {
   qualityReport(courseId: string) {
     return requestJson<ApiResponse<Record<string, unknown>>>(apiRoutes.coreApi.projectCourses.qualityReport(courseId), { method: 'GET', fallbackMessage: '获取课程质量报告失败' })
   },
+  previewBlueprint(courseId: string, expectedVersion: number, chapters: BlueprintChapterUpdate[]) {
+    return requestJson<ApiResponse<{ coverage: Record<string, unknown>; status: string }>>(apiRoutes.coreApi.projectCourses.blueprintPreview(courseId), { method: 'POST', json: { expected_version: expectedVersion, chapters }, fallbackMessage: '校验课程覆盖影响失败' })
+  },
   updateBlueprint(courseId: string, expectedVersion: number, chapters: BlueprintChapterUpdate[]) {
     return requestJson<ApiResponse<{ blueprint_version: number }>>(apiRoutes.coreApi.projectCourses.blueprint(courseId), { method: 'PUT', json: { expected_version: expectedVersion, chapters }, fallbackMessage: '更新课程蓝图失败' })
   },

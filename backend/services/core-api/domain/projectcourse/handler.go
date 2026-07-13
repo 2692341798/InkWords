@@ -153,6 +153,28 @@ func (h *Handler) UpdateBlueprint(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 0, "data": gin.H{"blueprint_version": req.ExpectedVersion + 1}})
 }
 
+func (h *Handler) PreviewBlueprint(c *gin.Context) {
+	userID, courseID, ok := h.ids(c)
+	if !ok {
+		return
+	}
+	var req blueprintUpdateRequest
+	if err := decodeStrictJSON(c, &req); err != nil || req.ExpectedVersion < 1 || req.Chapters == nil {
+		writeError(c, http.StatusBadRequest, "expected_version and chapters are required")
+		return
+	}
+	updates := make([]ChapterUpdate, 0, len(req.Chapters))
+	for _, chapter := range req.Chapters {
+		updates = append(updates, ChapterUpdate{ChapterID: chapter.ChapterID, Title: chapter.Title, Sort: chapter.Sort, Enabled: chapter.Enabled})
+	}
+	preview, err := h.service.PreviewBlueprint(c.Request.Context(), userID, courseID, BlueprintUpdate{ExpectedVersion: req.ExpectedVersion, ChapterUpdates: updates})
+	if err != nil {
+		h.writeDomainError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"code": 0, "data": preview})
+}
+
 func (h *Handler) Approve(c *gin.Context) {
 	userID, courseID, ok := h.ids(c)
 	if !ok {

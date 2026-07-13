@@ -516,7 +516,7 @@ Expected: PASS。
 
 学习目标、EvidenceRef、练习和覆盖状态只读。
 
-- [ ] **Step 5：展示依赖和覆盖影响**
+- [x] **Step 5：展示依赖和覆盖影响**
 
 禁用或移动章节后调用后端 dry-run 校验，显示断裂依赖、覆盖率下降和 complete/customized 状态。
 
