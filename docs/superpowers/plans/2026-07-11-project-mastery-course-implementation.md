@@ -658,7 +658,7 @@ Expected: PASS。
 
 包含 language、toolchain version、allowed commands、starter、checkpoints、hints、solution、tests、resource limits 和 dependency graph。
 
-- [ ] **Step 2：约束简化边界**
+- [x] **Step 2：约束简化边界**
 
 生成前明确：保留哪些核心语言/协议/技术，删除哪些外围复杂度。更换核心语言视为合同失败。
 

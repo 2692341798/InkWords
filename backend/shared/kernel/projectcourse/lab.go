@@ -39,6 +39,8 @@ type LabExercise struct {
 type LabManifest struct {
 	Language         string              `json:"language"`
 	ToolchainVersion string              `json:"toolchain_version"`
+	CoreTechnologies []string            `json:"core_technologies,omitempty"`
+	ExcludedScope    []string            `json:"excluded_scope,omitempty"`
 	AllowedCommands  []string            `json:"allowed_commands"`
 	ResourceLimits   map[string]string   `json:"resource_limits"`
 	Starter          []LabFile           `json:"starter"`
@@ -52,6 +54,9 @@ type LabManifest struct {
 func (m LabManifest) Validate() error {
 	if strings.TrimSpace(m.Language) == "" || strings.TrimSpace(m.ToolchainVersion) == "" {
 		return fmt.Errorf("lab language and toolchain version are required")
+	}
+	if len(m.CoreTechnologies) > 0 && len(m.ExcludedScope) == 0 {
+		return fmt.Errorf("lab scope must document excluded complexity")
 	}
 	if len(m.AllowedCommands) == 0 {
 		return fmt.Errorf("lab allowed commands are required")
