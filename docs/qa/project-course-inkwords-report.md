@@ -22,6 +22,7 @@
 | 课程打包 | 仅接受已验证 checkpoint；manifest 锁定 commit、文件 hash 和排序 |
 | 阶段事件 | `CourseCheckpoint` 校验 course、blueprint version、input/output hash 和完成状态 |
 | 离线课程验收 | `go test ./services/llm-stream/app/projectcourse -run TestOfflineInkWordsAcceptance -v`：三种读者等级证据/覆盖稳定，夹具章节合同与硬门禁通过，variant manifest 合同通过 |
+| 浏览器入口验收 | 内置浏览器打开 `http://127.0.0.1:4173/`：课程入口、仓库/ref/读者等级控件和分析按钮均唯一可操作；输入 239 字符长仓库/ref 后页面无横向溢出 |
 | 自动化测试 | 后端全量 Go 测试、前端全量测试、lint、build 和 Compose config 已通过（详见 baseline） |
 
 ## 尚未通过或无法执行
@@ -30,6 +31,7 @@
 - DeepSeek 真实章节生成需要受控的 API 凭据和配额；当前只验证了生成器合同、证据门禁和任务路由，没有声称完整正文生成成功。
 - 三种读者等级的真实生成对比、人工完成三个累积 checkpoint、变式任务和故障排查 dogfood 尚未完成。
 - 浏览器深度交互验收未完成：当前沙箱中的 Playwright Chrome 进程无法启动；已有页面截图和组件测试不替代真实浏览器流程证据。
+- 本轮内置浏览器入口检查发现后端未启动，背景博客请求返回“服务暂时不可用”；移动视口覆盖未能在当前浏览器后端保持，因此未宣称移动端完整验收通过。
 - 需要在 Docker 和受控凭据可用后补录完整 ZIP 的自动硬门禁结果；本报告不把“代码路径存在”当作运行时通过。
 
 ## 复现命令
