@@ -3,7 +3,7 @@ import { Panel, SectionHeader, StatusPill } from '@/components/ui/workspace'
 import { useProjectCourseStore } from '@/store/projectCourseStore'
 
 export function BlueprintWorkspace() {
-  const { course, chapters, isLoading, error, taskMessage, updateChapter, saveBlueprint, approve } = useProjectCourseStore()
+  const { course, chapters, isLoading, error, taskMessage, packageMessage, updateChapter, saveBlueprint, approve, packageCourse } = useProjectCourseStore()
 
   if (isLoading) return <Panel className="p-6 text-sm text-muted-foreground">正在加载课程蓝图...</Panel>
   if (error) return <Panel className="p-6 text-sm text-destructive" role="alert">{error}</Panel>
@@ -46,7 +46,9 @@ export function BlueprintWorkspace() {
         <div className="mt-6 flex flex-wrap justify-end gap-3">
           <Button variant="outline" onClick={() => void saveBlueprint()} disabled={course.status === 'approved'}>保存蓝图</Button>
           <Button onClick={() => void approve()} disabled={course.status !== 'awaiting_approval'}>批准并继续生成</Button>
+          <Button variant="outline" onClick={() => void packageCourse()} disabled={course.status !== 'completed'}>打包课程 ZIP</Button>
         </div>
+        {packageMessage ? <p className="mt-3 text-right text-xs text-muted-foreground" role="status">{packageMessage}</p> : null}
       </Panel>
     </div>
   )

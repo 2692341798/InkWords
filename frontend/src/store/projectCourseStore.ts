@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { flattenBlueprintChapters, type BlueprintChapterUpdate, type ProjectCourse, type ProjectCourseBlueprint } from '@/lib/projectCourse'
-import { projectCourseService, streamProjectCourseTask, type CreateProjectCourseInput } from '@/services/projectCourse'
+import { downloadTaskArtifact, projectCourseService, streamProjectCourseTask, type CreateProjectCourseInput } from '@/services/projectCourse'
 
 interface ProjectCourseState {
   course: ProjectCourse | null
@@ -9,11 +9,13 @@ interface ProjectCourseState {
   error: string | null
   taskId: string | null
   taskMessage: string | null
+  packageMessage: string | null
   create: (input: CreateProjectCourseInput) => Promise<void>
   load: (courseId: string) => Promise<void>
   updateChapter: (chapterId: string, updates: Partial<Omit<BlueprintChapterUpdate, 'chapter_id'>>) => void
   saveBlueprint: () => Promise<void>
   approve: () => Promise<void>
+  packageCourse: () => Promise<void>
   reset: () => void
 }
 
@@ -24,6 +26,7 @@ export const useProjectCourseStore = create<ProjectCourseState>((set, get) => ({
   error: null,
   taskId: null,
   taskMessage: null,
+  packageMessage: null,
   create: async (input) => {
     set({ isLoading: true, error: null, taskId: null })
     try {
@@ -66,5 +69,18 @@ export const useProjectCourseStore = create<ProjectCourseState>((set, get) => ({
         .catch((error) => set({ taskMessage: error instanceof Error ? error.message : '课程生成任务流已断开' }))
     }
   },
-  reset: () => set({ course: null, chapters: [], isLoading: false, error: null, taskId: null, taskMessage: null }),
+  packageCourse: async () => {
+    const { course } = get()
+    if (!course) return
+    set({ packageMessage: '课程包任务已提交' })
+    try {
+      const response = await projectCourseService.package(course.id)
+      await streamProjectCourseTask(response.data.task_id, (message) => set({ packageMessage: message }))
+      await downloadTaskArtifact(response.data.task_id, 'project-course.zip')
+      set({ packageMessage: '课程包已准备完成' })
+    } catch (error) {
+      set({ packageMessage: error instanceof Error ? error.message : '课程包生成失败' })
+    }
+  },
+  reset: () => set({ course: null, chapters: [], isLoading: false, error: null, taskId: null, taskMessage: null, packageMessage: null }),
 }))

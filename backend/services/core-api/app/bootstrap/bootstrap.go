@@ -116,6 +116,7 @@ func BuildRouter() (*gin.Engine, func(), error) {
 		ProjectCourseGet:             projectCourseHandler.Get,
 		ProjectCourseBlueprintUpdate: projectCourseHandler.UpdateBlueprint,
 		ProjectCourseApprove:         projectCourseHandler.Approve,
+		ProjectCoursePackage:         projectCourseHandler.Package,
 		TaskCreateGeneration:         taskDomainHandler.CreateGenerationTask,
 		TaskCreateParse:              taskDomainHandler.CreateParseTask,
 		TaskCreateExport:             taskDomainHandler.CreateExportTask,

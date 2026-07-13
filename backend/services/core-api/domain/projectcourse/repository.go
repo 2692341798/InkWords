@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/google/uuid"
 	"gorm.io/datatypes"
@@ -82,8 +83,11 @@ func (r *GormRepository) PersistProjectCourseResult(ctx context.Context, result 
 // and advances the course only after the worker has produced a task result.
 func (r *GormRepository) PersistProjectCourseGenerationResult(ctx context.Context, result map[string]any) error {
 	var payload struct {
-		CourseID string `json:"course_id"`
-		Status   string `json:"status"`
+		ResultVersion    int    `json:"result_version"`
+		CourseID         string `json:"course_id"`
+		BlueprintVersion int    `json:"blueprint_version"`
+		CommitSHA        string `json:"commit_sha"`
+		Status           string `json:"status"`
 	}
 	encoded, err := json.Marshal(result)
 	if err != nil {
@@ -96,12 +100,15 @@ func (r *GormRepository) PersistProjectCourseGenerationResult(ctx context.Contex
 	if err != nil {
 		return ErrNotFound
 	}
+	if payload.ResultVersion != 1 || payload.BlueprintVersion < 1 || len(payload.CommitSHA) != 40 {
+		return fmt.Errorf("invalid project course generation result schema")
+	}
 	status := StatusBlocked
 	if payload.Status == string(sharedkernel.CourseCompleted) {
 		status = StatusCompleted
 	}
 	dbResult := r.db.WithContext(ctx).Model(&ProjectCourse{}).
-		Where("id = ? AND status IN ?", courseID, []string{StatusApproved, StatusGenerating}).
+		Where("id = ? AND status IN ? AND blueprint_version = ? AND resolved_commit_sha = ?", courseID, []string{StatusApproved, StatusGenerating}, payload.BlueprintVersion, payload.CommitSHA).
 		Updates(map[string]any{"quality_report_json": datatypes.JSON(encoded), "status": status, "updated_at": gorm.Expr("CURRENT_TIMESTAMP")})
 	if dbResult.Error != nil {
 		return dbResult.Error

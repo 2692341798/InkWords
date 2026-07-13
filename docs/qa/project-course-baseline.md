@@ -30,3 +30,11 @@ cd frontend && npm test -- --run
 ## 后续补充
 
 Task 2 完成后补充固定 SHA 解析结果、确定性清单文件数/角色分布、预算行为和大文件处置统计；Task 3 完成后补充知识图关键事实覆盖率。
+
+## 当前实现增量（2026-07-13）
+
+- 创建课程只提交仓库 URL、ref 和读者等级；分析任务负责解析并绑定 40 位 commit SHA。
+- 蓝图批准后生成任务绑定 course ID、蓝图版本和 SHA；章节结果经 EvidenceRef、Claim Ledger 和质量门禁后才归并。
+- 课程实验默认由 `PROJECT_COURSE_LAB_VERIFICATION_ENABLED=false` 阻断；开启时仅允许 bubblewrap 固定 Go 测试模板。
+- 课程 ZIP 只接受已验证 checkpoint，包含 README、starter、checkpoints、hints、solution、tests、coverage 和文件 hash manifest。
+- 最近验证：后端相关服务全量 Go 测试通过；前端全量测试 46 个测试文件、171 个测试通过；生产构建通过；Compose 配置在提供 `OBSIDIAN_VAULT_PATH` 后通过。

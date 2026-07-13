@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -107,7 +108,15 @@ func BuildRouter() (*gin.Engine, *verification.Consumer, error) {
 	httpx.RegisterHealthRoutes(r, httpx.NewHealthAPI("course-runner", map[string]httpx.ReadinessCheck{"db": httpx.NewGormReadinessCheck(db)}))
 	tasks := taskStore{repo: coretask.NewGormRepository(db)}
 	resolver := artifactResolver{root: envOrDefault("COURSE_ARTIFACTS_DIR", "/app/course-artifacts")}
-	consumer := verification.NewConsumer(tasks, resolver, verification.Runner{})
+	runner := verification.Runner{}
+	if os.Getenv("PROJECT_COURSE_LAB_VERIFICATION_ENABLED") == "true" {
+		binary, err := exec.LookPath("bwrap")
+		if err != nil {
+			return nil, nil, fmt.Errorf("project course verification enabled but bwrap is unavailable: %w", err)
+		}
+		runner.Executor = verification.BubblewrapExecutor{Binary: binary}
+	}
+	consumer := verification.NewConsumer(tasks, resolver, runner)
 	return r, consumer, nil
 }
 

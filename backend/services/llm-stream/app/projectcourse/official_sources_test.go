@@ -16,6 +16,12 @@ type staticRoundTripper struct {
 	body        string
 }
 
+type redirectRoundTripper struct{}
+
+func (redirectRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
+	return &http.Response{StatusCode: http.StatusFound, Header: http.Header{"Location": []string{"https://evil.example/docs"}}, Body: io.NopCloser(strings.NewReader("")), Request: request}, nil
+}
+
 func (r staticRoundTripper) RoundTrip(*http.Request) (*http.Response, error) {
 	return &http.Response{StatusCode: r.status, Header: http.Header{"Content-Type": []string{r.contentType}}, Body: io.NopCloser(strings.NewReader(r.body))}, nil
 }
@@ -54,4 +60,10 @@ func TestHTTPOfficialSourceProviderEnforcesResponseLimitsAndTypes(t *testing.T) 
 	provider.MaxBytes = 2
 	_, err = provider.Fetch("https://example.com/docs")
 	require.ErrorContains(t, err, "size limit")
+}
+
+func TestHTTPOfficialSourceProviderRejectsUntrustedRedirect(t *testing.T) {
+	provider := HTTPOfficialSourceProvider{Client: &http.Client{Transport: redirectRoundTripper{}}, AllowedDomains: []string{"example.com"}}
+	_, err := provider.Fetch("https://example.com/docs")
+	require.ErrorContains(t, err, "redirect rejected")
 }

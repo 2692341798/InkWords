@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestEnumsUseStableJSONValuesAndRejectUnknownValues(t *testing.T) {
@@ -65,7 +67,7 @@ func TestBlueprintValidatesAudienceAndChapterType(t *testing.T) {
 	blueprint := Blueprint{
 		CourseID: "course-1", BlueprintVersion: 1, CommitSHA: "0123456789abcdef0123456789abcdef01234567",
 		AudienceLevel: AudienceProgramming,
-		Volumes:       []Volume{{Chapters: []Chapter{{ID: "chapter-1", Type: ChapterProjectMap}}}},
+		Volumes:       []Volume{{ID: "volume-1", Title: "项目基础", Sort: 1, Chapters: []Chapter{{ID: "chapter-1", Title: "项目地图", Sort: 1, Type: ChapterProjectMap}}}},
 	}
 	if err := blueprint.Validate(); err != nil {
 		t.Fatal(err)
@@ -74,6 +76,14 @@ func TestBlueprintValidatesAudienceAndChapterType(t *testing.T) {
 	if err := blueprint.Validate(); err == nil {
 		t.Fatal("unknown chapter type must invalidate blueprint")
 	}
+}
+
+func TestBlueprintRejectsInvalidOrderDuplicateAndCyclicDependencies(t *testing.T) {
+	snapshot := Blueprint{CourseID: "course-1", BlueprintVersion: 1, CommitSHA: "0123456789abcdef0123456789abcdef01234567", AudienceLevel: AudienceProgramming, Volumes: []Volume{{ID: "v1", Title: "卷一", Sort: 1, Chapters: []Chapter{{ID: "c1", Title: "第一章", Sort: 1, Type: ChapterMainFlow}}}}}
+	require.ErrorContains(t, snapshot.Validate(), "project map")
+	snapshot.Volumes[0].Chapters[0].Type = ChapterProjectMap
+	snapshot.Volumes[0].Chapters = append(snapshot.Volumes[0].Chapters, Chapter{ID: "c2", Title: "第二章", Sort: 2, Type: ChapterMainFlow, PrerequisiteIDs: []string{"c3"}}, Chapter{ID: "c3", Title: "第三章", Sort: 3, Type: ChapterMainFlow, PrerequisiteIDs: []string{"c2"}})
+	require.ErrorContains(t, snapshot.Validate(), "cycle")
 }
 
 func TestCoverageRateTreatsEmptySetAsCovered(t *testing.T) {

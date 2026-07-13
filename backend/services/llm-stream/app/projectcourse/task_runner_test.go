@@ -46,7 +46,9 @@ func TestCourseTaskRunnerGeneratesOnlyAgainstPinnedCommit(t *testing.T) {
 	snapshot := sharedkernel.SourceSnapshot{RepositoryURL: "https://github.com/example/project", RequestedRef: "0123456789abcdef0123456789abcdef01234567", ResolvedCommitSHA: "0123456789abcdef0123456789abcdef01234567", CapturedAt: time.Unix(1, 0)}
 	files := []InventoryEntry{{Path: "main.go", Role: RoleApplication, Disposition: DispositionCovered, ContentHash: "sha256:main", Content: "package main\nfunc main() {}"}}
 	chapter := sharedkernel.Chapter{ID: "chapter-1", Title: "入口", Sort: 1, Enabled: true, Type: sharedkernel.ChapterMainFlow, EvidenceIDs: evidenceIDsForFiles(files)}
-	blueprint := sharedkernel.Blueprint{CourseID: "course-1", BlueprintVersion: 2, CommitSHA: snapshot.ResolvedCommitSHA, AudienceLevel: sharedkernel.AudienceProgramming, Volumes: []sharedkernel.Volume{{ID: "volume-1", Chapters: []sharedkernel.Chapter{chapter}}}}
+	mapChapter := sharedkernel.Chapter{ID: "map", Title: "项目地图", Sort: 1, Enabled: false, Type: sharedkernel.ChapterProjectMap, EvidenceIDs: evidenceIDsForFiles(files)}
+	chapter.Sort = 2
+	blueprint := sharedkernel.Blueprint{CourseID: "course-1", BlueprintVersion: 2, CommitSHA: snapshot.ResolvedCommitSHA, AudienceLevel: sharedkernel.AudienceProgramming, Volumes: []sharedkernel.Volume{{ID: "volume-1", Title: "项目卷一", Sort: 1, Chapters: []sharedkernel.Chapter{mapChapter, chapter}}}}
 	payload, err := json.Marshal(generateTaskPayload{CourseID: "course-1", RepositoryURL: snapshot.RepositoryURL, ResolvedCommitSHA: snapshot.ResolvedCommitSHA, Blueprint: blueprint})
 	require.NoError(t, err)
 	runner := NewCourseTaskRunnerWithGenerator(fakeRepositoryAnalyzer{analysis: RepositoryAnalysis{Snapshot: snapshot, Graph: KnowledgeGraph{CommitSHA: snapshot.ResolvedCommitSHA, Files: files}}}, fakeChapterGenerator{})

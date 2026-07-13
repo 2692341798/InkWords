@@ -30,3 +30,18 @@ func TestWriteCoursePackageRejectsUnverifiedOrUnsafeArtifacts(t *testing.T) {
 	manifest.Starter[0].Path = "../secret"
 	require.ErrorContains(t, WriteCoursePackage(&buf, manifest, "sha"), "unsafe lab file path")
 }
+
+func TestWriteCoursePackageBundlesMultipleChapterArtifacts(t *testing.T) {
+	manifest := sharedkernel.LabManifest{Language: "go", ToolchainVersion: "1.25", AllowedCommands: []string{"test"}, ResourceLimits: map[string]string{"timeout_seconds": "30"}, Starter: []sharedkernel.LabFile{{Path: "main.go", Content: "package main"}}, Checkpoints: []sharedkernel.LabCheckpoint{{ID: "checkpoint-01", Files: []sharedkernel.LabFile{{Path: "main.go", Content: "package main"}}, Verified: true}}, Solution: []sharedkernel.LabFile{{Path: "main.go", Content: "package main"}}, Tests: []sharedkernel.LabFile{{Path: "main_test.go", Content: "package main"}}}
+	var buf bytes.Buffer
+	require.NoError(t, WriteCoursePackageWithMetadata(&buf, CoursePackageInput{CourseID: "course-1", BlueprintVersion: 2, CommitSHA: "0123456789abcdef0123456789abcdef01234567", Coverage: map[string]any{"files": []string{"main.go"}}, Verification: VerificationSummary{Passed: true}, Artifacts: []CourseArtifact{{ChapterID: "chapter-a", Title: "A", Manifest: manifest}, {ChapterID: "chapter-b", Title: "B", Manifest: manifest}}}))
+	reader, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	require.NoError(t, err)
+	names := make([]string, 0, len(reader.File))
+	for _, file := range reader.File {
+		names = append(names, file.Name)
+	}
+	require.Contains(t, names, "chapters/chapter-a/starter/main.go")
+	require.Contains(t, names, "chapters/chapter-b/tests/main_test.go")
+	require.Equal(t, "manifest.json", names[len(names)-1])
+}

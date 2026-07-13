@@ -26,6 +26,7 @@ type CoreHandlers struct {
 	ProjectCourseGet             gin.HandlerFunc
 	ProjectCourseBlueprintUpdate gin.HandlerFunc
 	ProjectCourseApprove         gin.HandlerFunc
+	ProjectCoursePackage         gin.HandlerFunc
 	TaskCreateGeneration         gin.HandlerFunc
 	TaskCreateParse              gin.HandlerFunc
 	TaskCreateExport             gin.HandlerFunc
@@ -63,6 +64,7 @@ func RegisterCoreRoutes(r *gin.Engine, authMiddleware gin.HandlerFunc, h CoreHan
 	must(h.ProjectCourseGet, "ProjectCourseGet")
 	must(h.ProjectCourseBlueprintUpdate, "ProjectCourseBlueprintUpdate")
 	must(h.ProjectCourseApprove, "ProjectCourseApprove")
+	must(h.ProjectCoursePackage, "ProjectCoursePackage")
 	must(h.TaskCreateGeneration, "TaskCreateGeneration")
 	must(h.TaskCreateParse, "TaskCreateParse")
 	must(h.TaskCreateExport, "TaskCreateExport")
@@ -108,6 +110,7 @@ func RegisterCoreRoutes(r *gin.Engine, authMiddleware gin.HandlerFunc, h CoreHan
 	projectCourseGroup.GET("/:id", h.ProjectCourseGet)
 	projectCourseGroup.PUT("/:id/blueprint", h.ProjectCourseBlueprintUpdate)
 	projectCourseGroup.POST("/:id/approve", h.ProjectCourseApprove)
+	projectCourseGroup.POST("/:id/package", h.ProjectCoursePackage)
 
 	taskGroup := v1.Group("/tasks")
 	taskGroup.Use(authMiddleware)

@@ -11,12 +11,14 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	coretask "inkwords-backend/services/core-api/domain/task"
+	sharedkernel "inkwords-backend/shared/kernel/projectcourse"
 )
 
 // Handler 是 ProjectCourse 的 HTTP 适配层；不允许客户端提交事实、证据或覆盖矩阵。
 type analyzeTaskCreator interface {
 	CreateProjectCourseAnalyzeTask(context.Context, coretask.CreateProjectCourseTaskInput) (coretask.JobTask, error)
 	CreateProjectCourseGenerateTask(context.Context, coretask.CreateProjectCourseTaskInput) (coretask.JobTask, error)
+	CreateProjectCoursePackageTask(context.Context, coretask.CreateProjectCourseTaskInput) (coretask.JobTask, error)
 }
 
 type Handler struct {
@@ -167,6 +169,65 @@ func (h *Handler) Approve(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"code": 0, "data": gin.H{"status": StatusApproved, "task_id": task.ID}})
+}
+
+func (h *Handler) Package(c *gin.Context) {
+	userID, courseID, ok := h.ids(c)
+	if !ok {
+		return
+	}
+	if h.taskCreator == nil {
+		writeError(c, http.StatusServiceUnavailable, "project course package worker is unavailable")
+		return
+	}
+	course, err := h.service.Get(c.Request.Context(), userID, courseID)
+	if err != nil {
+		h.writeDomainError(c, err)
+		return
+	}
+	if course.Status != StatusCompleted {
+		writeError(c, http.StatusConflict, "course package requires a completed course")
+		return
+	}
+	var report struct {
+		Chapters []struct {
+			ChapterID string `json:"chapter_id"`
+			Status    string `json:"status"`
+			Document  struct {
+				Title string                    `json:"title"`
+				Lab   *sharedkernel.LabManifest `json:"lab"`
+			} `json:"document"`
+		} `json:"chapters"`
+	}
+	if err := json.Unmarshal(course.QualityReportJSON, &report); err != nil {
+		writeError(c, http.StatusConflict, "course package report is unavailable")
+		return
+	}
+	artifacts := make([]map[string]any, 0)
+	for _, chapter := range report.Chapters {
+		if chapter.Status != "succeeded" || chapter.Document.Lab == nil {
+			continue
+		}
+		artifacts = append(artifacts, map[string]any{"chapter_id": chapter.ChapterID, "title": chapter.Document.Title, "manifest": chapter.Document.Lab})
+	}
+	if len(artifacts) == 0 {
+		writeError(c, http.StatusConflict, "no verified course lab artifacts are available")
+		return
+	}
+	payload, err := json.Marshal(map[string]any{"package": map[string]any{
+		"course_id": course.ID, "blueprint_version": course.BlueprintVersion, "repository_url": course.RepositoryURL, "commit_sha": course.ResolvedCommitSHA,
+		"artifacts": artifacts, "coverage": json.RawMessage(course.CoverageJSON), "verification": map[string]any{"passed": true},
+	}})
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "failed to create course package task")
+		return
+	}
+	task, err := h.taskCreator.CreateProjectCoursePackageTask(c.Request.Context(), coretask.CreateProjectCourseTaskInput{RequestedBy: userID, IdempotencyKey: fmt.Sprintf("project-course:package:%s:%d", course.ID, course.BlueprintVersion), Payload: payload})
+	if err != nil {
+		writeError(c, http.StatusInternalServerError, "failed to create course package task")
+		return
+	}
+	c.JSON(http.StatusAccepted, gin.H{"code": 0, "data": gin.H{"task_id": task.ID, "status": task.Status}})
 }
 
 func (h *Handler) ids(c *gin.Context) (uuid.UUID, uuid.UUID, bool) {

@@ -71,6 +71,27 @@ func TestConsumerHandleExportRequestedMarksFailedWhenExporterFails(t *testing.T)
 	require.Equal(t, "chromium failed", tasks.lastErrorMessage)
 }
 
+type stubCoursePackageBuilder struct{}
+
+func (stubCoursePackageBuilder) BuildCoursePackage(context.Context, CoursePackagePayload) (string, string, error) {
+	return "/tmp/course.zip", "project-course.zip", nil
+}
+
+func TestConsumerHandleCoursePackageUsesControlledArtifactStore(t *testing.T) {
+	tasks := &fakeExportTaskService{}
+	store := &stubArtifactStore{saveFunc: func(taskID uuid.UUID, sourcePath string, filename string) (TaskResult, error) {
+		require.Equal(t, uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), taskID)
+		require.Equal(t, "/tmp/course.zip", sourcePath)
+		require.Equal(t, "project-course.zip", filename)
+		return TaskResult{FileToken: "course-token", Filename: filename}, nil
+	}}
+	consumer := NewConsumer(tasks, &stubPDFExporter{}, store, stubCoursePackageBuilder{})
+	err := consumer.HandleExportRequested(context.Background(), RequestedMessage{TaskID: uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), Kind: "project_course_package", Payload: json.RawMessage(`{"package":{"commit_sha":"0123456789abcdef0123456789abcdef01234567"}}`)})
+	require.NoError(t, err)
+	require.Equal(t, "succeeded", tasks.lastStatus)
+	require.Contains(t, string(tasks.lastResult), "course-token")
+}
+
 type fakeExportTaskService struct {
 	lastStatus       string
 	lastResult       []byte

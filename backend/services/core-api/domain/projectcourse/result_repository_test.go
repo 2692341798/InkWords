@@ -42,7 +42,7 @@ func TestPersistProjectCourseGenerationResultTransitionsApprovedCourse(t *testin
 	repo := NewGormRepository(db)
 	course := &ProjectCourse{UserID: uuid.New(), RepositoryURL: "https://github.com/example/repo", RequestedRef: "main", ResolvedCommitSHA: "0123456789abcdef0123456789abcdef01234567", AudienceLevel: "programming", Status: StatusApproved, BlueprintVersion: 1, BlueprintJSON: []byte(`{}`), CoverageJSON: []byte(`{}`), QualityReportJSON: []byte(`{}`)}
 	require.NoError(t, repo.Create(context.Background(), course))
-	require.NoError(t, repo.PersistProjectCourseGenerationResult(context.Background(), map[string]any{"course_id": course.ID.String(), "status": "completed", "chapters": []any{map[string]any{"chapter_id": "chapter-1", "status": "succeeded"}}}))
+	require.NoError(t, repo.PersistProjectCourseGenerationResult(context.Background(), map[string]any{"result_version": 1, "course_id": course.ID.String(), "blueprint_version": 1, "commit_sha": course.ResolvedCommitSHA, "status": "completed", "chapters": []any{map[string]any{"chapter_id": "chapter-1", "status": "succeeded"}}}))
 	updated, err := repo.GetByID(context.Background(), course.UserID, course.ID)
 	require.NoError(t, err)
 	require.Equal(t, StatusCompleted, updated.Status)

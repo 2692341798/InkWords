@@ -2,6 +2,7 @@ import type { BlueprintChapterUpdate, ProjectCourse } from '@/lib/projectCourse'
 import { requestJson } from './apiClient'
 import { apiRoutes } from './apiRoutes'
 import { fetchEventSourceWithAuth } from './sse'
+import { downloadTaskArtifact } from './exportTasks'
 
 interface ApiResponse<T> { code: number; data: T; message?: string }
 
@@ -30,6 +31,9 @@ export const projectCourseService = {
   approve(courseId: string, expectedVersion: number) {
     return requestJson<ApiResponse<{ status: string; task_id?: string }>>(apiRoutes.coreApi.projectCourses.approve(courseId), { method: 'POST', json: { expected_version: expectedVersion }, fallbackMessage: '批准课程蓝图失败' })
   },
+  package(courseId: string) {
+    return requestJson<ApiResponse<{ task_id: string; status: string }>>(apiRoutes.coreApi.projectCourses.package(courseId), { method: 'POST', json: {}, fallbackMessage: '创建课程包任务失败' })
+  },
 }
 
 export function streamProjectCourseTask(taskId: string, onPhase: (message: string) => void) {
@@ -37,6 +41,14 @@ export function streamProjectCourseTask(taskId: string, onPhase: (message: strin
     method: 'GET',
     onmessage(event) {
       if (event.event === 'done') return
+      if (event.event === 'error') {
+        try {
+          const payload = JSON.parse(event.data) as { message?: string; error?: string }
+          throw new Error(payload.message || payload.error || '课程任务失败')
+        } catch (error) {
+          throw error instanceof Error ? error : new Error('课程任务失败')
+        }
+      }
       try {
         const payload = JSON.parse(event.data) as { stage?: string; checkpoint?: string }
         if (payload.stage || payload.checkpoint) onPhase([payload.stage, payload.checkpoint].filter(Boolean).join(' · '))
@@ -46,3 +58,5 @@ export function streamProjectCourseTask(taskId: string, onPhase: (message: strin
     },
   })
 }
+
+export { downloadTaskArtifact }

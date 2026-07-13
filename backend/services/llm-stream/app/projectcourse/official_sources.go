@@ -39,11 +39,25 @@ func (p HTTPOfficialSourceProvider) Fetch(rawURL string) (string, error) {
 	if client == nil {
 		client = &http.Client{Timeout: 10 * time.Second}
 	}
+	clientCopy := *client
+	previousRedirect := clientCopy.CheckRedirect
+	clientCopy.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 5 {
+			return fmt.Errorf("too many official source redirects")
+		}
+		if err := ValidateOfficialURL(req.URL.String(), p.AllowedDomains); err != nil {
+			return fmt.Errorf("redirect rejected: %w", err)
+		}
+		if previousRedirect != nil {
+			return previousRedirect(req, via)
+		}
+		return nil
+	}
 	maxBytes := p.MaxBytes
 	if maxBytes <= 0 {
 		maxBytes = 1 << 20
 	}
-	response, err := client.Get(rawURL)
+	response, err := clientCopy.Get(rawURL)
 	if err != nil {
 		return "", fmt.Errorf("fetch official source: %w", err)
 	}
@@ -112,6 +126,9 @@ func ValidateOfficialURL(rawURL string, allowedDomains []string) error {
 	host := strings.ToLower(strings.TrimSuffix(parsed.Hostname(), "."))
 	if host == "" || isPrivateHost(host) {
 		return fmt.Errorf("official URL points to a private or invalid host")
+	}
+	if port := parsed.Port(); port != "" && port != "443" {
+		return fmt.Errorf("official URL must use the default HTTPS port")
 	}
 	for _, allowed := range allowedDomains {
 		allowed = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(allowed), "."))

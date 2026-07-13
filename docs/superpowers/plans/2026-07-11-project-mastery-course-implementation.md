@@ -601,15 +601,15 @@ Expected: PASS。
 - Create: `backend/services/llm-stream/app/projectcourse/chapter_pipeline_test.go`
 - Create: `backend/services/llm-stream/app/projectcourse/prompts/*.go`
 
-- [ ] **Step 1：为每种章节类型写合同测试**
+- [x] **Step 1：为每种章节类型写合同测试**
 
 不要复用一个万能 Prompt。每种类型有独立 required sections、Evidence 要求、练习要求和门禁。
 
-- [ ] **Step 2：构造最小 Evidence Pack**
+- [x] **Step 2：构造最小 Evidence Pack**
 
 根据 chapter evidence IDs 拉取具体源码片段和官方资料。超预算时优先保留 Claim 所需证据，不按字符串头部截断。
 
-- [ ] **Step 3：先生成 ClaimPlan**
+- [x] **Step 3：先生成 ClaimPlan**
 
 正文前先列出拟表达的项目事实、原理事实、推断和证据映射。没有证据的项目事实在草稿前就被移除或改成待确认问题。
 
@@ -617,11 +617,11 @@ Expected: PASS。
 
 等级只影响术语解释、步骤颗粒度、提示数量和延伸深度，不影响 Claim 和 Evidence。
 
-- [ ] **Step 5：草稿、事实审稿、教学审稿分离**
+- [x] **Step 5：草稿、事实审稿、教学审稿分离**
 
 事实审稿优先使用确定性校验：路径、symbol、line range、hash、Claim 覆盖。模型审稿只处理无法用规则判断的语义一致性。
 
-- [ ] **Step 6：终稿重新注入 Evidence Pack**
+- [x] **Step 6：终稿重新注入 Evidence Pack**
 
 禁止沿用现有“只给草稿和 review actions”的终稿模式。终稿后再次解析 Claim Ledger 并运行硬门禁。
 
@@ -633,7 +633,7 @@ Expected: PASS。
 
 类比、节奏、重复和等级适配触发一次修复；仍失败则保留风险，不阻止事实正确的章节完成。
 
-- [ ] **Step 9：运行测试**
+- [x] **Step 9：运行测试**
 
 Run:
 
@@ -654,7 +654,7 @@ Expected: PASS。
 - Create: `backend/shared/kernel/projectcourse/lab.go`
 - Modify: `backend/services/llm-stream/app/projectcourse/chapter_pipeline.go`
 
-- [ ] **Step 1：定义 LabManifest**
+- [x] **Step 1：定义 LabManifest**
 
 包含 language、toolchain version、allowed commands、starter、checkpoints、hints、solution、tests、resource limits 和 dependency graph。
 
@@ -662,7 +662,7 @@ Expected: PASS。
 
 生成前明确：保留哪些核心语言/协议/技术，删除哪些外围复杂度。更换核心语言视为合同失败。
 
-- [ ] **Step 3：按补丁构建检查点**
+- [x] **Step 3：按补丁构建检查点**
 
 每章输出从 previous checkpoint 到 next checkpoint 的文件变化，服务端应用到单一 workspace，避免多个章节各自生成冲突的全量项目。
 
@@ -670,7 +670,7 @@ Expected: PASS。
 
 先从学习成果生成可观察验收测试，再生成 solution；starter 应至少有一个预期失败测试，solution 必须全部通过。
 
-- [ ] **Step 5：生成分级提示**
+- [x] **Step 5：生成分级提示**
 
 Level 1 只提示方向，Level 2 指向模块或接口，Level 3 给骨架或关键伪代码；完整答案只在 solution。
 
@@ -678,7 +678,7 @@ Level 1 只提示方向，Level 2 指向模块或接口，Level 3 给骨架或�
 
 每个核心技术至少生成一种变式或故障任务，并带独立测试，不把“复制最终代码”作为唯一通关方式。
 
-- [ ] **Step 7：运行纯结构测试**
+- [x] **Step 7：运行纯结构测试**
 
 Run:
 
@@ -711,7 +711,7 @@ Expected: PASS。
 
 不得把挂载宿主 `docker.sock` 给业务容器作为默认方案。
 
-- [ ] **Step 2：定义 runner 窄接口**
+- [x] **Step 2：定义 runner 窄接口**
 
 ```go
 type Runner interface {
@@ -721,23 +721,23 @@ type Runner interface {
 
 request 只能引用已落盘且经过 manifest 校验的课程 artifact，不接受任意 shell 字符串。
 
-- [ ] **Step 3：实现命令模板白名单**
+- [x] **Step 3：实现命令模板白名单**
 
 按 toolchain 映射固定 argv，例如 Go 只允许受控的 `go test ./...`。禁止 shell 展开、命令替换、重定向和任意环境变量继承。
 
-- [ ] **Step 4：实现隔离与资源限制**
+- [x] **Step 4：实现隔离与资源限制**
 
 必须验证：无网络、非 root、临时 workspace、只读工具链、CPU/内存/pids/timeout/output limit 生效。
 
-- [ ] **Step 5：恶意样例测试**
+- [x] **Step 5：恶意样例测试**
 
 覆盖：读取宿主文件、访问网络、fork bomb、无限循环、超大输出、符号链接逃逸、写只读目录、读取环境密钥。
 
-- [ ] **Step 6：RabbitMQ 任务集成**
+- [x] **Step 6：RabbitMQ 任务集成**
 
 使用独立 queue 和 task subtype。验证结果回写结构化 task result；失败日志截断并清理敏感信息。
 
-- [ ] **Step 7：功能开关**
+- [x] **Step 7：功能开关**
 
 沙箱未完成安全验收前 `PROJECT_COURSE_LAB_VERIFICATION_ENABLED=false`。关闭时只能生成“未验证”产物，不能通过课程完整成功硬门禁。
 
@@ -765,23 +765,23 @@ Expected: 单元测试和受控冒烟通过；容器无法访问外网和宿主�
 - Modify: `backend/services/core-api/domain/task/download_handler.go`
 - Modify: `frontend/src/services/generationTasks.ts` 或新增 course download service
 
-- [ ] **Step 1：写 ZIP 结构测试**
+- [x] **Step 1：写 ZIP 结构测试**
 
 断言 README、manifest、starter、checkpoints、hints、solution、tests、coverage 都存在，路径无穿越且排序稳定。
 
-- [ ] **Step 2：生成 manifest**
+- [x] **Step 2：生成 manifest**
 
 记录 course ID、blueprint version、repo URL、commit SHA、toolchain、测试命令、验证结果和文件 hash。
 
-- [ ] **Step 3：只打包已验证工件**
+- [x] **Step 3：只打包已验证工件**
 
 若某个检查点验证失败，package task 失败并列出具体 checkpoint；不得用缺失目录凑出成功 ZIP。
 
-- [ ] **Step 4：受控下载与清理**
+- [x] **Step 4：受控下载与清理**
 
 复用 task owner 鉴权。文件名净化、过期策略和不存在 artifact 的错误语义保持与现有下载接口一致。
 
-- [ ] **Step 5：运行测试**
+- [x] **Step 5：运行测试**
 
 Run:
 
@@ -808,11 +808,11 @@ Expected: PASS。
 
 结果包含 course、volumes、chapters、quality report、coverage、blog mapping、lab artifact references 和 usage。每章有显式 succeeded/blocked/failed 状态。
 
-- [ ] **Step 2：保持 task-only 边界**
+- [x] **Step 2：保持 task-only 边界**
 
 `llm-stream` 只写 task result；`core-api` 事务性写入博客树和课程状态。
 
-- [ ] **Step 3：映射分卷博客树**
+- [x] **Step 3：映射分卷博客树**
 
 若现有 blogs 只支持一层 parent/child，首期使用一个课程父博客，卷册信息写入章节 metadata 和导读目录；不要未经评审扩展任意深度树。
 
@@ -820,7 +820,7 @@ Expected: PASS。
 
 成功章节可以持久化，但存在硬失败章节时课程状态为 `partially_blocked`，不能标为完整成功。重试只替换目标章节。
 
-- [ ] **Step 5：幂等归并**
+- [x] **Step 5：幂等归并**
 
 使用 course ID、blueprint version、chapter ID 做幂等键；重复消费不得重复创建博客或累计 token。
 
@@ -847,7 +847,7 @@ Expected: PASS。
 - Modify: `frontend/src/components/project-course/BlueprintWorkspace.tsx`
 - Modify: `docs/runbooks/microservices-smoke-check.md`
 
-- [ ] **Step 1：增加课程阶段事件**
+- [x] **Step 1：增加课程阶段事件**
 
 事件带 course/volume/chapter/stage/sequence，中文消息只用于展示，前端逻辑使用稳定枚举。
 
@@ -875,7 +875,7 @@ Expected: PASS。
 
 取消新模型请求与未开始实验；已写入的阶段检查点保留。取消不得把课程标为失败或删除已验证产物。
 
-- [ ] **Step 6：运行任务与 SSE 测试**
+- [x] **Step 6：运行任务与 SSE 测试**
 
 Run:
 

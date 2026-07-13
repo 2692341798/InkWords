@@ -102,11 +102,13 @@ type generatedChapterResult struct {
 }
 
 type generateTaskResult struct {
+	ResultVersion    int                      `json:"result_version"`
 	TaskSubtype      string                   `json:"task_subtype"`
 	CourseID         string                   `json:"course_id"`
 	BlueprintVersion int                      `json:"blueprint_version"`
 	CommitSHA        string                   `json:"commit_sha"`
 	Status           string                   `json:"status"`
+	BlogParentID     string                   `json:"blog_parent_id"`
 	Chapters         []generatedChapterResult `json:"chapters"`
 }
 
@@ -134,7 +136,7 @@ func (r *CourseTaskRunner) runGenerate(ctx context.Context, message sharedrabbit
 	if analysis.Snapshot.ResolvedCommitSHA != payload.ResolvedCommitSHA {
 		return nil, fmt.Errorf("repository analyzer returned a different commit SHA")
 	}
-	result := generateTaskResult{TaskSubtype: message.Kind, CourseID: payload.CourseID, BlueprintVersion: payload.Blueprint.BlueprintVersion, CommitSHA: payload.ResolvedCommitSHA, Status: string(sharedkernel.CourseCompleted)}
+	result := generateTaskResult{ResultVersion: 1, TaskSubtype: message.Kind, CourseID: payload.CourseID, BlueprintVersion: payload.Blueprint.BlueprintVersion, CommitSHA: payload.ResolvedCommitSHA, Status: string(sharedkernel.CourseCompleted), BlogParentID: payload.CourseID}
 	for _, volume := range payload.Blueprint.Volumes {
 		for _, chapter := range volume.Chapters {
 			if !chapter.Enabled {

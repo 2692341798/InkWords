@@ -44,7 +44,9 @@ func (r Runner) Verify(ctx context.Context, request RunRequest) Report {
 			return Report{Results: results, Error: err.Error()}
 		}
 		started := time.Now()
-		exitCode, output, err := r.Executor.Execute(ctx, request.RootDir, command, timeout, nil)
+		execCtx, cancel := context.WithTimeout(ctx, timeout)
+		exitCode, output, err := r.Executor.Execute(execCtx, request.RootDir, command, timeout, nil)
+		cancel()
 		result := CommandResult{Command: command, ExitCode: exitCode, Output: output, Duration: time.Since(started)}
 		results = append(results, result)
 		if err != nil || exitCode != 0 {
@@ -70,8 +72,14 @@ func validateCommand(command string) error {
 	if len(parts) == 0 || parts[0] != "test" {
 		return ErrUnsafeCommand
 	}
-	for _, part := range parts[1:] {
-		if strings.HasPrefix(part, "-") && part != "-run" {
+	if len(parts) == 1 {
+		return nil
+	}
+	if len(parts) != 3 || parts[1] != "-run" || strings.TrimSpace(parts[2]) == "" {
+		return ErrUnsafeCommand
+	}
+	for _, char := range parts[2] {
+		if !(char == '_' || char == '-' || char == '.' || char == '*' || char == '+' || char == '^' || char == '$' || char == '(' || char == ')' || char >= 'A' && char <= 'Z' || char >= 'a' && char <= 'z' || char >= '0' && char <= '9') {
 			return ErrUnsafeCommand
 		}
 	}
