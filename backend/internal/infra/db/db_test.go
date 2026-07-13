@@ -21,3 +21,9 @@ func TestAutoMigrate_RegistersReviewTables(t *testing.T) {
 	require.True(t, testDB.Migrator().HasColumn(&model.ReviewSession{}, "phase"))
 	require.True(t, testDB.Migrator().HasColumn(&model.ReviewSession{}, "reading_completed_at"))
 }
+
+func TestProjectCourseResultIndexSkipsNonPostgresDialects(t *testing.T) {
+	testDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, ensureProjectCourseResultIndex(testDB))
+}

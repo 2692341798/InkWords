@@ -51,7 +51,7 @@ func InitReviewDB(dsn string) error {
 
 // autoMigrateCore/autoMigrateReview 将持久化模型集中在入口，避免启动路径和测试路径出现迁移清单漂移。
 func autoMigrateCore(database *gorm.DB) error {
-	return database.AutoMigrate(
+	if err := database.AutoMigrate(
 		&model.User{},
 		&model.Blog{},
 		&model.OAuthToken{},
@@ -59,7 +59,26 @@ func autoMigrateCore(database *gorm.DB) error {
 		&model.JobTask{},
 		&model.JobTaskEvent{},
 		&projectcourse.ProjectCourse{},
-	)
+	); err != nil {
+		return err
+	}
+	return ensureProjectCourseResultIndex(database)
+}
+
+// ensureProjectCourseResultIndex accelerates the idempotent course-result
+// lookup without affecting SQLite-based unit-test migrations. The partial
+// expression index keeps write overhead limited to project-course phase events
+// while covering the JSON identity and newest-result ordering used by the
+// reuse query.
+func ensureProjectCourseResultIndex(database *gorm.DB) error {
+	if database.Dialector.Name() != "postgres" {
+		return nil
+	}
+	return database.Exec(`
+CREATE INDEX IF NOT EXISTS idx_job_task_events_project_course_result
+ON job_task_events
+((payload->>'course_id'), (payload->>'stage'), (payload->>'checkpoint'), (payload->>'input_hash'), created_at DESC)
+WHERE event_type = 'project_course_phase'`).Error
 }
 
 func autoMigrateReview(database *gorm.DB) error {
