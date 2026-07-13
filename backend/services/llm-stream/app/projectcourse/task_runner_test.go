@@ -60,6 +60,12 @@ func (contractChapterGenerator) Generate(_ context.Context, chapter sharedkernel
 	return document, err
 }
 
+type hardFailChapterGenerator struct{}
+
+func (hardFailChapterGenerator) Generate(_ context.Context, chapter sharedkernel.Chapter, pack EvidencePack, _ sharedkernel.AudienceLevel) (ChapterDocument, error) {
+	return ChapterDocument{ChapterID: chapter.ID, ChapterType: chapter.Type, Title: chapter.Title, Markdown: "# " + chapter.Title, EvidencePack: pack}, nil
+}
+
 func TestCourseTaskRunnerReturnsAwaitingApprovalBlueprint(t *testing.T) {
 	snapshot := sharedkernel.SourceSnapshot{RepositoryURL: "https://github.com/example/project", RequestedRef: "main", ResolvedCommitSHA: "0123456789abcdef0123456789abcdef01234567", CapturedAt: time.Unix(1, 0)}
 	runner := NewCourseTaskRunner(fakeRepositoryAnalyzer{analysis: RepositoryAnalysis{Snapshot: snapshot, Graph: KnowledgeGraph{CommitSHA: snapshot.ResolvedCommitSHA, Files: []InventoryEntry{{Path: "main.go", Role: RoleApplication, Disposition: DispositionCovered, ContentHash: "sha256:main"}}}}})
@@ -107,6 +113,30 @@ func TestCourseTaskRunnerGeneratesOnlyAgainstPinnedCommit(t *testing.T) {
 	require.True(t, checkpoints["draft:chapter-1"])
 	require.True(t, checkpoints["review:chapter-1"])
 	require.True(t, checkpoints["final_gate:chapter-1"])
+}
+
+func TestCourseTaskRunnerDoesNotCompleteChapterAfterHardQualityFailure(t *testing.T) {
+	snapshot := sharedkernel.SourceSnapshot{RepositoryURL: "https://github.com/example/project", RequestedRef: "main", ResolvedCommitSHA: "0123456789abcdef0123456789abcdef01234567", CapturedAt: time.Unix(1, 0).UTC()}
+	files := []InventoryEntry{{Path: "main.go", Role: RoleApplication, Disposition: DispositionCovered, ContentHash: "sha256:main", Content: "package main"}}
+	blueprint := sharedkernel.Blueprint{CourseID: "course-hard-gate", BlueprintVersion: 1, CommitSHA: snapshot.ResolvedCommitSHA, AudienceLevel: sharedkernel.AudienceProgramming, Volumes: []sharedkernel.Volume{{ID: "volume-1", Title: "硬门禁", Sort: 1, Chapters: []sharedkernel.Chapter{{ID: "map", Title: "项目地图", Sort: 1, Enabled: false, Type: sharedkernel.ChapterProjectMap}, {ID: "flow", Title: "主链路", Sort: 2, Enabled: true, Type: sharedkernel.ChapterMainFlow, EvidenceIDs: evidenceIDsForFiles(files)}}}}}
+	payload, err := json.Marshal(generateTaskPayload{CourseID: blueprint.CourseID, RepositoryURL: snapshot.RepositoryURL, ResolvedCommitSHA: snapshot.ResolvedCommitSHA, Blueprint: blueprint})
+	require.NoError(t, err)
+	runner := NewCourseTaskRunnerWithGenerator(fakeRepositoryAnalyzer{analysis: RepositoryAnalysis{Snapshot: snapshot, Graph: KnowledgeGraph{CommitSHA: snapshot.ResolvedCommitSHA, Files: files}}}, hardFailChapterGenerator{})
+	result, err := runner.Run(context.Background(), sharedrabbitmq.GenerationRequestedMessage{Kind: "project_course_generate", Payload: payload})
+	require.NoError(t, err)
+	var decoded generateTaskResult
+	require.NoError(t, json.Unmarshal(result, &decoded))
+	require.Equal(t, string(sharedkernel.CourseBlocked), decoded.Status)
+	require.Len(t, decoded.Chapters, 1)
+	require.Equal(t, "blocked", decoded.Chapters[0].Status)
+	require.Contains(t, decoded.Chapters[0].Error, "quality gate")
+	var foundHardFailure bool
+	for _, gate := range decoded.QualityReport {
+		if gate.Name == "chapter_contract" && gate.Result == sharedkernel.GateHardFail {
+			foundHardFailure = true
+		}
+	}
+	require.True(t, foundHardFailure)
 }
 
 func TestCourseTaskRunnerPreservesSuccessfulChaptersWhenAnotherIsBlocked(t *testing.T) {

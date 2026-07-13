@@ -190,9 +190,14 @@ func (r *CourseTaskRunner) runGenerate(ctx context.Context, message sharedrabbit
 				result.Chapters = append(result.Chapters, generatedChapterResult{ChapterID: chapter.ID, VolumeID: volume.ID, VolumeTitle: volume.Title, Sort: chapter.Sort, Status: "blocked", Error: generateErr.Error()})
 				continue
 			}
-			result.Chapters = append(result.Chapters, generatedChapterResult{ChapterID: chapter.ID, VolumeID: volume.ID, VolumeTitle: volume.Title, Sort: chapter.Sort, Status: "succeeded", Document: &document})
 			quality := RunChapterQualityGates(document, false)
 			result.QualityReport = append(result.QualityReport, quality.Checks...)
+			if quality.Result == sharedkernel.GateHardFail {
+				blockedChapters++
+				result.Chapters = append(result.Chapters, generatedChapterResult{ChapterID: chapter.ID, VolumeID: volume.ID, VolumeTitle: volume.Title, Sort: chapter.Sort, Status: "blocked", Error: "chapter quality gate failed"})
+				continue
+			}
+			result.Chapters = append(result.Chapters, generatedChapterResult{ChapterID: chapter.ID, VolumeID: volume.ID, VolumeTitle: volume.Title, Sort: chapter.Sort, Status: "succeeded", Document: &document})
 			result.Checkpoints = append(result.Checkpoints,
 				projectCourseCheckpoint(payload.CourseID, payload.Blueprint.BlueprintVersion, "generation", len(result.Checkpoints)+1, "claim_plan:"+chapter.ID, packHash, hashProjectCourseValue(document.Claims)),
 				projectCourseCheckpoint(payload.CourseID, payload.Blueprint.BlueprintVersion, "generation", len(result.Checkpoints)+1, "draft:"+chapter.ID, hashProjectCourseValue(document.Claims), hashProjectCourseValue(document.Markdown)),
