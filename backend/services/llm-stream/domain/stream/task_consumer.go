@@ -210,10 +210,27 @@ func (c *TaskConsumer) handleProjectCourse(ctx context.Context, message sharedra
 	if err := c.appendProjectCourseEvent(ctx, message.TaskID, payload.CourseID, stage, "started", 1, projectCourseBlueprintVersion(message.Payload), inputHash, false, message.Payload); err != nil {
 		return err
 	}
-	result, err := c.projectCourse.Run(ctx, message)
+	taskCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go c.watchCancellation(taskCtx, cancel, message.TaskID)
+	result, err := c.projectCourse.Run(taskCtx, message)
 	if err != nil {
+		cancelled, cancelErr := c.tasks.IsCancelled(ctx, message.TaskID)
+		if cancelErr != nil {
+			return cancelErr
+		}
+		if cancelled || errors.Is(err, context.Canceled) {
+			return nil
+		}
 		c.metrics.Observe(strings.TrimSpace(message.Kind), time.Since(started), false)
 		return c.tasks.MarkFailed(ctx, message.TaskID, err.Error())
+	}
+	cancelled, cancelErr := c.tasks.IsCancelled(ctx, message.TaskID)
+	if cancelErr != nil {
+		return cancelErr
+	}
+	if cancelled {
+		return nil
 	}
 	c.metrics.Observe(strings.TrimSpace(message.Kind), time.Since(started), true)
 	if err := c.appendProjectCourseEvent(ctx, message.TaskID, payload.CourseID, stage, "result_ready", 2, projectCourseBlueprintVersion(result), inputHash, true, result); err != nil {

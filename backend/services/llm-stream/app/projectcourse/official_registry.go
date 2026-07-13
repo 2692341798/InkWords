@@ -88,9 +88,17 @@ func (p OfficialRegistryProvider) FetchTechnology(technology, versionConstraint 
 		if ttl <= 0 {
 			ttl = 24 * time.Hour
 		}
+		// The content-addressed key prevents a changed upstream page from
+		// silently colliding with a previous version; the base key is a short
+		// lookup alias for the same provider/version/URL tuple.
+		p.Cache.Set(officialSourceContentCacheKey(source), source, ttl)
 		p.Cache.Set(key, source, ttl)
 	}
 	return source, nil
+}
+
+func officialSourceContentCacheKey(source OfficialSource) string {
+	return officialSourceCacheKey(source) + ":" + strings.TrimSpace(source.ContentHash)
 }
 
 func officialSourceCacheKey(source OfficialSource) string {

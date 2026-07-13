@@ -2,6 +2,7 @@ package projectcourse
 
 import (
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"testing"
@@ -48,8 +49,18 @@ func TestOfficialRegistryRejectsUnknownTechnology(t *testing.T) {
 	require.ErrorContains(t, err, "no official source")
 }
 
+func TestDefaultOfficialRegistryCoversCoreInkWordsTechnologies(t *testing.T) {
+	registry := NewDefaultOfficialRegistry()
+	for _, technology := range []string{"Go", "Gin", "React", "Zustand", "PostgreSQL", "RabbitMQ", "Redis", "Docker Compose", "Nginx", "TypeScript"} {
+		source, err := registry.Resolve(technology, "")
+		require.NoError(t, err, technology)
+		require.Equal(t, technology, source.Technology)
+	}
+}
+
 func TestHTTPOfficialSourceProviderEnforcesResponseLimitsAndTypes(t *testing.T) {
-	provider := HTTPOfficialSourceProvider{Client: &http.Client{Transport: staticRoundTripper{status: http.StatusOK, contentType: "text/plain", body: "official"}}, AllowedDomains: []string{"example.com"}, MaxBytes: 32}
+	publicResolver := func(string) ([]net.IP, error) { return []net.IP{net.ParseIP("93.184.216.34")}, nil }
+	provider := HTTPOfficialSourceProvider{Client: &http.Client{Transport: staticRoundTripper{status: http.StatusOK, contentType: "text/plain", body: "official"}}, AllowedDomains: []string{"example.com"}, MaxBytes: 32, ResolveHost: publicResolver}
 	content, err := provider.Fetch("https://example.com/docs")
 	require.NoError(t, err)
 	require.Equal(t, "official", content)
@@ -63,7 +74,20 @@ func TestHTTPOfficialSourceProviderEnforcesResponseLimitsAndTypes(t *testing.T) 
 }
 
 func TestHTTPOfficialSourceProviderRejectsUntrustedRedirect(t *testing.T) {
-	provider := HTTPOfficialSourceProvider{Client: &http.Client{Transport: redirectRoundTripper{}}, AllowedDomains: []string{"example.com"}}
+	provider := HTTPOfficialSourceProvider{Client: &http.Client{Transport: redirectRoundTripper{}}, AllowedDomains: []string{"example.com"}, ResolveHost: func(host string) ([]net.IP, error) {
+		if host == "example.com" {
+			return []net.IP{net.ParseIP("93.184.216.34")}, nil
+		}
+		return []net.IP{net.ParseIP("192.168.1.10")}, nil
+	}}
 	_, err := provider.Fetch("https://example.com/docs")
 	require.ErrorContains(t, err, "redirect rejected")
+}
+
+func TestHTTPOfficialSourceProviderRejectsDNSRebindingToPrivateAddress(t *testing.T) {
+	provider := HTTPOfficialSourceProvider{AllowedDomains: []string{"example.com"}, ResolveHost: func(string) ([]net.IP, error) {
+		return []net.IP{net.ParseIP("169.254.169.254")}, nil
+	}}
+	_, err := provider.Fetch("https://example.com/docs")
+	require.ErrorContains(t, err, "private address")
 }

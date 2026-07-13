@@ -1,16 +1,22 @@
 {
-  "name": "inkwords-fixture",
-  "description": "脱敏的最小离线夹具，仅用于项目课程清单和证据合同测试。",
-  "source": "InkWords",
-  "files": [
-    {"path": "backend/services/core-api/transport/http/v1/routes.go", "role": "transport", "disposition": "covered"},
-    {"path": "backend/services/core-api/domain/task/service.go", "role": "application", "disposition": "covered"},
-    {"path": "backend/services/llm-stream/domain/stream/task_consumer.go", "role": "infrastructure", "disposition": "covered"},
-    {"path": "frontend/src/hooks/generator/useProjectAnalyzer.ts", "role": "application", "disposition": "covered"},
-    {"path": "frontend/src/store/streamStore.ts", "role": "application", "disposition": "covered"},
-    {"path": "docker-compose.yml", "role": "build_deploy", "disposition": "indexed"},
-    {"path": "README.md", "role": "documentation", "disposition": "indexed"},
-    {"path": "scripts/test_reader.py", "role": "example", "disposition": "indexed"},
-    {"path": "backend/services/core-api/domain/task/service_test.go", "role": "test", "disposition": "indexed"}
-  ]
+  "fixture_version": 1,
+  "repository": "InkWords",
+  "description": "脱敏的项目结构夹具；仅记录代表性路径和角色，不包含完整源码。",
+  "entries": [
+    {"path": "backend/cmd/server/main.go", "role": "go_entrypoint"},
+    {"path": "backend/services/core-api/transport/http/v1/routes.go", "role": "go_route"},
+    {"path": "backend/services/core-api/domain/projectcourse/service.go", "role": "go_service"},
+    {"path": "backend/services/llm-stream/domain/stream/task_consumer.go", "role": "rabbitmq_consumer"},
+    {"path": "frontend/src/store/projectCourseStore.ts", "role": "zustand_store"},
+    {"path": "frontend/src/services/projectCourse.ts", "role": "react_service"},
+    {"path": "docker-compose.yml", "role": "compose"},
+    {"path": "README.md", "role": "documentation"},
+    {"path": "backend/services/llm-stream/app/projectcourse/task_runner_test.go", "role": "test"},
+    {"path": "scripts", "role": "script_directory"}
+  ],
+  "constraints": {
+    "source_content_included": false,
+    "executes_target_repository": false,
+    "max_entry_count": 32
+  }
 }

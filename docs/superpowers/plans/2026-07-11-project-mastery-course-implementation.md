@@ -113,7 +113,7 @@ frontend/src/
 - Create: `backend/services/llm-stream/app/projectcourse/testdata/known-failures.json`
 - Modify: `docs/qa/e2e-testing.md`
 
-- [ ] **Step 1：记录现有生成链路基线**
+- [x] **Step 1：记录现有生成链路基线**
 
 记录当前 Git 分析的：
 
@@ -123,7 +123,7 @@ frontend/src/
 - 现有文章中的失效路径、失效符号和不可运行示例；
 - 当前 `origin/main` SHA 和评测日期。
 
-- [ ] **Step 2：建立最小离线仓库夹具**
+- [x] **Step 2：建立最小离线仓库夹具**
 
 夹具只保留 InkWords 的代表性结构和经过脱敏的短代码片段，覆盖：
 
@@ -135,7 +135,7 @@ frontend/src/
 
 不要把完整仓库复制进 testdata。
 
-- [ ] **Step 3：固化已知失败断言**
+- [x] **Step 3：固化已知失败断言**
 
 至少包含：
 
@@ -144,7 +144,7 @@ frontend/src/
 - 当前 commit 下的内容 hash 必须匹配；
 - README 声明、源码观察和模型推断必须使用不同置信度。
 
-- [ ] **Step 4：运行现有回归测试**
+- [x] **Step 4：运行现有回归测试**
 
 Run:
 
@@ -552,15 +552,15 @@ Expected: PASS。
 - Modify: `backend/shared/platform/cache/redis.go`
 - Modify: `backend/.env.example`
 
-- [ ] **Step 1：定义 `OfficialSourceProvider`**
+- [x] **Step 1：定义 `OfficialSourceProvider`**
 
 输入 technology、version evidence 和所需主题；输出 URL、版本范围、规范化正文、获取时间和 hash。
 
-- [ ] **Step 2：建立首期官方 registry**
+- [x] **Step 2：建立首期官方 registry**
 
 覆盖 InkWords 核心技术：Go、Gin、React、Zustand、PostgreSQL、RabbitMQ、Redis、Docker Compose、Nginx。每个 provider 只允许官方域名。
 
-- [ ] **Step 3：实现 SSRF 防护**
+- [x] **Step 3：实现 SSRF 防护**
 
 测试拒绝：
 
@@ -569,15 +569,15 @@ Expected: PASS。
 - 跨域重定向；
 - 非 HTTP(S)、超大响应、非文本内容和超时响应。
 
-- [ ] **Step 4：版本匹配和缓存**
+- [x] **Step 4：版本匹配和缓存**
 
 从 manifest 提取版本，缓存 key 包含 provider、URL、version、content hash。版本无法匹配时不声称精确版本支持。
 
-- [ ] **Step 5：Prompt 注入隔离**
+- [x] **Step 5：Prompt 注入隔离**
 
 官方网页正文只作为引用材料，放在明确分隔的数据块中；网页指令不得影响 system prompt。
 
-- [ ] **Step 6：运行测试**
+- [x] **Step 6：运行测试**
 
 Run:
 
@@ -613,7 +613,7 @@ Expected: PASS。
 
 正文前先列出拟表达的项目事实、原理事实、推断和证据映射。没有证据的项目事实在草稿前就被移除或改成待确认问题。
 
-- [ ] **Step 4：按读者等级生成教学结构**
+- [x] **Step 4：按读者等级生成教学结构**
 
 等级只影响术语解释、步骤颗粒度、提示数量和延伸深度，不影响 Claim 和 Evidence。
 
@@ -871,7 +871,7 @@ Expected: PASS。
 - 模块/主链路/文件处置覆盖率；
 - 章节重试和恢复命中率。
 
-- [ ] **Step 5：取消语义**
+- [x] **Step 5：取消语义**
 
 取消新模型请求与未开始实验；已写入的阶段检查点保留。取消不得把课程标为失败或删除已验证产物。
 
@@ -897,7 +897,7 @@ Expected: PASS。
 - Modify: `docs/qa/e2e-testing.md`
 - Modify: `README.md`
 
-- [ ] **Step 1：锁定验收 SHA**
+- [x] **Step 1：锁定验收 SHA**
 
 运行时解析 `https://github.com/2692341798/InkWords` 的 `main`，把 SHA 写入报告、课程 manifest 和所有 EvidenceRef。
 

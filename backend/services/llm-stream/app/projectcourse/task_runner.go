@@ -22,16 +22,25 @@ type RepositoryAnalyzer interface {
 }
 
 type CourseTaskRunner struct {
-	analyzer  RepositoryAnalyzer
-	generator ChapterGenerator
+	analyzer        RepositoryAnalyzer
+	generator       ChapterGenerator
+	officialSources OfficialSourceResolver
+}
+
+type OfficialSourceResolver interface {
+	FetchTechnology(technology, versionConstraint string) (OfficialSource, error)
 }
 
 func NewCourseTaskRunner(analyzer RepositoryAnalyzer) *CourseTaskRunner {
 	return &CourseTaskRunner{analyzer: analyzer}
 }
 
-func NewCourseTaskRunnerWithGenerator(analyzer RepositoryAnalyzer, generator ChapterGenerator) *CourseTaskRunner {
-	return &CourseTaskRunner{analyzer: analyzer, generator: generator}
+func NewCourseTaskRunnerWithGenerator(analyzer RepositoryAnalyzer, generator ChapterGenerator, officialSources ...OfficialSourceResolver) *CourseTaskRunner {
+	var resolver OfficialSourceResolver
+	if len(officialSources) > 0 {
+		resolver = officialSources[0]
+	}
+	return &CourseTaskRunner{analyzer: analyzer, generator: generator, officialSources: resolver}
 }
 
 type analyzeTaskPayload struct {
@@ -142,7 +151,13 @@ func (r *CourseTaskRunner) runGenerate(ctx context.Context, message sharedrabbit
 			if !chapter.Enabled {
 				continue
 			}
-			pack, packErr := BuildEvidencePack(analysis.Snapshot, chapter.ID, chapter.EvidenceIDs, analysis.Graph, nil)
+			official, officialErr := r.officialSourcesForChapter(chapter)
+			if officialErr != nil {
+				result.Status = string(sharedkernel.CourseBlocked)
+				result.Chapters = append(result.Chapters, generatedChapterResult{ChapterID: chapter.ID, VolumeID: volume.ID, VolumeTitle: volume.Title, Sort: chapter.Sort, Status: "blocked", Error: officialErr.Error()})
+				continue
+			}
+			pack, packErr := BuildEvidencePack(analysis.Snapshot, chapter.ID, chapter.EvidenceIDs, analysis.Graph, official)
 			if packErr != nil {
 				result.Status = string(sharedkernel.CourseBlocked)
 				result.Chapters = append(result.Chapters, generatedChapterResult{ChapterID: chapter.ID, VolumeID: volume.ID, VolumeTitle: volume.Title, Sort: chapter.Sort, Status: "blocked", Error: packErr.Error()})
@@ -158,4 +173,30 @@ func (r *CourseTaskRunner) runGenerate(ctx context.Context, message sharedrabbit
 		}
 	}
 	return json.Marshal(result)
+}
+
+func (r *CourseTaskRunner) officialSourcesForChapter(chapter sharedkernel.Chapter) ([]OfficialSource, error) {
+	_, requiresOfficial, _, ok := chapterContractFor(chapter.Type)
+	if !ok || !requiresOfficial {
+		return nil, nil
+	}
+	if r.officialSources == nil {
+		return nil, fmt.Errorf("chapter %q requires an official source provider", chapter.ID)
+	}
+	technology := "Go"
+	lowerTitle := strings.ToLower(chapter.Title)
+	for candidate, name := range map[string]string{
+		"react": "React", "zustand": "Zustand", "postgres": "PostgreSQL", "rabbitmq": "RabbitMQ",
+		"redis": "Redis", "compose": "Docker Compose", "docker": "Docker Compose", "nginx": "Nginx", "typescript": "TypeScript", "gin": "Gin",
+	} {
+		if strings.Contains(lowerTitle, candidate) {
+			technology = name
+			break
+		}
+	}
+	source, err := r.officialSources.FetchTechnology(technology, "")
+	if err != nil {
+		return nil, fmt.Errorf("fetch official source for %s: %w", technology, err)
+	}
+	return []OfficialSource{source}, nil
 }

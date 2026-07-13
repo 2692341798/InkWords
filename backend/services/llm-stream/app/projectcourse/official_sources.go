@@ -29,10 +29,11 @@ type HTTPOfficialSourceProvider struct {
 	Client         *http.Client
 	AllowedDomains []string
 	MaxBytes       int64
+	ResolveHost    func(host string) ([]net.IP, error)
 }
 
 func (p HTTPOfficialSourceProvider) Fetch(rawURL string) (string, error) {
-	if err := ValidateOfficialURL(rawURL, p.AllowedDomains); err != nil {
+	if err := p.validateFetchURL(rawURL); err != nil {
 		return "", err
 	}
 	client := p.Client
@@ -45,7 +46,7 @@ func (p HTTPOfficialSourceProvider) Fetch(rawURL string) (string, error) {
 		if len(via) >= 5 {
 			return fmt.Errorf("too many official source redirects")
 		}
-		if err := ValidateOfficialURL(req.URL.String(), p.AllowedDomains); err != nil {
+		if err := p.validateFetchURL(req.URL.String()); err != nil {
 			return fmt.Errorf("redirect rejected: %w", err)
 		}
 		if previousRedirect != nil {
@@ -82,6 +83,33 @@ func (p HTTPOfficialSourceProvider) Fetch(rawURL string) (string, error) {
 	return string(content), nil
 }
 
+func (p HTTPOfficialSourceProvider) validateFetchURL(rawURL string) error {
+	if err := ValidateOfficialURL(rawURL, p.AllowedDomains); err != nil {
+		return err
+	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("parse official source URL: %w", err)
+	}
+	resolver := p.ResolveHost
+	if resolver == nil {
+		resolver = net.LookupIP
+	}
+	ips, err := resolver(parsed.Hostname())
+	if err != nil {
+		return fmt.Errorf("resolve official source host: %w", err)
+	}
+	if len(ips) == 0 {
+		return fmt.Errorf("official source host has no resolved address")
+	}
+	for _, ip := range ips {
+		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsUnspecified() {
+			return fmt.Errorf("official source host resolves to a private address")
+		}
+	}
+	return nil
+}
+
 type OfficialRegistry struct {
 	Domains map[string][]string
 	URLs    map[string]string
@@ -90,18 +118,28 @@ type OfficialRegistry struct {
 func NewDefaultOfficialRegistry() OfficialRegistry {
 	return OfficialRegistry{
 		Domains: map[string][]string{
-			"Go":         {"go.dev", "pkg.go.dev"},
-			"Gin":        {"gin-gonic.com", "github.com"},
-			"RabbitMQ":   {"rabbitmq.com"},
-			"React":      {"react.dev"},
-			"TypeScript": {"typescriptlang.org"},
+			"Go":             {"go.dev", "pkg.go.dev"},
+			"Gin":            {"gin-gonic.com"},
+			"React":          {"react.dev"},
+			"Zustand":        {"zustand.docs.pmnd.rs"},
+			"PostgreSQL":     {"postgresql.org"},
+			"RabbitMQ":       {"rabbitmq.com"},
+			"Redis":          {"redis.io"},
+			"Docker Compose": {"docs.docker.com"},
+			"Nginx":          {"nginx.org"},
+			"TypeScript":     {"typescriptlang.org"},
 		},
 		URLs: map[string]string{
-			"Go":         "https://go.dev/doc/",
-			"Gin":        "https://gin-gonic.com/docs/",
-			"RabbitMQ":   "https://www.rabbitmq.com/docs",
-			"React":      "https://react.dev/learn",
-			"TypeScript": "https://www.typescriptlang.org/docs/",
+			"Go":             "https://go.dev/doc/",
+			"Gin":            "https://gin-gonic.com/docs/",
+			"React":          "https://react.dev/learn",
+			"Zustand":        "https://zustand.docs.pmnd.rs/",
+			"PostgreSQL":     "https://www.postgresql.org/docs/",
+			"RabbitMQ":       "https://www.rabbitmq.com/docs",
+			"Redis":          "https://redis.io/docs/latest/",
+			"Docker Compose": "https://docs.docker.com/compose/",
+			"Nginx":          "https://nginx.org/en/docs/",
+			"TypeScript":     "https://www.typescriptlang.org/docs/",
 		},
 	}
 }

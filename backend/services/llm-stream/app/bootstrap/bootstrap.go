@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"errors"
 	"os"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -54,9 +55,18 @@ func BuildRouter() (*gin.Engine, *streamdomain.GormTaskStore, *streamdomain.Serv
 
 	streamDomainService := streamdomain.NewService(generatorService, decompositionService, quotaService)
 	taskDomainService := streamdomain.NewGormTaskStore(dbConn)
+	var officialResolvers []projectcourseapp.OfficialSourceResolver
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("PROJECT_COURSE_OFFICIAL_SOURCES_ENABLED")), "true") {
+		officialResolvers = append(officialResolvers, projectcourseapp.OfficialRegistryProvider{
+			Registry: projectcourseapp.NewDefaultOfficialRegistry(),
+			Fetcher:  projectcourseapp.HTTPOfficialSourceProvider{AllowedDomains: officialSourceDomains()},
+			Cache:    projectcourseapp.NewMemoryOfficialSourceCache(),
+		})
+	}
 	projectCourseRunner := projectcourseapp.NewCourseTaskRunnerWithGenerator(
 		projectcourseapp.GitRepositoryAnalyzer{Fetcher: parser.NewGitFetcher()},
 		projectcourseapp.JSONChapterGenerator{Client: platformllm.NewDeepSeekClient(os.Getenv("DEEPSEEK_API_KEY")), Model: os.Getenv("DEEPSEEK_MODEL")},
+		officialResolvers...,
 	)
 	streamDomainHandler := streamdomain.NewHandler(streamDomainService, streamdomain.NewGormBlogReadable(dbConn))
 
@@ -69,4 +79,8 @@ func BuildRouter() (*gin.Engine, *streamdomain.GormTaskStore, *streamdomain.Serv
 	})
 
 	return r, taskDomainService, streamDomainService, projectCourseRunner, nil
+}
+
+func officialSourceDomains() []string {
+	return []string{"go.dev", "pkg.go.dev", "gin-gonic.com", "react.dev", "zustand.docs.pmnd.rs", "postgresql.org", "rabbitmq.com", "redis.io", "docs.docker.com", "nginx.org", "typescriptlang.org"}
 }

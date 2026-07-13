@@ -3,6 +3,7 @@ package stream
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -13,6 +14,13 @@ type fakeProjectCourseRunner struct{}
 
 func (fakeProjectCourseRunner) Run(context.Context, sharedrabbitmq.GenerationRequestedMessage) ([]byte, error) {
 	return []byte(`{"status":"awaiting_approval"}`), nil
+}
+
+type cancellableProjectCourseRunner struct{}
+
+func (cancellableProjectCourseRunner) Run(ctx context.Context, _ sharedrabbitmq.GenerationRequestedMessage) ([]byte, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
 }
 
 func TestTaskConsumerRoutesProjectCourseToDedicatedRunner(t *testing.T) {
@@ -37,4 +45,13 @@ func TestTaskConsumerFailsProjectCourseWhenRunnerIsNotConfigured(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, TaskStatusFailed, tasks.lastStatus)
 	require.Contains(t, tasks.lastErrorMessage, "worker is not configured")
+}
+
+func TestTaskConsumerCancelsProjectCourseRunnerWithoutMarkingFailure(t *testing.T) {
+	tasks := &fakeTaskService{cancelAfterNCalls: 2}
+	consumer := NewTaskConsumer(tasks, &fakeStreamService{}, cancellableProjectCourseRunner{})
+	consumer.cancellationPollInterval = 1 * time.Millisecond
+	err := consumer.HandleGenerationRequested(context.Background(), sharedrabbitmq.GenerationRequestedMessage{TaskID: uuid.New(), Kind: "project_course_generate", UserID: uuid.New(), Payload: []byte(`{"course_id":"course-1"}`)})
+	require.NoError(t, err)
+	require.NotEqual(t, TaskStatusFailed, tasks.lastStatus)
 }

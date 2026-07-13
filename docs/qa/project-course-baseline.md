@@ -38,3 +38,4 @@ Task 2 完成后补充固定 SHA 解析结果、确定性清单文件数/角色�
 - 课程实验默认由 `PROJECT_COURSE_LAB_VERIFICATION_ENABLED=false` 阻断；开启时仅允许 bubblewrap 固定 Go 测试模板。
 - 课程 ZIP 只接受已验证 checkpoint，包含 README、starter、checkpoints、hints、solution、tests、coverage 和文件 hash manifest。
 - 最近验证：后端相关服务全量 Go 测试通过；前端全量测试 46 个测试文件、171 个测试通过；生产构建通过；Compose 配置在提供 `OBSIDIAN_VAULT_PATH` 后通过。
+- 只读验收脚本锁定 `main` 为 `f14bd1dbc1e568a2335341dd4df0f6c0574bee35`，得到 60 个文件、485 个符号和 1037 条关系；脚本明确不执行目标仓库。
