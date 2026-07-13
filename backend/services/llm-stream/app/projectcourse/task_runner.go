@@ -2,6 +2,8 @@ package projectcourse
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -122,6 +124,7 @@ type generateTaskResult struct {
 	QualityReport    []sharedkernel.GateReport          `json:"quality_report,omitempty"`
 	Coverage         sharedkernel.CoverageMatrix        `json:"coverage,omitempty"`
 	Usage            sharedkernel.CourseGenerationUsage `json:"usage"`
+	Checkpoints      []sharedkernel.CourseCheckpoint    `json:"checkpoints,omitempty"`
 }
 
 func (r *CourseTaskRunner) runGenerate(ctx context.Context, message sharedrabbitmq.GenerationRequestedMessage) ([]byte, error) {
@@ -153,6 +156,11 @@ func (r *CourseTaskRunner) runGenerate(ctx context.Context, message sharedrabbit
 		allChapters = append(allChapters, volume.Chapters...)
 	}
 	result := generateTaskResult{ResultVersion: 1, TaskSubtype: message.Kind, CourseID: payload.CourseID, BlueprintVersion: payload.Blueprint.BlueprintVersion, CommitSHA: payload.ResolvedCommitSHA, Status: string(sharedkernel.CourseCompleted), BlogParentID: payload.CourseID, Coverage: buildCoverage(analysis.Graph, allChapters)}
+	inputHash := hashProjectCourseValue(payload)
+	result.Checkpoints = append(result.Checkpoints,
+		projectCourseCheckpoint(payload.CourseID, payload.Blueprint.BlueprintVersion, "analysis", 1, "snapshot", inputHash, hashProjectCourseValue(analysis.Snapshot)),
+		projectCourseCheckpoint(payload.CourseID, payload.Blueprint.BlueprintVersion, "blueprint", 2, "blueprint", hashProjectCourseValue(analysis.Snapshot), hashProjectCourseValue(payload.Blueprint)),
+	)
 	succeededChapters := 0
 	blockedChapters := 0
 	for _, volume := range payload.Blueprint.Volumes {
@@ -172,6 +180,8 @@ func (r *CourseTaskRunner) runGenerate(ctx context.Context, message sharedrabbit
 				result.Chapters = append(result.Chapters, generatedChapterResult{ChapterID: chapter.ID, VolumeID: volume.ID, VolumeTitle: volume.Title, Sort: chapter.Sort, Status: "blocked", Error: packErr.Error()})
 				continue
 			}
+			packHash := hashProjectCourseValue(pack)
+			result.Checkpoints = append(result.Checkpoints, projectCourseCheckpoint(payload.CourseID, payload.Blueprint.BlueprintVersion, "generation", len(result.Checkpoints)+1, "evidence_pack:"+chapter.ID, hashProjectCourseValue(payload.Blueprint), packHash))
 			document, generateErr := r.generator.Generate(ctx, chapter, pack, payload.Blueprint.AudienceLevel)
 			if generateErr != nil {
 				blockedChapters++
@@ -181,6 +191,10 @@ func (r *CourseTaskRunner) runGenerate(ctx context.Context, message sharedrabbit
 			result.Chapters = append(result.Chapters, generatedChapterResult{ChapterID: chapter.ID, VolumeID: volume.ID, VolumeTitle: volume.Title, Sort: chapter.Sort, Status: "succeeded", Document: &document})
 			quality := RunChapterQualityGates(document, false)
 			result.QualityReport = append(result.QualityReport, quality.Checks...)
+			result.Checkpoints = append(result.Checkpoints,
+				projectCourseCheckpoint(payload.CourseID, payload.Blueprint.BlueprintVersion, "generation", len(result.Checkpoints)+1, "claim_plan:"+chapter.ID, packHash, hashProjectCourseValue(document.Claims)),
+				projectCourseCheckpoint(payload.CourseID, payload.Blueprint.BlueprintVersion, "generation", len(result.Checkpoints)+1, "final_gate:"+chapter.ID, hashProjectCourseValue(document.Claims), hashProjectCourseValue(quality)),
+			)
 			succeededChapters++
 		}
 	}
@@ -192,6 +206,16 @@ func (r *CourseTaskRunner) runGenerate(ctx context.Context, message sharedrabbit
 		}
 	}
 	return json.Marshal(result)
+}
+
+func hashProjectCourseValue(value any) string {
+	encoded, _ := json.Marshal(value)
+	sum := sha256.Sum256(encoded)
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+func projectCourseCheckpoint(courseID string, blueprintVersion int, stage string, sequence int, checkpoint, inputHash, outputHash string) sharedkernel.CourseCheckpoint {
+	return sharedkernel.CourseCheckpoint{CourseID: courseID, BlueprintVersion: blueprintVersion, Stage: stage, Sequence: sequence, Checkpoint: checkpoint, InputHash: inputHash, OutputHash: outputHash, Completed: true}
 }
 
 func (r *CourseTaskRunner) officialSourcesForChapter(chapter sharedkernel.Chapter) ([]OfficialSource, error) {

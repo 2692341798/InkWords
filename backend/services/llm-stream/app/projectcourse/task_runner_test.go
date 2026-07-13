@@ -59,4 +59,8 @@ func TestCourseTaskRunnerGeneratesOnlyAgainstPinnedCommit(t *testing.T) {
 	require.Equal(t, string(sharedkernel.CourseCompleted), decoded.Status)
 	require.Len(t, decoded.Chapters, 1)
 	require.Equal(t, "succeeded", decoded.Chapters[0].Status)
+	require.NotEmpty(t, decoded.Checkpoints)
+	for _, checkpoint := range decoded.Checkpoints {
+		require.NoError(t, checkpoint.Validate())
+	}
 }

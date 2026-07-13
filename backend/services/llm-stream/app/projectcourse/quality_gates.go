@@ -18,6 +18,8 @@ func RunChapterQualityGates(document ChapterDocument, verifiedLab bool) QualityG
 		report.Checks = append(report.Checks, sharedkernel.GateReport{Name: name, Result: result, Message: message})
 		if result == sharedkernel.GateHardFail {
 			report.Result = sharedkernel.GateHardFail
+		} else if result == sharedkernel.GateSoftFail && report.Result == sharedkernel.GatePass {
+			report.Result = sharedkernel.GateSoftFail
 		}
 	}
 	if err := document.ValidateContract(); err != nil {
@@ -46,7 +48,31 @@ func RunChapterQualityGates(document ChapterDocument, verifiedLab bool) QualityG
 	} else {
 		add("title_in_document", sharedkernel.GatePass, "title present")
 	}
+	for name, message := range softChapterRisks(document.Markdown) {
+		add(name, sharedkernel.GateSoftFail, message)
+	}
 	return report
+}
+
+func softChapterRisks(markdown string) map[string]string {
+	risks := make(map[string]string)
+	if strings.Contains(markdown, "待确认") || strings.Contains(markdown, "TODO") {
+		risks["unresolved_language"] = "chapter contains unresolved wording"
+	}
+	headings := make(map[string]bool)
+	for _, line := range strings.Split(markdown, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "## ") {
+			continue
+		}
+		heading := strings.TrimSpace(strings.TrimPrefix(line, "## "))
+		if headings[heading] {
+			risks["duplicate_section"] = "chapter repeats a section heading"
+			break
+		}
+		headings[heading] = true
+	}
+	return risks
 }
 
 func validateCodeBlockProvenance(document ChapterDocument) error {

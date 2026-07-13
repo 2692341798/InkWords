@@ -2,6 +2,16 @@
 
 状态：首期落地执行器窄接口与 Linux bubblewrap 隔离实现；功能开关默认关闭，未配置可用 sandbox 时 fail-closed。
 
+## 方案比较
+
+| 方案 | 网络/资源隔离 | Compose 与本地兼容 | 首期决策 |
+| --- | --- | --- | --- |
+| 远程沙箱服务 | 强，依赖外部控制面 | 需要额外凭据和网络 | 暂不采用 |
+| rootless 容器 | 强，需正确配置 runtime | Linux/Compose 友好，macOS 依赖 Docker | 作为服务边界 |
+| gVisor | 强，运行时与镜像成本较高 | 需要专用 runtime | 暂不作为默认 |
+| nsjail | 强，规则复杂、发行版集成成本较高 | 需要额外维护 | 暂不采用 |
+| bubblewrap | namespace、禁网和 rlimit 直接可组合 | Linux 容器内轻量，macOS 通过 Docker 使用 | 首期选用 |
+
 ## 约束
 
 - 课程实验只能运行系统生成且已验证的工件，不能运行目标仓库。

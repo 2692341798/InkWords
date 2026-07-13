@@ -62,3 +62,11 @@ func TestQualityGateRequiresExactCodeFenceProvenance(t *testing.T) {
 	document.Markdown = "# 主链路\n## 主链路\n## 数据流\n## 练习\n```go\npackage main\n```"
 	require.Equal(t, sharedkernel.GateHardFail, RunChapterQualityGates(document, false).Result)
 }
+
+func TestQualityGateReportsSoftRisksWithoutHardBlocking(t *testing.T) {
+	document := validChapterDocument()
+	document.Markdown = "# 主链路\n## 主链路\n## 数据流\n## 练习\n待确认"
+	report := RunChapterQualityGates(document, false)
+	require.Equal(t, sharedkernel.GateSoftFail, report.Result)
+	require.Contains(t, report.Checks, sharedkernel.GateReport{Name: "unresolved_language", Result: sharedkernel.GateSoftFail, Message: "chapter contains unresolved wording"})
+}

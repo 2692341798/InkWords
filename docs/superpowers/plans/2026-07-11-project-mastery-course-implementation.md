@@ -629,7 +629,7 @@ Expected: PASS。
 
 项目源码代码块从 EvidenceRef 渲染；教学代码块从课程代码工件渲染。模型不得独立生成一份与 artifact 不同的同名代码。
 
-- [ ] **Step 8：软门禁与风险报告**
+- [x] **Step 8：软门禁与风险报告**
 
 类比、节奏、重复和等级适配触发一次修复；仍失败则保留风险，不阻止事实正确的章节完成。
 
@@ -705,7 +705,7 @@ Expected: PASS。
 - Modify: `docker-compose.yml`
 - Modify: `backend/.env.example`
 
-- [ ] **Step 1：完成成熟沙箱选型记录**
+- [x] **Step 1：完成成熟沙箱选型记录**
 
 至少比较：独立远程沙箱、rootless 容器、gVisor、nsjail 等方案。记录许可证、维护状态、macOS/Linux 开发兼容、Compose 部署方式、网络隔离、资源限制、镜像体积和逃逸风险。
 
