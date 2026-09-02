@@ -4,15 +4,16 @@ package prompt
 type ScenarioMode string
 
 const (
-	ScenarioModeEbookInterpretation ScenarioMode = "ebook_interpretation"
-	ScenarioModeOpenBookExamReview  ScenarioMode = "open_book_exam_review"
-	ScenarioModeBeginnerWalkthrough ScenarioMode = "beginner_walkthrough"
+	ScenarioModeEbookInterpretation  ScenarioMode = "ebook_interpretation"
+	ScenarioModeOpenBookExamReview   ScenarioMode = "open_book_exam_review"
+	ScenarioModeBeginnerWalkthrough  ScenarioMode = "beginner_walkthrough"
+	ScenarioModeProjectMasteryCourse ScenarioMode = "project_mastery_course"
 )
 
 // IsValid 返回当前场景是否为受支持的枚举值。
 func (m ScenarioMode) IsValid() bool {
 	switch m {
-	case ScenarioModeEbookInterpretation, ScenarioModeOpenBookExamReview, ScenarioModeBeginnerWalkthrough:
+	case ScenarioModeEbookInterpretation, ScenarioModeOpenBookExamReview, ScenarioModeBeginnerWalkthrough, ScenarioModeProjectMasteryCourse:
 		return true
 	default:
 		return false

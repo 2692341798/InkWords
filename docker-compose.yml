@@ -64,6 +64,7 @@ services:
       OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY: ${OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY:-}
       OBSIDIAN_WIKI_DIR: ${OBSIDIAN_WIKI_DIR:-wiki}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_API_URL: ${DEEPSEEK_API_URL:-}
       DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-}
       RABBITMQ_URL: ${RABBITMQ_URL:-amqp://guest:guest@rabbitmq:5672/}
       RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-inkwords.events}
@@ -114,6 +115,7 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_API_URL: ${DEEPSEEK_API_URL:-}
       DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-}
       INKWORDS_TASK_PERSISTENCE_MODE: ${INKWORDS_TASK_PERSISTENCE_MODE:-task_only}
       RABBITMQ_URL: ${RABBITMQ_URL:-amqp://guest:guest@rabbitmq:5672/}
@@ -188,6 +190,7 @@ services:
       OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY: ${OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY:-}
       OBSIDIAN_WIKI_DIR: ${OBSIDIAN_WIKI_DIR:-wiki}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_API_URL: ${DEEPSEEK_API_URL:-}
       DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-}
       RABBITMQ_URL: ${RABBITMQ_URL:-amqp://guest:guest@rabbitmq:5672/}
       RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-inkwords.events}
@@ -207,6 +210,37 @@ services:
       rabbitmq:
         condition: service_started
       obsidian-bridge:
+        condition: service_started
+    networks:
+      - inkwords-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/ready >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  course-runner:
+    build:
+      context: ./backend
+      dockerfile: services/course-runner/Dockerfile
+    image: inkwords/course-runner:local
+    command: ["./course-runner"]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-inkwords}:${POSTGRES_PASSWORD:-inkwords_password}@db:5432/inkwords_db?sslmode=disable
+      RABBITMQ_URL: ${RABBITMQ_URL:-amqp://guest:guest@rabbitmq:5672/}
+      RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-inkwords.events}
+      PROJECT_COURSE_LAB_VERIFICATION_ENABLED: ${PROJECT_COURSE_LAB_VERIFICATION_ENABLED:-false}
+      COURSE_ARTIFACTS_DIR: /app/course-artifacts
+    expose:
+      - "8080"
+    volumes:
+      - course-artifacts:/app/course-artifacts:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      rabbitmq:
         condition: service_started
     networks:
       - inkwords-network
@@ -304,3 +338,4 @@ volumes:
   uploads:
   redisdata:
   export-artifacts:
+  course-artifacts:

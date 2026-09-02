@@ -101,6 +101,30 @@ func TestGormGenerationResultRepository_CreatesSingleBlogWhenBlogIDIsMissing(t *
 	require.Equal(t, "正文", blogs[0].Content)
 }
 
+func TestGormGenerationResultRepository_PersistsProjectCourseBlogsIdempotently(t *testing.T) {
+	testDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, testDB.AutoMigrate(&userRecord{}, &blogRecord{}, &JobTask{}))
+	userID, taskID, courseID := uuid.New(), uuid.New(), uuid.New()
+	require.NoError(t, testDB.Create(&userRecord{ID: userID, Username: "course", Email: "course@example.com"}).Error)
+	require.NoError(t, testDB.Create(&JobTask{ID: taskID, TaskType: taskTypeGeneration, TaskSubtype: ProjectCourseGenerateTaskSubtype, Status: JobTaskStatusSucceeded, RequestedBy: userID}).Error)
+	repo := NewGormGenerationResultRepository(testDB)
+	result := map[string]any{"course_id": courseID.String(), "chapters": []any{
+		map[string]any{"chapter_id": "chapter-1", "sort": float64(1), "status": "succeeded", "document": map[string]any{"title": "项目地图", "markdown": "# 项目地图"}},
+		map[string]any{"chapter_id": "chapter-2", "sort": float64(2), "status": "blocked", "error": "未通过硬门禁"},
+	}}
+	require.NoError(t, repo.PersistProjectCourseGenerationBlogs(context.Background(), taskID, result))
+	require.NoError(t, repo.PersistProjectCourseGenerationBlogs(context.Background(), taskID, result))
+	var blogs []blogRecord
+	require.NoError(t, testDB.Find(&blogs).Error)
+	require.Len(t, blogs, 3)
+	var chapter blogRecord
+	childID := uuid.NewSHA1(uuid.Nil, []byte(courseID.String()+"/chapter-1"))
+	require.NoError(t, testDB.First(&chapter, "id = ?", childID).Error)
+	require.Equal(t, "项目地图", chapter.Title)
+	require.Equal(t, int16(1), chapter.Status)
+}
+
 func TestGormGenerationResultRepository_AccumulateTokensFallsBackToEstimatedTokens(t *testing.T) {
 	testDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)

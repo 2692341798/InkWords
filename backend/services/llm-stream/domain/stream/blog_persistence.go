@@ -168,8 +168,8 @@ func (p *seriesPersistence) EnsureSeriesParentAndDrafts(ctx context.Context, inp
 				return fmt.Errorf("create parent blog: %w", err)
 			}
 		} else if existingParent.UserID != input.UserID {
-				return fmt.Errorf("parent blog does not belong to user")
-			}
+			return fmt.Errorf("parent blog does not belong to user")
+		}
 		if err == nil && existingParent.SourceURL == "" && input.GitURL != "" {
 			if err := tx.Model(&existingParent).Update("source_url", input.GitURL).Error; err != nil {
 				return fmt.Errorf("update parent source url: %w", err)

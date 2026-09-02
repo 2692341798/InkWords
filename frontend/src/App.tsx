@@ -7,6 +7,7 @@ import { Editor } from '@/pages/Editor'
 import { Login } from '@/pages/Login'
 import { Dashboard } from '@/pages/Dashboard'
 import { KnowledgeReview } from '@/pages/KnowledgeReview'
+import { ProjectCourse } from '@/pages/ProjectCourse'
 import { Toaster } from '@/components/ui/sonner'
 import { authTokenStore } from '@/lib/authTokenStore'
 import { isAuthBypassEnabled } from '@/lib/authBypass'
@@ -40,6 +41,8 @@ function App() {
         <Dashboard />
       ) : currentView === 'knowledge-review' ? (
         <KnowledgeReview />
+      ) : currentView === 'project-course' ? (
+        <ProjectCourse />
       ) : (
         <Generator />
       )}

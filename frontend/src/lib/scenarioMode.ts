@@ -2,11 +2,13 @@ export type ScenarioMode =
   | 'ebook_interpretation'
   | 'open_book_exam_review'
   | 'beginner_walkthrough'
+  | 'project_mastery_course'
 
 export const scenarioModeLabelMap: Record<ScenarioMode, string> = {
   ebook_interpretation: '电子书解读',
   open_book_exam_review: '开卷复习',
   beginner_walkthrough: '小白教程',
+  project_mastery_course: '项目精通课程',
 }
 
 export const scenarioModeOptions: Array<{
@@ -28,6 +30,11 @@ export const scenarioModeOptions: Array<{
     value: 'beginner_walkthrough',
     label: '小白教程',
     description: '适合开源项目与实战教程，突出环境准备、主链路和排错说明。',
+  },
+  {
+    value: 'project_mastery_course',
+    label: '项目精通课程',
+    description: '适合系统掌握 GitHub 项目，围绕固定源码快照、证据和累积实验组织课程。',
   },
 ]
 

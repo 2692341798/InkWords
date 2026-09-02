@@ -44,3 +44,16 @@ type ExportRequestedMessage struct {
 func (ExportRequestedMessage) RoutingKey() string {
 	return "export.requested"
 }
+
+// VerificationRequestedMessage references a stored course artifact. It must
+// never carry an arbitrary shell command or host path.
+type VerificationRequestedMessage struct {
+	TaskID  uuid.UUID       `json:"task_id"`
+	Kind    string          `json:"kind"`
+	UserID  uuid.UUID       `json:"user_id"`
+	Payload json.RawMessage `json:"payload"`
+}
+
+func (VerificationRequestedMessage) RoutingKey() string {
+	return "course.verification.requested"
+}

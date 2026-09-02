@@ -99,6 +99,21 @@ func (s *Service) CreateExportTask(ctx context.Context, input CreateExportTaskIn
 	})
 }
 
+// CreateProjectCourseAnalyzeTask reuses the generation queue while keeping a dedicated subtype.
+func (s *Service) CreateProjectCourseAnalyzeTask(ctx context.Context, input CreateProjectCourseTaskInput) (JobTask, error) {
+	return s.CreateGenerationTask(ctx, CreateGenerationTaskInput{RequestedBy: input.RequestedBy, TaskSubtype: ProjectCourseAnalyzeTaskSubtype, IdempotencyKey: input.IdempotencyKey, Payload: input.Payload})
+}
+
+// CreateProjectCourseGenerateTask reuses the generation queue while keeping a dedicated subtype.
+func (s *Service) CreateProjectCourseGenerateTask(ctx context.Context, input CreateProjectCourseTaskInput) (JobTask, error) {
+	return s.CreateGenerationTask(ctx, CreateGenerationTaskInput{RequestedBy: input.RequestedBy, TaskSubtype: ProjectCourseGenerateTaskSubtype, IdempotencyKey: input.IdempotencyKey, Payload: input.Payload})
+}
+
+// CreateProjectCoursePackageTask publishes the course package phase to export-service.
+func (s *Service) CreateProjectCoursePackageTask(ctx context.Context, input CreateProjectCourseTaskInput) (JobTask, error) {
+	return s.CreateExportTask(ctx, CreateExportTaskInput{RequestedBy: input.RequestedBy, TaskSubtype: ProjectCoursePackageTaskSubtype, IdempotencyKey: input.IdempotencyKey, Payload: input.Payload})
+}
+
 type createTaskParams struct {
 	taskType       string
 	taskSubtype    string

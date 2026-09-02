@@ -3,27 +3,31 @@ package bootstrap
 import (
 	"errors"
 	"os"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
 	generationapp "inkwords-backend/services/llm-stream/app/generation"
+	projectcourseapp "inkwords-backend/services/llm-stream/app/projectcourse"
 	streamdomain "inkwords-backend/services/llm-stream/domain/stream"
 	streamv1 "inkwords-backend/services/llm-stream/transport/http/v1"
 	"inkwords-backend/shared/kernel/httpx"
 	"inkwords-backend/shared/platform/cache"
+	platformllm "inkwords-backend/shared/platform/llm"
+	"inkwords-backend/shared/platform/parser"
 	"inkwords-backend/shared/platform/postgres"
 )
 
 // BuildRouter assembles the llm-stream owned router plus the services required by its consumer worker.
-func BuildRouter() (*gin.Engine, *streamdomain.GormTaskStore, *streamdomain.Service, error) {
+func BuildRouter() (*gin.Engine, *streamdomain.GormTaskStore, *streamdomain.Service, *projectcourseapp.CourseTaskRunner, error) {
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
-		return nil, nil, nil, errors.New("DATABASE_URL environment variable is not set")
+		return nil, nil, nil, nil, errors.New("DATABASE_URL environment variable is not set")
 	}
 
 	dbConn, err := postgres.InitCore(dsn)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	if err := cache.InitRedis(); err != nil {
 		_ = err // Redis 是增强项而不是启动硬依赖
@@ -51,6 +55,19 @@ func BuildRouter() (*gin.Engine, *streamdomain.GormTaskStore, *streamdomain.Serv
 
 	streamDomainService := streamdomain.NewService(generatorService, decompositionService, quotaService)
 	taskDomainService := streamdomain.NewGormTaskStore(dbConn)
+	var officialResolvers []projectcourseapp.OfficialSourceResolver
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("PROJECT_COURSE_OFFICIAL_SOURCES_ENABLED")), "true") {
+		officialResolvers = append(officialResolvers, projectcourseapp.OfficialRegistryProvider{
+			Registry: projectcourseapp.NewDefaultOfficialRegistry(),
+			Fetcher:  projectcourseapp.HTTPOfficialSourceProvider{AllowedDomains: officialSourceDomains()},
+			Cache:    projectcourseapp.NewMemoryOfficialSourceCache(),
+		})
+	}
+	projectCourseRunner := projectcourseapp.NewCourseTaskRunnerWithGenerator(
+		projectcourseapp.GitRepositoryAnalyzer{Fetcher: parser.NewGitFetcher()},
+		projectcourseapp.JSONChapterGenerator{Client: platformllm.NewDeepSeekClient(os.Getenv("DEEPSEEK_API_KEY")), Model: os.Getenv("DEEPSEEK_MODEL")},
+		officialResolvers...,
+	)
 	streamDomainHandler := streamdomain.NewHandler(streamDomainService, streamdomain.NewGormBlogReadable(dbConn))
 
 	streamv1.RegisterStreamRoutes(r, httpx.AuthMiddleware(), streamv1.StreamHandlers{
@@ -61,5 +78,9 @@ func BuildRouter() (*gin.Engine, *streamdomain.GormTaskStore, *streamdomain.Serv
 		Generate:     streamDomainHandler.GenerateBlogStreamHandler,
 	})
 
-	return r, taskDomainService, streamDomainService, nil
+	return r, taskDomainService, streamDomainService, projectCourseRunner, nil
+}
+
+func officialSourceDomains() []string {
+	return []string{"go.dev", "pkg.go.dev", "gin-gonic.com", "react.dev", "zustand.docs.pmnd.rs", "postgresql.org", "rabbitmq.com", "redis.io", "docs.docker.com", "nginx.org", "typescriptlang.org"}
 }

@@ -32,6 +32,16 @@ export const apiRoutes = {
       stream: (taskId: string) => `/api/v1/tasks/${pathSegment(taskId)}/stream`,
       download: (taskId: string) => `/api/v1/tasks/${pathSegment(taskId)}/download`,
     },
+    projectCourses: {
+      collection: '/api/v1/project-courses',
+      byId: (courseId: string) => `/api/v1/project-courses/${pathSegment(courseId)}`,
+      coverage: (courseId: string) => `/api/v1/project-courses/${pathSegment(courseId)}/coverage`,
+      qualityReport: (courseId: string) => `/api/v1/project-courses/${pathSegment(courseId)}/quality-report`,
+      blueprintPreview: (courseId: string) => `/api/v1/project-courses/${pathSegment(courseId)}/blueprint/preview`,
+      blueprint: (courseId: string) => `/api/v1/project-courses/${pathSegment(courseId)}/blueprint`,
+      approve: (courseId: string) => `/api/v1/project-courses/${pathSegment(courseId)}/approve`,
+      package: (courseId: string) => `/api/v1/project-courses/${pathSegment(courseId)}/package`,
+    },
   },
   llmStream: {
     scan: '/api/v1/stream/scan',

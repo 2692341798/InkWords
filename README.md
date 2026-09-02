@@ -31,6 +31,7 @@ InkWords Trainer 是一个面向个人知识沉淀、知识复习与内容输出
 - **异步导出**：支持 Markdown / ZIP 导出、系列 PDF 导出、导出到 Obsidian Vault
 - **动态提示词锁定**：文件 Analyze 阶段自动识别内容类型并锁定 `prompt_profile`
 - **质量流水线**：系列章节生成支持 `理解 -> 草稿 -> 审稿 -> 定向补强 -> 输出终稿` 的阶段化可视化
+- **项目精通课程**：对锁定 commit SHA 的 GitHub 仓库生成可审计蓝图、证据驱动章节、累积实验和受控 ZIP；默认不执行目标仓库
 
 ## 当前架构
 
@@ -50,6 +51,7 @@ InkWords Trainer 是一个面向个人知识沉淀、知识复习与内容输出
 - `parser-service`：文件 / ZIP 解析与 parse worker
 - `export-service`：PDF 导出与 export worker
 - `review-service`：知识漫游复习服务
+- `course-runner`：只运行系统生成且命令受控的课程实验，bubblewrap 隔离、禁网、限资源
 - `db`：PostgreSQL
 - `redis`：缓存与状态辅助
 - `rabbitmq`：任务队列
@@ -114,6 +116,12 @@ InkWords Trainer 是一个面向个人知识沉淀、知识复习与内容输出
 - PDF 异步导出
 - 导出到 Obsidian Vault
 
+### 6. 项目精通课程
+
+在首页进入“项目精通课程”，提交 GitHub URL、ref 和读者等级。系统先解析并锁定 commit SHA，生成蓝图供用户有限编辑和批准；批准前不会生成正文。章节事实必须绑定 EvidenceRef 和 Claim Ledger，技术原理章节通过 allowlist 官方资料补充来源。课程实验默认关闭，开启后只验证系统生成的实验工件，不读取或执行目标仓库。
+
+课程验收与只读分析脚本见 [`docs/qa/project-course-inkwords-report.md`](docs/qa/project-course-inkwords-report.md)。
+
 ## 快速开始
 
 ### 1. 准备环境
@@ -134,6 +142,7 @@ cp backend/.env.example backend/.env
 至少需要检查以下变量：
 
 - `DEEPSEEK_API_KEY`
+- `DEEPSEEK_API_URL`（可选；用于本地 mock 或受控 OpenAI-compatible 网关，默认 `https://api.deepseek.com/chat/completions`）
 - `JWT_SECRET`
 - `OBSIDIAN_REST_API_KEY`
 - `OBSIDIAN_VAULT_PATH`

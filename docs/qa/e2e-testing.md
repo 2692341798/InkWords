@@ -37,6 +37,12 @@ rm -rf "${E2E_VAULT_PATH}"
 截图和视频，再清理当前项目。测试日志不得包含 Token、API Key、OAuth code
 或完整用户内容。
 
+## Project Mastery Course 验收补充
+
+项目精通课程的验收必须使用任务开始时解析得到的固定 commit SHA。测试夹具只允许使用
+脱敏的仓库结构和短代码片段，不得执行被分析仓库的构建、测试、安装脚本或 hook。
+蓝图阶段先验证文件处置、证据引用、覆盖率和依赖；只有批准后的蓝图才允许进入正文生成。
+
 ## 真实验收
 
 真实验收使用带有 `inkwords-real-acceptance` 标签的专用 self-hosted Runner，

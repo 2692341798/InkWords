@@ -10,6 +10,7 @@ const (
 	PromptProfileLiteratureCommentary      PromptProfileKey = "literature_commentary_book"
 	PromptProfileTechnicalManual           PromptProfileKey = "technical_manual_book"
 	PromptProfileExamMaterialReview        PromptProfileKey = "exam_material_review"
+	PromptProfileProjectMasteryCourse      PromptProfileKey = "project_mastery_course"
 )
 
 // PromptProfile 描述某一类内容对应的系统角色与提示词要求。
@@ -79,6 +80,14 @@ var promptProfiles = map[PromptProfileKey]PromptProfile{
 		AnalyzeRequirements:  "请优先识别考点、定义、步骤模板、答题抓手和易错点，并按复习效率组织章节。",
 		GenerateRequirements: "请强调速查、记忆和答题抓手，少做大段推导，优先输出清单、模板和判断依据。",
 	},
+	PromptProfileProjectMasteryCourse: {
+		Key:                  PromptProfileProjectMasteryCourse,
+		DisplayName:          "项目精通课程",
+		DocumentKind:         "project_mastery_course",
+		SystemRole:           "你是一位严谨的开源项目课程设计师，只能基于固定源码快照和可核验资料组织课程。",
+		AnalyzeRequirements:  "请先建立仓库快照、文件清单、模块关系和证据引用，再按学习依赖规划蓝图；不要把没有证据的推断写成项目事实。",
+		GenerateRequirements: "请区分项目事实、官方原理和明确标注的推断，引用固定 commit 下的路径、符号和行范围，并为关键能力安排可验证的累积实验。",
+	},
 }
 
 // FallbackPromptProfileForScenario 根据场景返回兜底 profile，避免分类失败时把任务带偏。
@@ -88,6 +97,8 @@ func FallbackPromptProfileForScenario(mode ScenarioMode) PromptProfile {
 		return promptProfiles[PromptProfileExamMaterialReview]
 	case ScenarioModeBeginnerWalkthrough:
 		return promptProfiles[PromptProfileTechnicalManual]
+	case ScenarioModeProjectMasteryCourse:
+		return promptProfiles[PromptProfileProjectMasteryCourse]
 	default:
 		return promptProfiles[PromptProfileClassicTextInterpretation]
 	}

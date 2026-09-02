@@ -1,0 +1,8 @@
+{
+  "assertions": [
+    {"id": "legacy-path", "description": "旧路径不得作为当前源码路径", "forbidden_path": "backend/internal/service/..."},
+    {"id": "symbol-exists", "description": "EvidenceRef.symbol 必须存在于固定快照"},
+    {"id": "content-hash", "description": "引用内容 hash 必须匹配固定 commit"},
+    {"id": "confidence-separation", "description": "documented、observed、inferred 必须保持不同置信度"}
+  ]
+}

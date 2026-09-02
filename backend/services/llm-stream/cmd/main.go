@@ -15,6 +15,7 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 
 	"inkwords-backend/services/llm-stream/app/bootstrap"
+	projectcourseapp "inkwords-backend/services/llm-stream/app/projectcourse"
 	streamdomain "inkwords-backend/services/llm-stream/domain/stream"
 	"inkwords-backend/shared/kernel/httpx"
 	sharedrabbitmq "inkwords-backend/shared/platform/rabbitmq"
@@ -27,7 +28,7 @@ func init() {
 }
 
 func main() {
-	router, taskService, streamService, err := bootstrap.BuildRouter()
+	router, taskService, streamService, projectCourseRunner, err := bootstrap.BuildRouter()
 	if err != nil {
 		log.Fatalf("bootstrap llm-stream failed: %v", err)
 	}
@@ -36,7 +37,7 @@ func main() {
 	signalContext, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	stopConsumer, err := startGenerationTaskConsumer(signalContext, taskService, streamService)
+	stopConsumer, err := startGenerationTaskConsumer(signalContext, taskService, streamService, projectCourseRunner)
 	if err != nil {
 		log.Printf("RabbitMQ generation consumer initialization skipped: %v", err)
 	}
@@ -58,6 +59,7 @@ func startGenerationTaskConsumer(
 	signalContext context.Context,
 	taskService *streamdomain.GormTaskStore,
 	streamService *streamdomain.Service,
+	projectCourseRunner *projectcourseapp.CourseTaskRunner,
 ) (func(), error) {
 	rabbitURL := os.Getenv("RABBITMQ_URL")
 	if rabbitURL == "" {
@@ -104,7 +106,7 @@ func startGenerationTaskConsumer(
 		return func() {}, err
 	}
 
-	consumer := streamdomain.NewTaskConsumer(taskService, streamService)
+	consumer := streamdomain.NewTaskConsumer(taskService, streamService, projectCourseRunner)
 	go func() {
 		for {
 			select {

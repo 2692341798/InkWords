@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 )
 
@@ -93,9 +94,13 @@ func (e *APIError) Error() string {
 
 // NewDeepSeekClient creates a new DeepSeek client
 func NewDeepSeekClient(apiKey string) *DeepSeekClient {
+	apiURL := strings.TrimSpace(os.Getenv("DEEPSEEK_API_URL"))
+	if apiURL == "" {
+		apiURL = defaultDeepSeekAPIURL
+	}
 	return &DeepSeekClient{
 		APIKey: apiKey,
-		APIURL: defaultDeepSeekAPIURL,
+		APIURL: apiURL,
 		Client: &http.Client{},
 	}
 }

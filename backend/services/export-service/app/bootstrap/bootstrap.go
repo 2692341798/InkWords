@@ -47,7 +47,7 @@ func BuildRouter() (*gin.Engine, *exportdomain.Consumer, error) {
 
 	artifactStore := artifact.NewStore(envOrDefault("EXPORT_ARTIFACTS_DIR", "/app/export-artifacts"))
 	taskStore := exportdomain.NewGormTaskStore(dbConn)
-	consumer := exportdomain.NewConsumer(taskStore, exportService, artifactStore)
+	consumer := exportdomain.NewConsumer(taskStore, exportService, artifactStore, exportdomain.NewFileCoursePackageBuilder(envOrDefault("COURSE_PACKAGE_TEMP_DIR", "/tmp")))
 
 	return r, consumer, nil
 }

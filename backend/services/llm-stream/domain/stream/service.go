@@ -48,16 +48,16 @@ type QuotaChecker interface {
 }
 
 type Service struct {
-	generator    Generator
+	generator     Generator
 	decomposition Decomposition
-	quotaChecker QuotaChecker
+	quotaChecker  QuotaChecker
 }
 
 func NewService(generator Generator, decomposition Decomposition, quotaChecker QuotaChecker) *Service {
 	return &Service{
-		generator:    generator,
+		generator:     generator,
 		decomposition: decomposition,
-		quotaChecker: quotaChecker,
+		quotaChecker:  quotaChecker,
 	}
 }
 

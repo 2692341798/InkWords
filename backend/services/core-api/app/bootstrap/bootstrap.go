@@ -10,14 +10,15 @@ import (
 	"github.com/gin-gonic/gin"
 	amqp "github.com/rabbitmq/amqp091-go"
 
+	"inkwords-backend/services/core-api/app/projectanalysis"
 	authdomain "inkwords-backend/services/core-api/domain/auth"
 	blogdomain "inkwords-backend/services/core-api/domain/blog"
 	projectdomain "inkwords-backend/services/core-api/domain/project"
+	projectcoursedomain "inkwords-backend/services/core-api/domain/projectcourse"
 	coretask "inkwords-backend/services/core-api/domain/task"
 	userdomain "inkwords-backend/services/core-api/domain/user"
 	coremq "inkwords-backend/services/core-api/infra/mq"
 	corev1 "inkwords-backend/services/core-api/transport/http/v1"
-	"inkwords-backend/services/core-api/app/projectanalysis"
 	"inkwords-backend/shared/kernel/httpx"
 	"inkwords-backend/shared/platform/cache"
 	llm "inkwords-backend/shared/platform/llm"
@@ -80,8 +81,9 @@ func BuildRouter() (*gin.Engine, func(), error) {
 		userDomainService,
 	)
 	projectDomainHandler := projectdomain.NewHandler(projectDomainService)
+	projectCourseRepo := projectcoursedomain.NewGormRepository(dbConn)
 	generationResultRepo := coretask.NewGormGenerationResultRepository(dbConn)
-	resultPersister := coretask.NewResultPersister(generationResultRepo, generationResultRepo)
+	resultPersister := coretask.NewResultPersister(generationResultRepo, generationResultRepo, projectCourseRepo)
 
 	taskRepo := coretask.NewGormRepository(dbConn)
 	taskDomainService := coretask.NewService(taskRepo, taskPublisher, resultPersister)
@@ -89,33 +91,42 @@ func BuildRouter() (*gin.Engine, func(), error) {
 		taskDomainService,
 		envOrDefault("EXPORT_ARTIFACTS_DIR", "/app/export-artifacts"),
 	)
+	projectCourseHandler := projectcoursedomain.NewHandler(projectcoursedomain.NewService(projectCourseRepo), taskDomainService)
 
 	corev1.RegisterCoreRoutes(r, httpx.AuthMiddleware(), corev1.CoreHandlers{
-		AuthRegister:         authDomainHandler.Register,
-		AuthLogin:            authDomainHandler.Login,
-		AuthBindGithub:       authDomainHandler.BindGithub,
-		AuthGetCaptcha:       authDomainHandler.GetCaptcha,
-		AuthOAuthRedirect:    authDomainHandler.OAuthRedirect,
-		AuthOAuthCallback:    authDomainHandler.OAuthCallback,
-		UserProfile:          userDomainHandler.GetProfile,
-		UserUpdateProfile:    userDomainHandler.UpdateProfile,
-		UserUploadAvatar:     userDomainHandler.UploadAvatar,
-		UserStats:            userDomainHandler.GetUserStats,
-		UserGetPromptSetting: userDomainHandler.GetPromptSettings,
-		UserPutPromptSetting: userDomainHandler.UpdatePromptSettings,
-		BlogList:             blogDomainHandler.GetUserBlogs,
-		BlogCreateDraft:      blogDomainHandler.CreateDraftBlog,
-		BlogBatchDelete:      blogDomainHandler.BatchDeleteBlogs,
-		BlogUpdate:           blogDomainHandler.UpdateBlog,
-		ProjectScan:          projectDomainHandler.ScanGithubRepo,
-		ProjectAnalyze:       projectDomainHandler.Analyze,
-		TaskCreateGeneration: taskDomainHandler.CreateGenerationTask,
-		TaskCreateParse:      taskDomainHandler.CreateParseTask,
-		TaskCreateExport:     taskDomainHandler.CreateExportTask,
-		TaskGet:              taskDomainHandler.GetTask,
-		TaskCancel:           taskDomainHandler.CancelTask,
-		TaskStream:           taskDomainHandler.StreamTask,
-		TaskDownload:         taskDomainHandler.DownloadTask,
+		AuthRegister:                  authDomainHandler.Register,
+		AuthLogin:                     authDomainHandler.Login,
+		AuthBindGithub:                authDomainHandler.BindGithub,
+		AuthGetCaptcha:                authDomainHandler.GetCaptcha,
+		AuthOAuthRedirect:             authDomainHandler.OAuthRedirect,
+		AuthOAuthCallback:             authDomainHandler.OAuthCallback,
+		UserProfile:                   userDomainHandler.GetProfile,
+		UserUpdateProfile:             userDomainHandler.UpdateProfile,
+		UserUploadAvatar:              userDomainHandler.UploadAvatar,
+		UserStats:                     userDomainHandler.GetUserStats,
+		UserGetPromptSetting:          userDomainHandler.GetPromptSettings,
+		UserPutPromptSetting:          userDomainHandler.UpdatePromptSettings,
+		BlogList:                      blogDomainHandler.GetUserBlogs,
+		BlogCreateDraft:               blogDomainHandler.CreateDraftBlog,
+		BlogBatchDelete:               blogDomainHandler.BatchDeleteBlogs,
+		BlogUpdate:                    blogDomainHandler.UpdateBlog,
+		ProjectScan:                   projectDomainHandler.ScanGithubRepo,
+		ProjectAnalyze:                projectDomainHandler.Analyze,
+		ProjectCourseCreate:           projectCourseHandler.Create,
+		ProjectCourseGet:              projectCourseHandler.Get,
+		ProjectCourseCoverage:         projectCourseHandler.Coverage,
+		ProjectCourseQualityReport:    projectCourseHandler.QualityReport,
+		ProjectCourseBlueprintPreview: projectCourseHandler.PreviewBlueprint,
+		ProjectCourseBlueprintUpdate:  projectCourseHandler.UpdateBlueprint,
+		ProjectCourseApprove:          projectCourseHandler.Approve,
+		ProjectCoursePackage:          projectCourseHandler.Package,
+		TaskCreateGeneration:          taskDomainHandler.CreateGenerationTask,
+		TaskCreateParse:               taskDomainHandler.CreateParseTask,
+		TaskCreateExport:              taskDomainHandler.CreateExportTask,
+		TaskGet:                       taskDomainHandler.GetTask,
+		TaskCancel:                    taskDomainHandler.CancelTask,
+		TaskStream:                    taskDomainHandler.StreamTask,
+		TaskDownload:                  taskDomainHandler.DownloadTask,
 	})
 
 	return r, cleanupTaskPublisher, nil

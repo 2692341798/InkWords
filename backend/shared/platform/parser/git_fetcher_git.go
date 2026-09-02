@@ -41,17 +41,24 @@ func buildChunksFromDirContents(dirContents map[string]*strings.Builder) []FileC
 }
 
 //nolint:gosec,noctx
-func (f *GitFetcher) fetchWithGitCLI(repoURL, subDir string, progressCallback func(string)) (string, []FileChunk, error) {
+func (f *GitFetcher) fetchWithGitCLI(repoURL, subDir, requestedRef string, progressCallback func(string)) (string, string, []FileChunk, error) {
 	cachePath, err := f.GetCachedRepoPath(repoURL, progressCallback)
 	if err != nil {
-		return "", nil, err
+		return "", "", nil, err
 	}
 
 	if progressCallback != nil {
 		progressCallback("读取文件列表...")
 	}
 
-	args := []string{"ls-tree", "-r", "--name-only", "HEAD"}
+	resolveCmd := exec.Command("git", "rev-parse", requestedRef+"^{commit}")
+	resolveCmd.Dir = cachePath
+	shaBytes, err := resolveCmd.Output()
+	if err != nil {
+		return "", "", nil, fmt.Errorf("failed to resolve commit %q: %w", requestedRef, err)
+	}
+	resolvedSHA := strings.TrimSpace(string(shaBytes))
+	args := []string{"ls-tree", "-r", "--name-only", resolvedSHA}
 	if subDir != "" && subDir != "." {
 		args = append(args, subDir)
 	}
@@ -60,7 +67,7 @@ func (f *GitFetcher) fetchWithGitCLI(repoURL, subDir string, progressCallback fu
 	cmd.Dir = cachePath
 	outBytes, err := cmd.Output()
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to list files with ls-tree: %w", err)
+		return "", "", nil, fmt.Errorf("failed to list files with ls-tree: %w", err)
 	}
 
 	files := strings.Split(strings.ReplaceAll(string(outBytes), "\r\n", "\n"), "\n")
@@ -82,7 +89,7 @@ func (f *GitFetcher) fetchWithGitCLI(repoURL, subDir string, progressCallback fu
 
 		treeBuilder.WriteString("- " + path + "\n")
 
-		cmdShow := exec.Command("git", "show", "HEAD:"+path)
+		cmdShow := exec.Command("git", "show", resolvedSHA+":"+path)
 		cmdShow.Dir = cachePath
 		data, err := cmdShow.Output()
 		if err != nil {
@@ -121,5 +128,5 @@ func (f *GitFetcher) fetchWithGitCLI(repoURL, subDir string, progressCallback fu
 		treeBuilder.WriteString("\n\n" + largeRepoTruncationHint)
 	}
 
-	return treeBuilder.String(), chunks, nil
+	return resolvedSHA, treeBuilder.String(), chunks, nil
 }
