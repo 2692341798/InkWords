@@ -1,7 +1,7 @@
 export type ProjectCourseAudience = 'foundation' | 'programming' | 'stack_familiar'
 export type ProjectCourseStatus = 'draft' | 'analyzing' | 'awaiting_approval' | 'approved' | 'generating' | 'completed' | 'partially_blocked' | 'blocked' | 'failed'
 
-export interface ProjectCourseChapter {
+interface ProjectCourseChapter {
   chapter_id: string
   title: string
   sort: number
@@ -11,7 +11,7 @@ export interface ProjectCourseChapter {
   evidence_ids: string[]
 }
 
-export interface ProjectCourseVolume {
+interface ProjectCourseVolume {
   volume_id: string
   title: string
   sort: number
