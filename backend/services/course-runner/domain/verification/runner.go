@@ -79,11 +79,16 @@ func validateCommand(command string) error {
 		return ErrUnsafeCommand
 	}
 	for _, char := range parts[2] {
-		if !(char == '_' || char == '-' || char == '.' || char == '*' || char == '+' || char == '^' || char == '$' || char == '(' || char == ')' || char >= 'A' && char <= 'Z' || char >= 'a' && char <= 'z' || char >= '0' && char <= '9') {
+		if !isAllowedTestPatternRune(char) {
 			return ErrUnsafeCommand
 		}
 	}
 	return nil
+}
+
+func isAllowedTestPatternRune(char rune) bool {
+	return char == '_' || char == '-' || char == '.' || char == '*' || char == '+' || char == '^' || char == '$' || char == '(' || char == ')' ||
+		char >= 'A' && char <= 'Z' || char >= 'a' && char <= 'z' || char >= '0' && char <= '9'
 }
 
 func commandFailure(command string, exitCode int, err error) string {

@@ -62,6 +62,7 @@ type LabManifest struct {
 	DependencyGraph        map[string][]string `json:"dependency_graph"`
 }
 
+//nolint:gocyclo // Validation intentionally enumerates every executable lab safety invariant.
 func (m LabManifest) Validate() error {
 	if strings.TrimSpace(m.Language) == "" || strings.TrimSpace(m.ToolchainVersion) == "" {
 		return fmt.Errorf("lab language and toolchain version are required")

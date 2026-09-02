@@ -105,6 +105,7 @@ func normalizeInventoryPath(value string) (string, error) {
 	return clean, nil
 }
 
+//nolint:gocyclo // Classification intentionally keeps the ordered role and language rules visible together.
 func classify(filePath string, content []byte) InventoryEntry {
 	role := RoleUnknown
 	base := path.Base(filePath)

@@ -107,6 +107,8 @@ func WriteCoursePackage(w io.Writer, manifest sharedkernel.LabManifest, commitSH
 // WriteCoursePackageWithMetadata creates a deterministic, self-describing
 // package. It only serializes already materialized artifacts; it never runs a
 // test or reads a path outside the supplied manifest.
+//
+//nolint:gocyclo // The branching mirrors the manifest's ordered validation and archive sections.
 func WriteCoursePackageWithMetadata(w io.Writer, input CoursePackageInput) error {
 	artifacts := input.Artifacts
 	bundle := len(artifacts) > 0
@@ -187,7 +189,7 @@ func WriteCoursePackageWithMetadata(w io.Writer, input CoursePackageInput) error
 		hashes[entry.name] = "sha256:" + fmt.Sprintf("%x", sum[:])
 	}
 	archive := zip.NewWriter(w)
-	defer archive.Close()
+	defer func() { _ = archive.Close() }()
 	for _, entry := range entries {
 		writer, err := archive.Create(entry.name)
 		if err != nil {
@@ -215,8 +217,10 @@ func WriteCoursePackageWithMetadata(w io.Writer, input CoursePackageInput) error
 	if err != nil {
 		return err
 	}
-	_, err = writer.Write(meta)
-	return err
+	if _, err = writer.Write(meta); err != nil {
+		return err
+	}
+	return archive.Close()
 }
 
 func safeZipPath(prefix, filePath string) (string, error) {

@@ -127,6 +127,7 @@ type generateTaskResult struct {
 	Checkpoints      []sharedkernel.CourseCheckpoint    `json:"checkpoints,omitempty"`
 }
 
+//nolint:gocyclo // Generation keeps each fail-closed chapter transition explicit for auditability.
 func (r *CourseTaskRunner) runGenerate(ctx context.Context, message sharedrabbitmq.GenerationRequestedMessage) ([]byte, error) {
 	if r.generator == nil {
 		return nil, fmt.Errorf("project course chapter generator is not configured")

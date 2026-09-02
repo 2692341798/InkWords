@@ -143,7 +143,7 @@ func (h *Handler) UpdateBlueprint(c *gin.Context) {
 	}
 	updates := make([]ChapterUpdate, 0, len(req.Chapters))
 	for _, chapter := range req.Chapters {
-		updates = append(updates, ChapterUpdate{ChapterID: chapter.ChapterID, Title: chapter.Title, Sort: chapter.Sort, Enabled: chapter.Enabled})
+		updates = append(updates, ChapterUpdate(chapter))
 	}
 	err := h.service.UpdateBlueprint(c.Request.Context(), userID, courseID, BlueprintUpdate{ExpectedVersion: req.ExpectedVersion, ChapterUpdates: updates})
 	if err != nil {
@@ -165,7 +165,7 @@ func (h *Handler) PreviewBlueprint(c *gin.Context) {
 	}
 	updates := make([]ChapterUpdate, 0, len(req.Chapters))
 	for _, chapter := range req.Chapters {
-		updates = append(updates, ChapterUpdate{ChapterID: chapter.ChapterID, Title: chapter.Title, Sort: chapter.Sort, Enabled: chapter.Enabled})
+		updates = append(updates, ChapterUpdate(chapter))
 	}
 	preview, err := h.service.PreviewBlueprint(c.Request.Context(), userID, courseID, BlueprintUpdate{ExpectedVersion: req.ExpectedVersion, ChapterUpdates: updates})
 	if err != nil {

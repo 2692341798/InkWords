@@ -34,11 +34,12 @@ func (e BubblewrapExecutor) Execute(ctx context.Context, rootDir, command string
 	if err != nil {
 		return -1, "", fmt.Errorf("create temporary lab workspace: %w", err)
 	}
-	defer os.RemoveAll(workspace)
+	defer func() { _ = os.RemoveAll(workspace) }()
 	if err := copyArtifactTree(rootDir, workspace); err != nil {
 		return -1, "", err
 	}
-	cmd := exec.CommandContext(ctx, e.Binary, buildBubblewrapArgs(workspace, command)...)
+	// Binary is operator configuration, while command and all subprocess arguments are allowlisted above.
+	cmd := exec.CommandContext(ctx, e.Binary, buildBubblewrapArgs(workspace, command)...) //nolint:gosec
 	output := limitedBuffer{limit: e.MaxOutputBytes}
 	if output.limit <= 0 {
 		output.limit = 1 << 20
@@ -119,20 +120,22 @@ func copyArtifactTree(source, destination string) error {
 		}
 		target := filepath.Join(destination, relative)
 		if info.IsDir() {
-			return os.MkdirAll(target, 0o755)
+			return os.MkdirAll(target, 0o750)
 		}
 		if !info.Mode().IsRegular() {
 			return fmt.Errorf("unsupported course artifact file: %s", relative)
 		}
-		input, err := os.Open(path)
+		// path is supplied by filepath.Walk under the validated artifact root.
+		input, err := os.Open(path) //nolint:gosec
 		if err != nil {
 			return err
 		}
-		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
 			_ = input.Close()
 			return err
 		}
-		output, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+		// target is derived from filepath.Rel and remains inside the fresh temporary workspace.
+		output, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600) //nolint:gosec
 		if err != nil {
 			_ = input.Close()
 			return err

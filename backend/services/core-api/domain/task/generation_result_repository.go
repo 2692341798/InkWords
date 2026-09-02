@@ -67,7 +67,7 @@ func (r *GormGenerationResultRepository) PersistProjectCourseGenerationBlogs(ctx
 			}
 			if readPayloadString(chapter, "status") == "succeeded" {
 				document, _ := chapter["document"].(map[string]any)
-				toc.WriteString(fmt.Sprintf("- %s\n", readPayloadString(document, "title")))
+				_, _ = fmt.Fprintf(&toc, "- %s\n", readPayloadString(document, "title"))
 			}
 		}
 		parent := blogRecord{ID: courseID, UserID: ownerID, Title: "项目精通课程", Content: toc.String(), SourceType: "project_mastery_course", IsSeries: true, Status: 1, TechStacks: datatypes.JSON([]byte(`[]`))}

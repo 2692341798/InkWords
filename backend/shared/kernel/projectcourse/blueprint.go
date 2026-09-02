@@ -44,6 +44,7 @@ type Blueprint struct {
 	Volumes          []Volume      `json:"volumes"`
 }
 
+//nolint:gocyclo // Validation intentionally enumerates the complete persisted blueprint contract.
 func (b Blueprint) Validate() error {
 	if b.CourseID == "" || b.BlueprintVersion < 1 || b.CommitSHA == "" {
 		return fmt.Errorf("course_id, positive blueprint_version and commit_sha are required")

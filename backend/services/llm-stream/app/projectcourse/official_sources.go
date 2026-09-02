@@ -1,6 +1,7 @@
 package projectcourse
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -58,11 +59,15 @@ func (p HTTPOfficialSourceProvider) Fetch(rawURL string) (string, error) {
 	if maxBytes <= 0 {
 		maxBytes = 1 << 20
 	}
-	response, err := clientCopy.Get(rawURL)
+	request, err := http.NewRequestWithContext(context.Background(), http.MethodGet, rawURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("create official source request: %w", err)
+	}
+	response, err := clientCopy.Do(request)
 	if err != nil {
 		return "", fmt.Errorf("fetch official source: %w", err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("official source returned status %d", response.StatusCode)
 	}

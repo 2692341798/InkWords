@@ -175,6 +175,7 @@ func isProjectCourseKind(kind string) bool {
 	}
 }
 
+//nolint:gocyclo // The worker keeps cancellation, reuse, event, and terminal-state gates explicit.
 func (c *TaskConsumer) handleProjectCourse(ctx context.Context, message sharedrabbitmq.GenerationRequestedMessage) error {
 	started := time.Now()
 	if c.projectCourse == nil {

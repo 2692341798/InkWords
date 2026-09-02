@@ -11,7 +11,8 @@ import (
 
 func TestInkWordsFixtureManifestIsMinimalAndNonExecutable(t *testing.T) {
 	path := filepath.Join("testdata", "inkwords-fixture", "manifest.json")
-	content, err := os.ReadFile(path)
+	// path is a fixed test fixture below this package.
+	content, err := os.ReadFile(path) //nolint:gosec
 	require.NoError(t, err)
 	var manifest struct {
 		Entries []struct {

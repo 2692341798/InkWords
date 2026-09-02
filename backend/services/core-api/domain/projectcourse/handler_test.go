@@ -59,7 +59,7 @@ func TestCreateStartsAnalyzeTaskWithoutClientSuppliedSHA(t *testing.T) {
 		handler.Create(c)
 	})
 
-	req := httptest.NewRequest(http.MethodPost, "/project-courses", strings.NewReader(`{"repository_url":"https://github.com/example/repo","requested_ref":"main","audience_level":"programming"}`))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/project-courses", strings.NewReader(`{"repository_url":"https://github.com/example/repo","requested_ref":"main","audience_level":"programming"}`))
 	req.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, req)
@@ -92,7 +92,7 @@ func TestCreateRejectsClientSuppliedResolvedSHA(t *testing.T) {
 		c.Set("user_id", uuid.New())
 		handler.Create(c)
 	})
-	req := httptest.NewRequest(http.MethodPost, "/project-courses", strings.NewReader(`{"repository_url":"https://github.com/example/repo","requested_ref":"main","resolved_commit_sha":"0123456789abcdef0123456789abcdef01234567","audience_level":"programming"}`))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/project-courses", strings.NewReader(`{"repository_url":"https://github.com/example/repo","requested_ref":"main","resolved_commit_sha":"0123456789abcdef0123456789abcdef01234567","audience_level":"programming"}`))
 	req.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, req)
@@ -109,7 +109,7 @@ func TestReportsAreReadOnlyAndScopedToTheAuthenticatedCourse(t *testing.T) {
 	router.GET("/project-courses/:id/quality-report", func(c *gin.Context) { c.Set("user_id", owner); handler.QualityReport(c) })
 	for _, path := range []string{"/project-courses/" + repository.created.ID.String() + "/coverage", "/project-courses/" + repository.created.ID.String() + "/quality-report"} {
 		response := httptest.NewRecorder()
-		router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+		router.ServeHTTP(response, httptest.NewRequestWithContext(context.Background(), http.MethodGet, path, nil))
 		require.Equal(t, http.StatusOK, response.Code)
 	}
 }

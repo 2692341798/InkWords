@@ -71,7 +71,7 @@ func autoMigrateCore(database *gorm.DB) error {
 // while covering the JSON identity and newest-result ordering used by the
 // reuse query.
 func ensureProjectCourseResultIndex(database *gorm.DB) error {
-	if database.Dialector.Name() != "postgres" {
+	if database.Name() != "postgres" {
 		return nil
 	}
 	return database.Exec(`
