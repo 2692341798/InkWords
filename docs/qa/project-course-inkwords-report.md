@@ -1,8 +1,8 @@
 # InkWords Project Mastery Course 验收报告
 
-日期：2026-07-13  
-验收仓库：`https://github.com/2692341798/InkWords`  
-验收 ref：`main`  
+日期：2026-07-13
+验收仓库：`https://github.com/2692341798/InkWords`
+验收 ref：`main`
 锁定 SHA：`f14bd1dbc1e568a2335341dd4df0f6c0574bee35`
 
 ## 验收边界
