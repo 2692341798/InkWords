@@ -72,7 +72,7 @@ InkWords Trainer 是一个面向个人知识沉淀、知识复习与内容输出
 - `/api/v1/blogs/:id/continue|polish` -> `llm-stream`
 - `/api/v1/project/parse` -> `parser-service`
 - `/api/v1/review/*` -> `review-service`
-- `/api/v1/blogs/:id/export*` -> `export-service`
+- `/api/v1/blogs/:id/export*` 与 `/api/v1/textbook-projects/{chapters,book-builds}/.../export/*` -> `export-service`
 - 其余 `/api/*` -> `core-api`
 - `/uploads/*` -> `core-api`
 
@@ -143,8 +143,12 @@ cp backend/.env.example backend/.env
 
 - `DEEPSEEK_API_KEY`
 - `DEEPSEEK_API_URL`（可选；用于本地 mock 或受控 OpenAI-compatible 网关，默认 `https://api.deepseek.com/chat/completions`）
-- `JWT_SECRET`
-- `OBSIDIAN_REST_API_KEY`
+- `TEXTBOOK_GENERATION_PROVIDER`（默认 `fake`；仅在明确设置为 `deepseek` 或 `openai` 后，教材候选稿才会使用远端模型）
+- `TEXTBOOK_STANDARD_MODEL`（启用远端教材生成时必填；DeepSeek 推荐 `deepseek-v4-flash`，样章使用标准成本档）
+- `TEXTBOOK_CORE_MODEL`（DeepSeek 推荐 `deepseek-v4-pro`；仅用于蓝图、核心机制和审校等高价值任务）
+- `TEXTBOOK_GENERATION_REQUEST_TIMEOUT`（教材 Provider 单次请求超时，默认 `15m`，可设 `30s`–`30m`）
+- 相应 provider 的进程环境密钥：DeepSeek 使用 `DEEPSEEK_API_KEY`，OpenAI 使用 `OPENAI_API_KEY`；密钥不会写入数据库或 API 响应
+- `OBSIDIAN_REST_API_KEY`（仅需要写入型 Obsidian REST 能力时；知识复习直接只读挂载的本地 vault）
 - `OBSIDIAN_VAULT_PATH`
 
 `backend/.env.example` 中已经提供了常用默认项，例如：
@@ -225,8 +229,6 @@ go run ./cmd/server/main.go
 
 ```bash
 FRONTEND_PORT=8081 \
-FRONTEND_URL=http://localhost:5173 \
-DOCKER_GITHUB_REDIRECT_URL=http://localhost:5173/api/v1/auth/callback/github \
 docker compose --env-file backend/.env up -d --build
 ```
 
@@ -286,7 +288,7 @@ InkWords/
 
 ### 后端
 
-- Go 1.25
+- Go 1.26
 - Gin
 - GORM
 - PostgreSQL 14
@@ -329,6 +331,7 @@ InkWords/
 - [核心任务边界说明](./docs/runbooks/core-blog-task-boundary.md)
 - [Review 数据库迁移说明](./docs/runbooks/review-db-migration.md)
 - [服务镜像边界说明](./docs/runbooks/service-image-boundaries.md)
+- [教材平台本地启动、备份与故障排查](./docs/runbooks/textbook-local-operations.md)
 
 ## 文档索引
 
