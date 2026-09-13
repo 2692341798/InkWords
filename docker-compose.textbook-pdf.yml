@@ -1,0 +1,21 @@
+# Opt-in runtime for the trusted textbook Chromium renderer. See
+# docs/decisions/textbook-pdf-runtime.md before using another image/runtime.
+services:
+  export-service:
+    environment:
+      TEXTBOOK_CHROMIUM_BIN: /usr/lib/chromium/chromium
+      TEXTBOOK_PDF_FONT_PROFILE: inkwords.pdf-font-source-set.v1
+      XDG_CACHE_HOME: /tmp/inkwords-cache
+    user: "10001:10001"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+      - seccomp=./backend/services/export-service/seccomp/chromium-outer.json
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=256m,mode=1777
+    shm_size: 128m
+    mem_limit: 1g
+    cpus: 1.5
+    pids_limit: 192
