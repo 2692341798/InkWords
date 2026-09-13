@@ -119,8 +119,8 @@ func buildChromiumArgs(htmlPath, pdfPath string) []string {
 }
 
 //nolint:gosec
-func (s *Service) ExportSeriesToPDF(ctx context.Context, blogID uuid.UUID, userID uuid.UUID) (string, string, error) {
-	blogs, err := s.GetSeriesBlogs(ctx, blogID, userID)
+func (s *Service) ExportSeriesToPDF(ctx context.Context, blogID uuid.UUID, workspaceID uuid.UUID) (string, string, error) {
+	blogs, err := s.GetSeriesBlogs(ctx, blogID, workspaceID)
 	if err != nil {
 		return "", "", err
 	}

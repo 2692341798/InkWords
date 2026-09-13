@@ -146,6 +146,17 @@ func (s *GormTaskStore) IsCancelled(ctx context.Context, taskID uuid.UUID) (bool
 	return task.Status == taskStatusCancelled, nil
 }
 
+func (s *GormTaskStore) TextbookWorkspaceMatches(ctx context.Context, taskID, workspaceID uuid.UUID, taskSubtype string) (bool, error) {
+	if taskID == uuid.Nil || workspaceID == uuid.Nil || strings.TrimSpace(taskSubtype) == "" {
+		return false, nil
+	}
+	var count int64
+	err := s.db.WithContext(ctx).Model(&jobTask{}).
+		Where("id = ? AND workspace_id = ? AND task_subtype = ?", taskID, workspaceID, strings.TrimSpace(taskSubtype)).
+		Count(&count).Error
+	return count == 1, err
+}
+
 func (s *GormTaskStore) getByID(ctx context.Context, taskID uuid.UUID) (jobTask, error) {
 	var task jobTask
 	if err := s.db.WithContext(ctx).Where("id = ?", taskID).First(&task).Error; err != nil {

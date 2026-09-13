@@ -35,7 +35,7 @@ func TestDeepSeekClient_Generate_setsReasoningEffortHigh(t *testing.T) {
 	require.Equal(t, "high", payload["reasoning_effort"])
 }
 
-func TestDeepSeekClient_GenerateJSONWithOptions_DisablesThinkingAndSetsMaxTokensAndUserID(t *testing.T) {
+func TestDeepSeekClient_GenerateJSONWithOptions_DisablesThinkingAndOmitsLocalIdentity(t *testing.T) {
 	var capturedBody []byte
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -55,14 +55,14 @@ func TestDeepSeekClient_GenerateJSONWithOptions_DisablesThinkingAndSetsMaxTokens
 		context.Background(),
 		"deepseek-v4-flash",
 		[]Message{{Role: "user", Content: "hi"}},
-		LightweightChatOptions("task:abc@example.com", 256),
+		LightweightChatOptions(256),
 	)
 	require.NoError(t, err)
 
 	var payload map[string]any
 	require.NoError(t, json.Unmarshal(capturedBody, &payload))
 	require.Equal(t, float64(256), payload["max_tokens"])
-	require.Equal(t, "taskabcexamplecom", payload["user_id"])
+	require.NotContains(t, payload, "user_id")
 	require.Nil(t, payload["reasoning_effort"])
 
 	thinking, ok := payload["thinking"].(map[string]any)

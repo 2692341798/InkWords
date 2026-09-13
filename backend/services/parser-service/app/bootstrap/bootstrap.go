@@ -6,10 +6,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	crawldomain "inkwords-backend/services/parser-service/domain/crawl"
 	parsedomain "inkwords-backend/services/parser-service/domain/parse"
-	parserinfra "inkwords-backend/shared/platform/parser"
 	parserroutes "inkwords-backend/services/parser-service/transport/http/v1"
 	"inkwords-backend/shared/kernel/httpx"
+	parserinfra "inkwords-backend/shared/platform/parser"
 	"inkwords-backend/shared/platform/postgres"
 )
 
@@ -32,13 +33,21 @@ func BuildRouter() (*gin.Engine, *parsedomain.Service, *parsedomain.GormTaskStor
 		"db": httpx.NewGormReadinessCheck(dbConn),
 	}))
 
-	quotaChecker := parsedomain.NewGormQuotaChecker(dbConn)
 	docParser := parserinfra.NewDocParser()
 	archiveParser := parserinfra.NewArchiveParser(docParser)
 	parseService := parsedomain.NewService(docParser, archiveParser)
 	taskService := parsedomain.NewGormTaskStore(dbConn)
-	parseHandler := parsedomain.NewHandler(parseService, quotaChecker)
-	parserroutes.RegisterParserRoutes(r, httpx.AuthMiddleware(), parseHandler)
+	parseHandler := parsedomain.NewHandler(parseService)
+	checkpointRoot := os.Getenv("TEXTBOOK_CRAWL_CHECKPOINTS_DIR")
+	if checkpointRoot == "" {
+		checkpointRoot = "/app/crawl-checkpoints"
+	}
+	checkpointStore, err := crawldomain.NewFilesystemCheckpointStore(checkpointRoot)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	crawlHandler := crawldomain.NewHandler(crawldomain.NewService(crawldomain.NewDefaultHTTPFetcher(), checkpointStore))
+	parserroutes.RegisterParserRoutes(r, httpx.LocalWorkspaceContext(postgres.NewLocalWorkspaceResolver(dbConn)), parseHandler, crawlHandler)
 
 	return r, parseService, taskService, nil
 }

@@ -31,10 +31,12 @@ type AppendEventInput struct {
 	Payload   []byte
 }
 
-// projectCourseResultReuseStore is optional so legacy task-store fakes and
-// deployments can continue to process non-course tasks without this lookup.
-type projectCourseResultReuseStore interface {
-	FindCompletedProjectCourseResult(ctx context.Context, courseID, stage, inputHash string) ([]byte, bool, error)
+// textbookStageResultReuseStore recognizes a completed stage for the exact
+// delivery identity. The result comes from the durable stage checkpoint, not
+// the mutable terminal task row, so a retry can resume after a terminal-state
+// write failed. Keeping it optional preserves legacy task-store fakes.
+type textbookStageResultReuseStore interface {
+	FindCompletedTextbookStageResult(ctx context.Context, taskID uuid.UUID, stageExecutionKey string) ([]byte, bool, error)
 }
 
 type jobTask struct {
@@ -141,6 +143,20 @@ func (s *GormTaskStore) MarkSucceeded(ctx context.Context, taskID uuid.UUID, res
 }
 
 func (s *GormTaskStore) MarkFailed(ctx context.Context, taskID uuid.UUID, message string) error {
+	return s.markFailed(ctx, taskID, message, nil)
+}
+
+// MarkFailedWithResult persists safe structured failure evidence alongside the
+// terminal task state. Callers must omit rejected model prose and raw provider
+// diagnostics; the task store still applies its credential redaction guard.
+func (s *GormTaskStore) MarkFailedWithResult(ctx context.Context, taskID uuid.UUID, message string, result []byte) error {
+	if len(result) == 0 || !json.Valid(result) {
+		return fmt.Errorf("失败任务结果必须是有效 JSON")
+	}
+	return s.markFailed(ctx, taskID, message, result)
+}
+
+func (s *GormTaskStore) markFailed(ctx context.Context, taskID uuid.UUID, message string, result []byte) error {
 	task, err := s.getByID(ctx, taskID)
 	if err != nil {
 		return err
@@ -149,11 +165,15 @@ func (s *GormTaskStore) MarkFailed(ctx context.Context, taskID uuid.UUID, messag
 		return nil
 	}
 
-	trimmedMessage := strings.TrimSpace(message)
-	payload, err := json.Marshal(map[string]string{
+	trimmedMessage := sanitizeTaskFailureMessage(message)
+	payloadFields := map[string]any{
 		"status":  string(TaskStatusFailed),
 		"message": trimmedMessage,
-	})
+	}
+	if len(result) > 0 {
+		payloadFields["failure"] = json.RawMessage(result)
+	}
+	payload, err := json.Marshal(payloadFields)
 	if err != nil {
 		return fmt.Errorf("序列化任务失败事件失败: %w", err)
 	}
@@ -167,13 +187,31 @@ func (s *GormTaskStore) MarkFailed(ctx context.Context, taskID uuid.UUID, messag
 		return fmt.Errorf("追加失败事件失败: %w", err)
 	}
 
-	now := time.Now().UTC()
-	return s.updateTask(ctx, taskID, map[string]any{
+	updates := map[string]any{
 		"status":        TaskStatusFailed,
 		"error_message": trimmedMessage,
-		"finished_at":   now,
-		"updated_at":    now,
-	})
+		"finished_at":   time.Now().UTC(),
+		"updated_at":    time.Now().UTC(),
+	}
+	if len(result) > 0 {
+		updates["result_json"] = append(datatypes.JSON(nil), result...)
+	}
+	return s.updateTask(ctx, taskID, updates)
+}
+
+// sanitizeTaskFailureMessage is the final persistence guard for diagnostics
+// received from providers or transport libraries. Provider adapters already
+// return structured errors, but task storage must remain safe if a future
+// adapter accidentally includes a credential in its error text.
+func sanitizeTaskFailureMessage(message string) string {
+	trimmed := strings.TrimSpace(message)
+	lower := strings.ToLower(trimmed)
+	for _, marker := range []string{"api_key", "apikey", "authorization", "bearer ", "sk-"} {
+		if strings.Contains(lower, marker) {
+			return "generation task failed; provider diagnostic redacted"
+		}
+	}
+	return trimmed
 }
 
 func (s *GormTaskStore) IsCancelled(ctx context.Context, taskID uuid.UUID) (bool, error) {
@@ -184,12 +222,30 @@ func (s *GormTaskStore) IsCancelled(ctx context.Context, taskID uuid.UUID) (bool
 	return task.Status == TaskStatusCancelled, nil
 }
 
-func (s *GormTaskStore) FindCompletedProjectCourseResult(ctx context.Context, courseID, stage, inputHash string) ([]byte, bool, error) {
+func (s *GormTaskStore) TextbookWorkspaceMatches(ctx context.Context, taskID, workspaceID uuid.UUID, taskSubtype string) (bool, error) {
+	if taskID == uuid.Nil || workspaceID == uuid.Nil || strings.TrimSpace(taskSubtype) == "" {
+		return false, nil
+	}
+	var count int64
+	err := s.db.WithContext(ctx).Model(&jobTask{}).
+		Where("id = ? AND workspace_id = ? AND task_subtype = ?", taskID, workspaceID, strings.TrimSpace(taskSubtype)).
+		Count(&count).Error
+	return count == 1, err
+}
+
+// FindCompletedTextbookStageResult returns only a result recorded in a completed
+// stage checkpoint for this task. The stage key binds task ID, stage, and frozen
+// input hash, so a redelivery cannot accidentally reuse another task. It does
+// not depend on task.status: terminal state may be the write that failed after
+// a stage was already completed.
+func (s *GormTaskStore) FindCompletedTextbookStageResult(ctx context.Context, taskID uuid.UUID, stageExecutionKey string) ([]byte, bool, error) {
+	if taskID == uuid.Nil || strings.TrimSpace(stageExecutionKey) == "" {
+		return nil, false, nil
+	}
 	var resultJSON datatypes.JSON
-	query := s.db.WithContext(ctx).Table("job_tasks AS task").
-		Select("task.result_json").
-		Joins("JOIN job_task_events AS event ON event.task_id = task.id").
-		Where("task.status = ? AND event.event_type = ? AND event.payload->>'course_id' = ? AND event.payload->>'stage' = ? AND event.payload->>'checkpoint' = ? AND event.payload->>'input_hash' = ?", TaskStatusSucceeded, "project_course_phase", courseID, stage, "result_ready", inputHash).
+	query := s.db.WithContext(ctx).Table("job_task_events AS event").
+		Select("event.payload->'result' AS result_json").
+		Where("event.task_id = ? AND event.event_type = ? AND event.payload->>'stage_execution_key' = ? AND event.payload->>'checkpoint' = ? AND (event.payload->>'completed')::boolean = true AND event.payload ? 'result'", taskID, "textbook_sample_phase", stageExecutionKey, "result_ready").
 		Order("event.created_at DESC").Limit(1).Scan(&resultJSON)
 	if query.Error != nil {
 		return nil, false, query.Error

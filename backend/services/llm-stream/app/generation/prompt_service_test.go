@@ -6,56 +6,34 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"gorm.io/datatypes"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 
 	"inkwords-backend/shared/kernel/prompt"
 	llm "inkwords-backend/shared/platform/llm"
 )
 
-func newPromptTestDB(t *testing.T) *gorm.DB {
-	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&userPromptSettingsRow{}))
-	return db
-}
-
 func TestPromptRequirementsResolveFallsBackForInvalidScenario(t *testing.T) {
-	svc := NewPromptRequirements(newPromptTestDB(t))
-	got, err := svc.Resolve(context.Background(), uuid.New(), prompt.ScenarioMode("bad"), prompt.ArticleStyleGeneral)
+	svc := NewPromptRequirements()
+	got, err := svc.Resolve(prompt.ScenarioMode("bad"), prompt.ArticleStyleGeneral)
 	require.NoError(t, err)
 	require.Contains(t, got, "电子书或长文本解读场景")
 	require.NotContains(t, got, "bad")
 }
 
-func TestPromptRequirementsResolveHonorsUserOverride(t *testing.T) {
-	db := newPromptTestDB(t)
-	uid := uuid.New()
-	require.NoError(t, db.Create(&userPromptSettingsRow{
-		UserID: uid, Overrides: datatypes.JSON([]byte(`{"beginner_tutorial":"CUSTOM STYLE"}`)),
-	}).Error)
-
-	got, err := NewPromptRequirements(db).Resolve(context.Background(), uid, prompt.ScenarioModeBeginnerWalkthrough, prompt.ArticleStyleBeginnerTutorial)
+func TestPromptRequirementsResolveUsesWorkspaceDefaults(t *testing.T) {
+	got, err := NewPromptRequirements().Resolve(prompt.ScenarioModeBeginnerWalkthrough, prompt.ArticleStyleBeginnerTutorial)
 	require.NoError(t, err)
 	require.Contains(t, got, "零基础或初学者")
-	require.Contains(t, got, "CUSTOM STYLE")
+	require.Contains(t, got, prompt.DefaultStyleRequirements(prompt.ScenarioModeBeginnerWalkthrough, prompt.ArticleStyleBeginnerTutorial))
 }
 
 func TestPromptRequirementsResolveWithProfilePrependsProfileRequirements(t *testing.T) {
-	svc := NewPromptRequirements(newPromptTestDB(t))
+	svc := NewPromptRequirements()
 	profile := prompt.ResolvePromptProfileKey("classic_text_interpretation", prompt.ScenarioModeEbookInterpretation)
-	got, err := svc.ResolveWithProfile(context.Background(), uuid.New(), prompt.ScenarioModeEbookInterpretation, prompt.ArticleStyleGeneral, profile)
+	got, err := svc.ResolveWithProfile(prompt.ScenarioModeEbookInterpretation, prompt.ArticleStyleGeneral, profile)
 	require.NoError(t, err)
 	require.Contains(t, got, profile.GenerateRequirements)
 	require.Equal(t, 0, strings.Index(got, profile.GenerateRequirements))
-}
-
-func TestUserPromptSettingsRowUsesSharedTableName(t *testing.T) {
-	require.Equal(t, "user_prompt_settings", userPromptSettingsRow{}.TableName())
 }
 
 type fakePromptProfileLLM struct {

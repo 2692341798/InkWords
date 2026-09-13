@@ -14,10 +14,10 @@ import (
 
 	"golang.org/x/time/rate"
 
+	projectdomain "inkwords-backend/services/core-api/domain/project"
 	sharedprompt "inkwords-backend/shared/kernel/prompt"
 	llm "inkwords-backend/shared/platform/llm"
 	"inkwords-backend/shared/platform/parser"
-	projectdomain "inkwords-backend/services/core-api/domain/project"
 )
 
 // LLMClient 是项目分析服务所需的 LLM 调用窄接口，仅暴露 GenerateJSONWithOptions 方法。
@@ -177,7 +177,7 @@ func (s *Service) ScanProjectModules(ctx context.Context, gitURL string) ([]proj
 		defer cancel()
 
 		if err := s.limiter.Wait(ctxTimeout); err == nil {
-			if jsonStr, _, err := s.llm.GenerateJSONWithOptions(ctxTimeout, modelStr, messages, llm.LightweightChatOptions("", 1000)); err == nil {
+			if jsonStr, _, err := s.llm.GenerateJSONWithOptions(ctxTimeout, modelStr, messages, llm.LightweightChatOptions(1000)); err == nil {
 				jsonStr = strings.TrimPrefix(strings.TrimSpace(jsonStr), "```json")
 				jsonStr = strings.TrimPrefix(jsonStr, "```")
 				jsonStr = strings.TrimSuffix(jsonStr, "```")

@@ -6,9 +6,9 @@ import (
 	"strings"
 	"sync"
 
-	llm "inkwords-backend/shared/platform/llm"
 	sharedblog "inkwords-backend/shared/kernel/blog"
 	"inkwords-backend/shared/kernel/prompt"
+	llm "inkwords-backend/shared/platform/llm"
 )
 
 // seriesChapterUsage 表示单章节流水线阶段的模型用量摘要。
@@ -256,7 +256,6 @@ type seriesQualityPipelineInput struct {
 	ChapterSourceContent string
 	GitURL               string
 	OldContent           string
-	UserID               string
 	ProgressChan         chan<- string
 }
 

@@ -8,10 +8,6 @@ import (
 )
 
 func (h *Handler) PolishBlogStreamHandler(c *gin.Context) {
-	if !h.maybeCheckQuota(c) {
-		return
-	}
-
 	blogIDStr := c.Param("id")
 	blogID, err := uuid.Parse(blogIDStr)
 	if err != nil {
@@ -19,13 +15,13 @@ func (h *Handler) PolishBlogStreamHandler(c *gin.Context) {
 		return
 	}
 
-	userID := h.getUserID(c)
-	if userID == uuid.Nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+	workspaceID := h.getWorkspaceID(c)
+	if workspaceID == uuid.Nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "local workspace unavailable"})
 		return
 	}
 
-	if err := h.blogRepo.Exists(c.Request.Context(), userID, blogID); err != nil {
+	if err := h.blogRepo.Exists(c.Request.Context(), workspaceID, blogID); err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "blog not found"})
 		return
 	}

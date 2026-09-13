@@ -13,11 +13,12 @@ import (
 
 // Repository 定义任务领域访问持久化层所需的最小接口。
 type Repository interface {
-	FindByIdempotencyKey(ctx context.Context, requestedBy uuid.UUID, taskType, key string) (*JobTask, error)
+	FindByWorkspaceIdempotencyKey(ctx context.Context, workspaceID uuid.UUID, taskType, key string) (*JobTask, error)
 	Create(ctx context.Context, task *JobTask) error
 	GetByID(ctx context.Context, taskID uuid.UUID) (*JobTask, error)
 	UpdateStatus(ctx context.Context, taskID uuid.UUID, status JobTaskStatus, errorMessage string) error
 	UpdateResult(ctx context.Context, taskID uuid.UUID, result datatypes.JSON) error
+	RetryFailed(ctx context.Context, taskID uuid.UUID) (*JobTask, error)
 	AppendEvent(ctx context.Context, event *JobTaskEvent) error
 	ListEventsAfter(ctx context.Context, taskID uuid.UUID, afterID uint64, limit int) ([]JobTaskEvent, error)
 }
@@ -35,6 +36,20 @@ type Publisher interface {
 	PublishExportRequested(ctx context.Context, payload ExportRequestedMessage) error
 }
 
+// textbookVerificationPublisher is opt-in to keep existing task publishers
+// and tests compatible while the separate textbook runner is introduced.
+type textbookVerificationPublisher interface {
+	PublishTextbookVerificationRequested(context.Context, TextbookVerificationRequestedMessage) error
+}
+
+type textbookGenerationPublisher interface {
+	PublishTextbookGenerationRequested(context.Context, TextbookGenerationRequestedMessage) error
+}
+
+type textbookParsePublisher interface {
+	PublishTextbookParseRequested(context.Context, TextbookParseRequestedMessage) error
+}
+
 // GormRepository 使用 GORM 实现任务领域的数据访问。
 type GormRepository struct {
 	db *gorm.DB
@@ -45,14 +60,15 @@ func NewGormRepository(db *gorm.DB) *GormRepository {
 	return &GormRepository{db: db}
 }
 
-func (r *GormRepository) FindByIdempotencyKey(ctx context.Context, requestedBy uuid.UUID, taskType, key string) (*JobTask, error) {
-	if strings.TrimSpace(key) == "" {
+// FindByWorkspaceIdempotencyKey scopes task reuse to the stable installation workspace.
+func (r *GormRepository) FindByWorkspaceIdempotencyKey(ctx context.Context, workspaceID uuid.UUID, taskType, key string) (*JobTask, error) {
+	if workspaceID == uuid.Nil || strings.TrimSpace(key) == "" {
 		return nil, nil
 	}
 
 	var task JobTask
 	err := r.db.WithContext(ctx).
-		Where("requested_by = ? AND task_type = ? AND idempotency_key = ?", requestedBy, taskType, strings.TrimSpace(key)).
+		Where("workspace_id = ? AND task_type = ? AND idempotency_key = ?", workspaceID, taskType, strings.TrimSpace(key)).
 		First(&task).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
@@ -92,12 +108,20 @@ func (r *GormRepository) UpdateStatus(ctx context.Context, taskID uuid.UUID, sta
 		updates["finished_at"] = time.Now().UTC()
 	}
 
-	result := r.db.WithContext(ctx).Model(&JobTask{}).Where("id = ?", taskID).Updates(updates)
+	query := r.db.WithContext(ctx).Model(&JobTask{}).Where("id = ?", taskID)
+	if status == JobTaskStatusCancelled {
+		query = query.Where("status NOT IN ?", []JobTaskStatus{JobTaskStatusSucceeded, JobTaskStatusFailed, JobTaskStatusCancelled})
+	} else {
+		// A late worker update must not resurrect an acknowledged cancellation.
+		query = query.Where("status <> ?", JobTaskStatusCancelled)
+	}
+	result := query.Updates(updates)
 	if result.Error != nil {
 		return result.Error
 	}
 	if result.RowsAffected == 0 {
-		return ErrTaskNotFound
+		_, err := r.GetByID(ctx, taskID)
+		return err
 	}
 	return nil
 }
@@ -108,14 +132,44 @@ func (r *GormRepository) UpdateResult(ctx context.Context, taskID uuid.UUID, res
 		"updated_at":  time.Now().UTC(),
 	}
 
-	stored := r.db.WithContext(ctx).Model(&JobTask{}).Where("id = ?", taskID).Updates(updates)
+	stored := r.db.WithContext(ctx).Model(&JobTask{}).Where("id = ? AND status <> ?", taskID, JobTaskStatusCancelled).Updates(updates)
 	if stored.Error != nil {
 		return stored.Error
 	}
 	if stored.RowsAffected == 0 {
-		return ErrTaskNotFound
+		_, err := r.GetByID(ctx, taskID)
+		return err
 	}
 	return nil
+}
+
+// RetryFailed moves only a failed task back to queued. Its task id and frozen
+// payload remain unchanged, so a worker retry cannot silently use new inputs.
+func (r *GormRepository) RetryFailed(ctx context.Context, taskID uuid.UUID) (*JobTask, error) {
+	var task JobTask
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("id = ?", taskID).First(&task).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrTaskNotFound
+			}
+			return err
+		}
+		if task.Status != JobTaskStatusFailed {
+			return ErrTaskNotRetryable
+		}
+		now := time.Now().UTC()
+		if err := tx.Model(&JobTask{}).Where("id = ? AND status = ?", taskID, JobTaskStatusFailed).Updates(map[string]any{
+			"status": JobTaskStatusQueued, "retry_count": gorm.Expr("retry_count + 1"), "error_message": "", "result_json": datatypes.JSON([]byte(`{}`)),
+			"result_persistence_started_at": nil, "result_persisted_at": nil, "started_at": nil, "finished_at": nil, "updated_at": now,
+		}).Error; err != nil {
+			return err
+		}
+		return tx.Where("id = ?", taskID).First(&task).Error
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &task, nil
 }
 
 func (r *GormRepository) ClaimResultPersistence(ctx context.Context, taskID uuid.UUID, staleBefore time.Time) (bool, error) {

@@ -10,41 +10,43 @@ import (
 )
 
 const (
-	taskTypeGeneration               = "generation"
-	taskTypeParse                    = "parse"
-	defaultStreamEventLimit          = 200
-	ProjectCourseAnalyzeTaskSubtype  = "project_course_analyze"
-	ProjectCourseGenerateTaskSubtype = "project_course_generate"
-	ProjectCoursePackageTaskSubtype  = "project_course_package"
+	taskTypeGeneration      = "generation"
+	taskTypeParse           = "parse"
+	taskTypeVerification    = "verification"
+	defaultStreamEventLimit = 200
 )
 
 var (
 	ErrTaskNotFound     = errors.New("task not found")
 	ErrTaskAccessDenied = errors.New("task access denied")
 	ErrInvalidTaskInput = errors.New("invalid task input")
+	ErrTaskNotRetryable = errors.New("task is not retryable")
 	ErrEmptyTaskSubtype = errors.New("task subtype is required")
-	ErrEmptyRequestedBy = errors.New("requested_by is required")
+	ErrEmptyWorkspaceID = errors.New("workspace_id is required")
 )
 
 // CreateGenerationTaskInput 描述创建生成任务时服务层需要的输入。
 type CreateGenerationTaskInput struct {
-	RequestedBy    uuid.UUID
-	TaskSubtype    string
-	IdempotencyKey string
-	Payload        []byte
+	WorkspaceID       uuid.UUID
+	TextbookChapterID *uuid.UUID
+	TaskSubtype       string
+	IdempotencyKey    string
+	Payload           []byte
 }
 
 // CreateParseTaskInput 描述创建解析任务时服务层需要的输入。
 type CreateParseTaskInput struct {
-	RequestedBy    uuid.UUID
+	WorkspaceID    uuid.UUID
 	TaskSubtype    string
 	IdempotencyKey string
 	Payload        []byte
 }
 
-// CreateProjectCourseTaskInput is shared by the three project-course phases.
-type CreateProjectCourseTaskInput struct {
-	RequestedBy    uuid.UUID
+// CreateTextbookVerificationTaskInput is constructed only after core-api has
+// resolved a workspace-owned immutable teaching artifact.
+type CreateTextbookVerificationTaskInput struct {
+	WorkspaceID    uuid.UUID
+	TaskSubtype    string
 	IdempotencyKey string
 	Payload        []byte
 }
@@ -59,11 +61,21 @@ type AppendEventInput struct {
 // GenerationRequestedMessage 是任务创建成功后发往消息队列的标准载荷。
 type GenerationRequestedMessage = sharedrabbitmq.GenerationRequestedMessage
 
+// TextbookGenerationRequestedMessage omits legacy user identity.
+type TextbookGenerationRequestedMessage = sharedrabbitmq.TextbookGenerationRequestedMessage
+
 // ParseRequestedMessage 是解析任务创建成功后发往消息队列的标准载荷。
 type ParseRequestedMessage = sharedrabbitmq.ParseRequestedMessage
 
+// TextbookParseRequestedMessage omits legacy user identity.
+type TextbookParseRequestedMessage = sharedrabbitmq.TextbookParseRequestedMessage
+
 // ExportRequestedMessage 是导出任务创建成功后发往消息队列的标准载荷。
 type ExportRequestedMessage = sharedrabbitmq.ExportRequestedMessage
+
+// TextbookVerificationRequestedMessage is deliberately separate from the
+// legacy verification envelope.
+type TextbookVerificationRequestedMessage = sharedrabbitmq.TextbookVerificationRequestedMessage
 
 // CreateGenerationTaskRequest 描述创建生成任务的 HTTP 请求体。
 type CreateGenerationTaskRequest struct {

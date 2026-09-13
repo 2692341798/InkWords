@@ -121,7 +121,7 @@ func TestService_GetSession_ReturnsPersistedTurns(t *testing.T) {
 
 	session := seedLightRecallSession(t)
 
-	got, err := session.Service.GetSession(context.Background(), session.UserID, session.ID)
+	got, err := session.Service.GetSession(context.Background(), session.WorkspaceID, session.ID)
 	require.NoError(t, err)
 	require.Equal(t, session.ID, got.SessionID)
 	require.Equal(t, ReviewStatusCreated, got.Status)
@@ -134,18 +134,18 @@ func TestService_RespondDetailedQA_AdvancesThreeRounds(t *testing.T) {
 
 	session := seedDetailedQASession(t)
 
-	first, err := session.Service.Respond(context.Background(), session.UserID, session.ID, RespondRequest{Answer: "这是主旨"})
+	first, err := session.Service.Respond(context.Background(), session.WorkspaceID, session.ID, RespondRequest{Answer: "这是主旨"})
 	require.NoError(t, err)
 	require.Equal(t, ReviewStatusInProgress, first.SessionStatus)
 	require.Contains(t, first.NextQuestion, "概念")
 	require.False(t, first.Completed)
 
-	second, err := session.Service.Respond(context.Background(), session.UserID, session.ID, RespondRequest{Answer: "这是细节"})
+	second, err := session.Service.Respond(context.Background(), session.WorkspaceID, session.ID, RespondRequest{Answer: "这是细节"})
 	require.NoError(t, err)
 	require.Contains(t, second.NextQuestion, "新手")
 	require.False(t, second.Completed)
 
-	third, err := session.Service.Respond(context.Background(), session.UserID, session.ID, RespondRequest{Answer: "这是迁移解释"})
+	third, err := session.Service.Respond(context.Background(), session.WorkspaceID, session.ID, RespondRequest{Answer: "这是迁移解释"})
 	require.NoError(t, err)
 	require.True(t, third.Completed)
 	require.Equal(t, ReviewStatusCompleted, third.SessionStatus)
@@ -219,7 +219,7 @@ func TestService_RequestHint_StopsAtMaxCount(t *testing.T) {
 
 	session := seedLightRecallSession(t)
 
-	first, err := session.Service.RequestHint(context.Background(), session.UserID, session.ID, HintRequest{})
+	first, err := session.Service.RequestHint(context.Background(), session.WorkspaceID, session.ID, HintRequest{})
 	require.NoError(t, err)
 	require.NotEmpty(t, first.HintText)
 	require.Equal(t, 1, first.Level)
@@ -227,19 +227,19 @@ func TestService_RequestHint_StopsAtMaxCount(t *testing.T) {
 	require.NotEmpty(t, first.TargetGap)
 	require.NotEmpty(t, first.NextAction)
 
-	second, err := session.Service.RequestHint(context.Background(), session.UserID, session.ID, HintRequest{})
+	second, err := session.Service.RequestHint(context.Background(), session.WorkspaceID, session.ID, HintRequest{})
 	require.NoError(t, err)
 	require.NotEmpty(t, second.HintText)
 	require.Equal(t, 2, second.Level)
 	require.Equal(t, 1, second.RemainingHintCount)
 
-	third, err := session.Service.RequestHint(context.Background(), session.UserID, session.ID, HintRequest{})
+	third, err := session.Service.RequestHint(context.Background(), session.WorkspaceID, session.ID, HintRequest{})
 	require.NoError(t, err)
 	require.Equal(t, 3, third.Level)
 	require.Equal(t, 0, third.RemainingHintCount)
 	require.NotEmpty(t, third.SourceAnchor)
 
-	_, err = session.Service.RequestHint(context.Background(), session.UserID, session.ID, HintRequest{})
+	_, err = session.Service.RequestHint(context.Background(), session.WorkspaceID, session.ID, HintRequest{})
 	require.ErrorContains(t, err, "提示次数已用尽")
 }
 
@@ -248,10 +248,10 @@ func TestService_RequestHint_DetailedQAFollowsCurrentQuestion(t *testing.T) {
 
 	session := seedDetailedQASession(t)
 
-	_, err := session.Service.Respond(context.Background(), session.UserID, session.ID, RespondRequest{Answer: "这是主旨"})
+	_, err := session.Service.Respond(context.Background(), session.WorkspaceID, session.ID, RespondRequest{Answer: "这是主旨"})
 	require.NoError(t, err)
 
-	hint, err := session.Service.RequestHint(context.Background(), session.UserID, session.ID, HintRequest{})
+	hint, err := session.Service.RequestHint(context.Background(), session.WorkspaceID, session.ID, HintRequest{})
 	require.NoError(t, err)
 	require.Equal(t, 1, hint.Level)
 	require.NotEmpty(t, hint.TargetGap)
@@ -335,10 +335,10 @@ func TestService_Finish_ProducesFinalFeedback(t *testing.T) {
 
 	session := seedLightRecallSession(t)
 
-	_, err := session.Service.Respond(context.Background(), session.UserID, session.ID, RespondRequest{Answer: "我先讲主线"})
+	_, err := session.Service.Respond(context.Background(), session.WorkspaceID, session.ID, RespondRequest{Answer: "我先讲主线"})
 	require.NoError(t, err)
 
-	resp, err := session.Service.Finish(context.Background(), session.UserID, session.ID)
+	resp, err := session.Service.Finish(context.Background(), session.WorkspaceID, session.ID)
 	require.NoError(t, err)
 	require.Equal(t, ReviewStatusCompleted, resp.SessionStatus)
 	require.NotEmpty(t, resp.FinalFeedback.Summary)
@@ -358,10 +358,10 @@ func TestService_Finish_DetailedQADoesNotOverstatePartialProgress(t *testing.T) 
 
 	session := seedDetailedQASession(t)
 
-	_, err := session.Service.Respond(context.Background(), session.UserID, session.ID, RespondRequest{Answer: "我先回答第一问"})
+	_, err := session.Service.Respond(context.Background(), session.WorkspaceID, session.ID, RespondRequest{Answer: "我先回答第一问"})
 	require.NoError(t, err)
 
-	resp, err := session.Service.Finish(context.Background(), session.UserID, session.ID)
+	resp, err := session.Service.Finish(context.Background(), session.WorkspaceID, session.ID)
 	require.NoError(t, err)
 	require.Equal(t, ReviewStatusCompleted, resp.SessionStatus)
 	require.NotContains(t, resp.FinalFeedback.Summary, "完成一轮逐步追问式复习")

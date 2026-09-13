@@ -9,13 +9,13 @@ import (
 
 // Repository 定义 Blog 领域的数据访问接口。
 type Repository interface {
-	ListTopLevelBlogs(ctx context.Context, userID uuid.UUID, page int, size int) ([]Blog, error)
-	ListChildrenByParentIDs(ctx context.Context, userID uuid.UUID, parentIDs []uuid.UUID) ([]Blog, error)
-	GetByID(ctx context.Context, userID uuid.UUID, blogID uuid.UUID) (*Blog, error)
-	GetSeriesBlogs(ctx context.Context, userID uuid.UUID, parentID uuid.UUID) ([]Blog, error)
+	ListTopLevelBlogs(ctx context.Context, workspaceID uuid.UUID, page int, size int) ([]Blog, error)
+	ListChildrenByParentIDs(ctx context.Context, workspaceID uuid.UUID, parentIDs []uuid.UUID) ([]Blog, error)
+	GetByID(ctx context.Context, workspaceID uuid.UUID, blogID uuid.UUID) (*Blog, error)
+	GetSeriesBlogs(ctx context.Context, workspaceID uuid.UUID, parentID uuid.UUID) ([]Blog, error)
 	Create(ctx context.Context, blog *Blog) error
-	Update(ctx context.Context, userID uuid.UUID, blogID uuid.UUID, updates map[string]any) (rowsAffected int64, err error)
-	BatchDelete(ctx context.Context, userID uuid.UUID, blogIDs []uuid.UUID) error
+	Update(ctx context.Context, workspaceID uuid.UUID, blogID uuid.UUID, updates map[string]any) (rowsAffected int64, err error)
+	BatchDelete(ctx context.Context, workspaceID uuid.UUID, blogIDs []uuid.UUID) error
 }
 
 // GormRepository 使用 GORM 实现 BlogRepository。
@@ -28,11 +28,11 @@ func NewGormRepository(db *gorm.DB) *GormRepository {
 	return &GormRepository{db: db}
 }
 
-func (r *GormRepository) ListTopLevelBlogs(ctx context.Context, userID uuid.UUID, page int, size int) ([]Blog, error) {
+func (r *GormRepository) ListTopLevelBlogs(ctx context.Context, workspaceID uuid.UUID, page int, size int) ([]Blog, error) {
 	var parents []Blog
 	offset := (page - 1) * size
 	err := r.db.WithContext(ctx).
-		Where("user_id = ? AND parent_id IS NULL", userID).
+		Where("workspace_id = ? AND parent_id IS NULL", workspaceID).
 		Order("created_at DESC").
 		Offset(offset).
 		Limit(size).
@@ -43,13 +43,13 @@ func (r *GormRepository) ListTopLevelBlogs(ctx context.Context, userID uuid.UUID
 	return parents, nil
 }
 
-func (r *GormRepository) ListChildrenByParentIDs(ctx context.Context, userID uuid.UUID, parentIDs []uuid.UUID) ([]Blog, error) {
+func (r *GormRepository) ListChildrenByParentIDs(ctx context.Context, workspaceID uuid.UUID, parentIDs []uuid.UUID) ([]Blog, error) {
 	var children []Blog
 	if len(parentIDs) == 0 {
 		return []Blog{}, nil
 	}
 	err := r.db.WithContext(ctx).
-		Where("user_id = ? AND parent_id IN ?", userID, parentIDs).
+		Where("workspace_id = ? AND parent_id IN ?", workspaceID, parentIDs).
 		Order("chapter_sort ASC").
 		Find(&children).Error
 	if err != nil {
@@ -58,26 +58,26 @@ func (r *GormRepository) ListChildrenByParentIDs(ctx context.Context, userID uui
 	return children, nil
 }
 
-func (r *GormRepository) GetByID(ctx context.Context, userID uuid.UUID, blogID uuid.UUID) (*Blog, error) {
+func (r *GormRepository) GetByID(ctx context.Context, workspaceID uuid.UUID, blogID uuid.UUID) (*Blog, error) {
 	var blog Blog
-	if err := r.db.WithContext(ctx).Where("id = ? AND user_id = ?", blogID, userID).First(&blog).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("id = ? AND workspace_id = ?", blogID, workspaceID).First(&blog).Error; err != nil {
 		return nil, err
 	}
 	return &blog, nil
 }
 
-func (r *GormRepository) GetSeriesBlogs(ctx context.Context, userID uuid.UUID, parentID uuid.UUID) ([]Blog, error) {
+func (r *GormRepository) GetSeriesBlogs(ctx context.Context, workspaceID uuid.UUID, parentID uuid.UUID) ([]Blog, error) {
 	var blogs []Blog
 
 	var parent Blog
-	err := r.db.WithContext(ctx).Where("id = ? AND user_id = ?", parentID, userID).First(&parent).Error
+	err := r.db.WithContext(ctx).Where("id = ? AND workspace_id = ?", parentID, workspaceID).First(&parent).Error
 	if err != nil {
 		return nil, err
 	}
 	blogs = append(blogs, parent)
 
 	var children []Blog
-	err = r.db.WithContext(ctx).Where("parent_id = ? AND user_id = ?", parentID, userID).Order("chapter_sort ASC").Find(&children).Error
+	err = r.db.WithContext(ctx).Where("parent_id = ? AND workspace_id = ?", parentID, workspaceID).Order("chapter_sort ASC").Find(&children).Error
 	if err != nil {
 		return nil, err
 	}
@@ -90,9 +90,9 @@ func (r *GormRepository) Create(ctx context.Context, blog *Blog) error {
 	return r.db.WithContext(ctx).Create(blog).Error
 }
 
-func (r *GormRepository) Update(ctx context.Context, userID uuid.UUID, blogID uuid.UUID, updates map[string]any) (int64, error) {
+func (r *GormRepository) Update(ctx context.Context, workspaceID uuid.UUID, blogID uuid.UUID, updates map[string]any) (int64, error) {
 	res := r.db.WithContext(ctx).Model(&Blog{}).
-		Where("id = ? AND user_id = ?", blogID, userID).
+		Where("id = ? AND workspace_id = ?", blogID, workspaceID).
 		Updates(updates)
 	if res.Error != nil {
 		return 0, res.Error
@@ -100,12 +100,12 @@ func (r *GormRepository) Update(ctx context.Context, userID uuid.UUID, blogID uu
 	return res.RowsAffected, nil
 }
 
-func (r *GormRepository) BatchDelete(ctx context.Context, userID uuid.UUID, blogIDs []uuid.UUID) error {
+func (r *GormRepository) BatchDelete(ctx context.Context, workspaceID uuid.UUID, blogIDs []uuid.UUID) error {
 	if len(blogIDs) == 0 {
 		return nil
 	}
 	res := r.db.WithContext(ctx).
-		Where("user_id = ? AND (id IN ? OR parent_id IN ?)", userID, blogIDs, blogIDs).
+		Where("workspace_id = ? AND (id IN ? OR parent_id IN ?)", workspaceID, blogIDs, blogIDs).
 		Delete(&Blog{})
 	return res.Error
 }

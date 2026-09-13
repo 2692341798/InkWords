@@ -9,7 +9,7 @@ import (
 
 // Repository 定义 review 领域所需的持久化接口。
 type Repository interface {
-	GetRecentSessions(ctx context.Context, userID uuid.UUID, limit int) ([]ReviewSession, error)
+	GetRecentSessions(ctx context.Context, workspaceID uuid.UUID, limit int) ([]ReviewSession, error)
 	CreateSession(ctx context.Context, session *ReviewSession) error
 	GetSessionByID(ctx context.Context, sessionID uuid.UUID) (ReviewSession, error)
 	ListTurns(ctx context.Context, sessionID uuid.UUID) ([]ReviewTurn, error)
@@ -27,14 +27,14 @@ func NewGormRepository(db *gorm.DB) *GormRepository {
 	return &GormRepository{db: db}
 }
 
-func (r *GormRepository) GetRecentSessions(ctx context.Context, userID uuid.UUID, limit int) ([]ReviewSession, error) {
+func (r *GormRepository) GetRecentSessions(ctx context.Context, workspaceID uuid.UUID, limit int) ([]ReviewSession, error) {
 	if limit <= 0 {
 		limit = 20
 	}
 
 	var sessions []ReviewSession
 	err := r.db.WithContext(ctx).
-		Where("user_id = ?", userID).
+		Where("workspace_id = ?", workspaceID).
 		Order("created_at DESC").
 		Limit(limit).
 		Find(&sessions).Error

@@ -13,10 +13,6 @@ import (
 )
 
 func (h *Handler) AnalyzeStreamHandler(c *gin.Context) {
-	if !h.maybeCheckQuota(c) {
-		return
-	}
-
 	var req GenerateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
@@ -41,14 +37,15 @@ func (h *Handler) AnalyzeStreamHandler(c *gin.Context) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 
-	userID := h.getUserID(c)
-	if userID == uuid.Nil {
-		userID = uuid.New()
+	workspaceID := h.getWorkspaceID(c)
+	if workspaceID == uuid.Nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "local workspace unavailable"})
+		return
 	}
 
 	go func() {
 		defer wg.Done()
-		h.service.AnalyzeStream(ctx, userID, req, progressChan, errChan)
+		h.service.AnalyzeStream(ctx, workspaceID, req, progressChan, errChan)
 	}()
 
 	c.Writer.Header().Set("Content-Type", "text/event-stream")

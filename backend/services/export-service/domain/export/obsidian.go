@@ -15,12 +15,12 @@ import (
 	"inkwords-backend/shared/platform/obsidian"
 )
 
-func (s *Service) ExportToObsidian(ctx context.Context, blogID uuid.UUID, userID uuid.UUID) error {
+func (s *Service) ExportToObsidian(ctx context.Context, blogID uuid.UUID, workspaceID uuid.UUID) error {
 	if s == nil || s.repo == nil {
 		return ErrExportNotConfigured
 	}
 
-	blog, err := s.repo.GetByID(ctx, userID, blogID)
+	blog, err := s.repo.GetByID(ctx, workspaceID, blogID)
 	if err != nil {
 		return err
 	}
@@ -65,8 +65,8 @@ status: seed
 }
 
 //nolint:gocyclo
-func (s *Service) ExportSeriesToObsidian(ctx context.Context, blogID uuid.UUID, userID uuid.UUID) error {
-	blogs, err := s.GetSeriesBlogs(ctx, blogID, userID)
+func (s *Service) ExportSeriesToObsidian(ctx context.Context, blogID uuid.UUID, workspaceID uuid.UUID) error {
+	blogs, err := s.GetSeriesBlogs(ctx, blogID, workspaceID)
 	if err != nil {
 		return err
 	}

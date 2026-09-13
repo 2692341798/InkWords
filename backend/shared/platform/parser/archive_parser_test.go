@@ -3,6 +3,7 @@ package parser
 import (
 	"archive/zip"
 	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -52,6 +53,35 @@ func TestArchiveParser_ParseArchive_ReturnsErrorWhenNoUsefulFiles(t *testing.T) 
 	_, err := parser.ParseArchive(bytes.NewReader(archive), "empty.zip")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "压缩包中没有可解析的文本文件")
+}
+
+func TestArchiveParser_RejectsZipBombBudgetsAndNormalizesUnsafePaths(t *testing.T) {
+	archive := buildZipArchive(t, map[string]string{"large.md": strings.Repeat("A", 2_048)})
+	limits := DefaultArchiveLimits()
+	limits.MaxEntryUncompressedSize = 1_024
+	parser := NewArchiveParserWithLimits(NewDocParser(), limits)
+
+	_, err := parser.ParseArchive(bytes.NewReader(archive), "too-large.zip")
+	require.ErrorContains(t, err, "entry_too_large")
+
+	_, err = sanitizeArchivePath(`C:\windows\system32\notes.md`)
+	require.ErrorContains(t, err, "非法压缩包路径")
+	_, err = sanitizeArchivePath(`..\escape.md`)
+	require.ErrorContains(t, err, "非法压缩包路径")
+}
+
+func TestArchiveParser_SkipsNestedArchivesWithAnEntryDecision(t *testing.T) {
+	parser := NewArchiveParser(NewDocParser())
+	archive := buildZipArchive(t, map[string]string{
+		"lesson.md":  "# 第一课\n内容",
+		"nested.zip": "not-expanded",
+	})
+
+	result, err := parser.ParseArchive(bytes.NewReader(archive), "course.zip")
+	require.NoError(t, err)
+	require.Equal(t, 1, result.ArchiveSummary.KeptFiles)
+	require.Equal(t, 1, result.ArchiveSummary.IgnoredFiles)
+	require.Contains(t, result.ArchiveSummary.Entries, ArchiveEntryReport{Path: "nested.zip", Status: "skipped", Reason: "nested_archives_not_supported"})
 }
 
 func buildZipArchive(t *testing.T, files map[string]string) []byte {

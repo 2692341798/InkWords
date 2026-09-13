@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -12,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -30,7 +28,7 @@ func TestHandler_Parse_ReturnsArchiveSummaryForZip(t *testing.T) {
 				KeptFiles:  2,
 			},
 		},
-	}, &stubQuotaChecker{})
+	})
 
 	response := performMultipartParseRequest(t, handler, "courseware.zip", []byte("fake zip"))
 	require.Equal(t, http.StatusOK, response.Code)
@@ -55,43 +53,11 @@ func TestHandler_Parse_OmitsArchiveSummaryForNormalFile(t *testing.T) {
 
 	handler := NewHandler(&stubParseService{
 		parseResult: ParseResult{SourceContent: "plain content"},
-	}, &stubQuotaChecker{})
+	})
 
 	response := performMultipartParseRequest(t, handler, "lesson.md", []byte("# title"))
 	require.Equal(t, http.StatusOK, response.Code)
 	assert.NotContains(t, response.Body.String(), "archive_summary")
-}
-
-func TestHandler_Parse_RejectsWhenQuotaExceeded(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	quotaChecker := &stubQuotaChecker{err: errors.New("quota exceeded")}
-	parseService := &stubParseService{}
-	handler := NewHandler(parseService, quotaChecker)
-
-	var body bytes.Buffer
-	writer := multipart.NewWriter(&body)
-	fileWriter, err := writer.CreateFormFile("file", "lesson.md")
-	require.NoError(t, err)
-	_, err = fileWriter.Write([]byte("# title"))
-	require.NoError(t, err)
-	require.NoError(t, writer.Close())
-
-	request := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/api/v1/project/parse", &body)
-	request.Header.Set("Content-Type", writer.FormDataContentType())
-	recorder := httptest.NewRecorder()
-
-	engine := gin.New()
-	engine.Use(func(c *gin.Context) {
-		c.Set("user_id", uuid.New())
-		c.Next()
-	})
-	engine.POST("/api/v1/project/parse", handler.Parse)
-	engine.ServeHTTP(recorder, request)
-
-	assert.Equal(t, http.StatusPaymentRequired, recorder.Code)
-	assert.True(t, quotaChecker.called)
-	assert.False(t, parseService.called)
 }
 
 type stubParseService struct {
@@ -103,16 +69,6 @@ type stubParseService struct {
 func (s *stubParseService) Parse(io.Reader, string) (ParseResult, error) {
 	s.called = true
 	return s.parseResult, s.parseErr
-}
-
-type stubQuotaChecker struct {
-	err    error
-	called bool
-}
-
-func (s *stubQuotaChecker) CheckQuota(uuid.UUID) error {
-	s.called = true
-	return s.err
 }
 
 func performMultipartParseRequest(t *testing.T, handler *Handler, filename string, content []byte) *httptest.ResponseRecorder {

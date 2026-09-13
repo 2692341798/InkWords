@@ -31,10 +31,11 @@ type NoteSource interface {
 
 // Service 提供 today、pick、notes 三类入口能力。
 type Service struct {
-	repo       Repository
-	noteSource NoteSource
-	aiFeedback AIFeedbackGenerator
-	now        func() time.Time
+	repo          Repository
+	noteSource    NoteSource
+	aiFeedback    AIFeedbackGenerator
+	legacyMastery LegacyMasteryAdapter
+	now           func() time.Time
 }
 
 type sessionMetadata struct {
@@ -42,6 +43,14 @@ type sessionMetadata struct {
 	SessionOutline SessionOutline `json:"session_outline"`
 	SourcePreview  string         `json:"source_preview"`
 	ReadingContent string         `json:"reading_content"`
+}
+
+// WithLegacyMasteryAdapter enables an explicit, opt-in bridge for old Obsidian
+// notes. Existing review sessions continue to use their user and note-path
+// identity until a caller asks to create the workspace-owned objective.
+func (service *Service) WithLegacyMasteryAdapter(adapter LegacyMasteryAdapter) *Service {
+	service.legacyMastery = adapter
+	return service
 }
 
 func resolveSessionPhase(session ReviewSession) string {

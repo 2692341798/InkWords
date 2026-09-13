@@ -26,46 +26,35 @@ type ContinueTaskResultSnapshot struct {
 
 // Generator 定义单篇博客生成与润色的能力边界。
 type Generator interface {
-	GenerateBlogStreamWithProfile(ctx context.Context, userID uuid.UUID, sourceContent string, sourceType string, scenarioMode prompt.ScenarioMode, style string, profile prompt.PromptProfile, chunkChan chan<- string, errChan chan<- error)
+	GenerateBlogStreamWithProfile(ctx context.Context, workspaceID uuid.UUID, sourceContent string, sourceType string, scenarioMode prompt.ScenarioMode, style string, profile prompt.PromptProfile, chunkChan chan<- string, errChan chan<- error)
 	GeneratePolishDraftStream(ctx context.Context, title string, content string, chunkChan chan<- string, errChan chan<- error)
 	BuildGenerateSingleTaskResult(ctx context.Context, sourceType string, content string) (GenerateSingleResult, error)
 }
 
 // Decomposition 定义系列生成、续写、分析与扫描的能力边界。
 type Decomposition interface {
-	GenerateSeriesWithProfile(ctx context.Context, userID uuid.UUID, parentID uuid.UUID, seriesTitle string, outline []sharedblog.Chapter, sourceContent string, sourceType string, gitURL string, scenarioMode prompt.ScenarioMode, style string, profile prompt.PromptProfile, chunkChan chan<- string, errChan chan<- error)
-	ContinueGeneration(ctx context.Context, userID uuid.UUID, blogID uuid.UUID, chunkChan chan<- string, errChan chan<- error)
-	BuildContinueTaskResult(ctx context.Context, userID uuid.UUID, blogID uuid.UUID, appendedContent string) (ContinueTaskResultSnapshot, error)
+	GenerateSeriesWithProfile(ctx context.Context, workspaceID uuid.UUID, parentID uuid.UUID, seriesTitle string, outline []sharedblog.Chapter, sourceContent string, sourceType string, gitURL string, scenarioMode prompt.ScenarioMode, style string, profile prompt.PromptProfile, chunkChan chan<- string, errChan chan<- error)
+	ContinueGeneration(ctx context.Context, workspaceID uuid.UUID, blogID uuid.UUID, chunkChan chan<- string, errChan chan<- error)
+	BuildContinueTaskResult(ctx context.Context, workspaceID uuid.UUID, blogID uuid.UUID, appendedContent string) (ContinueTaskResultSnapshot, error)
 	TakeGenerateSeriesTaskResult(parentID uuid.UUID) ([]byte, error)
-	AnalyzeStream(ctx context.Context, userID uuid.UUID, gitURL string, selectedModules []string, scenarioMode prompt.ScenarioMode, progressChan chan<- string, errChan chan<- error)
-	AnalyzeFileStream(ctx context.Context, userID uuid.UUID, sourceContent string, scenarioMode prompt.ScenarioMode, progressChan chan<- string, errChan chan<- error)
+	AnalyzeStream(ctx context.Context, workspaceID uuid.UUID, gitURL string, selectedModules []string, scenarioMode prompt.ScenarioMode, progressChan chan<- string, errChan chan<- error)
+	AnalyzeFileStream(ctx context.Context, workspaceID uuid.UUID, sourceContent string, scenarioMode prompt.ScenarioMode, progressChan chan<- string, errChan chan<- error)
 	ScanProjectModulesWithProgress(ctx context.Context, gitURL string, progressChan chan<- string) ([]ModuleCard, error)
-}
-
-// QuotaChecker 定义用量配额检查的能力边界。
-type QuotaChecker interface {
-	CheckQuota(uid uuid.UUID) error
 }
 
 type Service struct {
 	generator     Generator
 	decomposition Decomposition
-	quotaChecker  QuotaChecker
 }
 
-func NewService(generator Generator, decomposition Decomposition, quotaChecker QuotaChecker) *Service {
+func NewService(generator Generator, decomposition Decomposition) *Service {
 	return &Service{
 		generator:     generator,
 		decomposition: decomposition,
-		quotaChecker:  quotaChecker,
 	}
 }
 
-func (s *Service) CheckQuota(uid uuid.UUID) error {
-	return s.quotaChecker.CheckQuota(uid)
-}
-
-func (s *Service) Generate(ctx context.Context, userID uuid.UUID, req GenerateRequest, chunkChan chan<- string, errChan chan<- error) {
+func (s *Service) Generate(ctx context.Context, workspaceID uuid.UUID, req GenerateRequest, chunkChan chan<- string, errChan chan<- error) {
 	style := req.ArticleStyle
 	if style == "" {
 		style = "general"
@@ -97,7 +86,7 @@ func (s *Service) Generate(ctx context.Context, userID uuid.UUID, req GenerateRe
 		}
 		s.decomposition.GenerateSeriesWithProfile(
 			ctx,
-			userID,
+			workspaceID,
 			parentID,
 			req.SeriesTitle,
 			outline,
@@ -115,7 +104,7 @@ func (s *Service) Generate(ctx context.Context, userID uuid.UUID, req GenerateRe
 
 	s.generator.GenerateBlogStreamWithProfile(
 		ctx,
-		userID,
+		workspaceID,
 		req.SourceContent,
 		req.SourceType,
 		scenarioMode,
@@ -141,12 +130,12 @@ func (s *Service) BuildGenerateSingleTaskResult(ctx context.Context, req Generat
 }
 
 // BuildContinueTaskResult 基于续写追加正文构造结构化任务结果。
-func (s *Service) BuildContinueTaskResult(ctx context.Context, userID uuid.UUID, blogID uuid.UUID, appendedContent string) ([]byte, error) {
+func (s *Service) BuildContinueTaskResult(ctx context.Context, workspaceID uuid.UUID, blogID uuid.UUID, appendedContent string) ([]byte, error) {
 	if s == nil || s.decomposition == nil {
 		return nil, errors.New("decomposition service is not configured")
 	}
 
-	snapshot, err := s.decomposition.BuildContinueTaskResult(ctx, userID, blogID, appendedContent)
+	snapshot, err := s.decomposition.BuildContinueTaskResult(ctx, workspaceID, blogID, appendedContent)
 	if err != nil {
 		return nil, err
 	}
@@ -181,21 +170,21 @@ func (s *Service) BuildGenerateSeriesTaskResult(ctx context.Context, req Generat
 	return s.decomposition.TakeGenerateSeriesTaskResult(parentID)
 }
 
-func (s *Service) Continue(bgCtx context.Context, userID uuid.UUID, blogID uuid.UUID, chunkChan chan<- string, errChan chan<- error) {
-	s.decomposition.ContinueGeneration(bgCtx, userID, blogID, chunkChan, errChan)
+func (s *Service) Continue(bgCtx context.Context, workspaceID uuid.UUID, blogID uuid.UUID, chunkChan chan<- string, errChan chan<- error) {
+	s.decomposition.ContinueGeneration(bgCtx, workspaceID, blogID, chunkChan, errChan)
 }
 
 func (s *Service) Polish(ctx context.Context, req PolishRequest, chunkChan chan<- string, errChan chan<- error) {
 	s.generator.GeneratePolishDraftStream(ctx, req.Title, req.Content, chunkChan, errChan)
 }
 
-func (s *Service) AnalyzeStream(bgCtx context.Context, userID uuid.UUID, req GenerateRequest, progressChan chan<- string, errChan chan<- error) {
+func (s *Service) AnalyzeStream(bgCtx context.Context, workspaceID uuid.UUID, req GenerateRequest, progressChan chan<- string, errChan chan<- error) {
 	scenarioMode := prompt.ScenarioMode(req.ScenarioMode)
 	if req.SourceType == "file" {
-		s.decomposition.AnalyzeFileStream(bgCtx, userID, req.SourceContent, scenarioMode, progressChan, errChan)
+		s.decomposition.AnalyzeFileStream(bgCtx, workspaceID, req.SourceContent, scenarioMode, progressChan, errChan)
 		return
 	}
-	s.decomposition.AnalyzeStream(bgCtx, userID, req.GitURL, req.SelectedModules, scenarioMode, progressChan, errChan)
+	s.decomposition.AnalyzeStream(bgCtx, workspaceID, req.GitURL, req.SelectedModules, scenarioMode, progressChan, errChan)
 }
 
 func (s *Service) ScanProjectModules(bgCtx context.Context, gitURL string, progressChan chan<- string) ([]ModuleCard, error) {

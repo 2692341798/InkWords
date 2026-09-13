@@ -3,42 +3,23 @@ package generation
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
-
-	"github.com/google/uuid"
-	"gorm.io/datatypes"
-	"gorm.io/gorm"
 
 	"inkwords-backend/shared/kernel/prompt"
 	llm "inkwords-backend/shared/platform/llm"
 )
 
-// userPromptSettingsRow 是 prompt 要求解析查询 user_prompt_settings 表所需的最小投影。
-type userPromptSettingsRow struct {
-	UserID    uuid.UUID      `gorm:"column:user_id"`
-	Overrides datatypes.JSON `gorm:"column:overrides"`
-}
-
-func (userPromptSettingsRow) TableName() string {
-	return "user_prompt_settings"
-}
-
 // PromptRequirements 为生成链路组装最终 prompt 写作要求。
-type PromptRequirements struct {
-	db *gorm.DB
-}
+type PromptRequirements struct{}
 
 // NewPromptRequirements 创建 PromptRequirements 实例。
-func NewPromptRequirements(db *gorm.DB) *PromptRequirements {
-	return &PromptRequirements{db: db}
+func NewPromptRequirements() *PromptRequirements {
+	return &PromptRequirements{}
 }
 
-// Resolve 统一合并场景层、风格层与用户覆盖后的最终 Prompt 要求。
+// Resolve 统一合并场景层与风格层的工作区默认 Prompt 要求。
 func (s *PromptRequirements) Resolve(
-	ctx context.Context,
-	userID uuid.UUID,
 	scenario prompt.ScenarioMode,
 	style prompt.ArticleStyle,
 ) (string, error) {
@@ -49,48 +30,19 @@ func (s *PromptRequirements) Resolve(
 		style = prompt.ArticleStyleGeneral
 	}
 
-	styleRequirements := prompt.DefaultStyleRequirements(scenario, style)
-	userStyleOverride := styleRequirements
-
-	var row userPromptSettingsRow
-	if err := s.db.WithContext(ctx).First(&row, "user_id = ?", userID).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return strings.TrimSpace(strings.Join([]string{
-				prompt.DefaultScenarioRequirements(scenario),
-				userStyleOverride,
-			}, "\n\n")), nil
-		}
-		return "", err
-	}
-
-	if len(row.Overrides) > 0 {
-		var overrides map[string]string
-		if err := json.Unmarshal(row.Overrides, &overrides); err == nil {
-			if v, ok := overrides[string(style)]; ok {
-				if v == "" {
-					userStyleOverride = styleRequirements
-				} else {
-					userStyleOverride = v
-				}
-			}
-		}
-	}
-
 	return strings.TrimSpace(strings.Join([]string{
 		prompt.DefaultScenarioRequirements(scenario),
-		userStyleOverride,
+		prompt.DefaultStyleRequirements(scenario, style),
 	}, "\n\n")), nil
 }
 
 // ResolveWithProfile 在基础 requirements 前追加 profile 级写作要求。
 func (s *PromptRequirements) ResolveWithProfile(
-	ctx context.Context,
-	userID uuid.UUID,
 	scenario prompt.ScenarioMode,
 	style prompt.ArticleStyle,
 	profile prompt.PromptProfile,
 ) (string, error) {
-	baseRequirements, err := s.Resolve(ctx, userID, scenario, style)
+	baseRequirements, err := s.Resolve(scenario, style)
 	if err != nil {
 		return "", err
 	}
@@ -185,7 +137,7 @@ func (r *PromptProfileResolver) ResolveForFile(
 
 func (r *PromptProfileResolver) generateClassifierJSON(ctx context.Context, messages []llm.Message) (string, error) {
 	if client, ok := r.llmClient.(jsonGeneratorWithOptions); ok {
-		payload, _, err := client.GenerateJSONWithOptions(ctx, profileResolverModel, messages, llm.LightweightChatOptions("", 512))
+		payload, _, err := client.GenerateJSONWithOptions(ctx, profileResolverModel, messages, llm.LightweightChatOptions(512))
 		return payload, err
 	}
 	return r.llmClient.GenerateJSON(ctx, profileResolverModel, messages)

@@ -1,5 +1,5 @@
 # Stage 1: Build the LLM streaming API and generation worker.
-FROM golang:1.25-alpine AS builder
+FROM golang:1.26-alpine AS builder
 
 WORKDIR /src
 
@@ -12,6 +12,7 @@ RUN go mod download
 
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o /out/llm-stream ./services/llm-stream/cmd
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o /out/textbook-recheck ./services/llm-stream/cmd/textbook-recheck
 
 # Stage 2: Runtime dependencies owned by llm-stream.
 FROM alpine:3.19
@@ -23,6 +24,7 @@ RUN apk add --no-cache ca-certificates git tzdata && \
     echo "Asia/Shanghai" > /etc/timezone
 
 COPY --from=builder /out/llm-stream ./llm-stream
+COPY --from=builder /out/textbook-recheck ./textbook-recheck
 
 EXPOSE 8080
 

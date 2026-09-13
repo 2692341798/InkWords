@@ -23,22 +23,29 @@ const (
 
 // JobTask is core-api's projection of the job_tasks table.
 type JobTask struct {
-	ID                         uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
-	TaskType                   string         `gorm:"type:varchar(32);not null;index" json:"task_type"`
-	TaskSubtype                string         `gorm:"type:varchar(64);not null;index" json:"task_subtype"`
-	Status                     JobTaskStatus  `gorm:"type:varchar(16);not null;index" json:"status"`
-	RequestedBy                uuid.UUID      `gorm:"type:uuid;not null;index" json:"requested_by"`
-	IdempotencyKey             string         `gorm:"type:varchar(255);index" json:"idempotency_key"`
-	PayloadJSON                datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'" json:"payload_json"`
-	ResultJSON                 datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'" json:"result_json"`
-	ErrorMessage               string         `gorm:"type:text" json:"error_message"`
-	RetryCount                 int            `gorm:"type:integer;not null;default:0" json:"retry_count"`
-	ResultPersistenceStartedAt *time.Time     `json:"result_persistence_started_at"`
-	ResultPersistedAt          *time.Time     `json:"result_persisted_at"`
-	StartedAt                  *time.Time     `json:"started_at"`
-	FinishedAt                 *time.Time     `json:"finished_at"`
-	CreatedAt                  time.Time      `json:"created_at"`
-	UpdatedAt                  time.Time      `json:"updated_at"`
+	VerificationArtifactID       *uuid.UUID     `gorm:"type:uuid" json:"-"`
+	VerificationAttempt          int            `gorm:"not null;default:0" json:"verification_attempt,omitempty"`
+	PreviousVerificationTaskID   *uuid.UUID     `gorm:"type:uuid" json:"previous_verification_task_id,omitempty"`
+	VerificationWorkerToken      *uuid.UUID     `gorm:"type:uuid" json:"-"`
+	VerificationWorkerReleasedAt *time.Time     `json:"verification_worker_released_at,omitempty"`
+	VerificationReleaseKind      string         `json:"verification_release_kind,omitempty"`
+	ID                           uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
+	TaskType                     string         `gorm:"type:varchar(32);not null;index" json:"task_type"`
+	TaskSubtype                  string         `gorm:"type:varchar(64);not null;index" json:"task_subtype"`
+	Status                       JobTaskStatus  `gorm:"type:varchar(16);not null;index" json:"status"`
+	WorkspaceID                  *uuid.UUID     `gorm:"type:uuid;index" json:"workspace_id,omitempty"`
+	TextbookChapterID            *uuid.UUID     `gorm:"type:uuid;index" json:"textbook_chapter_id,omitempty"`
+	IdempotencyKey               string         `gorm:"type:varchar(255);index" json:"idempotency_key"`
+	PayloadJSON                  datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'" json:"payload_json"`
+	ResultJSON                   datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'" json:"result_json"`
+	ErrorMessage                 string         `gorm:"type:text" json:"error_message"`
+	RetryCount                   int            `gorm:"type:integer;not null;default:0" json:"retry_count"`
+	ResultPersistenceStartedAt   *time.Time     `json:"result_persistence_started_at"`
+	ResultPersistedAt            *time.Time     `json:"result_persisted_at"`
+	StartedAt                    *time.Time     `json:"started_at"`
+	FinishedAt                   *time.Time     `json:"finished_at"`
+	CreatedAt                    time.Time      `json:"created_at"`
+	UpdatedAt                    time.Time      `json:"updated_at"`
 }
 
 func (JobTask) TableName() string {
@@ -69,7 +76,7 @@ func (JobTaskEvent) TableName() string {
 
 type blogRecord struct {
 	ID          uuid.UUID      `gorm:"type:uuid;primaryKey"`
-	UserID      uuid.UUID      `gorm:"type:uuid;index:idx_user_parent_chapter;not null"`
+	WorkspaceID uuid.UUID      `gorm:"type:uuid;not null;index:idx_blogs_workspace_parent_chapter"`
 	ParentID    *uuid.UUID     `gorm:"type:uuid;index:idx_user_parent_chapter"`
 	ChapterSort int            `gorm:"type:integer;index:idx_user_parent_chapter"`
 	Title       string         `gorm:"type:varchar(255);not null"`
@@ -87,19 +94,4 @@ type blogRecord struct {
 
 func (blogRecord) TableName() string {
 	return "blogs"
-}
-
-type userRecord struct {
-	ID         uuid.UUID `gorm:"type:uuid;primaryKey"`
-	Username   string    `gorm:"type:varchar(255);not null"`
-	Email      string    `gorm:"type:varchar(255);uniqueIndex;not null"`
-	TokensUsed int       `gorm:"type:integer;default:0"`
-	TokenLimit int       `gorm:"type:integer;default:1000000000"`
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
-	DeletedAt  gorm.DeletedAt `gorm:"index"`
-}
-
-func (userRecord) TableName() string {
-	return "users"
 }

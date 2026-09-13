@@ -27,7 +27,6 @@ type JobTask struct {
 	TaskType                   string         `gorm:"type:varchar(32);not null;index" json:"task_type"`
 	TaskSubtype                string         `gorm:"type:varchar(64);not null;index" json:"task_subtype"`
 	Status                     JobTaskStatus  `gorm:"type:varchar(16);not null;index" json:"status"`
-	RequestedBy                uuid.UUID      `gorm:"type:uuid;not null;index" json:"requested_by"`
 	IdempotencyKey             string         `gorm:"type:varchar(255);index" json:"idempotency_key"`
 	PayloadJSON                datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'" json:"payload_json"`
 	ResultJSON                 datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'" json:"result_json"`

@@ -59,7 +59,6 @@ func TestGenerateSeriesChapterUnderstandingRepairsMissingMustExplain(t *testing.
 		buildSeriesSharedPromptPrefix("KNN", "初学者", []sharedblog.Chapter{chapter}),
 		chapter,
 		"k=3 和 k=5 可能产生不同分类结果",
-		"series-test",
 	)
 
 	require.NoError(t, err)
@@ -79,7 +78,7 @@ func TestGenerateSeriesChapterDraftRepairsFalseCoverageGate(t *testing.T) {
 	}
 
 	result, _, err := h.service.generateSeriesChapterDraft(
-		context.Background(), "deepseek-v4-flash", "系列契约", input, understanding, "series-test",
+		context.Background(), "deepseek-v4-flash", "系列契约", input, understanding,
 	)
 
 	require.NoError(t, err)
@@ -100,7 +99,7 @@ func TestGenerateSeriesChapterDraftSalvagesUnexpectedEOF(t *testing.T) {
 	}
 
 	result, _, err := h.service.generateSeriesChapterDraft(
-		context.Background(), "deepseek-v4-flash", "系列契约", input, understanding, "series-test",
+		context.Background(), "deepseek-v4-flash", "系列契约", input, understanding,
 	)
 
 	require.NoError(t, err)

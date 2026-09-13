@@ -10,7 +10,7 @@ import (
 // GeneratedBlogPersistenceInput contains the persisted business facts produced
 // after LLM generation has completed.
 type GeneratedBlogPersistenceInput struct {
-	UserID     uuid.UUID
+	WorkspaceID uuid.UUID
 	Title      string
 	Content    string
 	SourceType string
@@ -26,21 +26,21 @@ type GeneratedBlogPersistence interface {
 
 // ContinueBlog is the minimal blog projection needed by the continue flow.
 type ContinueBlog struct {
-	ID      uuid.UUID
-	UserID  uuid.UUID
-	Content string
+	ID          uuid.UUID
+	WorkspaceID uuid.UUID
+	Content     string
 }
 
 // ContinuePersistence captures continue flow reads and final blog updates.
 type ContinuePersistence interface {
-	LoadContinueBlog(ctx context.Context, userID uuid.UUID, blogID uuid.UUID) (ContinueBlog, error)
+	LoadContinueBlog(ctx context.Context, workspaceID uuid.UUID, blogID uuid.UUID) (ContinueBlog, error)
 	SaveContinuedBlog(ctx context.Context, blog ContinueBlog, updatedContent string) error
 }
 
 // SeriesChapterPersistenceInput describes the persisted business facts for a
 // completed series chapter.
 type SeriesChapterPersistenceInput struct {
-	UserID     uuid.UUID
+	WorkspaceID uuid.UUID
 	ParentID   uuid.UUID
 	BlogID     uuid.UUID
 	Chapter    Chapter
@@ -53,7 +53,7 @@ type SeriesChapterPersistenceInput struct {
 // SeriesDraftPreflightInput describes the context needed to prepare series
 // parent/draft blogs before generation starts.
 type SeriesDraftPreflightInput struct {
-	UserID      uuid.UUID
+	WorkspaceID uuid.UUID
 	ParentID    uuid.UUID
 	ParentTitle string
 	SourceType  string
@@ -66,9 +66,9 @@ type SeriesDraftPreflightInput struct {
 type SeriesPersistence interface {
 	EnsureSeriesParentAndDrafts(ctx context.Context, input SeriesDraftPreflightInput) ([]Chapter, error)
 	SaveSeriesChapter(ctx context.Context, input SeriesChapterPersistenceInput) error
-	MarkSeriesChapterFailed(ctx context.Context, userID uuid.UUID, blogID uuid.UUID) error
-	SaveSeriesIntro(ctx context.Context, userID uuid.UUID, parentID uuid.UUID, content string) error
-	MarkSeriesIntroFailed(ctx context.Context, userID uuid.UUID, parentID uuid.UUID) error
-	LoadSeriesOldContent(ctx context.Context, userID uuid.UUID, blogID uuid.UUID) (string, error)
-	UpdateSkippedSeriesChapterMeta(ctx context.Context, userID uuid.UUID, blogID uuid.UUID, chapter Chapter) error
+	MarkSeriesChapterFailed(ctx context.Context, workspaceID uuid.UUID, blogID uuid.UUID) error
+	SaveSeriesIntro(ctx context.Context, workspaceID uuid.UUID, parentID uuid.UUID, content string) error
+	MarkSeriesIntroFailed(ctx context.Context, workspaceID uuid.UUID, parentID uuid.UUID) error
+	LoadSeriesOldContent(ctx context.Context, workspaceID uuid.UUID, blogID uuid.UUID) (string, error)
+	UpdateSkippedSeriesChapterMeta(ctx context.Context, workspaceID uuid.UUID, blogID uuid.UUID, chapter Chapter) error
 }

@@ -6,11 +6,9 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 )
 
 type projectService interface {
-	CheckQuota(uuid.UUID) error
 	ScanProjectModules(context.Context, string) ([]ModuleCard, error)
 	Analyze(context.Context, string, string) (OutlineResult, string, string, error)
 	Parse(io.Reader, string) (ParseResult, error)
@@ -24,27 +22,7 @@ func NewHandler(service projectService) *Handler {
 	return &Handler{service: service}
 }
 
-func (h *Handler) getUserID(c *gin.Context) (uuid.UUID, bool) {
-	if userID, exists := c.Get("user_id"); exists {
-		if uid, ok := userID.(uuid.UUID); ok {
-			return uid, true
-		}
-	}
-	return uuid.Nil, false
-}
-
 func (h *Handler) ScanGithubRepo(c *gin.Context) {
-	if userID, ok := h.getUserID(c); ok {
-		if err := h.service.CheckQuota(userID); err != nil {
-			c.JSON(http.StatusPaymentRequired, gin.H{
-				"code":    http.StatusPaymentRequired,
-				"message": err.Error(),
-				"data":    nil,
-			})
-			return
-		}
-	}
-
 	var req ScanRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -77,17 +55,6 @@ func (h *Handler) ScanGithubRepo(c *gin.Context) {
 }
 
 func (h *Handler) Analyze(c *gin.Context) {
-	if userID, ok := h.getUserID(c); ok {
-		if err := h.service.CheckQuota(userID); err != nil {
-			c.JSON(http.StatusPaymentRequired, gin.H{
-				"code":    http.StatusPaymentRequired,
-				"message": err.Error(),
-				"data":    nil,
-			})
-			return
-		}
-	}
-
 	var req AnalyzeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -128,17 +95,6 @@ func (h *Handler) Analyze(c *gin.Context) {
 }
 
 func (h *Handler) Parse(c *gin.Context) {
-	if userID, ok := h.getUserID(c); ok {
-		if err := h.service.CheckQuota(userID); err != nil {
-			c.JSON(http.StatusPaymentRequired, gin.H{
-				"code":    http.StatusPaymentRequired,
-				"message": err.Error(),
-				"data":    nil,
-			})
-			return
-		}
-	}
-
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{

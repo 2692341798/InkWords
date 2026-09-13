@@ -12,30 +12,39 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gin-gonic/gin"
-	amqp "github.com/rabbitmq/amqp091-go"
-	"github.com/joho/godotenv"
+	"inkwords-backend/services/core-api/app/textbookartifact"
+	"inkwords-backend/shared/platform/teachingartifact"
 
-	authdomain "inkwords-backend/services/core-api/domain/auth"
+	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
+	amqp "github.com/rabbitmq/amqp091-go"
+	"gorm.io/gorm"
+
+	"inkwords-backend/services/core-api/app/projectanalysis"
+	"inkwords-backend/services/core-api/app/textbookgeneration"
+	"inkwords-backend/services/core-api/app/textbookimport"
 	blogdomain "inkwords-backend/services/core-api/domain/blog"
 	projectdomain "inkwords-backend/services/core-api/domain/project"
 	coretask "inkwords-backend/services/core-api/domain/task"
-	userdomain "inkwords-backend/services/core-api/domain/user"
-	coreapiv1 "inkwords-backend/services/core-api/transport/http/v1"
-	"inkwords-backend/services/core-api/app/projectanalysis"
+	textbookdomain "inkwords-backend/services/core-api/domain/textbook"
 	coremq "inkwords-backend/services/core-api/infra/mq"
+	coreapiv1 "inkwords-backend/services/core-api/transport/http/v1"
 
-	streamdomain "inkwords-backend/services/llm-stream/domain/stream"
 	generationapp "inkwords-backend/services/llm-stream/app/generation"
+	streamdomain "inkwords-backend/services/llm-stream/domain/stream"
 	streamv1 "inkwords-backend/services/llm-stream/transport/http/v1"
 
+	reviewbootstrap "inkwords-backend/services/review-service/app/bootstrap"
+	masterydomain "inkwords-backend/services/review-service/domain/mastery"
 	reviewdomain "inkwords-backend/services/review-service/domain/review"
+	textbookpractice "inkwords-backend/services/review-service/infra/textbook"
 	reviewwiki "inkwords-backend/services/review-service/infra/wiki"
 	reviewroutes "inkwords-backend/services/review-service/transport/http/v1"
 
 	exportdomain "inkwords-backend/services/export-service/domain/export"
 	exportroutes "inkwords-backend/services/export-service/transport/http/v1"
 
+	crawldomain "inkwords-backend/services/parser-service/domain/crawl"
 	parserdomain "inkwords-backend/services/parser-service/domain/parse"
 	parserroutes "inkwords-backend/services/parser-service/transport/http/v1"
 
@@ -45,6 +54,7 @@ import (
 	"inkwords-backend/shared/platform/obsidian"
 	"inkwords-backend/shared/platform/parser"
 	"inkwords-backend/shared/platform/postgres"
+	"inkwords-backend/shared/platform/sourceartifact"
 )
 
 func init() {
@@ -64,13 +74,16 @@ func main() {
 		log.Fatalf("Core database initialization failed: %v", err)
 	}
 
+	var reviewDB *gorm.DB
 	if reviewDSN := os.Getenv("REVIEW_DATABASE_URL"); reviewDSN != "" && reviewDSN != dsn {
-		if _, err := postgres.InitReview(reviewDSN); err != nil {
+		reviewDB, err = postgres.InitReview(reviewDSN)
+		if err != nil {
 			log.Fatalf("Review database initialization failed: %v", err)
 		}
 	} else {
 		// Why: 聚合模式下复用核心数据库连接，同时 AutoMigrate 审核表。
-		if _, err := postgres.InitReview(dsn); err != nil {
+		reviewDB, err = postgres.InitReview(dsn)
+		if err != nil {
 			log.Fatalf("Review database initialization failed: %v", err)
 		}
 	}
@@ -93,14 +106,6 @@ func main() {
 		"db": httpx.NewGormReadinessCheck(coreDB),
 	}))
 
-	userRepo := userdomain.NewGormRepository(coreDB)
-	userDomainService := userdomain.NewService(userRepo)
-	userDomainHandler := userdomain.NewHandler(userDomainService)
-
-	authRepo := authdomain.NewGormRepository(coreDB)
-	authDomainService := authdomain.NewService(authRepo)
-	authDomainHandler := authdomain.NewHandler(authDomainService)
-
 	blogRepo := blogdomain.NewGormRepository(coreDB)
 	blogDomainService := blogdomain.NewService(blogRepo)
 	blogDomainHandler := blogdomain.NewHandler(blogDomainService)
@@ -115,12 +120,16 @@ func main() {
 		paService,
 		gitFetcher,
 		docParser,
-		userDomainService,
 	)
 	projectDomainHandler := projectdomain.NewHandler(projectDomainService)
 
+	textbookTarget, err := textbookgeneration.SampleGenerationTargetFromConfig(os.Getenv("TEXTBOOK_GENERATION_PROVIDER"), os.Getenv("TEXTBOOK_STANDARD_MODEL"))
+	if err != nil {
+		log.Fatalf("configure textbook sample target: %v", err)
+	}
+	textbookRepo := textbookdomain.NewGormRepository(coreDB, textbookTarget)
 	generationResultRepo := coretask.NewGormGenerationResultRepository(coreDB)
-	resultPersister := coretask.NewResultPersister(generationResultRepo, generationResultRepo)
+	resultPersister := coretask.NewResultPersister(generationResultRepo).WithTextbookSampleRepository(textbookRepo).WithTextbookSourceImportRepository(textbookRepo)
 
 	taskRepo := coretask.NewGormRepository(coreDB)
 	taskDomainService := coretask.NewService(taskRepo, taskPublisher, resultPersister)
@@ -128,39 +137,74 @@ func main() {
 		taskDomainService,
 		envOrDefault("EXPORT_ARTIFACTS_DIR", "/app/export-artifacts"),
 	)
+	textbookService := textbookdomain.NewService(textbookRepo)
+	textbookTaskCreator := textbookgeneration.NewService(textbookService, taskDomainService, textbookTarget)
+	sourceArtifacts := sourceartifact.NewStore(envOrDefault("TEXTBOOK_SOURCE_ARTIFACTS_DIR", "/app/source-artifacts"))
+	textbookHandler := textbookdomain.NewHandler(textbookService, textbookTaskCreator).WithSourceImportCreator(textbookimport.NewService(textbookService, taskDomainService, sourceArtifacts))
+	textbookTaskHandler := coreapiv1.NewTextbookTaskHandler(textbookgeneration.NewTaskAccessService(taskDomainService))
 
-	authMiddleware := httpx.AuthMiddleware()
+	workspaceMiddleware := httpx.LocalWorkspaceContext(postgres.NewLocalWorkspaceResolver(coreDB))
+	dependencyCatalog := textbookartifact.NewLocalDependencyCatalog(os.Getenv("TEXTBOOK_DEPENDENCY_CATALOG_FILE"), textbookRepo)
+	dependencyArtifacts := textbookartifact.NewService(teachingartifact.NewStore(envOrDefault("TEXTBOOK_TEACHING_ARTIFACTS_DIR", "/app/teaching-artifacts")).WithReadGroup(teachingartifact.ReaderGroupID), textbookRepo)
+	coreapiv1.RegisterDependencyProjectionRoutes(r, workspaceMiddleware, coreapiv1.NewDependencyProjectionHandler(dependencyCatalog, textbookartifact.NewDependencyProjectionService(textbookRepo, dependencyCatalog, dependencyArtifacts)))
 
-	coreapiv1.RegisterCoreRoutes(r, authMiddleware, coreapiv1.CoreHandlers{
-		AuthRegister:         authDomainHandler.Register,
-		AuthLogin:            authDomainHandler.Login,
-		AuthBindGithub:       authDomainHandler.BindGithub,
-		AuthGetCaptcha:       authDomainHandler.GetCaptcha,
-		AuthOAuthRedirect:    authDomainHandler.OAuthRedirect,
-		AuthOAuthCallback:    authDomainHandler.OAuthCallback,
-		UserProfile:          userDomainHandler.GetProfile,
-		UserUpdateProfile:    userDomainHandler.UpdateProfile,
-		UserUploadAvatar:     userDomainHandler.UploadAvatar,
-		UserStats:            userDomainHandler.GetUserStats,
-		UserGetPromptSetting: userDomainHandler.GetPromptSettings,
-		UserPutPromptSetting: userDomainHandler.UpdatePromptSettings,
-		BlogList:             blogDomainHandler.GetUserBlogs,
-		BlogCreateDraft:      blogDomainHandler.CreateDraftBlog,
-		BlogBatchDelete:      blogDomainHandler.BatchDeleteBlogs,
-		BlogUpdate:           blogDomainHandler.UpdateBlog,
-		ProjectScan:          projectDomainHandler.ScanGithubRepo,
-		ProjectAnalyze:       projectDomainHandler.Analyze,
+	coreapiv1.RegisterBlogRoutes(r, workspaceMiddleware, coreapiv1.BlogHandlers{
+		BlogList:        blogDomainHandler.GetUserBlogs,
+		BlogCreateDraft: blogDomainHandler.CreateDraftBlog,
+		BlogBatchDelete: blogDomainHandler.BatchDeleteBlogs,
+		BlogUpdate:      blogDomainHandler.UpdateBlog,
+	})
+	coreapiv1.RegisterProjectRoutes(r, workspaceMiddleware, coreapiv1.ProjectHandlers{
+		ProjectScan:    projectDomainHandler.ScanGithubRepo,
+		ProjectAnalyze: projectDomainHandler.Analyze,
+	})
+	coreapiv1.RegisterTaskRoutes(r, workspaceMiddleware, coreapiv1.TaskHandlers{
 		TaskCreateGeneration: taskDomainHandler.CreateGenerationTask,
 		TaskCreateParse:      taskDomainHandler.CreateParseTask,
 		TaskCreateExport:     taskDomainHandler.CreateExportTask,
 		TaskGet:              taskDomainHandler.GetTask,
+		TaskRetry:            taskDomainHandler.RetryGenerationTask,
 		TaskCancel:           taskDomainHandler.CancelTask,
 		TaskStream:           taskDomainHandler.StreamTask,
 		TaskDownload:         taskDomainHandler.DownloadTask,
 	})
+	coreapiv1.RegisterTextbookRoutes(r, workspaceMiddleware, coreapiv1.TextbookHandlers{
+		TextbookGetTask:                      textbookTaskHandler.GetTask,
+		TextbookRetryTask:                    textbookTaskHandler.RetryTask,
+		TextbookCreateProject:                textbookHandler.CreateProject,
+		TextbookListProjects:                 textbookHandler.ListProjects,
+		TextbookGetProject:                   textbookHandler.GetProject,
+		TextbookGetProjectWorkspace:          textbookHandler.GetProjectWorkspace,
+		TextbookGetProjectProgress:           textbookHandler.GetProjectProgress,
+		TextbookCreateBookBuild:              textbookHandler.CreateBookBuild,
+		TextbookListSourceLibrary:            textbookHandler.ListSourceLibrary,
+		TextbookListSourceEvidence:           textbookHandler.ListSourceEvidence,
+		TextbookRetrieveSourceEvidence:       textbookHandler.RetrieveSourceEvidence,
+		TextbookGetChapterWorkspace:          textbookHandler.GetChapterWorkspace,
+		TextbookGetApprovedProjections:       textbookHandler.GetApprovedChapterProjections,
+		TextbookAddSource:                    textbookHandler.AddSource,
+		TextbookLoadGinFixture:               textbookHandler.LoadGinFixture,
+		TextbookCreateSourceImport:           textbookHandler.CreateSourceImport,
+		TextbookCreateOfficialWebImport:      textbookHandler.CreateOfficialWebImport,
+		TextbookCreateChapter:                textbookHandler.CreateChapter,
+		TextbookCreateBookContract:           textbookHandler.CreateBookContract,
+		TextbookCreateStyleSheet:             textbookHandler.CreateStyleSheet,
+		TextbookCreateBlueprint:              textbookHandler.CreateBlueprint,
+		TextbookApproveBookContract:          textbookHandler.ApproveBookContract,
+		TextbookApproveStyleSheet:            textbookHandler.ApproveStyleSheet,
+		TextbookApproveBlueprint:             textbookHandler.ApproveBlueprint,
+		TextbookAcquireLock:                  textbookHandler.AcquireLock,
+		TextbookAppendRevision:               textbookHandler.AppendRevision,
+		TextbookApplyCandidate:               textbookHandler.ApplyCandidate,
+		TextbookRejectCandidate:              textbookHandler.RejectCandidate,
+		TextbookGetSampleGenerationPreflight: textbookHandler.GetSampleGenerationPreflight,
+		TextbookGenerateSample:               textbookHandler.GenerateSample,
+		TextbookCreateArtifactVerification:   textbookHandler.CreateArtifactVerification,
+		TextbookGetArtifactVerification:      textbookHandler.GetArtifactVerification,
+		TextbookUploadVisualAsset:            textbookHandler.UploadVisualAsset,
+	})
 
-	quotaService := generationapp.NewQuotaService(coreDB)
-	promptReqService := generationapp.NewPromptRequirements(coreDB)
+	promptReqService := generationapp.NewPromptRequirements()
 	generatorService := generationapp.NewGeneratorServiceWithDB(
 		coreDB,
 		promptReqService,
@@ -171,10 +215,10 @@ func main() {
 		streamdomain.NewSeriesPersistence(coreDB),
 		streamdomain.NewContinuePersistence(coreDB),
 	)
-	streamDomainService := streamdomain.NewService(generatorService, decompositionService, quotaService)
+	streamDomainService := streamdomain.NewService(generatorService, decompositionService)
 	streamDomainHandler := streamdomain.NewHandler(streamDomainService, streamdomain.NewGormBlogReadable(coreDB))
 
-	streamv1.RegisterStreamRoutes(r, authMiddleware, streamv1.StreamHandlers{
+	streamv1.RegisterStreamRoutes(r, workspaceMiddleware, streamv1.StreamHandlers{
 		ContinueBlog: streamDomainHandler.ContinueBlogStreamHandler,
 		PolishBlog:   streamDomainHandler.PolishBlogStreamHandler,
 		Scan:         streamDomainHandler.ScanStreamHandler,
@@ -193,7 +237,22 @@ func main() {
 	}
 	reviewDomainService := reviewdomain.NewService(reviewRepo, reviewNoteSource, reviewAIFeedback)
 	reviewDomainHandler := reviewdomain.NewHandler(reviewDomainService)
-	reviewroutes.RegisterReviewRoutes(r, authMiddleware, reviewDomainHandler)
+	reviewroutes.RegisterReviewRoutes(r, workspaceMiddleware, reviewDomainHandler)
+	masteryStore, err := masterydomain.NewGormStore(reviewDB)
+	if err != nil {
+		log.Fatalf("Mastery storage initialization failed: %v", err)
+	}
+	practiceSource, err := textbookpractice.NewClient(envOrDefault("CORE_API_URL", "http://127.0.0.1:8080"))
+	if err != nil {
+		log.Fatalf("Mastery practice source initialization failed: %v", err)
+	}
+	masteryService := masterydomain.NewService(masteryStore).WithPracticeSource(practiceSource)
+	reviewroutes.RegisterMasteryRoutes(r, workspaceMiddleware, masterydomain.NewHandler(masteryService))
+	assessments, err := reviewbootstrap.BuildAssessmentService(reviewDB, masteryService)
+	if err != nil {
+		log.Fatalf("Failed to initialize mastery assessments: %v", err)
+	}
+	reviewroutes.RegisterAssessmentRoutes(r, workspaceMiddleware, assessments)
 
 	exportRepo := exportdomain.NewGormRepository(coreDB)
 	exportDomainService := exportdomain.NewService(
@@ -204,14 +263,14 @@ func main() {
 		envOrDefault("OBSIDIAN_WIKI_DIR", "wiki"),
 	)
 	exportDomainHandler := exportdomain.NewHandler(exportDomainService)
-	exportroutes.RegisterExportRoutes(r, authMiddleware, exportDomainHandler)
+	exportroutes.RegisterExportRoutes(r, workspaceMiddleware, exportDomainHandler)
 
-	parserQuotaChecker := parserdomain.NewGormQuotaChecker(coreDB)
 	parserDocParser := parser.NewDocParser()
 	parserArchiveParser := parser.NewArchiveParser(parserDocParser)
 	parserDomainService := parserdomain.NewService(parserDocParser, parserArchiveParser)
-	parserDomainHandler := parserdomain.NewHandler(parserDomainService, parserQuotaChecker)
-	parserroutes.RegisterParserRoutes(r, authMiddleware, parserDomainHandler)
+	parserDomainHandler := parserdomain.NewHandler(parserDomainService)
+	parserCrawlHandler := crawldomain.NewHandler(crawldomain.NewService(crawldomain.NewDefaultHTTPFetcher()))
+	parserroutes.RegisterParserRoutes(r, workspaceMiddleware, parserDomainHandler, parserCrawlHandler)
 
 	server := httpx.NewServer(r)
 	signalContext, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

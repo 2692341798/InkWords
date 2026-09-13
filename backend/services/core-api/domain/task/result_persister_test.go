@@ -17,18 +17,27 @@ func (r *fakeBlogRepository) PersistGenerationResult(context.Context, uuid.UUID,
 	return nil
 }
 
-type fakeUsageRepository struct {
-	accumulated bool
+type fakeTextbookSampleRepository struct {
+	persisted bool
 }
 
-func (r *fakeUsageRepository) AccumulateTokens(context.Context, uuid.UUID, map[string]any) error {
-	r.accumulated = true
+type fakeTextbookSourceImportRepository struct {
+	persisted bool
+}
+
+func (r *fakeTextbookSampleRepository) PersistTextbookSampleResult(context.Context, uuid.UUID, map[string]any) error {
+	r.persisted = true
+	return nil
+}
+
+func (r *fakeTextbookSourceImportRepository) PersistTextbookSourceImportResult(context.Context, uuid.UUID, map[string]any) error {
+	r.persisted = true
 	return nil
 }
 
 func TestResultPersister_PersistsGenerationResultToBlogRepository(t *testing.T) {
 	repo := &fakeBlogRepository{}
-	persister := NewResultPersister(repo, nil)
+	persister := NewResultPersister(repo)
 
 	err := persister.PersistGenerationResult(context.Background(), uuid.New(), map[string]any{"content": "# 内容"})
 	require.NoError(t, err)
@@ -37,8 +46,7 @@ func TestResultPersister_PersistsGenerationResultToBlogRepository(t *testing.T) 
 
 func TestResultPersister_PersistsSingleGenerationResult(t *testing.T) {
 	repo := &fakeBlogRepository{}
-	usage := &fakeUsageRepository{}
-	persister := NewResultPersister(repo, usage)
+	persister := NewResultPersister(repo)
 
 	taskID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	result := map[string]any{
@@ -62,5 +70,32 @@ func TestResultPersister_PersistsSingleGenerationResult(t *testing.T) {
 
 	require.NoError(t, persister.PersistGenerationResult(context.Background(), taskID, result))
 	require.True(t, repo.persisted)
-	require.True(t, usage.accumulated)
+}
+
+func TestResultPersisterRoutesTextbookSamplesAwayFromLegacyBlogWrites(t *testing.T) {
+	blog := &fakeBlogRepository{}
+	textbook := &fakeTextbookSampleRepository{}
+	persister := NewResultPersister(blog).WithTextbookSampleRepository(textbook)
+
+	require.NoError(t, persister.PersistGenerationResult(context.Background(), uuid.New(), map[string]any{"task_subtype": "textbook_sample_generate"}))
+	require.True(t, textbook.persisted)
+	require.False(t, blog.persisted)
+}
+
+func TestResultPersisterRoutesTypedSourceImportAwayFromLegacyBlogWrites(t *testing.T) {
+	blog := &fakeBlogRepository{}
+	imports := &fakeTextbookSourceImportRepository{}
+	persister := NewResultPersister(blog).WithTextbookSourceImportRepository(imports)
+
+	require.NoError(t, persister.PersistParseResult(context.Background(), uuid.New(), map[string]any{"task_subtype": "textbook_source_import"}))
+	require.True(t, imports.persisted)
+	require.False(t, blog.persisted)
+}
+
+func TestResultPersisterRoutesOfficialWebImportToTheCoreOwnedSourcePersister(t *testing.T) {
+	imports := &fakeTextbookSourceImportRepository{}
+	persister := NewResultPersister(nil).WithTextbookSourceImportRepository(imports)
+
+	require.NoError(t, persister.PersistParseResult(context.Background(), uuid.New(), map[string]any{"task_subtype": "textbook_official_web_import"}))
+	require.True(t, imports.persisted)
 }

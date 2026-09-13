@@ -10,18 +10,18 @@ import (
 
 	"github.com/google/uuid"
 
-	llm "inkwords-backend/shared/platform/llm"
 	streamdomain "inkwords-backend/services/llm-stream/domain/stream"
+	llm "inkwords-backend/shared/platform/llm"
 )
 
 // ContinueGeneration 加载已有博客并通过 LLM 流式续写，将新内容推送到 chunkChan。
 //
 //nolint:gocyclo
-func (s *DecompositionService) ContinueGeneration(ctx context.Context, userID uuid.UUID, blogID uuid.UUID, chunkChan chan<- string, errChan chan<- error) {
+func (s *DecompositionService) ContinueGeneration(ctx context.Context, workspaceID uuid.UUID, blogID uuid.UUID, chunkChan chan<- string, errChan chan<- error) {
 	defer close(chunkChan)
 	defer close(errChan)
 
-	blog, err := s.continuePersistence.LoadContinueBlog(ctx, userID, blogID)
+	blog, err := s.continuePersistence.LoadContinueBlog(ctx, workspaceID, blogID)
 	if err != nil {
 		errChan <- fmt.Errorf("blog not found: %w", err)
 		return
@@ -73,7 +73,6 @@ func (s *DecompositionService) ContinueGeneration(ctx context.Context, userID uu
 			}()
 
 			options := llm.DefaultChatOptions()
-			options.UserID = fmt.Sprintf("continue-%s", blogID.String())
 			finishReason, usage, err := s.llmClient.GenerateStreamWithOptions(streamCtx, llmModel, currentMessages, tempChunkChan, options)
 			wg.Wait()
 
@@ -154,11 +153,11 @@ func (s *DecompositionService) ContinueGeneration(ctx context.Context, userID uu
 // BuildContinueTaskResult 为 task_only 续写构造结构化任务结果快照。
 func (s *DecompositionService) BuildContinueTaskResult(
 	ctx context.Context,
-	userID uuid.UUID,
+	workspaceID uuid.UUID,
 	blogID uuid.UUID,
 	appendedContent string,
 ) (streamdomain.ContinueTaskResultSnapshot, error) {
-	blog, err := s.continuePersistence.LoadContinueBlog(ctx, userID, blogID)
+	blog, err := s.continuePersistence.LoadContinueBlog(ctx, workspaceID, blogID)
 	if err != nil {
 		return streamdomain.ContinueTaskResultSnapshot{}, fmt.Errorf("load continue blog for task result: %w", err)
 	}

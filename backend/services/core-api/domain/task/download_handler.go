@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"inkwords-backend/shared/kernel/httpx"
 )
 
 // DownloadTask 根据任务结果中的文件令牌提供受控下载，并在成功发送后删除落地文件。
@@ -17,13 +18,13 @@ func (h *Handler) DownloadTask(c *gin.Context) {
 	if !ok {
 		return
 	}
-	userID, ok := h.getUserID(c)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+	workspaceID, err := httpx.GetLocalWorkspaceID(c)
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "local workspace unavailable"})
 		return
 	}
 
-	task, err := h.service.GetTask(c.Request.Context(), taskID, userID)
+	task, err := h.service.GetTask(c.Request.Context(), taskID, workspaceID)
 	if err != nil {
 		h.writeServiceError(c, err)
 		return

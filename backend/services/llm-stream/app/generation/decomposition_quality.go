@@ -79,7 +79,6 @@ func buildSeriesSharedPromptPrefix(seriesTitle string, readerProfile string, out
 func (s *DecompositionService) repairSeriesJSONOutput(
 	ctx context.Context,
 	llmModel string,
-	userID string,
 	seriesPrefix string,
 	stageName string,
 	raw string,
@@ -99,7 +98,7 @@ func (s *DecompositionService) repairSeriesJSONOutput(
 		},
 	}
 
-	return s.llmClient.GenerateJSONWithOptions(ctx, llmModel, messages, llm.LightweightChatOptions(userID, 1800))
+	return s.llmClient.GenerateJSONWithOptions(ctx, llmModel, messages, llm.LightweightChatOptions(1800))
 }
 
 func (s *DecompositionService) generateSeriesChapterUnderstanding(
@@ -108,7 +107,6 @@ func (s *DecompositionService) generateSeriesChapterUnderstanding(
 	seriesPrefix string,
 	chapter sharedblog.Chapter,
 	chapterSourceContent string,
-	userID string,
 ) (seriesChapterUnderstanding, seriesChapterUsage, error) {
 	messages := []llm.Message{
 		{Role: "system", Content: seriesPrefix + "\n当前阶段：章节理解"},
@@ -124,7 +122,7 @@ func (s *DecompositionService) generateSeriesChapterUnderstanding(
 		},
 	}
 
-	raw, usage, err := s.llmClient.GenerateJSONWithOptions(ctx, llmModel, messages, llm.LightweightChatOptions(userID, 1200))
+	raw, usage, err := s.llmClient.GenerateJSONWithOptions(ctx, llmModel, messages, llm.LightweightChatOptions(1200))
 	if err != nil {
 		return seriesChapterUnderstanding{}, seriesChapterUsage{}, err
 	}
@@ -134,7 +132,7 @@ func (s *DecompositionService) generateSeriesChapterUnderstanding(
 		return result, usageFromCompletionUsage(usage), nil
 	}
 
-	repairedRaw, repairUsage, err := s.repairSeriesJSONOutput(ctx, llmModel, userID, seriesPrefix, "章节理解", raw, parseErr)
+	repairedRaw, repairUsage, err := s.repairSeriesJSONOutput(ctx, llmModel, seriesPrefix, "章节理解", raw, parseErr)
 	totalUsage := usageFromCompletionUsage(usage).add(usageFromCompletionUsage(repairUsage))
 	if err != nil {
 		return seriesChapterUnderstanding{}, totalUsage, parseErr
@@ -163,7 +161,6 @@ func (s *DecompositionService) generateSeriesChapterDraft(
 	seriesPrefix string,
 	input seriesQualityPipelineInput,
 	understanding seriesChapterUnderstanding,
-	userID string,
 ) (seriesChapterDraft, seriesChapterUsage, error) {
 	messages := []llm.Message{
 		{Role: "system", Content: seriesPrefix + "\n当前阶段：章节写作"},
@@ -171,7 +168,6 @@ func (s *DecompositionService) generateSeriesChapterDraft(
 	}
 
 	options := llm.DefaultChatOptions()
-	options.UserID = userID
 	options.MaxTokens = 5000
 	raw, usage, err := s.llmClient.GenerateJSONWithOptions(ctx, llmModel, messages, options)
 	if err != nil {
@@ -183,7 +179,7 @@ func (s *DecompositionService) generateSeriesChapterDraft(
 		return result, usageFromCompletionUsage(usage), nil
 	}
 
-	repairedRaw, repairUsage, err := s.repairSeriesJSONOutput(ctx, llmModel, userID, seriesPrefix, "章节草稿", raw, parseErr)
+	repairedRaw, repairUsage, err := s.repairSeriesJSONOutput(ctx, llmModel, seriesPrefix, "章节草稿", raw, parseErr)
 	totalUsage := usageFromCompletionUsage(usage).add(usageFromCompletionUsage(repairUsage))
 	if err != nil {
 		return seriesChapterDraft{}, totalUsage, parseErr
@@ -357,14 +353,12 @@ func (s *DecompositionService) reviewSeriesChapterDraft(
 	chapter sharedblog.Chapter,
 	understanding seriesChapterUnderstanding,
 	draft seriesChapterDraft,
-	userID string,
 ) (seriesChapterReview, seriesChapterUsage, error) {
 	messages := []llm.Message{
 		{Role: "system", Content: seriesPrefix + "\n当前阶段：章节审稿"},
 		{Role: "user", Content: buildSeriesReviewPrompt(chapter, understanding, draft)},
 	}
 	options := llm.DefaultChatOptions()
-	options.UserID = userID
 	options.MaxTokens = 1800
 	raw, usage, err := s.llmClient.GenerateJSONWithOptions(ctx, llmModel, messages, options)
 	if err != nil {
@@ -376,7 +370,7 @@ func (s *DecompositionService) reviewSeriesChapterDraft(
 		return result, usageFromCompletionUsage(usage), nil
 	}
 
-	repairedRaw, repairUsage, err := s.repairSeriesJSONOutput(ctx, llmModel, userID, seriesPrefix, "章节审稿", raw, parseErr)
+	repairedRaw, repairUsage, err := s.repairSeriesJSONOutput(ctx, llmModel, seriesPrefix, "章节审稿", raw, parseErr)
 	totalUsage := usageFromCompletionUsage(usage).add(usageFromCompletionUsage(repairUsage))
 	if err != nil {
 		return seriesChapterReview{}, totalUsage, parseErr
@@ -422,14 +416,12 @@ func (s *DecompositionService) repairSeriesChapterDraftForReview(
 	ctx context.Context,
 	llmModel string,
 	seriesPrefix string,
-	userID string,
 	input seriesQualityPipelineInput,
 	understanding seriesChapterUnderstanding,
 	draft seriesChapterDraft,
 	review seriesChapterReview,
 ) (seriesChapterDraft, seriesChapterUsage, error) {
 	options := llm.DefaultChatOptions()
-	options.UserID = userID
 	options.MaxTokens = 5000
 	raw, usage, err := s.llmClient.GenerateJSONWithOptions(ctx, llmModel, []llm.Message{
 		{Role: "system", Content: seriesPrefix + "\n当前阶段：章节草稿定向修复"},
@@ -444,7 +436,7 @@ func (s *DecompositionService) repairSeriesChapterDraftForReview(
 		return repaired, usageFromCompletionUsage(usage), nil
 	}
 
-	repairedRaw, repairUsage, err := s.repairSeriesJSONOutput(ctx, llmModel, userID, seriesPrefix, "章节草稿修复", raw, parseErr)
+	repairedRaw, repairUsage, err := s.repairSeriesJSONOutput(ctx, llmModel, seriesPrefix, "章节草稿修复", raw, parseErr)
 	totalUsage := usageFromCompletionUsage(usage).add(usageFromCompletionUsage(repairUsage))
 	if err != nil {
 		return seriesChapterDraft{}, totalUsage, parseErr
@@ -514,7 +506,6 @@ func (s *DecompositionService) finalizeSeriesChapterDraft(
 
 	go func() {
 		options := llm.DefaultChatOptions()
-		options.UserID = input.UserID
 		_, usage, err := s.llmClient.GenerateStreamWithOptions(ctx, llmModel, []llm.Message{
 			{Role: "system", Content: seriesPrefix + "\n当前阶段：定向补强与轻统稿"},
 			{Role: "user", Content: buildSeriesFinalizePrompt(input, understanding, draft, review)},
@@ -571,21 +562,21 @@ func (s *DecompositionService) runSeriesChapterQualityPipeline(
 	var totalUsage seriesChapterUsage
 
 	sendQualityProgress(input.ProgressChan, input.Chapter.Sort, input.Chapter.Title, "understanding")
-	understanding, understandingUsage, err := s.generateSeriesChapterUnderstanding(ctx, understandingModel, seriesPrefix, input.Chapter, input.ChapterSourceContent, input.UserID)
+	understanding, understandingUsage, err := s.generateSeriesChapterUnderstanding(ctx, understandingModel, seriesPrefix, input.Chapter, input.ChapterSourceContent)
 	if err != nil {
 		return seriesChapterFinal{}, err
 	}
 	totalUsage = totalUsage.add(understandingUsage)
 
 	sendQualityProgress(input.ProgressChan, input.Chapter.Sort, input.Chapter.Title, "drafting")
-	draft, draftUsage, err := s.generateSeriesChapterDraft(ctx, draftModel, seriesPrefix, input, understanding, input.UserID)
+	draft, draftUsage, err := s.generateSeriesChapterDraft(ctx, draftModel, seriesPrefix, input, understanding)
 	if err != nil {
 		return seriesChapterFinal{}, err
 	}
 	totalUsage = totalUsage.add(draftUsage)
 
 	sendQualityProgress(input.ProgressChan, input.Chapter.Sort, input.Chapter.Title, "reviewing")
-	review, reviewUsage, err := s.reviewSeriesChapterDraft(ctx, reviewModel, seriesPrefix, input.Chapter, understanding, draft, input.UserID)
+	review, reviewUsage, err := s.reviewSeriesChapterDraft(ctx, reviewModel, seriesPrefix, input.Chapter, understanding, draft)
 	if err != nil {
 		return seriesChapterFinal{}, err
 	}
@@ -593,7 +584,7 @@ func (s *DecompositionService) runSeriesChapterQualityPipeline(
 
 	if scorecardBelowThreshold(review.Scorecard, 4) {
 		sendQualityProgress(input.ProgressChan, input.Chapter.Sort, input.Chapter.Title, "repairing")
-		repairedDraft, repairUsage, err := s.repairSeriesChapterDraftForReview(ctx, draftModel, seriesPrefix, input.UserID, input, understanding, draft, review)
+		repairedDraft, repairUsage, err := s.repairSeriesChapterDraftForReview(ctx, draftModel, seriesPrefix, input, understanding, draft, review)
 		if err != nil {
 			return seriesChapterFinal{}, err
 		}

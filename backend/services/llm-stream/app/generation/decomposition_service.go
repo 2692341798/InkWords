@@ -171,7 +171,7 @@ func (s *DecompositionService) ScanProjectModulesWithProgress(ctx context.Contex
 // AnalyzeStream 处理 Git 仓库的完整分析流水线。
 func (s *DecompositionService) AnalyzeStream(
 	ctx context.Context,
-	userID uuid.UUID,
+	workspaceID uuid.UUID,
 	gitURL string,
 	selectedModules []string,
 	scenarioMode prompt.ScenarioMode,
@@ -185,7 +185,7 @@ func (s *DecompositionService) AnalyzeStream(
 		scenarioMode = prompt.ScenarioModeBeginnerWalkthrough
 	}
 
-	_ = userID
+	_ = workspaceID
 	if strings.TrimSpace(gitURL) == "" {
 		errChan <- fmt.Errorf("git url is required")
 		return
@@ -274,7 +274,7 @@ func (s *DecompositionService) AnalyzeStream(
 // AnalyzeFileStream 为文件源内容执行分析流水线。
 func (s *DecompositionService) AnalyzeFileStream(
 	ctx context.Context,
-	userID uuid.UUID,
+	workspaceID uuid.UUID,
 	sourceContent string,
 	scenarioMode prompt.ScenarioMode,
 	progressChan chan<- string,
@@ -286,6 +286,7 @@ func (s *DecompositionService) AnalyzeFileStream(
 	if !scenarioMode.IsValid() {
 		scenarioMode = prompt.ScenarioModeEbookInterpretation
 	}
+	_ = workspaceID
 
 	if strings.TrimSpace(sourceContent) == "" {
 		errChan <- fmt.Errorf("source content is empty")

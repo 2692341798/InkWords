@@ -39,7 +39,7 @@ func (r *fakeRepository) ListTopLevelBlogs(ctx context.Context, userID uuid.UUID
 
 	var parents []Blog
 	for _, b := range r.blogs {
-		if b.UserID == userID && b.ParentID == nil {
+		if b.WorkspaceID == userID && b.ParentID == nil {
 			parents = append(parents, b)
 		}
 	}
@@ -73,7 +73,7 @@ func (r *fakeRepository) ListChildrenByParentIDs(ctx context.Context, userID uui
 
 	var children []Blog
 	for _, b := range r.blogs {
-		if b.UserID == userID && b.ParentID != nil && parentSet[*b.ParentID] {
+		if b.WorkspaceID == userID && b.ParentID != nil && parentSet[*b.ParentID] {
 			children = append(children, b)
 		}
 	}
@@ -85,7 +85,7 @@ func (r *fakeRepository) GetByID(ctx context.Context, userID uuid.UUID, blogID u
 	defer r.mu.RUnlock()
 
 	b, ok := r.blogs[blogID]
-	if !ok || b.UserID != userID {
+	if !ok || b.WorkspaceID != userID {
 		return nil, ErrBlogNotFound
 	}
 	return &b, nil
@@ -103,13 +103,13 @@ func (r *fakeRepository) GetSeriesBlogs(ctx context.Context, userID uuid.UUID, p
 			break
 		}
 	}
-	if parent == nil || parent.UserID != userID {
+	if parent == nil || parent.WorkspaceID != userID {
 		return nil, ErrBlogNotFound
 	}
 
 	result := []Blog{*parent}
 	for _, b := range r.blogs {
-		if b.ParentID != nil && *b.ParentID == parentID && b.UserID == userID {
+		if b.ParentID != nil && *b.ParentID == parentID && b.WorkspaceID == userID {
 			result = append(result, b)
 		}
 	}
@@ -141,7 +141,7 @@ func (r *fakeRepository) Update(ctx context.Context, userID uuid.UUID, blogID uu
 	defer r.mu.Unlock()
 
 	b, ok := r.blogs[blogID]
-	if !ok || b.UserID != userID {
+	if !ok || b.WorkspaceID != userID {
 		return 0, ErrBlogNotFound
 	}
 
@@ -182,7 +182,7 @@ func (r *fakeRepository) BatchDelete(ctx context.Context, userID uuid.UUID, blog
 	}
 
 	for id, b := range r.blogs {
-		if b.UserID != userID {
+		if b.WorkspaceID != userID {
 			continue
 		}
 		if idSet[id] || (b.ParentID != nil && idSet[*b.ParentID]) {
@@ -224,7 +224,7 @@ func TestGetUserBlogs_OwnershipFiltering(t *testing.T) {
 
 	blogA1 := Blog{
 		ID:          uuid.MustParse("a0000001-0000-0000-0000-000000000001"),
-		UserID:      userA,
+		WorkspaceID: userA,
 		Title:       "User A Blog 1",
 		Content:     "Content A1",
 		SourceType:  "manual",
@@ -234,7 +234,7 @@ func TestGetUserBlogs_OwnershipFiltering(t *testing.T) {
 	}
 	blogA2 := Blog{
 		ID:          uuid.MustParse("a0000002-0000-0000-0000-000000000002"),
-		UserID:      userA,
+		WorkspaceID: userA,
 		Title:       "User A Blog 2",
 		Content:     "Content A2",
 		SourceType:  "manual",
@@ -244,7 +244,7 @@ func TestGetUserBlogs_OwnershipFiltering(t *testing.T) {
 	}
 	blogB1 := Blog{
 		ID:          uuid.MustParse("b0000001-0000-0000-0000-000000000001"),
-		UserID:      userB,
+		WorkspaceID: userB,
 		Title:       "User B Blog 1",
 		Content:     "Content B1",
 		SourceType:  "manual",
@@ -264,7 +264,7 @@ func TestGetUserBlogs_OwnershipFiltering(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, results, 2)
 		for _, node := range results {
-			assert.Equal(t, userA, findUserID(repo, node.ID))
+			assert.Equal(t, userA, findWorkspaceID(repo, node.ID))
 		}
 	})
 
@@ -291,14 +291,14 @@ func TestGetUserBlogs_Pagination(t *testing.T) {
 		idBytes := [16]byte{}
 		idBytes[15] = byte(i)
 		blog := Blog{
-			ID:         uuid.UUID(idBytes),
-			UserID:     userID,
-			Title:      "Blog " + string(rune('0'+i)),
-			Content:    "Content",
-			SourceType: "manual",
-			Status:     1,
-			CreatedAt:  time.Now().UTC(),
-			UpdatedAt:  time.Now().UTC(),
+			ID:          uuid.UUID(idBytes),
+			WorkspaceID: userID,
+			Title:       "Blog " + string(rune('0'+i)),
+			Content:     "Content",
+			SourceType:  "manual",
+			Status:      1,
+			CreatedAt:   time.Now().UTC(),
+			UpdatedAt:   time.Now().UTC(),
 		}
 		repo.seed(blog)
 	}
@@ -336,7 +336,7 @@ func TestGetUserBlogs_TreeStructure(t *testing.T) {
 
 	parent := Blog{
 		ID:          uuid.MustParse("10000000-0000-0000-0000-000000000001"),
-		UserID:      userID,
+		WorkspaceID: userID,
 		Title:       "Series Parent",
 		Content:     "Parent Content",
 		SourceType:  "git",
@@ -348,7 +348,7 @@ func TestGetUserBlogs_TreeStructure(t *testing.T) {
 	parentID := parent.ID
 	child1 := Blog{
 		ID:          uuid.MustParse("20000000-0000-0000-0000-000000000001"),
-		UserID:      userID,
+		WorkspaceID: userID,
 		ParentID:    &parentID,
 		Title:       "Chapter 1",
 		Content:     "Chapter 1 Content",
@@ -360,7 +360,7 @@ func TestGetUserBlogs_TreeStructure(t *testing.T) {
 	}
 	child2 := Blog{
 		ID:          uuid.MustParse("20000000-0000-0000-0000-000000000002"),
-		UserID:      userID,
+		WorkspaceID: userID,
 		ParentID:    &parentID,
 		Title:       "Chapter 2",
 		Content:     "Chapter 2 Content",
@@ -398,7 +398,7 @@ func TestCreateDraftBlog_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("草稿具有默认属性", func(t *testing.T) {
-		assert.Equal(t, userID, draft.UserID)
+		assert.Equal(t, userID, draft.WorkspaceID)
 		assert.Nil(t, draft.ParentID)
 		assert.Equal(t, "未命名博客", draft.Title)
 		assert.Empty(t, draft.Content)
@@ -435,8 +435,8 @@ func TestCreateDraftBlog_MultipleUsersIndependent(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.NotEqual(t, draftA.ID, draftB.ID)
-	assert.Equal(t, userA, draftA.UserID)
-	assert.Equal(t, userB, draftB.UserID)
+	assert.Equal(t, userA, draftA.WorkspaceID)
+	assert.Equal(t, userB, draftB.WorkspaceID)
 
 	resultsA, err := svc.GetUserBlogs(ctx, userA, 1, 20)
 	require.NoError(t, err)
@@ -452,14 +452,14 @@ func TestUpdateBlog_Success(t *testing.T) {
 	blogID := uuid.MustParse("e0000000-0000-0000-0000-000000000001")
 
 	blog := Blog{
-		ID:         blogID,
-		UserID:     userID,
-		Title:      "原始标题",
-		Content:    "原始内容",
-		SourceType: "manual",
-		Status:     1,
-		CreatedAt:  time.Now().UTC(),
-		UpdatedAt:  time.Now().UTC(),
+		ID:          blogID,
+		WorkspaceID: userID,
+		Title:       "原始标题",
+		Content:     "原始内容",
+		SourceType:  "manual",
+		Status:      1,
+		CreatedAt:   time.Now().UTC(),
+		UpdatedAt:   time.Now().UTC(),
 	}
 
 	repo := newFakeRepository()
@@ -506,14 +506,14 @@ func TestUpdateBlog_WrongUser(t *testing.T) {
 	blogID := uuid.MustParse("e0000000-0000-0000-0000-000000000001")
 
 	blog := Blog{
-		ID:         blogID,
-		UserID:     userA,
-		Title:      "User A 的博客",
-		Content:    "Content",
-		SourceType: "manual",
-		Status:     1,
-		CreatedAt:  time.Now().UTC(),
-		UpdatedAt:  time.Now().UTC(),
+		ID:          blogID,
+		WorkspaceID: userA,
+		Title:       "User A 的博客",
+		Content:     "Content",
+		SourceType:  "manual",
+		Status:      1,
+		CreatedAt:   time.Now().UTC(),
+		UpdatedAt:   time.Now().UTC(),
 	}
 
 	repo := newFakeRepository()
@@ -538,14 +538,14 @@ func TestUpdateBlog_EmptyUpdates(t *testing.T) {
 	blogID := uuid.MustParse("e0000000-0000-0000-0000-000000000001")
 
 	blog := Blog{
-		ID:         blogID,
-		UserID:     userID,
-		Title:      "原始标题",
-		Content:    "原始内容",
-		SourceType: "manual",
-		Status:     1,
-		CreatedAt:  time.Now().UTC(),
-		UpdatedAt:  time.Now().UTC(),
+		ID:          blogID,
+		WorkspaceID: userID,
+		Title:       "原始标题",
+		Content:     "原始内容",
+		SourceType:  "manual",
+		Status:      1,
+		CreatedAt:   time.Now().UTC(),
+		UpdatedAt:   time.Now().UTC(),
 	}
 
 	repo := newFakeRepository()
@@ -568,7 +568,7 @@ func TestBatchDeleteBlogs_Success(t *testing.T) {
 
 	blog1 := Blog{
 		ID:          uuid.MustParse("d0000000-0000-0000-0000-000000000001"),
-		UserID:      userID,
+		WorkspaceID: userID,
 		Title:       "待删除博客1",
 		Content:     "Content 1",
 		SourceType:  "manual",
@@ -578,7 +578,7 @@ func TestBatchDeleteBlogs_Success(t *testing.T) {
 	}
 	blog2 := Blog{
 		ID:          uuid.MustParse("d0000000-0000-0000-0000-000000000002"),
-		UserID:      userID,
+		WorkspaceID: userID,
 		Title:       "待删除博客2",
 		Content:     "Content 2",
 		SourceType:  "manual",
@@ -588,7 +588,7 @@ func TestBatchDeleteBlogs_Success(t *testing.T) {
 	}
 	blog3 := Blog{
 		ID:          uuid.MustParse("d0000000-0000-0000-0000-000000000003"),
-		UserID:      userID,
+		WorkspaceID: userID,
 		Title:       "保留博客",
 		Content:     "Content 3",
 		SourceType:  "manual",
@@ -625,7 +625,7 @@ func TestBatchDeleteBlogs_OwnershipEnforced(t *testing.T) {
 
 	blogB := Blog{
 		ID:          uuid.MustParse("b0000000-0000-0000-0000-000000000001"),
-		UserID:      userB,
+		WorkspaceID: userB,
 		Title:       "User B 的博客",
 		Content:     "Content B",
 		SourceType:  "manual",
@@ -636,7 +636,7 @@ func TestBatchDeleteBlogs_OwnershipEnforced(t *testing.T) {
 
 	blogA := Blog{
 		ID:          uuid.MustParse("a0000000-0000-0000-0000-000000000001"),
-		UserID:      userA,
+		WorkspaceID: userA,
 		Title:       "User A 的博客",
 		Content:     "Content A",
 		SourceType:  "manual",
@@ -673,7 +673,7 @@ func TestBatchDeleteBlogs_CascadingChildren(t *testing.T) {
 
 	parent := Blog{
 		ID:          parentID,
-		UserID:      userID,
+		WorkspaceID: userID,
 		Title:       "系列父博客",
 		Content:     "Parent",
 		SourceType:  "git",
@@ -684,7 +684,7 @@ func TestBatchDeleteBlogs_CascadingChildren(t *testing.T) {
 
 	child1 := Blog{
 		ID:          uuid.MustParse("20000000-0000-0000-0000-000000000001"),
-		UserID:      userID,
+		WorkspaceID: userID,
 		ParentID:    &parentID,
 		Title:       "子章节1",
 		Content:     "Child 1",
@@ -697,7 +697,7 @@ func TestBatchDeleteBlogs_CascadingChildren(t *testing.T) {
 
 	child2 := Blog{
 		ID:          uuid.MustParse("20000000-0000-0000-0000-000000000002"),
-		UserID:      userID,
+		WorkspaceID: userID,
 		ParentID:    &parentID,
 		Title:       "子章节2",
 		Content:     "Child 2",
@@ -752,7 +752,7 @@ func TestGetSeriesBlogs_Success(t *testing.T) {
 
 	parent := Blog{
 		ID:          parentID,
-		UserID:      userID,
+		WorkspaceID: userID,
 		Title:       "系列导读",
 		Content:     "Intro",
 		SourceType:  "git",
@@ -763,7 +763,7 @@ func TestGetSeriesBlogs_Success(t *testing.T) {
 
 	child := Blog{
 		ID:          uuid.MustParse("20000000-0000-0000-0000-000000000001"),
-		UserID:      userID,
+		WorkspaceID: userID,
 		ParentID:    &parentID,
 		Title:       "第一章",
 		Content:     "Chapter 1",
@@ -798,12 +798,12 @@ func TestGetSeriesBlogs_NotFound(t *testing.T) {
 	assert.True(t, errors.Is(err, ErrBlogNotFound))
 }
 
-// findUserID 通过 blog ID 从仓库查找对应的 UserID，仅用于测试断言。
-func findUserID(repo *fakeRepository, blogID uuid.UUID) uuid.UUID {
+// findWorkspaceID 通过 blog ID 从仓库查找对应的 WorkspaceID，仅用于测试断言。
+func findWorkspaceID(repo *fakeRepository, blogID uuid.UUID) uuid.UUID {
 	repo.mu.RLock()
 	defer repo.mu.RUnlock()
 	if b, ok := repo.blogs[blogID]; ok {
-		return b.UserID
+		return b.WorkspaceID
 	}
 	return uuid.Nil
 }

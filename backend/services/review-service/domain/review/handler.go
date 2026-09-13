@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"inkwords-backend/shared/kernel/httpx"
 )
 
 type reviewService interface {
@@ -26,11 +27,11 @@ type reviewService interface {
 
 // CompleteReading 标记原文已浏览完毕，并进入关书复述阶段。
 func (h *Handler) CompleteReading(c *gin.Context) {
-	userID, sessionID, ok := h.requireSessionContext(c)
+	workspaceID, sessionID, ok := h.requireSessionContext(c)
 	if !ok {
 		return
 	}
-	resp, err := h.service.CompleteReading(c.Request.Context(), userID, sessionID)
+	resp, err := h.service.CompleteReading(c.Request.Context(), workspaceID, sessionID)
 	if err != nil {
 		h.handleServiceError(c, err)
 		return
@@ -50,13 +51,13 @@ func NewHandler(service reviewService) *Handler {
 
 // GetTodayCard 返回今日推荐题卡。
 func (h *Handler) GetTodayCard(c *gin.Context) {
-	userID, ok := h.getUserID(c)
+	workspaceID, ok := h.getWorkspaceID(c)
 	if !ok {
-		h.writeError(c, http.StatusUnauthorized, "未授权的访问")
+		h.writeError(c, http.StatusServiceUnavailable, "本地工作区尚未准备完成")
 		return
 	}
 
-	resp, err := h.service.GetTodayCard(c.Request.Context(), userID)
+	resp, err := h.service.GetTodayCard(c.Request.Context(), workspaceID)
 	if err != nil {
 		h.handleServiceError(c, err)
 		return
@@ -67,13 +68,13 @@ func (h *Handler) GetTodayCard(c *gin.Context) {
 
 // GetHistory 返回最近复习记录摘要。
 func (h *Handler) GetHistory(c *gin.Context) {
-	userID, ok := h.getUserID(c)
+	workspaceID, ok := h.getWorkspaceID(c)
 	if !ok {
-		h.writeError(c, http.StatusUnauthorized, "未授权的访问")
+		h.writeError(c, http.StatusServiceUnavailable, "本地工作区尚未准备完成")
 		return
 	}
 
-	resp, err := h.service.GetHistory(c.Request.Context(), userID, parseQueryInt(c.Query("limit"), 5))
+	resp, err := h.service.GetHistory(c.Request.Context(), workspaceID, parseQueryInt(c.Query("limit"), 5))
 	if err != nil {
 		h.handleServiceError(c, err)
 		return
@@ -84,13 +85,13 @@ func (h *Handler) GetHistory(c *gin.Context) {
 
 // PickRandom 返回一次手动随机抽取的题卡。
 func (h *Handler) PickRandom(c *gin.Context) {
-	userID, ok := h.getUserID(c)
+	workspaceID, ok := h.getWorkspaceID(c)
 	if !ok {
-		h.writeError(c, http.StatusUnauthorized, "未授权的访问")
+		h.writeError(c, http.StatusServiceUnavailable, "本地工作区尚未准备完成")
 		return
 	}
 
-	resp, err := h.service.PickRandomCard(c.Request.Context(), userID)
+	resp, err := h.service.PickRandomCard(c.Request.Context(), workspaceID)
 	if err != nil {
 		h.handleServiceError(c, err)
 		return
@@ -101,9 +102,9 @@ func (h *Handler) PickRandom(c *gin.Context) {
 
 // ListNotes 返回手动选择复习入口的候选文章列表。
 func (h *Handler) ListNotes(c *gin.Context) {
-	userID, ok := h.getUserID(c)
+	workspaceID, ok := h.getWorkspaceID(c)
 	if !ok {
-		h.writeError(c, http.StatusUnauthorized, "未授权的访问")
+		h.writeError(c, http.StatusServiceUnavailable, "本地工作区尚未准备完成")
 		return
 	}
 
@@ -114,7 +115,7 @@ func (h *Handler) ListNotes(c *gin.Context) {
 		PageSize:    parseQueryInt(c.Query("page_size"), defaultListNotesPageSize),
 	}
 
-	resp, err := h.service.ListNotes(c.Request.Context(), userID, query)
+	resp, err := h.service.ListNotes(c.Request.Context(), workspaceID, query)
 	if err != nil {
 		h.handleServiceError(c, err)
 		return
@@ -125,9 +126,9 @@ func (h *Handler) ListNotes(c *gin.Context) {
 
 // CreateSession 基于题卡创建一次 review session。
 func (h *Handler) CreateSession(c *gin.Context) {
-	userID, ok := h.getUserID(c)
+	workspaceID, ok := h.getWorkspaceID(c)
 	if !ok {
-		h.writeError(c, http.StatusUnauthorized, "未授权的访问")
+		h.writeError(c, http.StatusServiceUnavailable, "本地工作区尚未准备完成")
 		return
 	}
 
@@ -137,7 +138,7 @@ func (h *Handler) CreateSession(c *gin.Context) {
 		return
 	}
 
-	resp, err := h.service.CreateSession(c.Request.Context(), userID, req)
+	resp, err := h.service.CreateSession(c.Request.Context(), workspaceID, req)
 	if err != nil {
 		h.handleServiceError(c, err)
 		return
@@ -148,12 +149,12 @@ func (h *Handler) CreateSession(c *gin.Context) {
 
 // GetSession 返回一次 review session 的当前状态。
 func (h *Handler) GetSession(c *gin.Context) {
-	userID, sessionID, ok := h.requireSessionContext(c)
+	workspaceID, sessionID, ok := h.requireSessionContext(c)
 	if !ok {
 		return
 	}
 
-	resp, err := h.service.GetSession(c.Request.Context(), userID, sessionID)
+	resp, err := h.service.GetSession(c.Request.Context(), workspaceID, sessionID)
 	if err != nil {
 		h.handleServiceError(c, err)
 		return
@@ -164,7 +165,7 @@ func (h *Handler) GetSession(c *gin.Context) {
 
 // Respond 提交一轮回答并推进 review session。
 func (h *Handler) Respond(c *gin.Context) {
-	userID, sessionID, ok := h.requireSessionContext(c)
+	workspaceID, sessionID, ok := h.requireSessionContext(c)
 	if !ok {
 		return
 	}
@@ -175,7 +176,7 @@ func (h *Handler) Respond(c *gin.Context) {
 		return
 	}
 
-	resp, err := h.service.Respond(c.Request.Context(), userID, sessionID, req)
+	resp, err := h.service.Respond(c.Request.Context(), workspaceID, sessionID, req)
 	if err != nil {
 		h.handleServiceError(c, err)
 		return
@@ -186,7 +187,7 @@ func (h *Handler) Respond(c *gin.Context) {
 
 // RequestHint 为当前 review session 请求一条更具体的提示。
 func (h *Handler) RequestHint(c *gin.Context) {
-	userID, sessionID, ok := h.requireSessionContext(c)
+	workspaceID, sessionID, ok := h.requireSessionContext(c)
 	if !ok {
 		return
 	}
@@ -197,7 +198,7 @@ func (h *Handler) RequestHint(c *gin.Context) {
 		return
 	}
 
-	resp, err := h.service.RequestHint(c.Request.Context(), userID, sessionID, req)
+	resp, err := h.service.RequestHint(c.Request.Context(), workspaceID, sessionID, req)
 	if err != nil {
 		h.handleServiceError(c, err)
 		return
@@ -208,12 +209,12 @@ func (h *Handler) RequestHint(c *gin.Context) {
 
 // Finish 显式结束当前 review session。
 func (h *Handler) Finish(c *gin.Context) {
-	userID, sessionID, ok := h.requireSessionContext(c)
+	workspaceID, sessionID, ok := h.requireSessionContext(c)
 	if !ok {
 		return
 	}
 
-	resp, err := h.service.Finish(c.Request.Context(), userID, sessionID)
+	resp, err := h.service.Finish(c.Request.Context(), workspaceID, sessionID)
 	if err != nil {
 		h.handleServiceError(c, err)
 		return
@@ -222,26 +223,48 @@ func (h *Handler) Finish(c *gin.Context) {
 	h.writeSuccess(c, resp)
 }
 
-func (h *Handler) getUserID(c *gin.Context) (uuid.UUID, bool) {
-	raw, exists := c.Get("user_id")
-	if !exists {
-		return uuid.Nil, false
-	}
-
-	userID, ok := raw.(uuid.UUID)
+// MigrateLegacyNote creates or reuses a workspace-owned objective for one
+// existing Obsidian review note. The old user-owned review APIs remain intact.
+func (h *Handler) MigrateLegacyNote(c *gin.Context) {
+	service, ok := h.service.(interface {
+		MigrateLegacyNote(context.Context, uuid.UUID, string) (LegacyNoteMigrationResponse, error)
+	})
 	if !ok {
-		h.writeError(c, http.StatusInternalServerError, "用户 ID 类型错误")
+		h.writeError(c, http.StatusServiceUnavailable, "旧笔记迁移暂不可用")
+		return
+	}
+	workspaceID, err := httpx.GetLocalWorkspaceID(c)
+	if err != nil || workspaceID == uuid.Nil {
+		h.writeError(c, http.StatusServiceUnavailable, "本地工作区尚未准备完成")
+		return
+	}
+	var request struct {
+		NotePath string `json:"note_path"`
+	}
+	if err := c.ShouldBindJSON(&request); err != nil {
+		h.writeError(c, http.StatusBadRequest, "请求参数格式错误")
+		return
+	}
+	response, err := service.MigrateLegacyNote(c.Request.Context(), workspaceID, request.NotePath)
+	if err != nil {
+		h.handleServiceError(c, err)
+		return
+	}
+	h.writeSuccess(c, response)
+}
+
+func (h *Handler) getWorkspaceID(c *gin.Context) (uuid.UUID, bool) {
+	workspaceID, err := httpx.GetLocalWorkspaceID(c)
+	if err != nil || workspaceID == uuid.Nil {
 		return uuid.Nil, false
 	}
-	return userID, true
+	return workspaceID, true
 }
 
 func (h *Handler) requireSessionContext(c *gin.Context) (uuid.UUID, uuid.UUID, bool) {
-	userID, ok := h.getUserID(c)
+	workspaceID, ok := h.getWorkspaceID(c)
 	if !ok {
-		if !c.Writer.Written() {
-			h.writeError(c, http.StatusUnauthorized, "未授权的访问")
-		}
+		h.writeError(c, http.StatusServiceUnavailable, "本地工作区尚未准备完成")
 		return uuid.Nil, uuid.Nil, false
 	}
 
@@ -251,7 +274,7 @@ func (h *Handler) requireSessionContext(c *gin.Context) (uuid.UUID, uuid.UUID, b
 		return uuid.Nil, uuid.Nil, false
 	}
 
-	return userID, sessionID, true
+	return workspaceID, sessionID, true
 }
 
 func (h *Handler) writeSuccess(c *gin.Context, data any) {

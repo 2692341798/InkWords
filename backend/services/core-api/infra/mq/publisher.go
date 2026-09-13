@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
 
 	sharedrabbitmq "inkwords-backend/shared/platform/rabbitmq"
@@ -42,12 +43,24 @@ func (p *Publisher) PublishGenerationRequested(ctx context.Context, message shar
 	}
 
 	envelope := sharedrabbitmq.GenerationRequestedMessage{
-		TaskID:  message.TaskID,
-		Kind:    message.Kind,
-		UserID:  message.UserID,
-		Payload: append(json.RawMessage(nil), message.Payload...),
+		TaskID:      message.TaskID,
+		Kind:        message.Kind,
+		WorkspaceID: cloneWorkspaceID(message.WorkspaceID),
+		Payload:     append(json.RawMessage(nil), message.Payload...),
 	}
 
+	return p.publish(ctx, envelope.RoutingKey(), envelope)
+}
+
+// PublishTextbookGenerationRequested uses the existing generation routing key
+// while keeping legacy user identity out of the textbook envelope.
+func (p *Publisher) PublishTextbookGenerationRequested(ctx context.Context, message sharedrabbitmq.TextbookGenerationRequestedMessage) error {
+	if p == nil || p.channel == nil {
+		return errors.New("rabbitmq publisher channel is nil")
+	}
+	envelope := sharedrabbitmq.TextbookGenerationRequestedMessage{
+		TaskID: message.TaskID, Kind: message.Kind, WorkspaceID: cloneWorkspaceID(message.WorkspaceID), Payload: append(json.RawMessage(nil), message.Payload...),
+	}
 	return p.publish(ctx, envelope.RoutingKey(), envelope)
 }
 
@@ -58,12 +71,24 @@ func (p *Publisher) PublishParseRequested(ctx context.Context, message sharedrab
 	}
 
 	envelope := sharedrabbitmq.ParseRequestedMessage{
-		TaskID:  message.TaskID,
-		Kind:    message.Kind,
-		UserID:  message.UserID,
-		Payload: append(json.RawMessage(nil), message.Payload...),
+		TaskID:      message.TaskID,
+		Kind:        message.Kind,
+		WorkspaceID: cloneWorkspaceID(message.WorkspaceID),
+		Payload:     append(json.RawMessage(nil), message.Payload...),
 	}
 
+	return p.publish(ctx, envelope.RoutingKey(), envelope)
+}
+
+// PublishTextbookParseRequested uses the existing parser routing key while
+// keeping legacy user identity out of the textbook envelope.
+func (p *Publisher) PublishTextbookParseRequested(ctx context.Context, message sharedrabbitmq.TextbookParseRequestedMessage) error {
+	if p == nil || p.channel == nil {
+		return errors.New("rabbitmq publisher channel is nil")
+	}
+	envelope := sharedrabbitmq.TextbookParseRequestedMessage{
+		TaskID: message.TaskID, Kind: message.Kind, WorkspaceID: cloneWorkspaceID(message.WorkspaceID), Payload: append(json.RawMessage(nil), message.Payload...),
+	}
 	return p.publish(ctx, envelope.RoutingKey(), envelope)
 }
 
@@ -74,13 +99,35 @@ func (p *Publisher) PublishExportRequested(ctx context.Context, message sharedra
 	}
 
 	envelope := sharedrabbitmq.ExportRequestedMessage{
-		TaskID:  message.TaskID,
-		Kind:    message.Kind,
-		UserID:  message.UserID,
-		Payload: append(json.RawMessage(nil), message.Payload...),
+		TaskID: message.TaskID, Kind: message.Kind,
+		WorkspaceID: cloneWorkspaceID(message.WorkspaceID), Payload: append(json.RawMessage(nil), message.Payload...),
 	}
 
 	return p.publish(ctx, envelope.RoutingKey(), envelope)
+}
+
+// PublishTextbookVerificationRequested publishes a separate, immutable
+// textbook-artifact verification request. It must not share the legacy course
+// verification queue because their manifest and trust contracts differ.
+func (p *Publisher) PublishTextbookVerificationRequested(ctx context.Context, message sharedrabbitmq.TextbookVerificationRequestedMessage) error {
+	if p == nil || p.channel == nil {
+		return errors.New("rabbitmq publisher channel is nil")
+	}
+	envelope := sharedrabbitmq.TextbookVerificationRequestedMessage{
+		TaskID:      message.TaskID,
+		Kind:        message.Kind,
+		WorkspaceID: cloneWorkspaceID(message.WorkspaceID),
+		Payload:     append(json.RawMessage(nil), message.Payload...),
+	}
+	return p.publish(ctx, envelope.RoutingKey(), envelope)
+}
+
+func cloneWorkspaceID(workspaceID *uuid.UUID) *uuid.UUID {
+	if workspaceID == nil {
+		return nil
+	}
+	copy := *workspaceID
+	return &copy
 }
 
 func (p *Publisher) publish(ctx context.Context, routingKey string, envelope any) error {

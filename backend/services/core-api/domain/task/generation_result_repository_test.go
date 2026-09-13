@@ -13,22 +13,17 @@ import (
 func TestGormGenerationResultRepository_PersistSingleGenerationResult(t *testing.T) {
 	testDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, testDB.AutoMigrate(&userRecord{}, &blogRecord{}))
+	require.NoError(t, testDB.AutoMigrate(&blogRecord{}))
 
-	userID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	workspaceID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 	blogID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
-	require.NoError(t, testDB.Create(&userRecord{
-		ID:       userID,
-		Username: "tester",
-		Email:    "tester@example.com",
-	}).Error)
 	require.NoError(t, testDB.Create(&blogRecord{
-		ID:         blogID,
-		UserID:     userID,
-		Title:      "旧标题",
-		Content:    "旧内容",
-		SourceType: "file",
-		Status:     0,
+		ID:          blogID,
+		WorkspaceID: workspaceID,
+		Title:       "旧标题",
+		Content:     "旧内容",
+		SourceType:  "file",
+		Status:      0,
 	}).Error)
 
 	repo := NewGormGenerationResultRepository(testDB)
@@ -57,7 +52,6 @@ func TestGormGenerationResultRepository_PersistSingleGenerationResult(t *testing
 
 	taskID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	require.NoError(t, repo.PersistGenerationResult(context.Background(), taskID, result))
-	require.NoError(t, repo.AccumulateTokens(context.Background(), taskID, result))
 
 	var blog blogRecord
 	require.NoError(t, testDB.First(&blog, "id = ?", blogID).Error)
@@ -66,23 +60,18 @@ func TestGormGenerationResultRepository_PersistSingleGenerationResult(t *testing
 	require.Equal(t, 3, blog.WordCount)
 	require.Equal(t, int16(1), blog.Status)
 	require.JSONEq(t, `["Go","Docker"]`, string(blog.TechStacks))
-
-	var user userRecord
-	require.NoError(t, testDB.First(&user, "id = ?", userID).Error)
-	require.Equal(t, 17, user.TokensUsed)
 }
 
 func TestGormGenerationResultRepository_CreatesSingleBlogWhenBlogIDIsMissing(t *testing.T) {
 	testDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, testDB.AutoMigrate(&userRecord{}, &blogRecord{}, &JobTask{}))
+	require.NoError(t, testDB.AutoMigrate(&blogRecord{}, &JobTask{}))
 
-	userID := uuid.New()
+	workspaceID := uuid.New()
 	taskID := uuid.New()
-	require.NoError(t, testDB.Create(&userRecord{ID: userID, Username: "tester", Email: "single@example.com"}).Error)
 	require.NoError(t, testDB.Create(&JobTask{
 		ID: taskID, TaskType: taskTypeGeneration, TaskSubtype: "generate_single",
-		Status: JobTaskStatusSucceeded, RequestedBy: userID,
+		Status: JobTaskStatusSucceeded, WorkspaceID: &workspaceID,
 	}).Error)
 
 	repo := NewGormGenerationResultRepository(testDB)
@@ -97,138 +86,48 @@ func TestGormGenerationResultRepository_CreatesSingleBlogWhenBlogIDIsMissing(t *
 	require.NoError(t, testDB.Find(&blogs).Error)
 	require.Len(t, blogs, 1)
 	require.Equal(t, taskID, blogs[0].ID)
-	require.Equal(t, userID, blogs[0].UserID)
+	require.Equal(t, workspaceID, blogs[0].WorkspaceID)
 	require.Equal(t, "正文", blogs[0].Content)
 }
 
-func TestGormGenerationResultRepository_PersistsProjectCourseBlogsIdempotently(t *testing.T) {
+func TestGormGenerationResultRepository_RejectsTaskWithoutWorkspace(t *testing.T) {
 	testDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, testDB.AutoMigrate(&userRecord{}, &blogRecord{}, &JobTask{}))
-	userID, taskID, courseID := uuid.New(), uuid.New(), uuid.New()
-	require.NoError(t, testDB.Create(&userRecord{ID: userID, Username: "course", Email: "course@example.com"}).Error)
-	require.NoError(t, testDB.Create(&JobTask{ID: taskID, TaskType: taskTypeGeneration, TaskSubtype: ProjectCourseGenerateTaskSubtype, Status: JobTaskStatusSucceeded, RequestedBy: userID}).Error)
-	repo := NewGormGenerationResultRepository(testDB)
-	result := map[string]any{"course_id": courseID.String(), "chapters": []any{
-		map[string]any{"chapter_id": "chapter-1", "sort": float64(1), "status": "succeeded", "document": map[string]any{"title": "项目地图", "markdown": "# 项目地图"}},
-		map[string]any{"chapter_id": "chapter-2", "sort": float64(2), "status": "blocked", "error": "未通过硬门禁"},
-	}}
-	require.NoError(t, repo.PersistProjectCourseGenerationBlogs(context.Background(), taskID, result))
-	require.NoError(t, repo.PersistProjectCourseGenerationBlogs(context.Background(), taskID, result))
-	var blogs []blogRecord
-	require.NoError(t, testDB.Find(&blogs).Error)
-	require.Len(t, blogs, 3)
-	var chapter blogRecord
-	childID := uuid.NewSHA1(uuid.Nil, []byte(courseID.String()+"/chapter-1"))
-	require.NoError(t, testDB.First(&chapter, "id = ?", childID).Error)
-	require.Equal(t, "项目地图", chapter.Title)
-	require.Equal(t, int16(1), chapter.Status)
-}
+	require.NoError(t, testDB.AutoMigrate(&blogRecord{}, &JobTask{}))
 
-func TestGormGenerationResultRepository_AccumulateTokensFallsBackToEstimatedTokens(t *testing.T) {
-	testDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, testDB.AutoMigrate(&userRecord{}, &blogRecord{}))
-
-	userID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
-	blogID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
-	require.NoError(t, testDB.Create(&userRecord{
-		ID:       userID,
-		Username: "tester",
-		Email:    "tester@example.com",
-	}).Error)
-	require.NoError(t, testDB.Create(&blogRecord{
-		ID:         blogID,
-		UserID:     userID,
-		Title:      "标题",
-		Content:    "内容",
-		SourceType: "file",
-		Status:     1,
-	}).Error)
-
-	repo := NewGormGenerationResultRepository(testDB)
-	result := map[string]any{
-		"result_version":   1,
-		"task_type":        "generation",
-		"task_subtype":     "generate_single",
-		"persistence_mode": "task_only",
-		"final_status":     "succeeded",
-		"usage": map[string]any{
-			"estimated_tokens": 24,
-		},
-		"payload": map[string]any{
-			"blog_id": blogID.String(),
-		},
-	}
-
-	taskID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
-	require.NoError(t, repo.AccumulateTokens(context.Background(), taskID, result))
-
-	var user userRecord
-	require.NoError(t, testDB.First(&user, "id = ?", userID).Error)
-	require.Equal(t, 24, user.TokensUsed)
-}
-
-func TestGormGenerationResultRepository_AccumulateTokensFallsBackToTaskOwnerWithoutBlogID(t *testing.T) {
-	testDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, testDB.AutoMigrate(&userRecord{}, &JobTask{}))
-
-	userID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
-	taskID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
-	require.NoError(t, testDB.Create(&userRecord{
-		ID:       userID,
-		Username: "tester",
-		Email:    "tester@example.com",
-	}).Error)
+	taskID := uuid.New()
 	require.NoError(t, testDB.Create(&JobTask{
-		ID:          taskID,
-		TaskType:    "generation",
-		TaskSubtype: "generate_single",
-		Status:      JobTaskStatusSucceeded,
-		RequestedBy: userID,
+		ID: taskID, TaskType: taskTypeGeneration, TaskSubtype: "generate_single",
+		Status: JobTaskStatusSucceeded,
 	}).Error)
 
 	repo := NewGormGenerationResultRepository(testDB)
 	result := map[string]any{
-		"result_version":   1,
-		"task_type":        "generation",
-		"task_subtype":     "generate_single",
-		"persistence_mode": "task_only",
-		"final_status":     "succeeded",
-		"usage": map[string]any{
-			"prompt_tokens":     11,
-			"completion_tokens": 9,
-		},
-		"payload": map[string]any{},
+		"result_version": 1, "task_type": "generation", "task_subtype": "generate_single",
+		"payload": map[string]any{"title": "历史任务文章", "content": "正文", "source_type": "file"},
 	}
+	err = repo.PersistGenerationResult(context.Background(), taskID, result)
+	require.ErrorContains(t, err, "has no workspace")
 
-	require.NoError(t, repo.AccumulateTokens(context.Background(), taskID, result))
-
-	var user userRecord
-	require.NoError(t, testDB.First(&user, "id = ?", userID).Error)
-	require.Equal(t, 20, user.TokensUsed)
+	var count int64
+	require.NoError(t, testDB.Model(&blogRecord{}).Count(&count).Error)
+	require.Zero(t, count)
 }
 
 func TestGormGenerationResultRepository_PersistContinueResult(t *testing.T) {
 	testDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, testDB.AutoMigrate(&userRecord{}, &blogRecord{}))
+	require.NoError(t, testDB.AutoMigrate(&blogRecord{}))
 
-	userID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	workspaceID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 	blogID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
-	require.NoError(t, testDB.Create(&userRecord{
-		ID:       userID,
-		Username: "tester",
-		Email:    "tester@example.com",
-	}).Error)
 	require.NoError(t, testDB.Create(&blogRecord{
-		ID:         blogID,
-		UserID:     userID,
-		Title:      "旧标题",
-		Content:    "旧内容",
-		SourceType: "file",
-		Status:     1,
+		ID:          blogID,
+		WorkspaceID: workspaceID,
+		Title:       "旧标题",
+		Content:     "旧内容",
+		SourceType:  "file",
+		Status:      1,
 	}).Error)
 
 	repo := NewGormGenerationResultRepository(testDB)
@@ -259,28 +158,23 @@ func TestGormGenerationResultRepository_PersistContinueResult(t *testing.T) {
 func TestGormGenerationResultRepository_PersistGenerateSeriesResult(t *testing.T) {
 	testDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, testDB.AutoMigrate(&userRecord{}, &blogRecord{}))
+	require.NoError(t, testDB.AutoMigrate(&blogRecord{}))
 
-	userID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+	workspaceID := uuid.MustParse("22222222-2222-2222-2222-222222222222")
 	parentID := uuid.MustParse("33333333-3333-3333-3333-333333333333")
 	childID := uuid.MustParse("44444444-4444-4444-4444-444444444444")
-	require.NoError(t, testDB.Create(&userRecord{
-		ID:       userID,
-		Username: "tester",
-		Email:    "tester@example.com",
-	}).Error)
 	require.NoError(t, testDB.Create(&blogRecord{
-		ID:         parentID,
-		UserID:     userID,
-		Title:      "旧系列标题",
-		Content:    "旧导读",
-		SourceType: "file",
-		IsSeries:   true,
-		Status:     0,
+		ID:          parentID,
+		WorkspaceID: workspaceID,
+		Title:       "旧系列标题",
+		Content:     "旧导读",
+		SourceType:  "file",
+		IsSeries:    true,
+		Status:      0,
 	}).Error)
 	require.NoError(t, testDB.Create(&blogRecord{
 		ID:          childID,
-		UserID:      userID,
+		WorkspaceID: workspaceID,
 		ParentID:    &parentID,
 		ChapterSort: 1,
 		Title:       "旧章节标题",
@@ -341,8 +235,4 @@ func TestGormGenerationResultRepository_PersistGenerateSeriesResult(t *testing.T
 	require.Equal(t, int16(1), child.Status)
 	require.JSONEq(t, `["Go"]`, string(child.TechStacks))
 
-	require.NoError(t, repo.AccumulateTokens(context.Background(), taskID, result))
-	var user userRecord
-	require.NoError(t, testDB.First(&user, "id = ?", userID).Error)
-	require.Equal(t, 42, user.TokensUsed)
 }
