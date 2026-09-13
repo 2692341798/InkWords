@@ -104,7 +104,7 @@ The page contains five main blocks:
   - `今天你想先完成哪一种任务？`
 
 ## 10. Decision Center
-- Two large selectable path cards shown side by side on desktop.
+- Two large selectable path cards; layout follows the available local-browser width without a device-specific acceptance target.
 - Card A: `生成博客`
   - marked with `推荐`
   - short copy: `从 GitHub 仓库或本地文档开始，生成结构化技术博客`
