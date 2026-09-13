@@ -17,8 +17,6 @@ docker compose --env-file backend/.env up -d --build
 
 ```bash
 FRONTEND_PORT=8081 \
-FRONTEND_URL=http://localhost:5173 \
-DOCKER_GITHUB_REDIRECT_URL=http://localhost:5173/api/v1/auth/callback/github \
 docker compose --env-file backend/.env up -d --build
 ```
 

@@ -8,6 +8,8 @@ async function installDeterministicApi(page: Page) {
     const path = new URL(request.url()).pathname
 
     if (path === '/api/v1/blogs') return route.fulfill({ json: envelope([]) })
+    if (path === '/api/v1/textbook-projects') return route.fulfill({ json: { code: 0, data: [] } })
+    if (path === '/api/v1/mastery/due') return route.fulfill({ json: envelope({ tasks: [] }) })
     if (path === '/api/v1/review/pick') {
       return route.fulfill({
         json: envelope({
@@ -19,13 +21,6 @@ async function installDeterministicApi(page: Page) {
     }
     if (path === '/api/v1/review/history') return route.fulfill({ json: envelope({ items: [], limit: 3 }) })
     if (path === '/api/v1/review/notes') return route.fulfill({ json: envelope({ items: [], total: 0, page: 1, page_size: 20 }) })
-    if (path === '/api/v1/user/stats') {
-      return route.fulfill({ json: envelope({ tokens_used: 0, estimated_cost: 0, total_articles: 0, total_words: 0, tech_stack_stats: [] }) })
-    }
-    if (path === '/api/v1/user/profile') {
-      return route.fulfill({ json: envelope({ username: 'E2E 用户', email: 'e2e@example.com', avatar_url: '', subscription_tier: 0, token_limit: 0 }) })
-    }
-
     return route.fulfill({ status: 404, json: { code: 404, message: `Unhandled E2E route: ${request.method()} ${path}` } })
   })
 }
@@ -39,7 +34,11 @@ export const test = base.extend<AppFixtures>({
     page.on('pageerror', (error) => errors.push(error.message))
 
     await installDeterministicApi(page)
-    await page.goto(`/?token=e2e-${process.env.E2E_RUN_ID || 'local'}`)
+    // Vite's development client keeps a hot-reload connection open. Waiting for
+    // the browser's full load event turns that transport detail into a flaky E2E
+    // dependency; DOM readiness plus the root assertion below is the actual app
+    // readiness contract for these deterministic UI tests.
+    await page.goto(`/?token=e2e-${process.env.E2E_RUN_ID || 'local'}`, { waitUntil: 'domcontentloaded' })
     await expect(page.locator('#root')).not.toBeEmpty()
     await runTest(page)
 

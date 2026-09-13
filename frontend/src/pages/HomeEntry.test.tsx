@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { blogStoreState, reviewStoreState } = vi.hoisted(() => ({
+const { blogStoreState, reviewStoreState, masteryServiceState } = vi.hoisted(() => ({
   blogStoreState: {
     blogs: [
       {
@@ -41,6 +41,9 @@ const { blogStoreState, reviewStoreState } = vi.hoisted(() => ({
     loadRecommendation: vi.fn(),
     loadHistory: vi.fn(),
   },
+  masteryServiceState: {
+    getDue: vi.fn(),
+  },
 }))
 
 vi.mock('@/store/blogStore', () => ({
@@ -53,6 +56,10 @@ vi.mock('@/store/reviewStore', () => ({
   }),
 }))
 
+vi.mock('@/services/mastery', () => ({
+  masteryService: masteryServiceState,
+}))
+
 vi.mock('@/components/shared/StepStrip', () => ({
   StepStrip: () => <div>StepStripStub</div>,
 }))
@@ -60,10 +67,25 @@ vi.mock('@/components/shared/StepStrip', () => ({
 import { HomeEntry } from './HomeEntry'
 
 describe('HomeEntry', () => {
+	afterEach(() => cleanup())
+
   beforeEach(() => {
     vi.clearAllMocks()
     reviewStoreState.loadRecommendation.mockResolvedValue(undefined)
     reviewStoreState.loadHistory.mockResolvedValue(undefined)
+    masteryServiceState.getDue.mockResolvedValue({ tasks: [] })
+  })
+
+  it('checks due mastery work once when the home entry opens, without a polling loop', async () => {
+    masteryServiceState.getDue.mockResolvedValue({
+      tasks: [{ objective_id: 'objective-1', chapter_id: 'chapter-1', title: '理解 Gin 路由', skill: 'explain', due_at: '2026-01-01T10:00:00Z', reason: '需要巩固原理' }],
+    })
+
+    render(<HomeEntry />)
+
+    expect(await screen.findByText('理解 Gin 路由')).toBeTruthy()
+    await waitFor(() => expect(masteryServiceState.getDue).toHaveBeenCalledTimes(1))
+    expect(screen.getByText('仅在打开首页时检查，不会后台提醒。')).toBeTruthy()
   })
 
   it('does not render the resume-review card copy for a completed review session', () => {
@@ -93,5 +115,14 @@ describe('HomeEntry', () => {
       expect(reviewStoreState.loadRecommendation).toHaveBeenCalledTimes(2)
       expect(reviewStoreState.loadHistory).toHaveBeenCalledTimes(2)
     })
+  })
+
+  it('uses the textbook workspace as the only project-course entry', () => {
+    render(<HomeEntry />)
+
+    fireEvent.click(screen.getByRole('button', { name: /教材项目/ }))
+
+    expect(blogStoreState.setCurrentView).toHaveBeenCalledWith('textbook-projects')
+    expect(screen.queryByRole('button', { name: /项目精通课程/ })).toBeNull()
   })
 })

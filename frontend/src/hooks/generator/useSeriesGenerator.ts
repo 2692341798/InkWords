@@ -1,7 +1,7 @@
 import { useCallback } from 'react'
 import { useStreamStore } from '@/store/streamStore'
 import { useBlogStore } from '@/store/blogStore'
-import { fetchEventSourceWithAuth } from '@/services/sse'
+import { fetchEventSourceLocal } from '@/services/sse'
 import {
   buildSeriesGenerationPayload,
   buildSingleGenerationPayload,
@@ -175,7 +175,7 @@ export const useSeriesGenerator = () => {
       )
       useStreamStore.getState().setCurrentTaskId(task.task_id)
 
-      await fetchEventSourceWithAuth(task.stream_url, {
+      await fetchEventSourceLocal(task.stream_url, {
         method: 'GET',
         signal: ctrl.signal,
         openWhenHidden: true,
@@ -296,7 +296,7 @@ export const useSeriesGenerator = () => {
       )
       useStreamStore.getState().setCurrentTaskId(task.task_id)
 
-      await fetchEventSourceWithAuth(task.stream_url, {
+      await fetchEventSourceLocal(task.stream_url, {
         method: 'GET',
         signal: ctrl.signal,
         openWhenHidden: true,

@@ -1,15 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-
-import { authTokenStore } from '@/lib/authTokenStore'
+import { describe, expect, it, vi } from 'vitest'
 import {
-  AUTH_EXPIRED_MESSAGE,
   GATEWAY_UNAVAILABLE_MESSAGE,
+  LOCAL_ACCESS_DENIED_MESSAGE,
   requestBlob,
   requestEnvelope,
   requestJson,
 } from './apiClient'
-
-const storage = new Map<string, string>()
 
 const jsonResponse = (payload: unknown, init: { ok?: boolean; status?: number } = {}) => ({
   ok: init.ok ?? true,
@@ -18,33 +14,34 @@ const jsonResponse = (payload: unknown, init: { ok?: boolean; status?: number } 
 }) as unknown as Response
 
 describe('apiClient', () => {
-  beforeEach(() => {
-    storage.clear()
-    vi.stubGlobal('localStorage', {
-      getItem: vi.fn((key: string) => storage.get(key) ?? null),
-      setItem: vi.fn((key: string, value: string) => storage.set(key, value)),
-      removeItem: vi.fn((key: string) => storage.delete(key)),
-      clear: vi.fn(() => storage.clear()),
-    })
-  })
-
-  it('adds authentication and serializes JSON without losing caller headers', async () => {
-    authTokenStore.setToken('api-token')
+  it('serializes JSON, preserves ordinary headers, and strips request identity', async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ ok: true }))
 
     await requestJson('/api/v1/example', {
       method: 'POST',
-      headers: { 'X-Test': '1' },
+      headers: { 'X-Test': '1', Authorization: 'Bearer caller-token' },
       json: { title: 'demo' },
       fetchImpl,
     })
 
     const [, init] = fetchImpl.mock.calls[0] as [string, RequestInit]
     const headers = new Headers(init.headers)
-    expect(headers.get('Authorization')).toBe('Bearer api-token')
+    expect(headers.has('Authorization')).toBe(false)
     expect(headers.get('Content-Type')).toBe('application/json')
     expect(headers.get('X-Test')).toBe('1')
     expect(init.body).toBe(JSON.stringify({ title: 'demo' }))
+  })
+
+  it('does not send a legacy browser token in local-workspace mode', async () => {
+    const getItem = vi.fn().mockReturnValue('stale-browser-token')
+    vi.stubGlobal('localStorage', { getItem })
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ ok: true }))
+
+    await requestJson('/api/v1/example', { fetchImpl })
+
+    const [, init] = fetchImpl.mock.calls[0] as [string, RequestInit]
+    expect(new Headers(init.headers).has('Authorization')).toBe(false)
+    expect(getItem).not.toHaveBeenCalled()
   })
 
   it('passes FormData and AbortSignal without forcing a content type', async () => {
@@ -77,12 +74,10 @@ describe('apiClient', () => {
     await expect(requestEnvelope('/api/v1/example', { fetchImpl: errorFetch })).rejects.toThrow('参数不合法')
   })
 
-  it('clears authentication on 401 responses', async () => {
-    authTokenStore.setToken('expired-token')
+  it('reports a local configuration error on unexpected 401 responses', async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({}, { ok: false, status: 401 }))
 
-    await expect(requestJson('/api/v1/private', { fetchImpl })).rejects.toThrow(AUTH_EXPIRED_MESSAGE)
-    expect(authTokenStore.getSnapshot()).toBeNull()
+    await expect(requestJson('/api/v1/private', { fetchImpl })).rejects.toThrow(LOCAL_ACCESS_DENIED_MESSAGE)
   })
 
   it.each([502, 503, 504])('normalizes gateway status %s', async (status) => {
@@ -92,6 +87,15 @@ describe('apiClient', () => {
     ))
 
     await expect(requestJson('/api/v1/example', { fetchImpl })).rejects.toThrow(GATEWAY_UNAVAILABLE_MESSAGE)
+  })
+
+  it('keeps actionable local-workspace initialization errors', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(
+      { code: 'LOCAL_WORKSPACE_UNAVAILABLE', message: '本地工作区尚未初始化完成。请检查数据库连接后重试。' },
+      { ok: false, status: 503 },
+    ))
+
+    await expect(requestJson('/api/v1/textbook-projects', { fetchImpl })).rejects.toThrow('本地工作区尚未初始化完成')
   })
 
   it('returns blobs without attempting JSON decoding', async () => {

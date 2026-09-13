@@ -1,5 +1,4 @@
 import type { BlogNode } from '@/store/blogStore'
-import { authTokenStore } from '@/lib/authTokenStore'
 import { requestEnvelope } from './apiClient'
 import { apiRoutes } from './apiRoutes'
 import {
@@ -10,7 +9,6 @@ import {
 
 interface SidebarExportDependencies {
   fetchImpl?: typeof fetch
-  getToken?: () => string | null
   downloadBlob?: (blob: Blob, filename: string) => void
   createExportTask?: (blogID: string) => Promise<{ task_id: string; stream_url: string }>
   waitForTaskCompletion?: (
@@ -40,14 +38,11 @@ function sanitizeDownloadFilename(name: string) {
  */
 export async function syncSeriesToObsidian(seriesRoots: BlogNode[], dependencies: SidebarExportDependencies = {}) {
   const fetchImpl = dependencies.fetchImpl ?? fetch
-  const getToken = dependencies.getToken ?? authTokenStore.getSnapshot
-  const token = getToken()
 
   for (const series of seriesRoots) {
     await requestEnvelope<null>(apiRoutes.exportService.seriesToObsidian(series.id), {
       method: 'POST',
       fetchImpl,
-      token,
       fallbackMessage: '同步系列失败',
     })
   }

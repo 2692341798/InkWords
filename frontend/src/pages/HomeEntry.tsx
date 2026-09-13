@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button'
 import { PageHeader, PageShell, Panel, SectionHeader, StatusPill } from '@/components/ui/workspace'
 import { useBlogStore } from '@/store/blogStore'
 import { useReviewStore } from '@/store/reviewStore'
+import { TodayQueue } from '@/components/learning/TodayQueue'
+import { useDueMasteryTasks } from '@/hooks/useDueMasteryTasks'
 import { getHomeEntryViewState, type HomeEntryPath } from './homeEntryViewState'
 
 // Why: 首页入口只做“选择路径 -> 预览流程 -> 进入真实工作页”，
@@ -15,6 +17,7 @@ export function HomeEntry() {
   const reviewStore = useReviewStore()
   const reviewBootstrapAttempted = useRef(false)
   const [reviewBootstrapError, setReviewBootstrapError] = useState(false)
+  const { tasks: dueTasks, loading: isLoadingDueTasks } = useDueMasteryTasks()
   const viewState = getHomeEntryViewState(activePath)
 
   useEffect(() => {
@@ -94,8 +97,8 @@ export function HomeEntry() {
   return (
     <PageShell wide>
       <PageHeader
-        title="从资料到博客，从博客到复习"
-        description="墨言会先帮你选定今天的主路径，再把注意力收敛到当前唯一需要完成的动作。"
+        title="从资料到教材，从教材到掌握"
+        description="默认先进入本地教材项目；博客与复习保留为兼容入口。"
         meta={<StatusPill tone="brand">墨言博客助手</StatusPill>}
         actions={
           <Button variant="outline" className="gap-2" onClick={resumeCard.onAction}>
@@ -124,6 +127,7 @@ export function HomeEntry() {
             />
 
             <div className="mt-5 grid gap-4 md:grid-cols-3">
+              <button type="button" onClick={() => setCurrentView('textbook-projects')} className="choice-tile choice-tile-active"><div className="flex items-center justify-between gap-3"><div className="flex items-center gap-3"><BookOpen className="h-5 w-5 text-[var(--brand)]" /><h3 className="text-base font-semibold text-foreground">教材项目</h3></div><StatusPill tone="brand">默认</StatusPill></div><p className="mt-3 text-sm leading-6 text-muted-foreground">从主资料、官方补充资料与读者版本开始，形成可自学的教材母稿。</p></button>
               <button
                 type="button"
                 onClick={() => setActivePath('blog')}
@@ -160,22 +164,6 @@ export function HomeEntry() {
                 </p>
               </button>
 
-              <button
-                type="button"
-                onClick={() => setCurrentView('project-course')}
-                className="choice-tile choice-tile-muted"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <BookOpen className="h-5 w-5 text-[var(--brand)]" />
-                    <h3 className="text-base font-semibold text-foreground">项目精通课程</h3>
-                  </div>
-                  <StatusPill>新场景</StatusPill>
-                </div>
-                <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                  固定 GitHub commit，围绕证据、主链路和累积实验掌握项目。
-                </p>
-              </button>
             </div>
           </Panel>
 
@@ -210,6 +198,7 @@ export function HomeEntry() {
         <aside className="summary-rail">
           <SectionHeader eyebrow="当前摘要" title="本次工作" description="右侧只保留影响下一步决策的信息。" />
           <div className="mt-5 space-y-3">
+            <TodayQueue tasks={dueTasks} loading={isLoadingDueTasks} />
             <div className="summary-row">
               <p className="text-xs text-muted-foreground">已选择</p>
               <p className="mt-1 text-sm font-medium text-foreground">{viewState.title}</p>

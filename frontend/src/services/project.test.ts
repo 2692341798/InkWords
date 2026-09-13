@@ -2,29 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { projectService } from './project'
 
 const mockFetch = vi.fn()
-const storage = new Map<string, string>()
 
 describe('projectService', () => {
   beforeEach(() => {
     mockFetch.mockReset()
     vi.stubGlobal('fetch', mockFetch)
-    storage.clear()
-    vi.stubGlobal('localStorage', {
-      getItem: vi.fn((key: string) => storage.get(key) ?? null),
-      setItem: vi.fn((key: string, value: string) => {
-        storage.set(key, value)
-      }),
-      removeItem: vi.fn((key: string) => {
-        storage.delete(key)
-      }),
-      clear: vi.fn(() => {
-        storage.clear()
-      }),
-    })
-    globalThis.localStorage.setItem('token', 'project-token')
   })
 
-  it('uploads project parse form data with auth headers and returns parsed data', async () => {
+  it('uploads project parse form data without request identity and returns parsed data', async () => {
     const formData = new FormData()
     formData.append('file', new Blob(['demo']), 'demo.md')
 
@@ -49,11 +34,11 @@ describe('projectService', () => {
     const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit]
     expect(url).toBe('/api/v1/project/parse')
     expect(init.method).toBe('POST')
-    expect(new Headers(init.headers).get('Authorization')).toBe('Bearer project-token')
+    expect(new Headers(init.headers).has('Authorization')).toBe(false)
     expect(init.body).toBe(formData)
   })
 
-  it('clears token and throws normalized error on unauthorized parse', async () => {
+  it('reports local configuration failure on unauthorized parse', async () => {
     const formData = new FormData()
     formData.append('file', new Blob(['demo']), 'demo.md')
 
@@ -67,9 +52,7 @@ describe('projectService', () => {
 
     await expect(
       projectService.parseProjectFile(formData, new AbortController().signal),
-    ).rejects.toThrow('登录已过期，请重新登录')
-
-    expect(globalThis.localStorage.getItem('token')).toBeNull()
+    ).rejects.toThrow('本地工作区请求被拒绝，请检查服务配置')
   })
 
   it('creates a parse task for async archive parsing', async () => {
@@ -93,7 +76,7 @@ describe('projectService', () => {
     const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit]
     expect(url).toBe('/api/v1/tasks/parse')
     expect(init.method).toBe('POST')
-    expect(new Headers(init.headers).get('Authorization')).toBe('Bearer project-token')
+    expect(new Headers(init.headers).has('Authorization')).toBe(false)
     expect(String(init.body)).toContain('"kind":"parse_archive"')
     expect(String(init.body)).toContain('"filename":"courseware.zip"')
   })
@@ -147,6 +130,6 @@ describe('projectService', () => {
     const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit]
     expect(url).toBe('/api/v1/tasks/task-parse-1')
     expect(init.method).toBe('GET')
-    expect(new Headers(init.headers).get('Authorization')).toBe('Bearer project-token')
+    expect(new Headers(init.headers).has('Authorization')).toBe(false)
   })
 })

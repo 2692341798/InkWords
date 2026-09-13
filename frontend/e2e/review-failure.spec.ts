@@ -6,12 +6,14 @@ test('@core review bootstrap failure is bounded and manually retryable', async (
   await page.route('**/api/v1/**', async (route) => {
     const path = new URL(route.request().url()).pathname
     if (path === '/api/v1/blogs') return route.fulfill({ json: { code: 200, data: [] } })
+    if (path === '/api/v1/textbook-projects') return route.fulfill({ json: { code: 0, data: [] } })
     if (path === '/api/v1/review/pick') pickRequests += 1
     if (path === '/api/v1/review/history') historyRequests += 1
     return route.fulfill({ status: 502, json: { message: 'Knowledge bridge unavailable' } })
   })
 
   await page.goto('/?token=e2e-review-failure')
+  await page.getByRole('button', { name: '工作入口' }).click()
   await expect(page.getByRole('alert')).toContainText('复习摘要暂时加载失败')
   await page.waitForTimeout(500)
   expect({ pickRequests, historyRequests }).toEqual({ pickRequests: 1, historyRequests: 1 })

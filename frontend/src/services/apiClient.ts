@@ -1,6 +1,4 @@
-import { authTokenStore } from '@/lib/authTokenStore'
-
-export const AUTH_EXPIRED_MESSAGE = '登录已过期，请重新登录'
+export const LOCAL_ACCESS_DENIED_MESSAGE = '本地工作区请求被拒绝，请检查服务配置'
 export const GATEWAY_UNAVAILABLE_MESSAGE = '服务暂时不可用，请稍后重试'
 
 interface ApiEnvelope<T> {
@@ -11,8 +9,9 @@ interface ApiEnvelope<T> {
 }
 
 interface ErrorPayload {
-  message?: string
-  error?: string
+	code?: string | number
+	message?: string
+	error?: string
 }
 
 export interface ApiRequestOptions extends Omit<RequestInit, 'body'> {
@@ -20,16 +19,15 @@ export interface ApiRequestOptions extends Omit<RequestInit, 'body'> {
   json?: unknown
   fallbackMessage?: string
   fetchImpl?: typeof fetch
-  token?: string | null
 }
 
 const gatewayErrorStatuses = new Set([502, 503, 504])
 
-export function buildAuthHeaders(init?: HeadersInit, token = authTokenStore.getSnapshot()) {
+function buildLocalHeaders(init?: HeadersInit) {
   const headers = new Headers(init)
-  if (token) {
-    headers.set('Authorization', `Bearer ${token}`)
-  }
+  // Local workspace identity is resolved by the service. Forwarding a stale
+  // browser token would reintroduce an identity input that V1 explicitly removed.
+  headers.delete('Authorization')
   return headers
 }
 
@@ -44,11 +42,14 @@ const readErrorMessage = async (response: Response, fallbackMessage: string) => 
 
 export async function assertApiResponse(response: Response, fallbackMessage = '请求失败') {
   if (response.status === 401) {
-    authTokenStore.clearToken()
-    throw new Error(AUTH_EXPIRED_MESSAGE)
+    throw new Error(LOCAL_ACCESS_DENIED_MESSAGE)
   }
   if (gatewayErrorStatuses.has(response.status)) {
-    throw new Error(GATEWAY_UNAVAILABLE_MESSAGE)
+	const payload = (await readJson(response)) as ErrorPayload | null
+	if (payload?.code === 'LOCAL_WORKSPACE_UNAVAILABLE' && payload.message) {
+		throw new Error(payload.message)
+	}
+		throw new Error(GATEWAY_UNAVAILABLE_MESSAGE)
   }
   if (!response.ok) {
     throw new Error(await readErrorMessage(response, fallbackMessage))
@@ -61,12 +62,11 @@ const executeRequest = async (url: string, options: ApiRequestOptions) => {
     json,
     fallbackMessage: _fallbackMessage,
     fetchImpl = fetch,
-    token = authTokenStore.getSnapshot(),
     headers: inputHeaders,
     ...init
   } = options
   void _fallbackMessage
-  const headers = buildAuthHeaders(inputHeaders, token)
+  const headers = buildLocalHeaders(inputHeaders)
   let requestBody = body
 
   if (json !== undefined) {

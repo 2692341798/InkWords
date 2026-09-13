@@ -1,7 +1,7 @@
 import { useCallback } from 'react'
 import type { ScenarioMode } from '@/lib/scenarioMode'
 import { useStreamStore } from '@/store/streamStore'
-import { fetchEventSourceWithAuth } from '@/services/sse'
+import { fetchEventSourceLocal } from '@/services/sse'
 import { apiRoutes } from '@/services/apiRoutes'
 import { toast } from 'sonner'
 
@@ -41,7 +41,7 @@ export const useProjectAnalyzer = () => {
     let receivedComplete = false
     
     try {
-      await fetchEventSourceWithAuth(apiRoutes.llmStream.analyze, {
+      await fetchEventSourceLocal(apiRoutes.llmStream.analyze, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: ctrl.signal,

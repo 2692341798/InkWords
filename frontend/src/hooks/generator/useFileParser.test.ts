@@ -2,13 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useStreamStore } from '@/store/streamStore'
 import { analyzeParsedFileContent, parseUploadedFile } from './useFileParser'
 
-const { fetchEventSourceWithAuth, toastError } = vi.hoisted(() => ({
-  fetchEventSourceWithAuth: vi.fn(),
+const { fetchEventSourceLocal, toastError } = vi.hoisted(() => ({
+  fetchEventSourceLocal: vi.fn(),
   toastError: vi.fn(),
 }))
 
 vi.mock('@/services/sse', () => ({
-  fetchEventSourceWithAuth,
+  fetchEventSourceLocal,
 }))
 
 vi.mock('sonner', () => ({
@@ -32,7 +32,7 @@ describe('parseUploadedFile', () => {
 
   beforeEach(() => {
     vi.restoreAllMocks()
-    fetchEventSourceWithAuth.mockReset()
+    fetchEventSourceLocal.mockReset()
     toastError.mockReset()
     useStreamStore.getState().reset()
   })
@@ -106,7 +106,7 @@ describe('parseUploadedFile', () => {
         },
       },
     })
-    fetchEventSourceWithAuth.mockResolvedValue(undefined)
+    fetchEventSourceLocal.mockResolvedValue(undefined)
 
     await expect(
       parseUploadedFile({
@@ -139,7 +139,7 @@ describe('parseUploadedFile', () => {
         source_content: 'async parsed pdf content',
       },
     })
-    fetchEventSourceWithAuth.mockResolvedValue(undefined)
+    fetchEventSourceLocal.mockResolvedValue(undefined)
 
     const file = new File(['pdf'], 'course.pdf', { type: 'application/pdf' })
     Object.defineProperty(file, 'size', { configurable: true, value: 50 * 1024 * 1024 + 1 })
@@ -188,7 +188,7 @@ describe('parseUploadedFile', () => {
   })
 
   it('writes the resolved prompt profile into the store when analyze completes', async () => {
-    fetchEventSourceWithAuth.mockImplementation(async (_url, options) => {
+    fetchEventSourceLocal.mockImplementation(async (_url, options) => {
       options.onmessage?.({
         event: 'chunk',
         data: JSON.stringify({
@@ -232,7 +232,7 @@ describe('parseUploadedFile', () => {
   })
 
   it('shows generic stream failures instead of silently swallowing them', async () => {
-    fetchEventSourceWithAuth.mockImplementation(async (_url, options) => {
+    fetchEventSourceLocal.mockImplementation(async (_url, options) => {
       options.onerror?.(new Error('服务暂时不可用，请稍后重试'))
     })
 
@@ -243,7 +243,7 @@ describe('parseUploadedFile', () => {
   })
 
   it('shows a visible error when the completed event has no outline payload', async () => {
-    fetchEventSourceWithAuth.mockImplementation(async (_url, options) => {
+    fetchEventSourceLocal.mockImplementation(async (_url, options) => {
       options.onmessage?.({
         event: 'chunk',
         data: JSON.stringify({ status: 'complete', message: '分析完成' }),

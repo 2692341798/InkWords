@@ -1,30 +1,20 @@
 import { EventStreamContentType, fetchEventSource } from '@microsoft/fetch-event-source'
-import { authTokenStore } from '@/lib/authTokenStore'
 import { assertApiResponse } from './apiClient'
 
 export type SSEOptions = Omit<Parameters<typeof fetchEventSource>[1], 'headers'> & {
   headers?: Record<string, string>
-  requireAuth?: boolean
 }
 
-export const buildAuthHeader = (token: string | null) => {
-  if (!token) return {}
-  return { Authorization: `Bearer ${token}` }
-}
-
-export const fetchEventSourceWithAuth = (url: string, options: SSEOptions) => {
+export const fetchEventSourceLocal = (url: string, options: SSEOptions) => {
   const {
     headers: inputHeaders,
-    requireAuth = true,
     onopen,
     onerror,
     ...requestOptions
   } = options
-  const token = authTokenStore.getSnapshot()
-  const headers: Record<string, string> = { ...(inputHeaders ?? {}) }
-  if (requireAuth && token) {
-    headers.Authorization = `Bearer ${token}`
-  }
+  const headers = Object.fromEntries(
+    Object.entries(inputHeaders ?? {}).filter(([name]) => name.toLowerCase() !== 'authorization'),
+  )
 
   return fetchEventSource(url, {
     ...requestOptions,
