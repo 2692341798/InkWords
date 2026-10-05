@@ -4,7 +4,9 @@
 >
 > 状态：V1 开发基线，待按阶段实施
 >
-> 对应 PRD：`.trae/documents/InkWords_PRD.md`
+> 对应 PRD：`.trae/documents/InkWords_PRD.md`（V1.2）
+>
+> 2026-10-05 修订：同步 PRD V1.2，新增质量豁免（5.1、9.5）、AI 模拟试读（5.1、9.5）、旧数据迁移（13.1）、单档位项目与快照复用（5.6）、知识库证据边界（7.1）、学习期步幅调整边界（5.4）和可注入时钟（11.4）。
 >
 > 关系：本文取代旧 Project Mastery Course 文档的产品方向，但保留其已经实现并验证的源码快照、证据、蓝图、质量门禁、实验包和任务编排能力。
 
@@ -191,7 +193,9 @@ flowchart LR
 | VerificationRun | id、revision_id、environment_json、command_json、result_json、status | core-api |
 | QualityAssessment | id、scope_type、scope_id、contract_version、detector、dimension_scores_json、findings_json、status | core-api |
 | EditorialReview | id、book_build_id、stage、reviewer_kind、findings_json、decision、created_at | core-api |
-| ReaderTrial | id、revision_id、audience_profile_json、environment_json、events_json、completion_json、findings_json | core-api |
+| QualityWaiver | id、assessment_id、scope_type、scope_id、dimension、score、reason、content_hash、created_at、revoked_at | core-api |
+| ReaderTrial | id、revision_id、reader_kind、audience_profile_json、environment_json、events_json、completion_json、findings_json、author_decisions_json | core-api |
+| LegacyMigrationRecord | id、batch_id、legacy_kind、legacy_id、target_kind、target_id、status、created_at | core-api |
 | RightsItem | id、project_id、asset/evidence_id、work_type、rights_basis、allowed_use、attribution、publication_status | core-api |
 | BookBuild | id、project_id、book_contract_revision_id、style_sheet_revision_id、manifest_json、status、created_at | core-api/export-service |
 | LearningObjective | id、chapter_id、text、mastery_requirements_json | review-service |
@@ -247,6 +251,8 @@ activate_prior_knowledge
 
 每个阶段记录目标、所需前置、允许提示级别、成功证据和失败后的补救路由。系统不声称存在适用于所有人的固定“自然曲线”；LearningArc 是默认教学顺序，具体步幅由 ReaderModel 根据正确率、提示次数、耗时、错误类别和复述质量调整。
 
+`adapt_from_evidence` 只在 Learning 上下文内运行：分层提示、补充例子、变式练习和前置补偿材料在章节生成阶段产出，作为 ChapterRevision 的 document_json 内容块随章节一起审批；学习时 ReaderModel 只从已批准修订的这些内容块中选择，不在作答过程中调用模型改写母稿。作答评分仍按 11.2 调用模型。
+
 生成合同同时包含：
 
 - `new_concepts`：本节首次引入的核心概念，默认建议 4–6 个，超出需分组、拆节或说明不可拆理由；
@@ -266,6 +272,15 @@ Language detector 标记循环定义、未展开缩写、连续术语密集段�
 - 已批准或人工编辑的 revision 默认 locked；
 - 批量生成只选择没有锁定终稿的章节；
 - V1 不建立分支图，只保留线性修订和候选差异。
+
+### 5.6 读者档位与快照复用
+
+TextbookProject.audience 在项目创建时确定，V1 不支持在同一项目内切换或并存多个档位。需要另一档位时新建 TextbookProject：
+
+- 新项目的 SourceSnapshot 复制原快照的 resolved_version、content_hash 和 artifact 引用，不重新抓取；
+- SourceDocument/SourceChunk 解析、切分与索引按 snapshot content_hash 复用，不重复解析；
+- 快照不可变，因此跨项目复用不会互相影响；项目之间不共享 Source 行，也不建立跨项目外键；
+- 蓝图、BookContract、StyleSheet、章节、审批、ReviewCard 均在新项目内独立生成，两个项目的母稿不同步。
 
 ## 6. 资料抓取与解析设计
 
@@ -329,6 +344,8 @@ V1 不使用浏览器渲染型爬虫。遇到纯 JavaScript 文档站时明确�
 4. 对候选去重并控制每类证据预算；
 5. 生成 EvidencePack，记录选中和被截断原因；
 6. 真实 Gin 验收若证明召回不足，再以 Retriever port 加入 embedding/reranker。
+
+Obsidian/LLM Wiki 中的笔记、来源卡片和概念页不进入 EvidencePack。检索候选只来自当前项目的 SourceSnapshot；知识库只作为导出目标。
 
 ### 7.2 缓存键
 
@@ -478,12 +495,27 @@ UnderstandingChain
 5. copy edit：按 StyleSheetRevision 处理语言、标点、数字、单位、格式和引用；
 6. layout proof：对实际 DOCX/PDF 渲染结果检查目录、分页、代码、图表和答案；
 7. rights/compliance preflight：逐项汇总 RightsItem、引用、书名页占位符和出版社待确认项；
-8. reader trial：在干净环境按目标画像完成代表性主线，记录卡点、提示、耗时、错误和恢复；
+8. reader trial：AI 模拟读者在干净环境按目标画像完成代表性主线，记录卡点、提示、耗时、错误和恢复，作者逐条确认或驳回；
 9. explicit approval：用户批准后状态才进入 `publication_candidate`。
 
 AI reviewer 使用与生成上下文隔离的输入，只看到稿件、合同、证据和 rubric；确定性 detector 负责可机械验证事项。两者均标记 `reviewer_kind=automated`，不得显示为人类同行评审。任何批准后修改都会使依赖的审校、校对或预检状态过期。
 
-QualityAssessment 各维度使用 0–4 rubric；候选稿要求无 hard failure 且每项至少为 3。关键事实无证据、代码验证失败、隐藏前提阻断主线、跨章矛盾、教学实现冒充生产实现、权利状态不明却进入出版包等均为 hard failure，不能被平均分抵消。
+ReaderTrial 默认 `reader_kind=automated`：
+
+- 模拟读者的输入只有 ChapterRevision 正文、BookContract 读者画像和一个新建的 course-runner 隔离工作区，看不到 EvidencePack、ClaimPlan、生成提示或答案视图；
+- 它按正文顺序执行命令和代码，执行同样受 sandbox 限制，只运行本章生成的教学工件，不运行导入仓库；
+- 每个发现带正文位置、执行记录和类别（隐藏前提、跳步、术语未定义、命令失败、无法恢复）；作者对每条发现写入 author_decisions_json（确认/驳回及理由），确认的发现转为待修复缺陷；
+- 只有作者处理完全部发现后，reader trial 阶段才算完成；UI 和导出报告显示为“自动化试读”，不得显示为真人试读或“目标读者可独立完成”的证明；
+- 真人试读使用同一记录结构，`reader_kind=human`，与自动化结果分开展示。
+
+QualityAssessment 各维度使用 0–4 rubric。关键事实无证据、代码验证失败、隐藏前提阻断主线、跨章矛盾、教学实现冒充生产实现、权利状态不明却进入出版包等均为 hard failure，不能被平均分抵消，也不能豁免。
+
+QualityWaiver 规则：
+
+- 章节批准要求无 hard failure；维度低于 3 时，用户可对单个维度创建 QualityWaiver（必须填写 reason），API 校验该维度不属于 hard failure 后才允许批准；
+- QualityWaiver 绑定被评估内容的 content_hash；内容变化后由应用层置 revoked_at，章节回到需重新评估状态；
+- 质量报告与完整性报告单独列出生效中的 waiver；
+- BookBuild 进入 `publication_candidate` 前要求所有章节无生效 waiver，且整本 QualityAssessment 各维度至少为 3，与 `AGENTS.md` 的出版候选门槛一致。
 
 ## 10. 代码运行、截图和视频教案
 
@@ -570,6 +602,8 @@ review-service 使用 go-fsrs：
 
 打开 InkWords 时请求 `GET /review/due?at=...`，按 due_at、薄弱维度和预计时间排序。没有系统通知、后台常驻和定时推送。
 
+review-service 通过注入的 Clock 取当前时间，不在 domain 中直接调用 `time.Now()`。测试和自动化验收用固定或可推进的 Clock 模拟复习间隔；在模拟时间下产生的 MasteryAttempt 标记为 simulated，不计入真实 retain 证据，也不在正常 UI 中显示为已掌握。
+
 ## 12. 导出架构
 
 ### 12.1 单一出版流水线
@@ -622,6 +656,34 @@ Canonical Book AST 处理目录、编号、图题、代码题注、交叉引用�
 7. 最后删除旧列和表。
 
 过渡期的 auth bypass 只能作为迁移桥梁，不能成为永久产品设计。
+
+### 13.1 旧博客与复习数据迁移
+
+第 5 步之后、第 7 步之前，把旧数据转换为教材领域对象，而不是长期依赖兼容映射：
+
+| 旧数据 | 识别方式 | 目标 |
+| --- | --- | --- |
+| 系列根博客 | `blogs.is_series = true` 且 `parent_id IS NULL` | 一个 TextbookProject，title 取自根博客 |
+| 系列子博客 | `parent_id` 指向系列根 | 该项目下的 Chapter，sort 取 `chapter_sort` |
+| 单篇博客 | 非系列且无 parent | 一个单章 TextbookProject |
+| 旧复述记录 | review-service 中关联到博客的复述会话 | 对应章节 LearningObjective 的 explain 维度历史 MasteryAttempt |
+| 软删除数据 | `deleted_at IS NOT NULL` | 不迁移，只保留在备份中 |
+
+转换规则：
+
+- 旧正文写入一个 ChapterRevision（`created_by=legacy_migration`），Chapter 状态为“需补证”；不设置 locked_revision_id，不视为人工终稿或已批准；
+- 旧 audience 无法可靠推断时，项目 audience 标记为待用户设置，未设置前不允许生成；
+- 旧复述记录只写 explain 维度并标记 legacy，不推断 complete/reproduce/transfer/diagnose，不产生 retain；ReviewCard 在迁移后首次作答时按新规则创建；
+- 所有旧 user_id 的数据都并入本地 Workspace，预演报告列出来源 user_id；
+- 每条映射写入 LegacyMigrationRecord，以 (legacy_kind, legacy_id) 唯一约束保证重复执行不产生重复项目。
+
+执行流程：
+
+1. dry-run：只读扫描，输出将创建的项目/章节/学习证据和无法映射项，不写入；
+2. 备份 PostgreSQL 与资料目录，并验证备份可恢复；
+3. 用户在 UI 中确认预演报告后执行；未确认不得运行；
+4. core-api 在单个事务内写入项目、章节、修订和 LegacyMigrationRecord，失败整体回滚；提交后通过版本化消息把 blog_id → chapter_id 映射发给 review-service，由 review-service 幂等地转换旧复述记录（core-api 不直接写 review-service 的表）；
+5. 旧表保持只读，用户确认迁移结果后，才按第 7 步删除旧列和表。回滚方式为从第 2 步的备份恢复。
 
 ## 14. 数据库迁移
 
@@ -711,9 +773,11 @@ frontend/src/features/
 - 线性 ChapterRevision、锁定、CAS 应用和 diff；
 - 博客/视频/学习投影；
 - ChapterProfile、LearningArc、通俗语言和隐藏前提 detector；
-- 按章生成与恢复。
+- QualityWaiver 与章节批准校验；
+- 按章生成与恢复；
+- 旧博客迁移为 TextbookProject/ChapterRevision（13.1 的 dry-run、备份、用户确认）。
 
-退出条件：人工修改内容在任何批量任务中不被覆盖。
+退出条件：人工修改内容在任何批量任务中不被覆盖；旧系列博客迁移的预演报告与实际结果一致，重复执行不产生重复项目。
 
 ### Phase 4：Provider 与 Token
 
@@ -743,13 +807,15 @@ frontend/src/features/
 - 复述、补全、复现、迁移、诊断任务；
 - go-fsrs ReviewCard；
 - 打开应用时的 due 队列；
+- 可注入 Clock 与 simulated 标记；
+- 旧复述记录迁移为 legacy explain 证据；
 - 评分解释和用户纠正。
 
 退出条件：一次完整学习记录会改变下一次任务时间和类型，且延迟通过前不显示已掌握。
 
 ### Phase 7：出版导出与整本 Gin 验收
 
-- 不可变 BookBuild、QualityAssessment、EditorialReview、ReaderTrial 和 RightsItem；
+- 不可变 BookBuild、QualityAssessment、EditorialReview、ReaderTrial（AI 模拟读者 + 作者确认）和 RightsItem；
 - 发展性、技术、自学性、全书一致性、文字编辑、排版校对与合规预检流水线；
 - Canonical Book AST；
 - Pandoc DOCX、reference.docx；
@@ -793,6 +859,14 @@ frontend/src/features/
 - Pandoc/Chromium 不可用；
 - RightsItem 仅标记“网上公开”却没有出版权利依据；
 - 自动检查伪装成人工同行评审或官方出版质量认定；
+- 对 hard failure 创建 QualityWaiver 被拒绝；
+- 已豁免章节内容修改后 waiver 失效；
+- 存在生效 waiver 的章节进入 publication_candidate 被拒绝；
+- AI 模拟试读结果被展示为真人试读；
+- 模拟读者访问到 EvidencePack、答案或导入仓库；
+- 模拟 Clock 下产生的 attempt 被计为真实 retain；
+- 旧博客迁移重复执行、迁移中途失败、软删除数据被迁移；
+- 知识库笔记进入 EvidencePack；
 - 导出物伪造 ISBN、CIP 或出版单位信息；
 - 断网后读取已批准教材。
 
@@ -805,8 +879,8 @@ frontend/src/features/
 - cache correctness：相同 key 一致、不同合同必失效；
 - sample chapter human pass；
 - ChapterProfile coverage：完整样章和风格探针覆盖全书主要类型；
-- self-study hard failures：0，冷启动主线路径无口头补充完成；
-- quality rubric：所有维度 >= 3/4 且 hard failures = 0；
+- self-study hard failures：0；AI 模拟试读走完主线路径，全部发现经作者确认或驳回；
+- quality rubric：章节批准 hard failures = 0，低于 3/4 的维度必须有生效 waiver；出版候选原稿所有维度 >= 3/4、hard failures = 0 且无生效 waiver；
 - whole-book consistency：术语冲突、断裂交叉引用、DAG 逆序、代码状态断裂 = 0；
 - publication preflight：RightsItem 完整，书名页无伪造字段，编校差错预检 <= 1‱；
 - delayed mastery pass；
