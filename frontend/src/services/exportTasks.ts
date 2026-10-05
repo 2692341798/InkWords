@@ -1,7 +1,6 @@
-import { authTokenStore } from '@/lib/authTokenStore'
 import { requestBlob, requestJson } from './apiClient'
 import { apiRoutes } from './apiRoutes'
-import { fetchEventSourceWithAuth } from './sse'
+import { fetchEventSourceLocal } from './sse'
 
 export interface ExportTaskResponse {
   task_id: string
@@ -11,7 +10,6 @@ export interface ExportTaskResponse {
 
 interface ExportTaskDependencies {
   fetchImpl?: typeof fetch
-  getToken?: () => string | null
   downloadBlob?: (blob: Blob, filename: string) => void
 }
 
@@ -28,14 +26,13 @@ const downloadBlobWithBrowser = (blob: Blob, filename: string) => {
 
 /**
  * Why: PDF 导出改成任务流后，Sidebar 只需要关心“创建任务”这一件事，
- * 具体鉴权头和接口契约由 service 统一维护，避免组件里散落重复实现。
+ * 具体本地 workspace 接口契约由 service 统一维护，避免组件里散落重复实现。
  */
 export async function createExportTask(
   blogID: string,
-  dependencies: Pick<ExportTaskDependencies, 'fetchImpl' | 'getToken'> = {},
+  dependencies: Pick<ExportTaskDependencies, 'fetchImpl'> = {},
 ): Promise<ExportTaskResponse> {
   const fetchImpl = dependencies.fetchImpl ?? fetch
-  const token = dependencies.getToken ? dependencies.getToken() : authTokenStore.getSnapshot()
   return requestJson<ExportTaskResponse>(apiRoutes.coreApi.tasks.export, {
     method: 'POST',
     json: {
@@ -44,13 +41,12 @@ export async function createExportTask(
       idempotency_key: `export-pdf:${blogID}`,
     },
     fetchImpl,
-    token,
     fallbackMessage: '创建导出任务失败',
   })
 }
 
 export async function waitForTaskCompletion(streamURL: string): Promise<void> {
-  await fetchEventSourceWithAuth(streamURL, {
+  await fetchEventSourceLocal(streamURL, {
     method: 'GET',
     openWhenHidden: true,
     onmessage(message) {
@@ -74,11 +70,9 @@ export async function downloadTaskArtifact(
   dependencies: ExportTaskDependencies = {},
 ): Promise<void> {
   const fetchImpl = dependencies.fetchImpl ?? fetch
-  const token = dependencies.getToken ? dependencies.getToken() : authTokenStore.getSnapshot()
   const blob = await requestBlob(apiRoutes.coreApi.tasks.download(taskID), {
     method: 'GET',
     fetchImpl,
-    token,
     fallbackMessage: 'PDF 下载失败',
   })
   const downloadBlob = dependencies.downloadBlob ?? downloadBlobWithBrowser

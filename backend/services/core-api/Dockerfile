@@ -1,5 +1,5 @@
 # Stage 1: Build the core API binary only.
-FROM golang:1.25-alpine AS builder
+FROM golang:1.26-alpine AS builder
 
 WORKDIR /src
 
@@ -12,6 +12,8 @@ RUN go mod download
 
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o /out/core-api ./services/core-api/cmd
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o /out/textbook-artifact-reconcile ./services/core-api/cmd/textbook-artifact-reconcile
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o /out/textbook-dependency-inspect ./services/core-api/cmd/textbook-dependency-inspect
 
 # Stage 2: Runtime dependencies owned by core-api.
 FROM alpine:3.19
@@ -23,6 +25,8 @@ RUN apk add --no-cache ca-certificates git poppler-utils tzdata && \
     echo "Asia/Shanghai" > /etc/timezone
 
 COPY --from=builder /out/core-api ./core-api
+COPY --from=builder /out/textbook-artifact-reconcile ./textbook-artifact-reconcile
+COPY --from=builder /out/textbook-dependency-inspect ./textbook-dependency-inspect
 
 EXPOSE 8080
 

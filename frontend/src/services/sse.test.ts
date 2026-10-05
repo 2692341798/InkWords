@@ -10,40 +10,25 @@ vi.mock('@microsoft/fetch-event-source', async (importOriginal) => {
   }
 })
 
-import { authTokenStore } from '@/lib/authTokenStore'
-import { AUTH_EXPIRED_MESSAGE, GATEWAY_UNAVAILABLE_MESSAGE } from './apiClient'
-import { buildAuthHeader, fetchEventSourceWithAuth } from './sse'
+import { GATEWAY_UNAVAILABLE_MESSAGE, LOCAL_ACCESS_DENIED_MESSAGE } from './apiClient'
+import { fetchEventSourceLocal } from './sse'
 
-const storage = new Map<string, string>()
-
-describe('buildAuthHeader', () => {
+describe('fetchEventSourceLocal', () => {
   beforeEach(() => {
     fetchEventSourceMock.mockClear()
-    storage.clear()
-    vi.stubGlobal('localStorage', {
-      getItem: vi.fn((key: string) => storage.get(key) ?? null),
-      setItem: vi.fn((key: string, value: string) => storage.set(key, value)),
-      removeItem: vi.fn((key: string) => storage.delete(key)),
+  })
+
+  it('strips request identity and reports unexpected unauthorized stream opens', async () => {
+    void fetchEventSourceLocal('/api/v1/tasks/task-1/stream', {
+      headers: { Authorization: 'Bearer caller-token', 'X-Test': '1' },
+      onmessage: vi.fn(),
     })
-  })
-
-  it('returns empty object when token missing', () => {
-    expect(buildAuthHeader(null)).toEqual({})
-  })
-
-  it('returns Bearer token header when token present', () => {
-    expect(buildAuthHeader('t')).toEqual({ Authorization: 'Bearer t' })
-  })
-
-  it('uses shared auth handling and rejects unauthorized stream opens', async () => {
-    authTokenStore.setToken('stream-token')
-    void fetchEventSourceWithAuth('/api/v1/tasks/task-1/stream', { onmessage: vi.fn() })
 
     const [, options] = fetchEventSourceMock.mock.calls[0] as [string, {
       headers: Record<string, string>
       onopen: (response: Response) => Promise<void>
     }]
-    expect(options.headers.Authorization).toBe('Bearer stream-token')
+    expect(options.headers).toEqual({ 'X-Test': '1' })
 
     const response = {
       ok: false,
@@ -51,13 +36,24 @@ describe('buildAuthHeader', () => {
       headers: new Headers({ 'content-type': 'application/json' }),
       json: vi.fn().mockResolvedValue({ message: 'unauthorized' }),
     } as unknown as Response
-    await expect(options.onopen(response)).rejects.toThrow(AUTH_EXPIRED_MESSAGE)
-    expect(authTokenStore.getSnapshot()).toBeNull()
+    await expect(options.onopen(response)).rejects.toThrow(LOCAL_ACCESS_DENIED_MESSAGE)
+  })
+
+  it('does not send a legacy browser token on local-workspace streams', () => {
+    const getItem = vi.fn().mockReturnValue('stale-stream-token')
+    vi.stubGlobal('localStorage', { getItem })
+    void fetchEventSourceLocal('/api/v1/tasks/task-1/stream', { onmessage: vi.fn() })
+
+    const [, options] = fetchEventSourceMock.mock.calls[0] as [string, {
+      headers: Record<string, string>
+    }]
+    expect(options.headers).not.toHaveProperty('Authorization')
+    expect(getItem).not.toHaveBeenCalled()
   })
 
   it('normalizes unavailable gateways and rejects implicit stream retries', async () => {
     const callerOnError = vi.fn()
-    void fetchEventSourceWithAuth('/api/v1/tasks/task-1/stream', {
+    void fetchEventSourceLocal('/api/v1/tasks/task-1/stream', {
       onmessage: vi.fn(),
       onerror: callerOnError,
     })

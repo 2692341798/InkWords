@@ -49,8 +49,12 @@ func sseStreamBody(c *gin.Context, chunkChan chan string, errChan *chan error, o
 			return false
 		case err, ok := <-*errChan:
 			if ok && err != nil {
-				slog.Error("stream operation failed", "operation", operation, "error", err)
-				writeStreamEvent(c, w, "error", externalStreamErrorMessage(operation, err))
+				message := externalStreamErrorMessage(operation, err)
+				// Stream errors can originate in a provider adapter. Persist only the
+				// stable, user-safe category in logs as well as SSE; raw provider
+				// diagnostics may contain credentials or untrusted response content.
+				slog.Error("stream operation failed", "operation", operation, "message", message)
+				writeStreamEvent(c, w, "error", message)
 				return false
 			}
 			if !ok {

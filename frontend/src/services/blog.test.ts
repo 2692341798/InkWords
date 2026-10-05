@@ -2,29 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { blogService } from './blog'
 
 const mockFetch = vi.fn()
-const storage = new Map<string, string>()
 
 describe('blogService', () => {
   beforeEach(() => {
     mockFetch.mockReset()
     vi.stubGlobal('fetch', mockFetch)
-    storage.clear()
-    vi.stubGlobal('localStorage', {
-      getItem: vi.fn((key: string) => storage.get(key) ?? null),
-      setItem: vi.fn((key: string, value: string) => {
-        storage.set(key, value)
-      }),
-      removeItem: vi.fn((key: string) => {
-        storage.delete(key)
-      }),
-      clear: vi.fn(() => {
-        storage.clear()
-      }),
-    })
-    globalThis.localStorage.setItem('token', 'blog-token')
   })
 
-  it('loads the blog tree with an auth header', async () => {
+  it('loads the blog tree without request identity', async () => {
     mockFetch.mockResolvedValue({
       ok: true,
       status: 200,
@@ -40,7 +25,7 @@ describe('blogService', () => {
 
     const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit]
     expect(url).toBe('/api/v1/blogs')
-    expect(new Headers(init.headers).get('Authorization')).toBe('Bearer blog-token')
+    expect(new Headers(init.headers).has('Authorization')).toBe(false)
   })
 
   it('creates a draft blog via POST and returns the parsed draft node', async () => {
@@ -124,7 +109,7 @@ describe('blogService', () => {
     expect(url).toBe('/api/v1/blogs/series-1/export/pdf')
   })
 
-  it('clears the token and throws a normalized error on unauthorized responses', async () => {
+  it('reports local configuration failure on unexpected unauthorized responses', async () => {
     mockFetch.mockResolvedValue({
       ok: false,
       status: 401,
@@ -134,8 +119,6 @@ describe('blogService', () => {
       }),
     } as Response)
 
-    await expect(blogService.fetchBlogTree()).rejects.toThrow('登录已过期，请重新登录')
-
-    expect(globalThis.localStorage.getItem('token')).toBeNull()
+    await expect(blogService.fetchBlogTree()).rejects.toThrow('本地工作区请求被拒绝，请检查服务配置')
   })
 })

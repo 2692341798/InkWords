@@ -8,7 +8,7 @@ import (
 )
 
 // GetTodayCard 返回今日推荐题卡。
-func (s *Service) GetTodayCard(ctx context.Context, userID uuid.UUID) (ReviewCardResponse, error) {
+func (s *Service) GetTodayCard(ctx context.Context, workspaceID uuid.UUID) (ReviewCardResponse, error) {
 	notes, err := s.noteSource.ListEligibleNotes(ctx)
 	if err != nil {
 		return ReviewCardResponse{}, err
@@ -17,7 +17,7 @@ func (s *Service) GetTodayCard(ctx context.Context, userID uuid.UUID) (ReviewCar
 		return ReviewCardResponse{}, errNoEligibleReviewNotes
 	}
 
-	stats, err := s.loadItemState(ctx, userID)
+	stats, err := s.loadItemState(ctx, workspaceID)
 	if err != nil {
 		return ReviewCardResponse{}, err
 	}
@@ -32,7 +32,7 @@ func (s *Service) GetTodayCard(ctx context.Context, userID uuid.UUID) (ReviewCar
 }
 
 // PickRandomCard 返回手动随机抽取的题卡。
-func (s *Service) PickRandomCard(ctx context.Context, userID uuid.UUID) (ReviewCardResponse, error) {
+func (s *Service) PickRandomCard(ctx context.Context, workspaceID uuid.UUID) (ReviewCardResponse, error) {
 	notes, err := s.noteSource.ListEligibleNotes(ctx)
 	if err != nil {
 		return ReviewCardResponse{}, err
@@ -41,7 +41,7 @@ func (s *Service) PickRandomCard(ctx context.Context, userID uuid.UUID) (ReviewC
 		return ReviewCardResponse{}, errNoEligibleReviewNotes
 	}
 
-	recent, err := s.loadRecentItems(ctx, userID)
+	recent, err := s.loadRecentItems(ctx, workspaceID)
 	if err != nil {
 		return ReviewCardResponse{}, err
 	}
@@ -50,13 +50,13 @@ func (s *Service) PickRandomCard(ctx context.Context, userID uuid.UUID) (ReviewC
 }
 
 // ListNotes 返回手动选择文章复习入口所需的候选列表。
-func (s *Service) ListNotes(ctx context.Context, userID uuid.UUID, query ListNotesQuery) (ListNotesResponse, error) {
+func (s *Service) ListNotes(ctx context.Context, workspaceID uuid.UUID, query ListNotesQuery) (ListNotesResponse, error) {
 	notes, err := s.noteSource.ListEligibleNotes(ctx)
 	if err != nil {
 		return ListNotesResponse{}, err
 	}
 
-	stats, err := s.loadItemState(ctx, userID)
+	stats, err := s.loadItemState(ctx, workspaceID)
 	if err != nil {
 		return ListNotesResponse{}, err
 	}
@@ -105,8 +105,8 @@ func (s *Service) ListNotes(ctx context.Context, userID uuid.UUID, query ListNot
 	}, nil
 }
 
-func (s *Service) loadItemState(ctx context.Context, userID uuid.UUID) (map[string]ReviewItemState, error) {
-	sessions, err := s.repo.GetRecentSessions(ctx, userID, 200)
+func (s *Service) loadItemState(ctx context.Context, workspaceID uuid.UUID) (map[string]ReviewItemState, error) {
+	sessions, err := s.repo.GetRecentSessions(ctx, workspaceID, 200)
 	if err != nil {
 		return nil, err
 	}
@@ -131,8 +131,8 @@ func (s *Service) loadItemState(ctx context.Context, userID uuid.UUID) (map[stri
 	return stats, nil
 }
 
-func (s *Service) loadRecentItems(ctx context.Context, userID uuid.UUID) (map[string]bool, error) {
-	sessions, err := s.repo.GetRecentSessions(ctx, userID, 50)
+func (s *Service) loadRecentItems(ctx context.Context, workspaceID uuid.UUID) (map[string]bool, error) {
+	sessions, err := s.repo.GetRecentSessions(ctx, workspaceID, 50)
 	if err != nil {
 		return nil, err
 	}

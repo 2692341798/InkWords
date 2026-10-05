@@ -12,7 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
-	sharedkernel "inkwords-backend/shared/kernel/projectcourse"
+	sharedtextbook "inkwords-backend/shared/kernel/textbook"
 	sharedrabbitmq "inkwords-backend/shared/platform/rabbitmq"
 )
 
@@ -26,42 +26,65 @@ type taskService interface {
 	IsCancelled(ctx context.Context, taskID uuid.UUID) (bool, error)
 }
 
+type textbookWorkspaceTaskStore interface {
+	TextbookWorkspaceMatches(context.Context, uuid.UUID, uuid.UUID, string) (bool, error)
+}
+
 type generationStreamService interface {
-	Generate(ctx context.Context, userID uuid.UUID, req GenerateRequest, chunkChan chan<- string, errChan chan<- error)
+	Generate(ctx context.Context, workspaceID uuid.UUID, req GenerateRequest, chunkChan chan<- string, errChan chan<- error)
 	BuildGenerateSingleTaskResult(ctx context.Context, req GenerateRequest, content string) ([]byte, error)
 	BuildGenerateSeriesTaskResult(ctx context.Context, req GenerateRequest) ([]byte, error)
-	BuildContinueTaskResult(ctx context.Context, userID uuid.UUID, blogID uuid.UUID, appendedContent string) ([]byte, error)
-	Continue(ctx context.Context, userID uuid.UUID, blogID uuid.UUID, chunkChan chan<- string, errChan chan<- error)
+	BuildContinueTaskResult(ctx context.Context, workspaceID uuid.UUID, blogID uuid.UUID, appendedContent string) ([]byte, error)
+	Continue(ctx context.Context, workspaceID uuid.UUID, blogID uuid.UUID, chunkChan chan<- string, errChan chan<- error)
 	Polish(ctx context.Context, req PolishRequest, chunkChan chan<- string, errChan chan<- error)
 }
 
-// projectCourseRunner isolates the new course pipeline from the legacy article stream.
-// It must return a task-only JSON result and must never execute the analyzed repository.
-type projectCourseRunner interface {
-	Run(ctx context.Context, message sharedrabbitmq.GenerationRequestedMessage) ([]byte, error)
+// textbookSampleRunner is deliberately result-only: core-api remains the sole writer of textbook revisions.
+type textbookSampleRunner interface {
+	Run(context.Context, sharedtextbook.SampleGenerationTaskPayload) (sharedtextbook.SampleGenerationTaskResult, error)
+}
+
+type textbookSampleFailureEvidence interface {
+	FailureResult() sharedtextbook.SampleGenerationTaskFailureResult
+}
+
+type taskFailureResultStore interface {
+	MarkFailedWithResult(context.Context, uuid.UUID, string, []byte) error
 }
 
 // TaskConsumer 把 RabbitMQ 中的 generation task 转换成现有 stream.Service 的执行调用。
 type TaskConsumer struct {
 	tasks                    taskService
 	streams                  generationStreamService
-	projectCourse            projectCourseRunner
-	metrics                  *CourseMetrics
+	textbookSample           textbookSampleRunner
+	localWorkspaceID         uuid.UUID
 	cancellationPollInterval time.Duration
+}
+
+// WithLocalWorkspace pins legacy blog task execution to the server-resolved
+// installation workspace. Message workspace values may confirm but never
+// override this identity.
+func (c *TaskConsumer) WithLocalWorkspace(workspaceID uuid.UUID) *TaskConsumer {
+	if c != nil {
+		c.localWorkspaceID = workspaceID
+	}
+	return c
+}
+
+// WithTextbookSampleRunner enables the isolated textbook candidate path without changing legacy callers.
+func (c *TaskConsumer) WithTextbookSampleRunner(runner textbookSampleRunner) *TaskConsumer {
+	if c != nil {
+		c.textbookSample = runner
+	}
+	return c
 }
 
 // NewTaskConsumer 通过依赖注入组装 llm-stream 使用的 generation worker consumer。
 
-func NewTaskConsumer(tasks taskService, streams generationStreamService, projectCourse ...projectCourseRunner) *TaskConsumer {
-	var courseRunner projectCourseRunner
-	if len(projectCourse) > 0 {
-		courseRunner = projectCourse[0]
-	}
+func NewTaskConsumer(tasks taskService, streams generationStreamService) *TaskConsumer {
 	return &TaskConsumer{
 		tasks:                    tasks,
 		streams:                  streams,
-		projectCourse:            courseRunner,
-		metrics:                  NewCourseMetrics(),
 		cancellationPollInterval: defaultTaskCancellationPollInterval,
 	}
 }
@@ -73,12 +96,16 @@ func (c *TaskConsumer) HandleGenerationRequested(ctx context.Context, message sh
 	if c == nil || c.tasks == nil || c.streams == nil {
 		return errors.New("task consumer dependencies are not configured")
 	}
-	if isProjectCourseKind(message.Kind) {
-		return c.handleProjectCourse(ctx, message)
+	if strings.TrimSpace(message.Kind) == sharedtextbook.TextbookSampleGenerationTaskSubtype {
+		return c.handleTextbookSample(ctx, message)
 	}
 
 	if !supportsGenerationKind(message.Kind) {
 		return c.tasks.MarkFailed(ctx, message.TaskID, fmt.Sprintf("unsupported generation kind: %s", strings.TrimSpace(message.Kind)))
+	}
+	workspaceID, err := c.resolveBlogWorkspace(message.WorkspaceID)
+	if err != nil {
+		return c.tasks.MarkFailed(ctx, message.TaskID, err.Error())
 	}
 
 	normalizedMessage, err := normalizeGenerationMessage(message)
@@ -104,7 +131,7 @@ func (c *TaskConsumer) HandleGenerationRequested(ctx context.Context, message sh
 	go c.watchCancellation(taskCtx, cancel, message.TaskID)
 
 	chunkChan, errChan := newGenerateStreamChannels()
-	if err := c.startTaskStream(taskCtx, message, chunkChan, errChan); err != nil {
+	if err := c.startTaskStream(taskCtx, workspaceID, message, chunkChan, errChan); err != nil {
 		return c.tasks.MarkFailed(ctx, message.TaskID, err.Error())
 	}
 
@@ -158,7 +185,7 @@ func (c *TaskConsumer) HandleGenerationRequested(ctx context.Context, message sh
 		}
 	}
 
-	result, err := c.buildFinalTaskResult(ctx, message, fullContent.String())
+	result, err := c.buildFinalTaskResult(ctx, workspaceID, message, fullContent.String())
 	if err != nil {
 		return c.tasks.MarkFailed(ctx, message.TaskID, err.Error())
 	}
@@ -166,21 +193,20 @@ func (c *TaskConsumer) HandleGenerationRequested(ctx context.Context, message sh
 	return c.tasks.MarkSucceeded(ctx, message.TaskID, result)
 }
 
-func isProjectCourseKind(kind string) bool {
-	switch strings.TrimSpace(kind) {
-	case "project_course_analyze", "project_course_generate":
-		return true
-	default:
-		return false
+func (c *TaskConsumer) handleTextbookSample(ctx context.Context, message sharedrabbitmq.GenerationRequestedMessage) error {
+	valid, err := c.validateTextbookWorkspace(ctx, message.TaskID, message.WorkspaceID, message.Kind)
+	if err != nil || !valid {
+		return err
 	}
-}
-
-//nolint:gocyclo // The worker keeps cancellation, reuse, event, and terminal-state gates explicit.
-func (c *TaskConsumer) handleProjectCourse(ctx context.Context, message sharedrabbitmq.GenerationRequestedMessage) error {
-	started := time.Now()
-	if c.projectCourse == nil {
-		c.metrics.Observe(strings.TrimSpace(message.Kind), time.Since(started), false)
-		return c.tasks.MarkFailed(ctx, message.TaskID, "project course worker is not configured")
+	if c.textbookSample == nil {
+		return c.tasks.MarkFailed(ctx, message.TaskID, "textbook sample worker is not configured")
+	}
+	var payload sharedtextbook.SampleGenerationTaskPayload
+	if err := json.Unmarshal(message.Payload, &payload); err != nil {
+		return c.tasks.MarkFailed(ctx, message.TaskID, "invalid textbook sample payload")
+	}
+	if err := payload.Validate(); err != nil {
+		return c.tasks.MarkFailed(ctx, message.TaskID, "invalid textbook sample payload: "+err.Error())
 	}
 	cancelled, err := c.tasks.IsCancelled(ctx, message.TaskID)
 	if err != nil {
@@ -189,47 +215,30 @@ func (c *TaskConsumer) handleProjectCourse(ctx context.Context, message sharedra
 	if cancelled {
 		return nil
 	}
-	var payload struct {
-		CourseID string `json:"course_id"`
-	}
-	if len(message.Payload) > 0 {
-		if err := json.Unmarshal(message.Payload, &payload); err != nil {
-			return c.tasks.MarkFailed(ctx, message.TaskID, "invalid project course payload")
-		}
-	}
-	if strings.TrimSpace(payload.CourseID) == "" {
-		return c.tasks.MarkFailed(ctx, message.TaskID, "project course payload requires course_id")
-	}
-	if err := c.tasks.MarkRunning(ctx, message.TaskID); err != nil {
-		return err
-	}
-	stage := "analysis"
-	if message.Kind == "project_course_generate" {
-		stage = "generation"
-	}
-	inputHash := hashCourseContent(message.Payload)
-	if reuse, ok := c.tasks.(projectCourseResultReuseStore); ok {
-		cachedResult, found, reuseErr := reuse.FindCompletedProjectCourseResult(ctx, payload.CourseID, stage, inputHash)
+	stageKey := sharedtextbook.TaskStageInputHash(message.TaskID.String(), sharedtextbook.SampleGenerationStage, payload.InputHash)
+	if reuse, ok := c.tasks.(textbookStageResultReuseStore); ok {
+		cachedResult, found, reuseErr := reuse.FindCompletedTextbookStageResult(ctx, message.TaskID, stageKey)
 		if reuseErr != nil {
 			return reuseErr
 		}
 		if found {
-			c.metrics.ObserveCache(true)
-			c.metrics.Observe(strings.TrimSpace(message.Kind), time.Since(started), true)
-			if err := c.appendProjectCourseEvent(ctx, message.TaskID, payload.CourseID, stage, "cache_hit", 1, projectCourseBlueprintVersion(message.Payload), inputHash, true, cachedResult); err != nil {
-				return err
-			}
+			// A failed terminal-state write must not cause the already completed
+			// model stage to run again. The checkpoint is scoped to this exact
+			// task, stage, and frozen input; write its original result back so the
+			// core-api reconciler can continue the normal candidate-persistence flow.
 			return c.tasks.MarkSucceeded(ctx, message.TaskID, cachedResult)
 		}
-		c.metrics.ObserveCache(false)
 	}
-	if err := c.appendProjectCourseEvent(ctx, message.TaskID, payload.CourseID, stage, "started", 1, projectCourseBlueprintVersion(message.Payload), inputHash, false, message.Payload); err != nil {
+	if err := c.tasks.MarkRunning(ctx, message.TaskID); err != nil {
+		return err
+	}
+	if err := c.appendTextbookSampleEvent(ctx, message.TaskID, payload, "started", false, nil); err != nil {
 		return err
 	}
 	taskCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	go c.watchCancellation(taskCtx, cancel, message.TaskID)
-	result, err := c.projectCourse.Run(taskCtx, message)
+	result, err := c.textbookSample.Run(taskCtx, payload)
 	if err != nil {
 		cancelled, cancelErr := c.tasks.IsCancelled(ctx, message.TaskID)
 		if cancelErr != nil {
@@ -238,65 +247,93 @@ func (c *TaskConsumer) handleProjectCourse(ctx context.Context, message sharedra
 		if cancelled || errors.Is(err, context.Canceled) {
 			return nil
 		}
-		c.metrics.Observe(strings.TrimSpace(message.Kind), time.Since(started), false)
+		var rejected textbookSampleFailureEvidence
+		if errors.As(err, &rejected) {
+			failure := rejected.FailureResult()
+			if validateErr := failure.ValidateAgainst(payload); validateErr != nil {
+				return c.tasks.MarkFailed(ctx, message.TaskID, "invalid textbook sample failure telemetry")
+			}
+			encoded, marshalErr := json.Marshal(failure)
+			if marshalErr != nil {
+				return c.tasks.MarkFailed(ctx, message.TaskID, "marshal textbook sample failure telemetry")
+			}
+			if store, ok := c.tasks.(taskFailureResultStore); ok {
+				return store.MarkFailedWithResult(ctx, message.TaskID, err.Error(), encoded)
+			}
+			if appendErr := c.appendTextbookSampleFailureEvent(ctx, message.TaskID, payload, encoded); appendErr != nil {
+				return c.tasks.MarkFailed(ctx, message.TaskID, err.Error())
+			}
+		}
 		return c.tasks.MarkFailed(ctx, message.TaskID, err.Error())
 	}
-	cancelled, cancelErr := c.tasks.IsCancelled(ctx, message.TaskID)
-	if cancelErr != nil {
-		return cancelErr
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		return c.tasks.MarkFailed(ctx, message.TaskID, "marshal textbook sample result: "+err.Error())
 	}
-	if cancelled {
-		return nil
-	}
-	c.metrics.Observe(strings.TrimSpace(message.Kind), time.Since(started), true)
-	c.metrics.ObserveResult(result)
-	if err := c.appendProjectCourseEvent(ctx, message.TaskID, payload.CourseID, stage, "result_ready", 2, projectCourseBlueprintVersion(result), inputHash, true, result); err != nil {
+	if err := c.appendTextbookSampleEvent(ctx, message.TaskID, payload, "result_ready", true, encoded); err != nil {
 		return err
 	}
-	return c.tasks.MarkSucceeded(ctx, message.TaskID, result)
+	return c.tasks.MarkSucceeded(ctx, message.TaskID, encoded)
 }
 
-func (c *TaskConsumer) appendProjectCourseEvent(ctx context.Context, taskID uuid.UUID, courseID, stage, checkpoint string, sequence, blueprintVersion int, inputHash string, completed bool, content []byte) error {
-	outputHash := ""
-	if completed {
-		outputHash = hashCourseContent(content)
+func (c *TaskConsumer) appendTextbookSampleFailureEvent(ctx context.Context, taskID uuid.UUID, payload sharedtextbook.SampleGenerationTaskPayload, failure []byte) error {
+	stageKey := sharedtextbook.TaskStageInputHash(taskID.String(), sharedtextbook.SampleGenerationStage, payload.InputHash)
+	var failureResult json.RawMessage
+	if err := json.Unmarshal(failure, &failureResult); err != nil {
+		return fmt.Errorf("decode textbook sample failure evidence: %w", err)
 	}
-	checkpointPayload := sharedkernel.CourseCheckpoint{
-		CourseID: courseID, BlueprintVersion: blueprintVersion, Stage: stage,
-		Sequence: sequence, Checkpoint: checkpoint, InputHash: inputHash,
-		OutputHash: outputHash, Completed: completed,
-	}
-	if err := checkpointPayload.Validate(); err != nil {
-		return err
-	}
-	payload, err := json.Marshal(checkpointPayload)
+	eventPayload, err := json.Marshal(map[string]any{
+		"project_id": payload.ProjectID, "chapter_id": payload.ChapterID, "stage": sharedtextbook.SampleGenerationStage,
+		"checkpoint": "quality_rejected", "input_hash": payload.InputHash, "stage_execution_key": stageKey,
+		"completed": false, "failure": failureResult,
+	})
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal textbook sample failure event: %w", err)
 	}
-	return c.tasks.AppendEvent(ctx, taskID, AppendEventInput{EventType: "project_course_phase", Status: TaskStatusRunning, Payload: payload})
+	return c.tasks.AppendEvent(ctx, taskID, AppendEventInput{EventType: "textbook_sample_phase", Status: TaskStatusRunning, Payload: eventPayload})
+}
+
+func (c *TaskConsumer) validateTextbookWorkspace(ctx context.Context, taskID uuid.UUID, workspaceID *uuid.UUID, taskSubtype string) (bool, error) {
+	if workspaceID == nil || *workspaceID == uuid.Nil {
+		return false, c.tasks.MarkFailed(ctx, taskID, "textbook task workspace identity is missing")
+	}
+	store, ok := c.tasks.(textbookWorkspaceTaskStore)
+	if !ok {
+		return false, errors.New("textbook task workspace store is not configured")
+	}
+	matches, err := store.TextbookWorkspaceMatches(ctx, taskID, *workspaceID, taskSubtype)
+	if err != nil {
+		return false, err
+	}
+	if !matches {
+		return false, c.tasks.MarkFailed(ctx, taskID, "textbook task workspace identity does not match")
+	}
+	return true, nil
+}
+
+func (c *TaskConsumer) appendTextbookSampleEvent(ctx context.Context, taskID uuid.UUID, payload sharedtextbook.SampleGenerationTaskPayload, checkpoint string, completed bool, result []byte) error {
+	stageKey := sharedtextbook.TaskStageInputHash(taskID.String(), sharedtextbook.SampleGenerationStage, payload.InputHash)
+	event := map[string]any{
+		"project_id": payload.ProjectID, "chapter_id": payload.ChapterID, "stage": sharedtextbook.SampleGenerationStage, "checkpoint": checkpoint,
+		"input_hash": payload.InputHash, "stage_execution_key": stageKey, "output_hash": hashCourseContent(result), "completed": completed,
+	}
+	if completed {
+		var stageResult json.RawMessage
+		if err := json.Unmarshal(result, &stageResult); err != nil {
+			return fmt.Errorf("decode textbook sample stage result: %w", err)
+		}
+		event["result"] = stageResult
+	}
+	eventPayload, err := json.Marshal(event)
+	if err != nil {
+		return fmt.Errorf("marshal textbook sample event: %w", err)
+	}
+	return c.tasks.AppendEvent(ctx, taskID, AppendEventInput{EventType: "textbook_sample_phase", Status: TaskStatusRunning, Payload: eventPayload})
 }
 
 func hashCourseContent(content []byte) string {
 	sum := sha256.Sum256(content)
 	return "sha256:" + hex.EncodeToString(sum[:])
-}
-
-func projectCourseBlueprintVersion(content []byte) int {
-	var payload struct {
-		BlueprintVersion int `json:"blueprint_version"`
-		Blueprint        struct {
-			BlueprintVersion int `json:"blueprint_version"`
-		} `json:"blueprint"`
-	}
-	if json.Unmarshal(content, &payload) == nil {
-		if payload.BlueprintVersion > 0 {
-			return payload.BlueprintVersion
-		}
-		if payload.Blueprint.BlueprintVersion > 0 {
-			return payload.Blueprint.BlueprintVersion
-		}
-	}
-	return 1
 }
 
 func (c *TaskConsumer) watchCancellation(taskCtx context.Context, cancel context.CancelFunc, taskID uuid.UUID) {
@@ -331,6 +368,7 @@ func supportsGenerationKind(kind string) bool {
 
 func (c *TaskConsumer) buildFinalTaskResult(
 	ctx context.Context,
+	workspaceID uuid.UUID,
 	message sharedrabbitmq.GenerationRequestedMessage,
 	fullContent string,
 ) ([]byte, error) {
@@ -358,7 +396,7 @@ func (c *TaskConsumer) buildFinalTaskResult(
 		if err != nil {
 			return nil, errors.New("invalid generation payload")
 		}
-		return c.streams.BuildContinueTaskResult(ctx, message.UserID, blogID, fullContent)
+		return c.streams.BuildContinueTaskResult(ctx, workspaceID, blogID, fullContent)
 	default:
 		return []byte(`{"done":true}`), nil
 	}
@@ -398,6 +436,7 @@ func normalizeGenerationMessage(message sharedrabbitmq.GenerationRequestedMessag
 
 func (c *TaskConsumer) startTaskStream(
 	taskCtx context.Context,
+	workspaceID uuid.UUID,
 	message sharedrabbitmq.GenerationRequestedMessage,
 	chunkChan chan<- string,
 	errChan chan<- error,
@@ -408,7 +447,7 @@ func (c *TaskConsumer) startTaskStream(
 		if err := json.Unmarshal(message.Payload, &req); err != nil {
 			return errors.New("invalid generation payload")
 		}
-		go c.streams.Generate(taskCtx, message.UserID, req, chunkChan, errChan)
+		go c.streams.Generate(taskCtx, workspaceID, req, chunkChan, errChan)
 		return nil
 	case "continue":
 		var payload struct {
@@ -421,7 +460,7 @@ func (c *TaskConsumer) startTaskStream(
 		if err != nil {
 			return errors.New("invalid generation payload")
 		}
-		go c.streams.Continue(taskCtx, message.UserID, blogID, chunkChan, errChan)
+		go c.streams.Continue(taskCtx, workspaceID, blogID, chunkChan, errChan)
 		return nil
 	case "polish":
 		var payload struct {
@@ -442,6 +481,16 @@ func (c *TaskConsumer) startTaskStream(
 	default:
 		return fmt.Errorf("unsupported generation kind: %s", strings.TrimSpace(message.Kind))
 	}
+}
+
+func (c *TaskConsumer) resolveBlogWorkspace(messageWorkspaceID *uuid.UUID) (uuid.UUID, error) {
+	if c.localWorkspaceID == uuid.Nil {
+		return uuid.Nil, errors.New("local workspace is not configured for blog task")
+	}
+	if messageWorkspaceID != nil && *messageWorkspaceID != c.localWorkspaceID {
+		return uuid.Nil, errors.New("blog task workspace does not match the local installation")
+	}
+	return c.localWorkspaceID, nil
 }
 
 // Why: 任务事件表使用 jsonb 存储 payload，若直接写入纯文本 chunk 会在持久化层被吞成空对象；

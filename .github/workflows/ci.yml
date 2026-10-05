@@ -105,7 +105,7 @@ jobs:
         run: |
           mkdir -p /tmp/obsidian-vault /tmp/e2e-vault
           OBSIDIAN_VAULT_PATH=/tmp/obsidian-vault docker compose config
-          JWT_SECRET="$(openssl rand -hex 32)" E2E_VAULT_PATH=/tmp/e2e-vault OBSIDIAN_VAULT_PATH=/tmp/obsidian-vault \
+          E2E_VAULT_PATH=/tmp/e2e-vault OBSIDIAN_VAULT_PATH=/tmp/obsidian-vault \
             docker compose -f docker-compose.yml -f docker-compose.e2e.yml config
 
   microservices-smoke:
@@ -117,7 +117,6 @@ jobs:
       E2E_VAULT_PATH: /tmp/inkwords-smoke-vault
       OBSIDIAN_VAULT_PATH: /tmp/inkwords-smoke-vault
       DEEPSEEK_API_KEY: ci-placeholder-key
-      JWT_SECRET: ci-placeholder-jwt-secret
       OBSIDIAN_REST_API_KEY: ci-placeholder-obsidian-key
     steps:
       - uses: actions/checkout@v4
@@ -142,7 +141,7 @@ jobs:
 
       - name: wait for healthy services
         run: |
-          for attempt in $(seq 1 30); do
+          for _ in $(seq 1 30); do
             if curl --fail --silent "http://127.0.0.1:${E2E_PORT}/" >/dev/null && \
                curl --fail --silent "http://127.0.0.1:${E2E_PORT}/api/v1/ping" >/dev/null; then
               exit 0

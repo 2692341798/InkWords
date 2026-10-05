@@ -11,7 +11,7 @@ import (
 
 	"github.com/joho/godotenv"
 	"inkwords-backend/services/course-runner/app/bootstrap"
-	verification "inkwords-backend/services/course-runner/domain/verification"
+	textbookverification "inkwords-backend/services/course-runner/domain/textbookverification"
 	"inkwords-backend/shared/kernel/httpx"
 )
 
@@ -22,18 +22,18 @@ func init() {
 }
 
 func main() {
-	r, consumer, err := bootstrap.BuildRouter()
+	r, textbookConsumer, err := bootstrap.BuildRouter()
 	if err != nil {
 		log.Fatalf("bootstrap course-runner failed: %v", err)
 	}
 	server := httpx.NewServer(r)
 	signalContext, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	stopConsumer, err := verification.StartVerificationConsumer(signalContext, consumer, "inkwords.course-verification")
+	stopTextbookConsumer, err := textbookverification.StartConsumer(signalContext, textbookConsumer, "inkwords.textbook-verification")
 	if err != nil {
-		log.Printf("RabbitMQ course verification consumer initialization failed: %v", err)
+		log.Printf("RabbitMQ textbook verification consumer initialization failed: %v", err)
 	}
-	defer stopConsumer()
+	defer stopTextbookConsumer()
 	go func() {
 		if err := httpx.ShutdownOnContextDone(signalContext, server, 15*time.Second); err != nil {
 			log.Printf("Server shutdown failed: %v", err)

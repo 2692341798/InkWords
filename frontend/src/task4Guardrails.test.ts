@@ -43,13 +43,10 @@ const scanForbiddenInteractions = (filePath: string, fileContent: string): ScanR
 
   const hrefRegex = /\b(?:window\.)?location\.href\s*=/
   if (hrefRegex.test(fileContent)) {
-    const normalizedPath = filePath.replace(srcRoot, '').replace(/\\/g, '/')
-    const allowOAuthJump = normalizedPath.endsWith('/pages/Login.tsx')
     const lines = fileContent.split(/\r?\n/)
 
     lines.forEach((line, index) => {
       if (!hrefRegex.test(line)) return
-      if (allowOAuthJump && line.includes("apiRoutes.coreApi.auth.oauth('github')")) return
       violations.push({
         filePath,
         message: `包含禁止交互：location.href (第 ${index + 1} 行)`,
@@ -61,7 +58,7 @@ const scanForbiddenInteractions = (filePath: string, fileContent: string): ScanR
 }
 
 describe('Task 4 guardrails', () => {
-  it('removes alert/confirm/location.reload/location.href from frontend/src (OAuth 跳转除外)', () => {
+  it('removes alert/confirm/location.reload/location.href from frontend/src', () => {
     const files = collectSourceFiles(srcRoot)
     const violations = files.flatMap((filePath) =>
       scanForbiddenInteractions(filePath, fs.readFileSync(filePath, 'utf-8')),
@@ -70,13 +67,27 @@ describe('Task 4 guardrails', () => {
     expect(violations).toEqual([])
   })
 
-  it('makes App authentication state reactive to storage/event updates', () => {
+  it('keeps the local App and Sidebar free of login gates', () => {
     const appPath = path.resolve(srcRoot, './App.tsx')
     const appContent = fs.readFileSync(appPath, 'utf-8')
+    const sidebarPath = path.resolve(srcRoot, './components/Sidebar.tsx')
+    const sidebarContent = fs.readFileSync(sidebarPath, 'utf-8')
 
-    expect(appContent).toContain('useSyncExternalStore')
-    expect(appContent).toContain("from '@/lib/authTokenStore'")
-    expect(appContent).not.toContain('useState<boolean>(() =>')
+    expect(appContent).not.toContain('authTokenStore')
+    expect(appContent).not.toContain('isAuthBypassEnabled')
+    expect(appContent).not.toContain("@/pages/Login")
+    expect(sidebarContent).not.toContain('authTokenStore')
+    expect(sidebarContent).not.toContain('退出登录')
+  })
+
+  it('keeps the local single-user UI free of account profile surfaces', () => {
+    expect(fs.existsSync(path.resolve(srcRoot, './pages/Dashboard.tsx'))).toBe(false)
+    expect(fs.existsSync(path.resolve(srcRoot, './services/user.ts'))).toBe(false)
+
+    const appContent = fs.readFileSync(path.resolve(srcRoot, './App.tsx'), 'utf-8')
+    const sidebarContent = fs.readFileSync(path.resolve(srcRoot, './components/Sidebar.tsx'), 'utf-8')
+    expect(appContent).not.toContain("currentView === 'dashboard'")
+    expect(sidebarContent).not.toContain('个人中心')
   })
 
   it('uses deferred preview content to reduce Markdown preview re-render cost', () => {

@@ -16,14 +16,26 @@ const locationBlock = (location: string) => {
 }
 
 describe('frontend microservices gateway contract', () => {
+  it('resolves Compose upstreams dynamically so a recreated service cannot leave a stale IP', () => {
+    expect(nginxConfig).toContain('resolver 127.0.0.11 ipv6=off valid=10s;')
+    expect(nginxConfig).toContain('set $core_api_upstream core-api:8080;')
+    expect(nginxConfig).toContain('set $llm_stream_upstream llm-stream:8080;')
+    expect(nginxConfig).toContain('set $parser_service_upstream parser-service:8080;')
+    expect(nginxConfig).toContain('set $review_service_upstream review-service:8080;')
+    expect(nginxConfig).toContain('set $export_service_upstream export-service:8080;')
+  })
+
   it('routes service-owned API paths to the correct upstream before the core fallback', () => {
     const routes = [
-      ['location ~ ^/api/v1/tasks/[^/]+/stream$', 'proxy_pass http://core-api:8080;'],
-      ['location ^~ /api/v1/stream/', 'proxy_pass http://llm-stream:8080/api/v1/stream/;'],
-      ['location ~ ^/api/v1/blogs/[^/]+/(continue|polish)$', 'proxy_pass http://llm-stream:8080;'],
-      ['location = /api/v1/project/parse', 'proxy_pass http://parser-service:8080/api/v1/project/parse;'],
-      ['location ^~ /api/v1/review/', 'proxy_pass http://review-service:8080/api/v1/review/;'],
-      ['location ~ ^/api/v1/blogs/[^/]+/export', 'proxy_pass http://export-service:8080;'],
+      ['location ~ ^/api/v1/tasks/[^/]+/stream$', 'proxy_pass http://$core_api_upstream;'],
+      ['location ^~ /api/v1/stream/', 'proxy_pass http://$llm_stream_upstream;'],
+      ['location ~ ^/api/v1/blogs/[^/]+/(continue|polish)$', 'proxy_pass http://$llm_stream_upstream;'],
+      ['location = /api/v1/project/parse', 'proxy_pass http://$parser_service_upstream;'],
+      ['location = /api/v1/project/crawl', 'proxy_pass http://$parser_service_upstream;'],
+      ['location ^~ /api/v1/review/', 'proxy_pass http://$review_service_upstream;'],
+      ['location ^~ /api/v1/mastery/', 'proxy_pass http://$review_service_upstream;'],
+      ['location ~ ^/api/v1/blogs/[^/]+/export', 'proxy_pass http://$export_service_upstream;'],
+      ['location ~ ^/api/v1/textbook-projects/chapters/[^/]+/export/(markdown|zip)$', 'proxy_pass http://$export_service_upstream;'],
     ] as const
 
     const fallbackIndex = nginxConfig.indexOf('location /api/')
@@ -31,8 +43,8 @@ describe('frontend microservices gateway contract', () => {
       expect(locationBlock(location)).toContain(upstream)
       expect(nginxConfig.indexOf(location)).toBeLessThan(fallbackIndex)
     })
-    expect(locationBlock('location /api/')).toContain('proxy_pass http://core-api:8080/api/;')
-    expect(locationBlock('location /uploads/')).toContain('proxy_pass http://core-api:8080/uploads/;')
+    expect(locationBlock('location /api/')).toContain('proxy_pass http://$core_api_upstream;')
+    expect(locationBlock('location /uploads/')).toContain('proxy_pass http://$core_api_upstream;')
   })
 
   it('keeps task and legacy streaming routes unbuffered', () => {
@@ -48,9 +60,13 @@ describe('frontend microservices gateway contract', () => {
       expect(block).toContain('proxy_cache off;')
       expect(block).toContain('add_header X-Accel-Buffering "no";')
       expect(block).toContain('proxy_read_timeout 3600s;')
-      expect(block).toContain('proxy_set_header Authorization $http_authorization;')
       expect(block).toContain('proxy_set_header X-Request-ID $http_x_request_id;')
     })
+  })
+
+  it('never forwards browser authorization into the fixed local workspace', () => {
+    expect(nginxConfig).not.toContain('proxy_set_header Authorization')
+    expect(nginxConfig).not.toContain('$http_authorization')
   })
 
   it('makes Vite proxy only through the configurable gateway origin', () => {

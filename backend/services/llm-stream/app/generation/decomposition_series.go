@@ -14,10 +14,10 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/sync/semaphore"
 
-	llm "inkwords-backend/shared/platform/llm"
-	"inkwords-backend/shared/platform/parser"
 	sharedblog "inkwords-backend/shared/kernel/blog"
 	"inkwords-backend/shared/kernel/prompt"
+	llm "inkwords-backend/shared/platform/llm"
+	"inkwords-backend/shared/platform/parser"
 )
 
 const (
@@ -31,7 +31,7 @@ const (
 //nolint:gocyclo
 func (s *DecompositionService) GenerateSeriesWithProfile(
 	ctx context.Context,
-	userID uuid.UUID,
+	workspaceID uuid.UUID,
 	parentID uuid.UUID,
 	seriesTitle string,
 	outline []sharedblog.Chapter,
@@ -75,7 +75,7 @@ func (s *DecompositionService) GenerateSeriesWithProfile(
 		parentTitle = seriesTitle
 	}
 
-	updatedOutline, err := s.ensureSeriesParentAndDrafts(ctx, userID, parentID, parentTitle, sourceType, gitURL, outline)
+	updatedOutline, err := s.ensureSeriesParentAndDrafts(ctx, workspaceID, parentID, parentTitle, sourceType, gitURL, outline)
 	if err != nil {
 		errChan <- fmt.Errorf("prepare series persistence: %w", err)
 		return
@@ -99,7 +99,7 @@ func (s *DecompositionService) GenerateSeriesWithProfile(
 		}
 
 		if chapter.Action == "skip" && chapter.ID != "" {
-			_ = s.handleSkippedSeriesChapter(ctx, userID, chapter)
+			_ = s.handleSkippedSeriesChapter(ctx, workspaceID, chapter)
 			endMsg := map[string]interface{}{
 				"status":       "completed",
 				"chapter_sort": chapter.Sort,
@@ -121,7 +121,7 @@ func (s *DecompositionService) GenerateSeriesWithProfile(
 			defer wg.Done()
 
 			chapterSourceContent := resolveSeriesChapterSourceContent(sourceType, cachePath, sourceContent, chapter)
-			oldContent := s.resolveSeriesOldContent(ctx, userID, chapter)
+			oldContent := s.resolveSeriesOldContent(ctx, workspaceID, chapter)
 			qualityResult, streamErr := s.runSeriesChapterQualityPipeline(ctx, seriesQualityPipelineInput{
 				SeriesTitle:          parentTitle,
 				ReaderProfile:        buildSeriesReaderProfile(scenarioMode),
@@ -131,11 +131,10 @@ func (s *DecompositionService) GenerateSeriesWithProfile(
 				ChapterSourceContent: chapterSourceContent,
 				GitURL:               gitURL,
 				OldContent:           oldContent,
-				UserID:               fmt.Sprintf("series-%s", parentID.String()),
 				ProgressChan:         progressChan,
 			})
 			if streamErr != nil {
-				s.handleSeriesChapterFailure(ctx, userID, chapter, streamErr, resultCollector)
+				s.handleSeriesChapterFailure(ctx, workspaceID, chapter, streamErr, resultCollector)
 
 				errMsg := map[string]interface{}{
 					"status":       "error",
@@ -156,7 +155,7 @@ func (s *DecompositionService) GenerateSeriesWithProfile(
 			}
 			techStacks := decodeTechStacksJSON(s.extractSeriesChapterTechStacks(ctx, llmModel, content))
 
-			if err := s.handleSeriesChapterCompletion(ctx, userID, parentID, sourceType, chapter, content, wordCount, techStacks, qualityResult, resultCollector); err != nil {
+			if err := s.handleSeriesChapterCompletion(ctx, workspaceID, parentID, sourceType, chapter, content, wordCount, techStacks, qualityResult, resultCollector); err != nil {
 				errMsg := map[string]interface{}{
 					"status":       "error",
 					"chapter_sort": chapter.Sort,
@@ -180,7 +179,7 @@ func (s *DecompositionService) GenerateSeriesWithProfile(
 	wg.Wait()
 
 	if ctx.Err() == nil {
-		s.generateSeriesIntro(ctx, userID, parentID, seriesTitle, outline, scenarioMode, prompt.ArticleStyle(style), profile, resultCollector, progressChan, errChan)
+		s.generateSeriesIntro(ctx, workspaceID, parentID, seriesTitle, outline, scenarioMode, prompt.ArticleStyle(style), profile, resultCollector, progressChan, errChan)
 		if taskOnlyPersistenceMode() && resultCollector != nil {
 			resultJSON, err := resultCollector.BuildTaskResult()
 			if err != nil {
@@ -246,7 +245,7 @@ func sendSeriesSystemProgress(progressChan chan<- string, message string) {
 
 func (s *DecompositionService) ensureSeriesParentAndDrafts(
 	ctx context.Context,
-	userID uuid.UUID,
+	workspaceID uuid.UUID,
 	parentID uuid.UUID,
 	parentTitle string,
 	sourceType string,
@@ -254,7 +253,7 @@ func (s *DecompositionService) ensureSeriesParentAndDrafts(
 	outline []sharedblog.Chapter,
 ) ([]sharedblog.Chapter, error) {
 	return s.seriesPersistence.EnsureSeriesParentAndDrafts(ctx, sharedblog.SeriesDraftPreflightInput{
-		UserID:      userID,
+		WorkspaceID: workspaceID,
 		ParentID:    parentID,
 		ParentTitle: parentTitle,
 		SourceType:  sourceType,
@@ -265,7 +264,7 @@ func (s *DecompositionService) ensureSeriesParentAndDrafts(
 
 func (s *DecompositionService) handleSeriesChapterCompletion(
 	ctx context.Context,
-	userID uuid.UUID,
+	workspaceID uuid.UUID,
 	parentID uuid.UUID,
 	sourceType string,
 	chapter sharedblog.Chapter,
@@ -295,7 +294,7 @@ func (s *DecompositionService) handleSeriesChapterCompletion(
 	}
 
 	return s.seriesPersistence.SaveSeriesChapter(ctx, sharedblog.SeriesChapterPersistenceInput{
-		UserID:     userID,
+		WorkspaceID: workspaceID,
 		ParentID:   parentID,
 		BlogID:     blogID,
 		Chapter:    chapter,
@@ -308,7 +307,7 @@ func (s *DecompositionService) handleSeriesChapterCompletion(
 
 func (s *DecompositionService) handleSeriesChapterFailure(
 	ctx context.Context,
-	userID uuid.UUID,
+	workspaceID uuid.UUID,
 	chapter sharedblog.Chapter,
 	streamErr error,
 	collector *seriesTaskResultCollector,
@@ -324,10 +323,10 @@ func (s *DecompositionService) handleSeriesChapterFailure(
 	if err != nil {
 		return
 	}
-	_ = s.seriesPersistence.MarkSeriesChapterFailed(ctx, userID, blogID)
+	_ = s.seriesPersistence.MarkSeriesChapterFailed(ctx, workspaceID, blogID)
 }
 
-func (s *DecompositionService) handleSkippedSeriesChapter(ctx context.Context, userID uuid.UUID, chapter sharedblog.Chapter) error {
+func (s *DecompositionService) handleSkippedSeriesChapter(ctx context.Context, workspaceID uuid.UUID, chapter sharedblog.Chapter) error {
 	if strings.TrimSpace(chapter.ID) == "" {
 		return nil
 	}
@@ -335,7 +334,7 @@ func (s *DecompositionService) handleSkippedSeriesChapter(ctx context.Context, u
 	if err != nil {
 		return err
 	}
-	return s.seriesPersistence.UpdateSkippedSeriesChapterMeta(ctx, userID, blogID, chapter)
+	return s.seriesPersistence.UpdateSkippedSeriesChapterMeta(ctx, workspaceID, blogID, chapter)
 }
 
 func decodeTechStacksJSON(raw json.RawMessage) []string {
@@ -349,7 +348,7 @@ func decodeTechStacksJSON(raw json.RawMessage) []string {
 	return techStacks
 }
 
-func (s *DecompositionService) resolveSeriesOldContent(ctx context.Context, userID uuid.UUID, chapter sharedblog.Chapter) string {
+func (s *DecompositionService) resolveSeriesOldContent(ctx context.Context, workspaceID uuid.UUID, chapter sharedblog.Chapter) string {
 	if chapter.Action != "regenerate" || strings.TrimSpace(chapter.ID) == "" {
 		return ""
 	}
@@ -357,7 +356,7 @@ func (s *DecompositionService) resolveSeriesOldContent(ctx context.Context, user
 	if err != nil {
 		return ""
 	}
-	oldContent, err := s.seriesPersistence.LoadSeriesOldContent(ctx, userID, blogID)
+	oldContent, err := s.seriesPersistence.LoadSeriesOldContent(ctx, workspaceID, blogID)
 	if err != nil {
 		return ""
 	}
@@ -449,7 +448,7 @@ func truncateSeriesContent(content string, runeLimit int) string {
 //nolint:gocyclo,staticcheck
 func (s *DecompositionService) generateSeriesIntro(
 	ctx context.Context,
-	userID uuid.UUID,
+	workspaceID uuid.UUID,
 	parentID uuid.UUID,
 	seriesTitle string,
 	outline []sharedblog.Chapter,
@@ -493,7 +492,7 @@ func (s *DecompositionService) generateSeriesIntro(
 		requirements,
 	}, "\n\n"))
 	if s.promptReq != nil {
-		if resolved, err := s.promptReq.ResolveWithProfile(ctx, userID, scenarioMode, style, profile); err == nil && resolved != "" {
+		if resolved, err := s.promptReq.ResolveWithProfile(scenarioMode, style, profile); err == nil && resolved != "" {
 			requirements = resolved
 		}
 	}
@@ -569,7 +568,7 @@ func (s *DecompositionService) generateSeriesIntro(
 			if ok && err != nil {
 				sendIntroProgress("error", "", err.Error())
 				if !taskOnlyPersistenceMode() {
-					_ = s.seriesPersistence.MarkSeriesIntroFailed(ctx, userID, parentID)
+					_ = s.seriesPersistence.MarkSeriesIntroFailed(ctx, workspaceID, parentID)
 				}
 				return
 			}
@@ -581,7 +580,7 @@ func (s *DecompositionService) generateSeriesIntro(
 					sendIntroProgress("completed", "", "")
 					return
 				}
-				if err := s.seriesPersistence.SaveSeriesIntro(ctx, userID, parentID, finalContent); err != nil {
+				if err := s.seriesPersistence.SaveSeriesIntro(ctx, workspaceID, parentID, finalContent); err != nil {
 					errChan <- fmt.Errorf("persist series intro: %w", err)
 					return
 				}
@@ -607,7 +606,7 @@ func (s *DecompositionService) extractSeriesChapterTechStacks(ctx context.Contex
 	var techStacks json.RawMessage
 	extractPrompt := "请从以下文章内容中提取出涉及的核心技术栈名称（如 React, Go, Docker 等），以 JSON 数组格式返回，不要有任何其他多余字符。\n\n例如：[\"React\", \"Go\"]\n\n文章内容：\n\n" + content
 	extractMessages := []llm.Message{{Role: "user", Content: extractPrompt}}
-	extractedJSON, _, err := s.llmClient.GenerateJSONWithOptions(ctx, llmModel, extractMessages, llm.LightweightChatOptions("", 512))
+	extractedJSON, _, err := s.llmClient.GenerateJSONWithOptions(ctx, llmModel, extractMessages, llm.LightweightChatOptions(512))
 	if err != nil || len(extractedJSON) == 0 {
 		return techStacks
 	}

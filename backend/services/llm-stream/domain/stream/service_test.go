@@ -23,6 +23,7 @@ type fakeTaskService struct {
 	cancelled          bool
 	cancelAfterNCalls  int
 	isCancelledCallCnt int
+	workspaceMismatch  bool
 }
 
 func (f *fakeTaskService) MarkRunning(_ context.Context, _ uuid.UUID) error {
@@ -57,6 +58,10 @@ func (f *fakeTaskService) IsCancelled(_ context.Context, _ uuid.UUID) (bool, err
 		return true, nil
 	}
 	return f.cancelled, nil
+}
+
+func (f *fakeTaskService) TextbookWorkspaceMatches(_ context.Context, _ uuid.UUID, _ uuid.UUID, _ string) (bool, error) {
+	return !f.workspaceMismatch, nil
 }
 
 // fakeStreamService 实现 generationStreamService 接口，用于特征化测试。
@@ -158,11 +163,10 @@ func TestGenerateSingle_StreamOutputAndErrorChannel(t *testing.T) {
 		},
 	}
 
-	consumer := NewTaskConsumer(tasks, streams)
+	consumer := NewTaskConsumer(tasks, streams).WithLocalWorkspace(newTestUserID())
 	message := sharedrabbitmq.GenerationRequestedMessage{
 		TaskID:  newTestTaskID(),
 		Kind:    "generate_single",
-		UserID:  newTestUserID(),
 		Payload: json.RawMessage(`{"source_type":"file","source_content":"hello world","scenario_mode":"ebook_interpretation"}`),
 	}
 
@@ -212,11 +216,10 @@ func TestGenerateSingle_NormalizesLegacyTopicPayload(t *testing.T) {
 		},
 	}
 
-	consumer := NewTaskConsumer(tasks, streams)
+	consumer := NewTaskConsumer(tasks, streams).WithLocalWorkspace(newTestUserID())
 	message := sharedrabbitmq.GenerationRequestedMessage{
 		TaskID:  newTestTaskID(),
 		Kind:    "generate_single",
-		UserID:  newTestUserID(),
 		Payload: json.RawMessage(`{"source_type":"topic","topic":"Go context 入门","scenario_mode":"ebook_interpretation"}`),
 	}
 
@@ -266,11 +269,10 @@ func TestGenerateSeries_ChapterAssignmentAndProgressPush(t *testing.T) {
 		},
 	}
 
-	consumer := NewTaskConsumer(tasks, streams)
+	consumer := NewTaskConsumer(tasks, streams).WithLocalWorkspace(newTestUserID())
 	message := sharedrabbitmq.GenerationRequestedMessage{
 		TaskID: newTestTaskID(),
 		Kind:   "generate_series",
-		UserID: newTestUserID(),
 		Payload: json.RawMessage(`{
 			"source_type":"file",
 			"source_content":"Go 源码阅读笔记",
@@ -331,11 +333,10 @@ func TestContinue_RequestRouting(t *testing.T) {
 		},
 	}
 
-	consumer := NewTaskConsumer(tasks, streams)
+	consumer := NewTaskConsumer(tasks, streams).WithLocalWorkspace(newTestUserID())
 	message := sharedrabbitmq.GenerationRequestedMessage{
 		TaskID:  newTestTaskID(),
 		Kind:    "continue",
-		UserID:  newTestUserID(),
 		Payload: json.RawMessage(`{"blog_id":"eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"}`),
 	}
 
@@ -368,11 +369,10 @@ func TestPolish_PayloadConstruction(t *testing.T) {
 		},
 	}
 
-	consumer := NewTaskConsumer(tasks, streams)
+	consumer := NewTaskConsumer(tasks, streams).WithLocalWorkspace(newTestUserID())
 	message := sharedrabbitmq.GenerationRequestedMessage{
 		TaskID: newTestTaskID(),
 		Kind:   "polish",
-		UserID: newTestUserID(),
 		Payload: json.RawMessage(`{
 			"blog_id":"ffffffff-ffff-ffff-ffff-ffffffffffff",
 			"title":"旧标题",
@@ -410,12 +410,12 @@ func TestCancel_ContextCancellationStopsGeneration(t *testing.T) {
 		tasks:                    tasks,
 		streams:                  streams,
 		cancellationPollInterval: 10 * time.Millisecond,
+		localWorkspaceID:         newTestUserID(),
 	}
 
 	message := sharedrabbitmq.GenerationRequestedMessage{
 		TaskID:  newTestTaskID(),
 		Kind:    "generate_single",
-		UserID:  newTestUserID(),
 		Payload: json.RawMessage(`{"source_type":"file","source_content":"content"}`),
 	}
 
@@ -438,11 +438,10 @@ func TestCancel_TaskAlreadyCancelledBeforeRunning(t *testing.T) {
 	}
 	streams := &fakeStreamService{}
 
-	consumer := NewTaskConsumer(tasks, streams)
+	consumer := NewTaskConsumer(tasks, streams).WithLocalWorkspace(newTestUserID())
 	message := sharedrabbitmq.GenerationRequestedMessage{
 		TaskID:  newTestTaskID(),
 		Kind:    "generate_single",
-		UserID:  newTestUserID(),
 		Payload: json.RawMessage(`{"source_type":"file","source_content":"content"}`),
 	}
 

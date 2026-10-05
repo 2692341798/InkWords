@@ -50,7 +50,7 @@ func NewGeneratorServiceWithDB(db *gorm.DB, promptReq *PromptRequirements, persi
 //nolint:gocyclo
 func (s *GeneratorService) GenerateBlogStreamWithProfile(
 	ctx context.Context,
-	userID uuid.UUID,
+	workspaceID uuid.UUID,
 	sourceContent string,
 	sourceType string,
 	scenarioMode prompt.ScenarioMode,
@@ -73,7 +73,7 @@ func (s *GeneratorService) GenerateBlogStreamWithProfile(
 		requirements,
 	}, "\n\n"))
 	if s.promptReq != nil {
-		if resolved, err := s.promptReq.ResolveWithProfile(ctx, userID, scenarioMode, prompt.ArticleStyle(style), profile); err == nil && resolved != "" {
+		if resolved, err := s.promptReq.ResolveWithProfile(scenarioMode, prompt.ArticleStyle(style), profile); err == nil && resolved != "" {
 			requirements = resolved
 		}
 	}
@@ -120,7 +120,7 @@ func (s *GeneratorService) GenerateBlogStreamWithProfile(
 			case chunk, ok := <-internalChunkChan:
 				if !ok {
 					if !taskOnlyPersistenceMode() {
-						if err := s.saveToDB(ctx, userID, sourceType, fullContent); err != nil {
+						if err := s.saveToDB(ctx, workspaceID, sourceType, fullContent); err != nil {
 							errChan <- err
 						}
 					} else if usage, ok := <-internalUsageChan; ok {
@@ -167,7 +167,6 @@ func (s *GeneratorService) GenerateBlogStreamWithProfile(
 			}()
 
 			options := llm.DefaultChatOptions()
-			options.UserID = fmt.Sprintf("single-%s", userID.String())
 			finishReason, usage, err := s.llmClient.GenerateStreamWithOptions(streamCtx, modelType, messages, tempChunkChan, options)
 			wg.Wait()
 
@@ -429,7 +428,7 @@ func (s *GeneratorService) BuildGenerateSingleTaskResult(
 }
 
 // saveToDB 将生成的博客持久化到数据库。
-func (s *GeneratorService) saveToDB(ctx context.Context, userID uuid.UUID, sourceType string, content string) error {
+func (s *GeneratorService) saveToDB(ctx context.Context, workspaceID uuid.UUID, sourceType string, content string) error {
 	facts := s.buildGeneratedBlogFacts(ctx, sourceType, content)
 	techStacksJSON, err := json.Marshal(facts.TechStacks)
 	if err != nil {
@@ -437,7 +436,7 @@ func (s *GeneratorService) saveToDB(ctx context.Context, userID uuid.UUID, sourc
 	}
 
 	input := sharedblog.GeneratedBlogPersistenceInput{
-		UserID:     userID,
+		WorkspaceID: workspaceID,
 		Title:      facts.Title,
 		Content:    facts.Content,
 		SourceType: facts.SourceType,
@@ -487,7 +486,7 @@ func (s *GeneratorService) extractTechStacks(ctx context.Context, content string
 		return nil
 	}
 
-	extractedJSON, _, err := s.llmClient.GenerateJSONWithOptions(ctx, modelType, messages, llm.LightweightChatOptions("", 512))
+	extractedJSON, _, err := s.llmClient.GenerateJSONWithOptions(ctx, modelType, messages, llm.LightweightChatOptions(512))
 	if err != nil || len(extractedJSON) == 0 {
 		return nil
 	}

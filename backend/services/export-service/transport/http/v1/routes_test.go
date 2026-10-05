@@ -16,10 +16,16 @@ func TestRegisterExportRoutes_OnlyRegistersExportRoutes(t *testing.T) {
 
 	ok := func(c *gin.Context) { c.Status(http.StatusOK) }
 	registerExportRoutes(r, func(c *gin.Context) { c.Next() }, exportRouteHandlers{
-		ExportSeries:           ok,
-		ExportSeriesPDF:        ok,
-		ExportToObsidian:       ok,
-		ExportSeriesToObsidian: ok,
+		ExportSeries:                          ok,
+		ExportSeriesPDF:                       ok,
+		ExportToObsidian:                      ok,
+		ExportSeriesToObsidian:                ok,
+		ExportApprovedTextbookChapterMarkdown: ok,
+		ExportApprovedTextbookChapterZip:      ok,
+		ExportFrozenTextbookBookMarkdown:      ok,
+		ExportFrozenTextbookBookDOCX:          ok,
+		ExportFrozenTextbookBookPDF:           ok,
+		ExportFrozenTextbookBookReviewBundle:  ok,
 	})
 
 	for _, tc := range []struct {
@@ -31,6 +37,12 @@ func TestRegisterExportRoutes_OnlyRegistersExportRoutes(t *testing.T) {
 		{method: http.MethodGet, path: "/api/v1/blogs/1/export/pdf", code: http.StatusOK},
 		{method: http.MethodPost, path: "/api/v1/blogs/1/export/obsidian", code: http.StatusOK},
 		{method: http.MethodPost, path: "/api/v1/blogs/1/export/obsidian/series", code: http.StatusOK},
+		{method: http.MethodGet, path: "/api/v1/textbook-projects/chapters/1/export/markdown", code: http.StatusOK},
+		{method: http.MethodGet, path: "/api/v1/textbook-projects/chapters/1/export/zip", code: http.StatusOK},
+		{method: http.MethodGet, path: "/api/v1/textbook-projects/book-builds/1/export/markdown", code: http.StatusOK},
+		{method: http.MethodGet, path: "/api/v1/textbook-projects/book-builds/1/export/docx", code: http.StatusOK},
+		{method: http.MethodGet, path: "/api/v1/textbook-projects/book-builds/1/export/pdf", code: http.StatusOK},
+		{method: http.MethodGet, path: "/api/v1/textbook-projects/book-builds/1/export/review-bundle", code: http.StatusOK},
 		{method: http.MethodGet, path: "/api/v1/blogs", code: http.StatusNotFound},
 	} {
 		req := httptest.NewRequestWithContext(context.Background(), tc.method, tc.path, nil)
@@ -38,4 +50,31 @@ func TestRegisterExportRoutes_OnlyRegistersExportRoutes(t *testing.T) {
 		r.ServeHTTP(resp, req)
 		require.Equal(t, tc.code, resp.Code)
 	}
+}
+
+func TestBlogAndTextbookExportRoutesUseWorkspace(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	workspaceCalls := 0
+	workspace := func(c *gin.Context) {
+		workspaceCalls++
+		c.Next()
+	}
+	ok := func(c *gin.Context) { c.Status(http.StatusOK) }
+	registerExportRoutes(r, workspace, exportRouteHandlers{
+		ExportSeries: ok, ExportSeriesPDF: ok, ExportToObsidian: ok, ExportSeriesToObsidian: ok,
+		ExportApprovedTextbookChapterMarkdown: ok, ExportApprovedTextbookChapterZip: ok,
+		ExportFrozenTextbookBookMarkdown: ok, ExportFrozenTextbookBookDOCX: ok,
+		ExportFrozenTextbookBookPDF: ok, ExportFrozenTextbookBookReviewBundle: ok,
+	})
+
+	blogResponse := httptest.NewRecorder()
+	r.ServeHTTP(blogResponse, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/blogs/1/export", nil))
+	require.Equal(t, http.StatusOK, blogResponse.Code)
+	require.Equal(t, 1, workspaceCalls)
+
+	textbookResponse := httptest.NewRecorder()
+	r.ServeHTTP(textbookResponse, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/textbook-projects/chapters/1/export/markdown", nil))
+	require.Equal(t, http.StatusOK, textbookResponse.Code)
+	require.Equal(t, 2, workspaceCalls)
 }

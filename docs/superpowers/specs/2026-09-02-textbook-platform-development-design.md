@@ -352,6 +352,11 @@ sha256(
 
 缓存不含 API Key。人工正文修改只使依赖该正文的审校、派生视图和验证缓存失效，不使资料解析与无关章节失效。
 
+样章生成缓存同时绑定完整 Provider-neutral Request 的哈希与质量合同版本，覆盖章节
+蓝图、合同 revision ID、输出 schema 和输出 Token 上限。只有通过来源身份、结构、
+质量门禁及候选修订校验的响应才入缓存；命中后仍重新校验。失败响应不进入可复用缓存，
+避免用户另行发起生成时反复读取同一失败结果；这一规则不会自动发起第二次模型调用。
+
 ### 7.3 提示词分层
 
 - system：短且稳定的安全、证据和输出合同；
@@ -393,6 +398,14 @@ GenerationRequest 使用内部 Message、OutputSchema、ReasoningProfile、Token
 - provider 特有 structured output、stream event、usage 和错误归一化。
 
 模型选择由 TaskModelPolicy 配置，不允许业务代码散落模型名。默认策略只给建议，真正使用的 provider/model 在任务创建页可见。
+
+预算分两次检查：core-api 在入队前按冻结任务与指令预留量做粗估；样章工作器在缓存查找
+和 Provider 调用前，按共享 `generation.BuildInputMessages` 组装的完整消息做最终估算。
+两个适配器复用同一消息组装逻辑，计入安全说明、JSON 转义、证据身份/定位和响应结构。
+工作器另计一份原生 structured-output schema 和 256 Token 的包装预留，估算方法为
+`utf8_rendered_messages_schema_reserve_v1`；仅 JSON 模式仍保留这份原生结构预留。
+两次检查都不得静默截断资料。字符估算和包装预留不构成实际 tokenizer 用量的严格上界，
+也不是账单；供应商回报的真实 Token、缓存用量和费用来源继续独立记录。
 
 API Key：
 
@@ -657,7 +670,7 @@ frontend/src/features/
 - BlogTreeDisplay 改为 ChapterTree 的投影；
 - Editor 继续编辑 Markdown，但增加 revision、lock、evidence 和 diff 面板；
 - 复习页按六种 task mode 增量扩展；
-- 重要 UI 用 Playwright 验证桌面主流程；移动视口仅保证可读，不做移动端产品功能。
+- 重要 UI 用 Playwright 验证本机浏览器主流程；不设桌面端或移动端专项适配与验收矩阵。
 
 ## 16. 可观测性与错误模型
 

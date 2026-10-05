@@ -15,11 +15,13 @@ describe('exportTasks', () => {
     })
 
     await expect(
-      createExportTask('series-1', { fetchImpl, getToken: () => 'token-123' }),
+      createExportTask('series-1', { fetchImpl }),
     ).resolves.toEqual({
       task_id: 'task-export-1',
       status: 'queued',
       stream_url: '/api/v1/tasks/task-export-1/stream',
     })
+    const [, init] = fetchImpl.mock.calls[0] as [string, RequestInit]
+    expect(new Headers(init.headers).has('Authorization')).toBe(false)
   })
 })

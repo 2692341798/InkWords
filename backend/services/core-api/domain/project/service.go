@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/google/uuid"
-
 	"inkwords-backend/shared/kernel/prompt"
 	"inkwords-backend/shared/platform/parser"
 )
@@ -17,7 +15,6 @@ type Service struct {
 	gitFetcher    *parser.GitFetcher
 	docParser     *parser.DocParser
 	archiveParser *parser.ArchiveParser
-	quotaChecker  quotaChecker
 }
 
 type projectAnalyzer interface {
@@ -25,25 +22,13 @@ type projectAnalyzer interface {
 	GenerateOutline(ctx context.Context, sourceContent string, scenarioMode prompt.ScenarioMode) (OutlineResult, error)
 }
 
-type quotaChecker interface {
-	CheckQuota(uid uuid.UUID) error
-}
-
-func NewService(analyzer projectAnalyzer, gitFetcher *parser.GitFetcher, docParser *parser.DocParser, quotaChecker quotaChecker) *Service {
+func NewService(analyzer projectAnalyzer, gitFetcher *parser.GitFetcher, docParser *parser.DocParser) *Service {
 	return &Service{
 		analyzer:      analyzer,
 		gitFetcher:    gitFetcher,
 		docParser:     docParser,
 		archiveParser: parser.NewArchiveParser(docParser),
-		quotaChecker:  quotaChecker,
 	}
-}
-
-func (s *Service) CheckQuota(uid uuid.UUID) error {
-	if s.quotaChecker == nil {
-		return nil
-	}
-	return s.quotaChecker.CheckQuota(uid)
 }
 
 func (s *Service) ScanProjectModules(ctx context.Context, gitURL string) ([]ModuleCard, error) {

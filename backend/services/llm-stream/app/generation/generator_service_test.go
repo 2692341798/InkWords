@@ -62,7 +62,7 @@ func TestGeneratorSaveUsesInjectedPersistenceAndReturnsFailure(t *testing.T) {
 	userID := uuid.New()
 	require.NoError(t, svc.saveToDB(context.Background(), userID, "file", "hello"))
 	require.Equal(t, 1, recorder.calls)
-	require.Equal(t, userID, recorder.saved.UserID)
+	require.Equal(t, userID, recorder.saved.WorkspaceID)
 	require.Equal(t, "hello", recorder.saved.Content)
 	require.JSONEq(t, `["Go","Docker"]`, string(recorder.saved.TechStacks))
 

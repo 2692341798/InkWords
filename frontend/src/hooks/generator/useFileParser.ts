@@ -1,7 +1,7 @@
 import { useCallback } from 'react'
 import { useStreamStore } from '@/store/streamStore'
 import type { Chapter, ResolvedPromptProfile } from '@/store/streamStore'
-import { fetchEventSourceWithAuth } from '@/services/sse'
+import { fetchEventSourceLocal } from '@/services/sse'
 import { apiRoutes } from '@/services/apiRoutes'
 import { projectService } from '@/services/project'
 import { toast } from 'sonner'
@@ -165,7 +165,7 @@ async function parseFileViaTask({
   }>
 }) {
   const task = await createParseTask(file)
-  await fetchEventSourceWithAuth(task.stream_url, {
+  await fetchEventSourceLocal(task.stream_url, {
     method: 'GET',
     signal,
     openWhenHidden: true,
@@ -208,7 +208,7 @@ export async function analyzeParsedFileContent(sourceContent: string) {
   store.setAnalysisMessage('正在根据创作场景生成大纲...')
   let receivedComplete = false
 
-  await fetchEventSourceWithAuth(apiRoutes.llmStream.analyze, {
+  await fetchEventSourceLocal(apiRoutes.llmStream.analyze, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     signal: ctrl.signal,

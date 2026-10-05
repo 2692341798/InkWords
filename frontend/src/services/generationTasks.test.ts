@@ -9,26 +9,11 @@ import {
 } from './generationTasks'
 
 const mockFetch = vi.fn()
-const storage = new Map<string, string>()
 
 describe('generationTasks', () => {
   beforeEach(() => {
     mockFetch.mockReset()
     vi.stubGlobal('fetch', mockFetch)
-    storage.clear()
-    vi.stubGlobal('localStorage', {
-      getItem: vi.fn((key: string) => storage.get(key) ?? null),
-      setItem: vi.fn((key: string, value: string) => {
-        storage.set(key, value)
-      }),
-      removeItem: vi.fn((key: string) => {
-        storage.delete(key)
-      }),
-      clear: vi.fn(() => {
-        storage.clear()
-      }),
-    })
-    globalThis.localStorage.setItem('token', 'task-token')
   })
 
   it('maps single generation payload to task request', () => {
@@ -70,7 +55,7 @@ describe('generationTasks', () => {
     )
   })
 
-  it('creates generation task with auth header and returns task metadata', async () => {
+  it('creates generation task without request identity and returns task metadata', async () => {
     mockFetch.mockResolvedValue({
       ok: true,
       status: 202,
@@ -97,11 +82,11 @@ describe('generationTasks', () => {
     const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit]
     expect(url).toBe('/api/v1/tasks/generation')
     expect(init.method).toBe('POST')
-    expect(new Headers(init.headers).get('Authorization')).toBe('Bearer task-token')
+    expect(new Headers(init.headers).has('Authorization')).toBe(false)
     expect(new Headers(init.headers).get('Content-Type')).toBe('application/json')
   })
 
-  it('cancels generation task with auth header', async () => {
+  it('cancels generation task without request identity', async () => {
     mockFetch.mockResolvedValue({
       ok: true,
       status: 202,
@@ -119,6 +104,6 @@ describe('generationTasks', () => {
     const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit]
     expect(url).toBe('/api/v1/tasks/task-123/cancel')
     expect(init.method).toBe('POST')
-    expect(new Headers(init.headers).get('Authorization')).toBe('Bearer task-token')
+    expect(new Headers(init.headers).has('Authorization')).toBe(false)
   })
 })

@@ -5,12 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 )
-
-type quotaChecker interface {
-	CheckQuota(uuid.UUID) error
-}
 
 type parseService interface {
 	Parse(io.Reader, string) (ParseResult, error)
@@ -18,42 +13,16 @@ type parseService interface {
 
 // Handler exposes the parser-service HTTP endpoint for file parsing.
 type Handler struct {
-	service      parseService
-	quotaChecker quotaChecker
+	service parseService
 }
 
-// NewHandler creates a parser-service HTTP handler with quota enforcement support.
-func NewHandler(service parseService, quotaChecker quotaChecker) *Handler {
-	return &Handler{
-		service:      service,
-		quotaChecker: quotaChecker,
-	}
-}
-
-func (h *Handler) getUserID(c *gin.Context) (uuid.UUID, bool) {
-	if userID, exists := c.Get("user_id"); exists {
-		if uid, ok := userID.(uuid.UUID); ok {
-			return uid, true
-		}
-	}
-	return uuid.Nil, false
+// NewHandler creates a parser-service HTTP handler for the local workspace.
+func NewHandler(service parseService) *Handler {
+	return &Handler{service: service}
 }
 
 // Parse handles the authenticated multipart upload endpoint for parser-service.
 func (h *Handler) Parse(c *gin.Context) {
-	if h.quotaChecker != nil {
-		if userID, ok := h.getUserID(c); ok {
-			if err := h.quotaChecker.CheckQuota(userID); err != nil {
-				c.JSON(http.StatusPaymentRequired, gin.H{
-					"code":    http.StatusPaymentRequired,
-					"message": err.Error(),
-					"data":    nil,
-				})
-				return
-			}
-		}
-	}
-
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{

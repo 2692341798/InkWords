@@ -8,10 +8,6 @@ import (
 )
 
 func (h *Handler) ContinueBlogStreamHandler(c *gin.Context) {
-	if !h.maybeCheckQuota(c) {
-		return
-	}
-
 	blogIDStr := c.Param("id")
 	blogID, err := uuid.Parse(blogIDStr)
 	if err != nil {
@@ -19,9 +15,9 @@ func (h *Handler) ContinueBlogStreamHandler(c *gin.Context) {
 		return
 	}
 
-	userID := h.getUserID(c)
-	if userID == uuid.Nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+	workspaceID := h.getWorkspaceID(c)
+	if workspaceID == uuid.Nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "local workspace unavailable"})
 		return
 	}
 
@@ -29,7 +25,7 @@ func (h *Handler) ContinueBlogStreamHandler(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	go h.service.Continue(ctx, userID, blogID, chunkChan, errChan)
+	go h.service.Continue(ctx, workspaceID, blogID, chunkChan, errChan)
 
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")

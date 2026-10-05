@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/google/uuid"
 	"gorm.io/datatypes"
@@ -41,68 +40,6 @@ func (r *GormGenerationResultRepository) PersistGenerationResult(ctx context.Con
 	}
 }
 
-// PersistProjectCourseGenerationBlogs materializes one deterministic parent
-// blog and idempotent chapter children. It intentionally keeps the existing
-// one-level blog tree; volume metadata remains in the course result.
-func (r *GormGenerationResultRepository) PersistProjectCourseGenerationBlogs(ctx context.Context, taskID uuid.UUID, result map[string]any) error {
-	courseID, err := uuid.Parse(readPayloadString(result, "course_id"))
-	if err != nil {
-		return fmt.Errorf("parse project course id: %w", err)
-	}
-	ownerID, err := r.taskOwnerUserID(ctx, taskID)
-	if err != nil {
-		return err
-	}
-	rawChapters, ok := result["chapters"].([]any)
-	if !ok {
-		return fmt.Errorf("read project course chapters: invalid payload")
-	}
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var toc strings.Builder
-		toc.WriteString("# 项目精通课程\n\n")
-		for _, raw := range rawChapters {
-			chapter, ok := raw.(map[string]any)
-			if !ok {
-				return fmt.Errorf("read project course chapter: invalid payload")
-			}
-			if readPayloadString(chapter, "status") == "succeeded" {
-				document, _ := chapter["document"].(map[string]any)
-				_, _ = fmt.Fprintf(&toc, "- %s\n", readPayloadString(document, "title"))
-			}
-		}
-		parent := blogRecord{ID: courseID, UserID: ownerID, Title: "项目精通课程", Content: toc.String(), SourceType: "project_mastery_course", IsSeries: true, Status: 1, TechStacks: datatypes.JSON([]byte(`[]`))}
-		if err := tx.Where("id = ?", courseID).Assign(parent).FirstOrCreate(&parent).Error; err != nil {
-			return fmt.Errorf("persist project course parent blog: %w", err)
-		}
-		for _, raw := range rawChapters {
-			chapter, ok := raw.(map[string]any)
-			if !ok {
-				return fmt.Errorf("read project course chapter: invalid payload")
-			}
-			chapterID := readPayloadString(chapter, "chapter_id")
-			if chapterID == "" {
-				return fmt.Errorf("project course chapter id is required")
-			}
-			childID := uuid.NewSHA1(uuid.Nil, []byte(courseID.String()+"/"+chapterID))
-			status := int16(2)
-			content := readPayloadString(chapter, "error")
-			title := chapterID
-			if document, ok := chapter["document"].(map[string]any); ok {
-				title = readPayloadString(document, "title")
-				content = readPayloadString(document, "markdown")
-				if readPayloadString(chapter, "status") == "succeeded" {
-					status = 1
-				}
-			}
-			child := blogRecord{ID: childID, UserID: ownerID, ParentID: &courseID, ChapterSort: readPayloadInt(chapter, "sort"), Title: title, Content: content, SourceType: "project_mastery_course", Status: status, WordCount: len(strings.Fields(content)), TechStacks: datatypes.JSON([]byte(`[]`))}
-			if err := tx.Where("id = ?", childID).Assign(child).FirstOrCreate(&child).Error; err != nil {
-				return fmt.Errorf("persist project course chapter %s: %w", chapterID, err)
-			}
-		}
-		return nil
-	})
-}
-
 func (r *GormGenerationResultRepository) persistSingleResult(ctx context.Context, taskID uuid.UUID, payload map[string]any) error {
 	blogID, err := readPayloadUUID(payload)
 	if err != nil {
@@ -130,12 +67,12 @@ func (r *GormGenerationResultRepository) persistSingleResult(ctx context.Context
 }
 
 func (r *GormGenerationResultRepository) createSingleResultBlog(ctx context.Context, taskID uuid.UUID, payload map[string]any, techStacksJSON []byte) error {
-	ownerID, err := r.taskOwnerUserID(ctx, taskID)
+	workspaceID, err := r.taskWorkspaceID(ctx, taskID)
 	if err != nil {
 		return err
 	}
 	created := blogRecord{
-		ID: taskID, UserID: ownerID, Title: readPayloadString(payload, "title"),
+		ID: taskID, WorkspaceID: workspaceID, Title: readPayloadString(payload, "title"),
 		Content: readPayloadString(payload, "content"), SourceType: readPayloadString(payload, "source_type"),
 		WordCount: readPayloadInt(payload, "word_count"), TechStacks: datatypes.JSON(techStacksJSON), Status: 1,
 	}
@@ -208,73 +145,18 @@ func persistSeriesChapter(ctx context.Context, tx *gorm.DB, rawChapter any) erro
 	}, "update series chapter blog")
 }
 
-// AccumulateTokens applies token accounting after blogs have been updated.
-func (r *GormGenerationResultRepository) AccumulateTokens(ctx context.Context, taskID uuid.UUID, result map[string]any) error {
-	decoded, err := decodeGenerationResult(result)
-	if err != nil {
-		return fmt.Errorf("decode generation result for task %s: %w", taskID, err)
-	}
-	switch decoded.TaskSubtype {
-	case "generate_single", "continue":
-	case "generate_series":
-	default:
-		return nil
-	}
-
-	userID, err := r.usageOwnerUserID(ctx, taskID, decoded)
-	if err != nil {
-		return err
-	}
-
-	updateTx := r.db.WithContext(ctx).Model(&userRecord{}).
-		Where("id = ?", userID).
-		UpdateColumn("tokens_used", gorm.Expr("tokens_used + ?", decoded.Usage.billableTokens()))
-	if updateTx.Error != nil {
-		return fmt.Errorf("accumulate user tokens: %w", updateTx.Error)
-	}
-	if updateTx.RowsAffected == 0 {
-		return fmt.Errorf("accumulate user tokens: user %s not found", userID)
-	}
-	return nil
-}
-
-func (r *GormGenerationResultRepository) usageOwnerUserID(ctx context.Context, taskID uuid.UUID, decoded GenerationResult) (uuid.UUID, error) {
-	blogID, err := usageOwnerBlogID(decoded)
-	if err == nil {
-		var blog blogRecord
-		if err := r.db.WithContext(ctx).Select("id", "user_id").First(&blog, "id = ?", blogID).Error; err != nil {
-			if !errors.Is(err, gorm.ErrRecordNotFound) {
-				return uuid.Nil, fmt.Errorf("load generated blog owner: %w", err)
-			}
-		} else {
-			return blog.UserID, nil
-		}
-	}
-
-	return r.taskOwnerUserID(ctx, taskID)
-}
-
-func (r *GormGenerationResultRepository) taskOwnerUserID(ctx context.Context, taskID uuid.UUID) (uuid.UUID, error) {
+func (r *GormGenerationResultRepository) taskWorkspaceID(ctx context.Context, taskID uuid.UUID) (uuid.UUID, error) {
 	var task JobTask
-	if err := r.db.WithContext(ctx).Select("id", "requested_by").First(&task, "id = ?", taskID).Error; err != nil {
+	if err := r.db.WithContext(ctx).Select("id", "workspace_id").First(&task, "id = ?", taskID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return uuid.Nil, fmt.Errorf("load generation task owner: task %s not found", taskID)
+			return uuid.Nil, fmt.Errorf("load generation task workspace: task %s not found", taskID)
 		}
-		return uuid.Nil, fmt.Errorf("load generation task owner: %w", err)
+		return uuid.Nil, fmt.Errorf("load generation task workspace: %w", err)
 	}
-	return task.RequestedBy, nil
-}
-
-func usageOwnerBlogID(decoded GenerationResult) (uuid.UUID, error) {
-	if decoded.TaskSubtype == "generate_series" {
-		parentRaw, ok := decoded.Payload["parent_blog"].(map[string]any)
-		if !ok {
-			return uuid.Nil, fmt.Errorf("read parent_blog: invalid payload")
-		}
-		return readPayloadUUID(parentRaw)
+	if task.WorkspaceID != nil {
+		return *task.WorkspaceID, nil
 	}
-
-	return readPayloadUUID(decoded.Payload)
+	return uuid.Nil, fmt.Errorf("generation task %s has no workspace", taskID)
 }
 
 func updateBlogByID(ctx context.Context, db *gorm.DB, blogID uuid.UUID, updates map[string]any, action string) error {
@@ -357,4 +239,3 @@ func marshalStringSlice(items []string) ([]byte, error) {
 }
 
 var _ BlogResultRepository = (*GormGenerationResultRepository)(nil)
-var _ UsageRepository = (*GormGenerationResultRepository)(nil)

@@ -451,7 +451,7 @@ flowchart LR
 - “深度生成”旁明确提示“多阶段审稿，耗时与成本更高”。
 - 模式选择在任务创建前确定，运行中不能切换。
 - 当前选择写入生成请求，不需要长期存入浏览器本地缓存。
-- 移动端保证两个选项键盘可达、焦点可见、文字不截断。
+- 本机浏览器中保证两个选项键盘可达、焦点可见、文字不截断。
 
 ## 10. 输入材料与 token 预算
 
@@ -706,7 +706,7 @@ backend/services/llm-stream/app/streaming/
 
 - 只有正在输出的章节卡片因正文变化而重渲染。
 - 停止按钮在高频输出下仍能立即响应。
-- 桌面和移动端没有内容跳动、滚动陷阱或文字截断。
+- 本机浏览器主流程没有内容跳动、滚动陷阱或文字截断。
 
 ### Phase 4：标准 / 深度模式
 
@@ -807,7 +807,7 @@ backend/services/llm-stream/app/streaming/
 - 标准/深度模式键盘可达且焦点可见。
 - 正文输出期间停止按钮可用。
 - 章节卡片没有批量闪烁。
-- 桌面与移动端截图符合预期。
+- 当前本机浏览器主流程截图符合预期；不设备专项验收。
 - 完成后 usage 展示与网络事件一致。
 
 ### 15.5 Docker 验证
@@ -901,7 +901,7 @@ GENERATION_CHUNK_FLUSH_BYTES=<number>
 - 标准模式默认启用，并比当前深度链路总耗时至少降低 40%。
 - 深度模式保留现有质量门禁和错误修复能力。
 - 取消、失败、最终持久化和幂等行为通过测试。
-- 前端桌面、移动端、键盘操作、Console 和截图验证通过。
+- 前端本机浏览器主流程、键盘操作、Console 和截图验证通过。
 - Docker 多服务冒烟通过。
 - 相关 API、环境变量、Runbook 和架构文档已同步。
 - 未输出或提交密钥、完整 prompt、私人源码和用户正文。
@@ -933,4 +933,3 @@ GENERATION_CHUNK_FLUSH_BYTES=<number>
 
 - DeepSeek Chat Completion：<https://api-docs.deepseek.com/api/create-chat-completion>
 - DeepSeek Context Caching：<https://api-docs.deepseek.com/guides/kv_cache>
-

@@ -48,7 +48,7 @@ func TestAsyncPipelineContracts(t *testing.T) {
 	require.Equal(t, 1, parsed.ArchiveSummary.IgnoredFiles)
 
 	taskID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
-	userID := uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+	workspaceID := uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
 	payload, err := json.Marshal(stream.GenerateRequest{
 		SourceType:    "file",
 		SourceContent: parsed.SourceContent,
@@ -57,14 +57,17 @@ func TestAsyncPipelineContracts(t *testing.T) {
 	require.NoError(t, err)
 
 	wire, err := json.Marshal(sharedmq.GenerationRequestedMessage{
-		TaskID: taskID, Kind: "generate_single", UserID: userID, Payload: payload,
+		TaskID: taskID, Kind: "generate_single", WorkspaceID: &workspaceID, Payload: payload,
 	})
 	require.NoError(t, err)
 	var received sharedmq.GenerationRequestedMessage
 	require.NoError(t, json.Unmarshal(wire, &received))
 	require.Equal(t, "generation.requested", received.RoutingKey())
 	require.Equal(t, taskID, received.TaskID)
-	require.Equal(t, userID, received.UserID)
+	require.Equal(t, workspaceID, *received.WorkspaceID)
+	var envelope map[string]any
+	require.NoError(t, json.Unmarshal(wire, &envelope))
+	require.NotContains(t, envelope, "user_id")
 
 	resultJSON, err := stream.BuildGenerateSingleTaskResult(stream.GenerateSingleTaskResultInput{
 		BlogID: "cccccccc-cccc-cccc-cccc-cccccccccccc", Title: "Queue safety",

@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	masterydomain "inkwords-backend/services/review-service/domain/mastery"
 	reviewdomain "inkwords-backend/services/review-service/domain/review"
 )
 
@@ -48,6 +49,27 @@ func TestRegisterReviewRoutes_RegistersReviewRoutes(t *testing.T) {
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/blogs/1/export", nil)
 	r.ServeHTTP(resp, req)
 	require.Equal(t, http.StatusNotFound, resp.Code)
+}
+
+func TestRegisterMasteryRoutes_RegistersMasteryRoutes(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	RegisterMasteryRoutes(r, func(c *gin.Context) { c.Next() }, masterydomain.NewHandler(nil))
+
+	registered := map[string]bool{}
+	for _, route := range r.Routes() {
+		registered[route.Method+" "+route.Path] = true
+	}
+	for _, expected := range []string{
+		http.MethodGet + " /api/v1/mastery/due",
+		http.MethodPost + " /api/v1/mastery/objectives",
+		http.MethodPost + " /api/v1/mastery/objectives/:id/attempts",
+		http.MethodPost + " /api/v1/mastery/objectives/:id/practice-sessions",
+		http.MethodGet + " /api/v1/mastery/objectives/:id/practice-sessions/:sessionID",
+		http.MethodPost + " /api/v1/mastery/objectives/:id/practice-sessions/:sessionID/help",
+	} {
+		require.Truef(t, registered[expected], "missing mastery route %s", expected)
+	}
 }
 
 type stubReviewService struct {

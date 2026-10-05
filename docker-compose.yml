@@ -51,13 +51,8 @@ services:
     image: inkwords/core-api:local
     command: ["./core-api"]
     environment:
-      DEV_AUTH_USER_ID: ${DEV_AUTH_USER_ID:-}
       DATABASE_URL: postgres://${POSTGRES_USER:-inkwords}:${POSTGRES_PASSWORD:-inkwords_password}@db:5432/${POSTGRES_DB:-inkwords_db}?sslmode=disable
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
-      # Why: Docker mode is fronted by Nginx on http://localhost, so OAuth must
-      # return through that public entrypoint instead of a Vite-only dev server.
-      GITHUB_REDIRECT_URL: ${DOCKER_GITHUB_REDIRECT_URL:-http://localhost/api/v1/auth/callback/github}
       OBSIDIAN_REST_API_BASE_URL: ${OBSIDIAN_REST_API_BASE_URL:-https://obsidian-bridge:27125}
       OBSIDIAN_REST_API_KEY: ${OBSIDIAN_REST_API_KEY:-}
       OBSIDIAN_REST_API_CERT_PATH: ${OBSIDIAN_REST_API_CERT_PATH:-}
@@ -66,19 +61,32 @@ services:
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       DEEPSEEK_API_URL: ${DEEPSEEK_API_URL:-}
       DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-}
+      TEXTBOOK_GENERATION_PROVIDER: ${TEXTBOOK_GENERATION_PROVIDER:-fake}
+      TEXTBOOK_STANDARD_MODEL: ${TEXTBOOK_STANDARD_MODEL:-}
       RABBITMQ_URL: ${RABBITMQ_URL:-amqp://guest:guest@rabbitmq:5672/}
       RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-inkwords.events}
       RABBITMQ_GENERATION_QUEUE: ${RABBITMQ_GENERATION_QUEUE:-inkwords.generation}
       RABBITMQ_EXPORT_QUEUE: ${RABBITMQ_EXPORT_QUEUE:-inkwords.export}
       EXPORT_ARTIFACTS_DIR: ${EXPORT_ARTIFACTS_DIR:-/app/export-artifacts}
-      JWT_SECRET: ${JWT_SECRET:-}
-      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
-      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      TEXTBOOK_SOURCE_ARTIFACTS_DIR: ${TEXTBOOK_SOURCE_ARTIFACTS_DIR:-/app/source-artifacts}
+      TEXTBOOK_TEACHING_ARTIFACTS_DIR: ${TEXTBOOK_TEACHING_ARTIFACTS_DIR:-/app/teaching-artifacts}
+      # Must match the operator-pinned course-runner image's actual Go version.
+      TEXTBOOK_TEACHING_GO_VERSION: ${TEXTBOOK_TEACHING_GO_VERSION:-go1.26.8}
+      TEXTBOOK_DEPENDENCY_CATALOG_FILE: ${TEXTBOOK_DEPENDENCY_CATALOG_FILE:-}
+      TEXTBOOK_VISUAL_ASSETS_DIR: ${TEXTBOOK_VISUAL_ASSETS_DIR:-/app/visual-assets}
+      TEXTBOOK_TEACHING_ARTIFACT_VERIFICATION_ENABLED: ${TEXTBOOK_TEACHING_ARTIFACT_VERIFICATION_ENABLED:-false}
     expose:
       - "8080"
     volumes:
       - uploads:/app/uploads
       - export-artifacts:/app/export-artifacts
+      # Raw sources are content-addressed. parser-service receives read-only
+      # access and task messages carry only their SHA-256 token.
+      - source-artifacts:/app/source-artifacts
+      # Generated teaching examples are a distinct immutable artifact class;
+      # the verification worker receives the same volume read-only.
+      - teaching-artifacts:/app/teaching-artifacts
+      - visual-assets:/app/visual-assets
       # Why: require an explicit host wiki path instead of silently binding a
       # machine-specific absolute path that only works on one workstation.
       - type: bind
@@ -110,18 +118,23 @@ services:
     image: inkwords/llm-stream:local
     command: ["./llm-stream"]
     environment:
-      DEV_AUTH_USER_ID: ${DEV_AUTH_USER_ID:-}
       DATABASE_URL: postgres://${POSTGRES_USER:-inkwords}:${POSTGRES_PASSWORD:-inkwords_password}@db:5432/${POSTGRES_DB:-inkwords_db}?sslmode=disable
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       DEEPSEEK_API_URL: ${DEEPSEEK_API_URL:-}
       DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-}
+      TEXTBOOK_GENERATION_PROVIDER: ${TEXTBOOK_GENERATION_PROVIDER:-fake}
+      TEXTBOOK_STANDARD_MODEL: ${TEXTBOOK_STANDARD_MODEL:-}
+      TEXTBOOK_CORE_MODEL: ${TEXTBOOK_CORE_MODEL:-}
+      TEXTBOOK_GENERATION_REQUEST_TIMEOUT: ${TEXTBOOK_GENERATION_REQUEST_TIMEOUT:-15m}
+      TEXTBOOK_REJECTED_DRAFTS_DIR: /app/rejected-drafts/private
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       INKWORDS_TASK_PERSISTENCE_MODE: ${INKWORDS_TASK_PERSISTENCE_MODE:-task_only}
       RABBITMQ_URL: ${RABBITMQ_URL:-amqp://guest:guest@rabbitmq:5672/}
       RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-inkwords.events}
       RABBITMQ_GENERATION_QUEUE: ${RABBITMQ_GENERATION_QUEUE:-inkwords.generation}
-      JWT_SECRET: ${JWT_SECRET:-}
+    volumes:
+      - rejected-drafts:/app/rejected-drafts
     expose:
       - "8080"
     depends_on:
@@ -148,15 +161,18 @@ services:
     image: inkwords/parser-service:local
     command: ["./parser-service"]
     environment:
-      DEV_AUTH_USER_ID: ${DEV_AUTH_USER_ID:-}
       DATABASE_URL: postgres://${POSTGRES_USER:-inkwords}:${POSTGRES_PASSWORD:-inkwords_password}@db:5432/${POSTGRES_DB:-inkwords_db}?sslmode=disable
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       RABBITMQ_URL: ${RABBITMQ_URL:-amqp://guest:guest@rabbitmq:5672/}
       RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-inkwords.events}
       RABBITMQ_PARSE_QUEUE: ${RABBITMQ_PARSE_QUEUE:-inkwords.parse}
-      JWT_SECRET: ${JWT_SECRET:-}
+      TEXTBOOK_SOURCE_ARTIFACTS_DIR: ${TEXTBOOK_SOURCE_ARTIFACTS_DIR:-/app/source-artifacts}
+      TEXTBOOK_CRAWL_CHECKPOINTS_DIR: ${TEXTBOOK_CRAWL_CHECKPOINTS_DIR:-/app/crawl-checkpoints}
     expose:
       - "8080"
+    volumes:
+      - source-artifacts:/app/source-artifacts:ro
+      - crawl-checkpoints:/app/crawl-checkpoints
     depends_on:
       db:
         condition: service_healthy
@@ -179,11 +195,13 @@ services:
       context: ./backend
       dockerfile: services/export-service/Dockerfile
     image: inkwords/export-service:local
+    # Frozen review ZIPs read the same immutable teaching trees as course-runner.
+    # Grant the existing read group; the volume remains read-only.
+    group_add:
+      - "20001"
     command: ["./export-service"]
     environment:
-      DEV_AUTH_USER_ID: ${DEV_AUTH_USER_ID:-}
       DATABASE_URL: postgres://${POSTGRES_USER:-inkwords}:${POSTGRES_PASSWORD:-inkwords_password}@db:5432/${POSTGRES_DB:-inkwords_db}?sslmode=disable
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
       OBSIDIAN_REST_API_BASE_URL: ${OBSIDIAN_REST_API_BASE_URL:-https://obsidian-bridge:27125}
       OBSIDIAN_REST_API_KEY: ${OBSIDIAN_REST_API_KEY:-}
       OBSIDIAN_REST_API_CERT_PATH: ${OBSIDIAN_REST_API_CERT_PATH:-}
@@ -196,11 +214,19 @@ services:
       RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-inkwords.events}
       RABBITMQ_EXPORT_QUEUE: ${RABBITMQ_EXPORT_QUEUE:-inkwords.export}
       EXPORT_ARTIFACTS_DIR: ${EXPORT_ARTIFACTS_DIR:-/app/export-artifacts}
-      JWT_SECRET: ${JWT_SECRET:-}
+      TEXTBOOK_TEACHING_ARTIFACTS_DIR: ${TEXTBOOK_TEACHING_ARTIFACTS_DIR:-/app/teaching-artifacts}
+      TEXTBOOK_VISUAL_ASSETS_DIR: ${TEXTBOOK_VISUAL_ASSETS_DIR:-/app/visual-assets}
+      # DOCX uses the reviewed reference shipped with export-service. PDF stays
+      # opt-in until Chromium sandboxing is verified in the deployment runtime.
+      TEXTBOOK_PANDOC_BIN: ${TEXTBOOK_PANDOC_BIN:-/usr/bin/pandoc}
+      TEXTBOOK_REFERENCE_DOCX: ${TEXTBOOK_REFERENCE_DOCX:-/app/assets/publishing/inkwords-reference.docx}
+      TEXTBOOK_CHROMIUM_BIN: ${TEXTBOOK_CHROMIUM_BIN:-}
     expose:
       - "8080"
     volumes:
       - export-artifacts:/app/export-artifacts
+      - teaching-artifacts:/app/teaching-artifacts:ro
+      - visual-assets:/app/visual-assets:ro
       - type: bind
         source: ${OBSIDIAN_VAULT_PATH:?Set OBSIDIAN_VAULT_PATH in backend/.env (used with --env-file) or your shell environment}
         target: /app/obsidian
@@ -226,17 +252,47 @@ services:
       context: ./backend
       dockerfile: services/course-runner/Dockerfile
     image: inkwords/course-runner:local
+    # Only generated teaching trees are published with this read group.
+    # The mount stays read-only and the runner keeps its non-root identity.
+    group_add:
+      - "20001"
     command: ["./course-runner"]
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-inkwords}:${POSTGRES_PASSWORD:-inkwords_password}@db:5432/inkwords_db?sslmode=disable
       RABBITMQ_URL: ${RABBITMQ_URL:-amqp://guest:guest@rabbitmq:5672/}
       RABBITMQ_EXCHANGE: ${RABBITMQ_EXCHANGE:-inkwords.events}
-      PROJECT_COURSE_LAB_VERIFICATION_ENABLED: ${PROJECT_COURSE_LAB_VERIFICATION_ENABLED:-false}
-      COURSE_ARTIFACTS_DIR: /app/course-artifacts
+      TEXTBOOK_TEACHING_ARTIFACT_VERIFICATION_ENABLED: ${TEXTBOOK_TEACHING_ARTIFACT_VERIFICATION_ENABLED:-false}
+      LEARNER_ARTIFACT_VERIFICATION_ENABLED: ${LEARNER_ARTIFACT_VERIFICATION_ENABLED:-false}
+      TEXTBOOK_TEACHING_ARTIFACTS_DIR: /app/teaching-artifacts
+      TEXTBOOK_VISUAL_ASSETS_DIR: /app/visual-assets
+      TEXTBOOK_RUNNER_IMAGE_DIGEST: ${TEXTBOOK_RUNNER_IMAGE_DIGEST:-}
+      TEXTBOOK_RUNNER_SANDBOX_PROFILE_PATH: /app/seccomp/bubblewrap-outer.json
+      REVIEW_SERVICE_URL: ${REVIEW_SERVICE_URL:-http://review-service:8080}
     expose:
       - "8080"
     volumes:
-      - course-artifacts:/app/course-artifacts:ro
+      - teaching-artifacts:/app/teaching-artifacts:ro
+      - ./backend/services/course-runner/seccomp/bubblewrap-outer.json:/app/seccomp/bubblewrap-outer.json:ro
+      # Browser screenshots are generated only after a successful isolated
+      # probe and stored content-addressed for core-api/export-service to read.
+      - visual-assets:/app/visual-assets
+    # The service only reads immutable artifacts and writes each isolated lab
+    # under /tmp. The lab itself receives a separate network namespace from
+    # bubblewrap; this service network remains limited to DB and RabbitMQ.
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+      # Derived from Moby's default profile. It permits only Bubblewrap's
+      # namespace setup syscalls; course-runner installs a child seccomp filter
+      # before any generated or learner-owned process starts.
+      - seccomp=./backend/services/course-runner/seccomp/bubblewrap-outer.json
+    pids_limit: 128
+    mem_limit: 512m
+    cpus: 1.0
     depends_on:
       db:
         condition: service_healthy
@@ -259,14 +315,22 @@ services:
     image: inkwords/review-service:local
     command: ["./review-service"]
     environment:
-      DEV_AUTH_USER_ID: ${DEV_AUTH_USER_ID:-}
+      CORE_API_URL: ${CORE_API_URL:-http://core-api:8080}
+      COURSE_RUNNER_URL: ${COURSE_RUNNER_URL:-http://course-runner:8080}
+      MASTERY_DEEPSEEK_API_KEY: ${MASTERY_DEEPSEEK_API_KEY:-${DEEPSEEK_API_KEY:-}}
+      MASTERY_DEEPSEEK_MODEL: ${MASTERY_DEEPSEEK_MODEL:-${DEEPSEEK_MODEL:-}}
+      MASTERY_ASSESSMENT_PROFILE: ${MASTERY_ASSESSMENT_PROFILE:-}
+      DEEPSEEK_API_URL: ${DEEPSEEK_API_URL:-}
+      DATABASE_URL: postgres://${POSTGRES_USER:-inkwords}:${POSTGRES_PASSWORD:-inkwords_password}@db:5432/${POSTGRES_DB:-inkwords_db}?sslmode=disable
       REVIEW_DATABASE_URL: postgres://${POSTGRES_USER:-inkwords}:${POSTGRES_PASSWORD:-inkwords_password}@db:5432/inkwords_review_db?sslmode=disable
       OBSIDIAN_REST_API_BASE_URL: ${OBSIDIAN_REST_API_BASE_URL:-https://obsidian-bridge:27125}
       OBSIDIAN_REST_API_KEY: ${OBSIDIAN_REST_API_KEY:-}
       OBSIDIAN_REST_API_CERT_PATH: ${OBSIDIAN_REST_API_CERT_PATH:-}
       OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY: ${OBSIDIAN_REST_API_INSECURE_SKIP_VERIFY:-}
       OBSIDIAN_WIKI_DIR: ${OBSIDIAN_WIKI_DIR:-wiki}
-      JWT_SECRET: ${JWT_SECRET:-}
+      # Review cards are read-only projections of the already mounted local
+      # vault, so they remain available even when the Obsidian REST plugin is off.
+      OBSIDIAN_LOCAL_VAULT_ROOT: /app/obsidian
     expose:
       - "8080"
     volumes:
@@ -304,8 +368,6 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-      args:
-        VITE_AUTH_BYPASS: ${VITE_AUTH_BYPASS:-false}
     ports:
       - "${FRONTEND_PORT:-80}:80"
     depends_on:
@@ -338,4 +400,8 @@ volumes:
   uploads:
   redisdata:
   export-artifacts:
-  course-artifacts:
+  source-artifacts:
+  teaching-artifacts:
+  visual-assets:
+  crawl-checkpoints:
+  rejected-drafts:

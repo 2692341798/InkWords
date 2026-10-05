@@ -9,7 +9,7 @@ import (
 )
 
 // CreateSession 创建一条新的复习会话，并生成训练快照与开场提示。
-func (s *Service) CreateSession(ctx context.Context, userID uuid.UUID, req CreateSessionRequest) (ReviewSessionResponse, error) {
+func (s *Service) CreateSession(ctx context.Context, workspaceID uuid.UUID, req CreateSessionRequest) (ReviewSessionResponse, error) {
 	if !isSupportedReviewMode(req.Mode) {
 		return ReviewSessionResponse{}, errInvalidReviewMode
 	}
@@ -30,7 +30,7 @@ func (s *Service) CreateSession(ctx context.Context, userID uuid.UUID, req Creat
 
 	session := ReviewSession{
 		ID:                uuid.New(),
-		UserID:            userID,
+		WorkspaceID:       workspaceID,
 		NotePath:          note.NotePath,
 		NoteTitle:         note.Title,
 		SourceTitle:       note.SourceTitle,
@@ -88,8 +88,8 @@ func (s *Service) CreateSession(ctx context.Context, userID uuid.UUID, req Creat
 }
 
 // CompleteReading 幂等地结束阅读阶段并允许用户开始脱离原文复述。
-func (s *Service) CompleteReading(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID) (ReadingCompleteResponse, error) {
-	session, _, err := s.loadOwnedSession(ctx, userID, sessionID)
+func (s *Service) CompleteReading(ctx context.Context, workspaceID uuid.UUID, sessionID uuid.UUID) (ReadingCompleteResponse, error) {
+	session, _, err := s.loadOwnedSession(ctx, workspaceID, sessionID)
 	if err != nil {
 		return ReadingCompleteResponse{}, err
 	}
@@ -110,8 +110,8 @@ func (s *Service) CompleteReading(ctx context.Context, userID uuid.UUID, session
 }
 
 // GetSession 返回一次复习会话的当前状态与历史轮次。
-func (s *Service) GetSession(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID) (ReviewSessionResponse, error) {
-	session, turns, err := s.loadOwnedSession(ctx, userID, sessionID)
+func (s *Service) GetSession(ctx context.Context, workspaceID uuid.UUID, sessionID uuid.UUID) (ReviewSessionResponse, error) {
+	session, turns, err := s.loadOwnedSession(ctx, workspaceID, sessionID)
 	if err != nil {
 		return ReviewSessionResponse{}, err
 	}
@@ -120,13 +120,13 @@ func (s *Service) GetSession(ctx context.Context, userID uuid.UUID, sessionID uu
 }
 
 // Respond 处理用户的一轮回答，并根据模式推进问题或结束会话。
-func (s *Service) Respond(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID, req RespondRequest) (RespondResponse, error) {
+func (s *Service) Respond(ctx context.Context, workspaceID uuid.UUID, sessionID uuid.UUID, req RespondRequest) (RespondResponse, error) {
 	answer := strings.TrimSpace(req.Answer)
 	if answer == "" {
 		return RespondResponse{}, errEmptyReviewAnswer
 	}
 
-	session, turns, err := s.loadOwnedSession(ctx, userID, sessionID)
+	session, turns, err := s.loadOwnedSession(ctx, workspaceID, sessionID)
 	if err != nil {
 		return RespondResponse{}, err
 	}
@@ -274,8 +274,8 @@ func (s *Service) Respond(ctx context.Context, userID uuid.UUID, sessionID uuid.
 }
 
 // RequestHint 根据当前会话状态返回一条更具体的提示。
-func (s *Service) RequestHint(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID, req HintRequest) (HintResponse, error) {
-	session, turns, err := s.loadOwnedSession(ctx, userID, sessionID)
+func (s *Service) RequestHint(ctx context.Context, workspaceID uuid.UUID, sessionID uuid.UUID, req HintRequest) (HintResponse, error) {
+	session, turns, err := s.loadOwnedSession(ctx, workspaceID, sessionID)
 	if err != nil {
 		return HintResponse{}, err
 	}
@@ -328,8 +328,8 @@ func (s *Service) RequestHint(ctx context.Context, userID uuid.UUID, sessionID u
 }
 
 // Finish 显式结束复习训练，并返回最终反馈。
-func (s *Service) Finish(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID) (FinishResponse, error) {
-	session, turns, err := s.loadOwnedSession(ctx, userID, sessionID)
+func (s *Service) Finish(ctx context.Context, workspaceID uuid.UUID, sessionID uuid.UUID) (FinishResponse, error) {
+	session, turns, err := s.loadOwnedSession(ctx, workspaceID, sessionID)
 	if err != nil {
 		return FinishResponse{}, err
 	}
@@ -374,7 +374,7 @@ func (s *Service) findNoteByPath(ctx context.Context, notePath string) (ReviewNo
 	return ReviewNote{}, errReviewNoteNotFound
 }
 
-func (s *Service) loadOwnedSession(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID) (ReviewSession, []ReviewTurn, error) {
+func (s *Service) loadOwnedSession(ctx context.Context, workspaceID uuid.UUID, sessionID uuid.UUID) (ReviewSession, []ReviewTurn, error) {
 	session, err := s.repo.GetSessionByID(ctx, sessionID)
 	if err != nil {
 		return ReviewSession{}, nil, fmt.Errorf("查询复习会话失败: %w", err)
@@ -382,7 +382,7 @@ func (s *Service) loadOwnedSession(ctx context.Context, userID uuid.UUID, sessio
 	if session.ID == uuid.Nil {
 		return ReviewSession{}, nil, errReviewSessionNotFound
 	}
-	if session.UserID != userID {
+	if session.WorkspaceID != workspaceID {
 		return ReviewSession{}, nil, errReviewSessionDenied
 	}
 

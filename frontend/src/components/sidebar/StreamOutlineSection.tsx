@@ -17,7 +17,7 @@ type StreamOutlineSectionProps = {
   isGenerating: boolean
   isAnalyzing: boolean
   resetStream: () => void
-  setCurrentView: (view: 'generator' | 'dashboard') => void
+  setCurrentView: (view: 'generator') => void
   blogs: BlogNode[]
   fetchBlogs: () => Promise<void>
   selectBlog: (blog: BlogNode) => void

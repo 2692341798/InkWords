@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"inkwords-backend/shared/kernel/httpx"
 )
 
 func TestHandler_GetTodayCard_Returns200(t *testing.T) {
@@ -19,10 +20,7 @@ func TestHandler_GetTodayCard_Returns200(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.Use(func(c *gin.Context) {
-		c.Set("user_id", uuid.New())
-		c.Next()
-	})
+	r.Use(testWorkspaceContext(uuid.New()))
 
 	h := NewHandler(&stubHandlerService{
 		todayCard: ReviewCardResponse{
@@ -53,7 +51,7 @@ func TestHandler_GetTodayCard_Returns200(t *testing.T) {
 	require.Equal(t, "wiki/concepts/gin.md", body.Data.NotePath)
 }
 
-func TestHandler_GetTodayCard_ReturnsUnauthorizedWithoutUser(t *testing.T) {
+func TestHandler_GetTodayCard_ReturnsUnavailableWithoutWorkspace(t *testing.T) {
 	t.Parallel()
 
 	gin.SetMode(gin.TestMode)
@@ -66,7 +64,7 @@ func TestHandler_GetTodayCard_ReturnsUnauthorizedWithoutUser(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	require.Equal(t, http.StatusUnauthorized, w.Code)
+	require.Equal(t, http.StatusServiceUnavailable, w.Code)
 }
 
 func TestHandler_CreateSession_Returns200(t *testing.T) {
@@ -74,13 +72,10 @@ func TestHandler_CreateSession_Returns200(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	userID := uuid.New()
+	workspaceID := uuid.New()
 	sessionID := uuid.New()
 
-	r.Use(func(c *gin.Context) {
-		c.Set("user_id", userID)
-		c.Next()
-	})
+	r.Use(testWorkspaceContext(workspaceID))
 
 	h := NewHandler(&stubHandlerService{
 		sessionResp: ReviewSessionResponse{
@@ -115,10 +110,7 @@ func TestHandler_GetHistory_Returns200(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.Use(func(c *gin.Context) {
-		c.Set("user_id", uuid.New())
-		c.Next()
-	})
+	r.Use(testWorkspaceContext(uuid.New()))
 
 	h := NewHandler(&stubHandlerService{
 		historyResp: ReviewHistoryResponse{
@@ -160,10 +152,7 @@ func TestHandler_ListNotes_DoesNotExposeObsidianTransportFailure(t *testing.T) {
 
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.Use(func(c *gin.Context) {
-		c.Set("user_id", uuid.New())
-		c.Next()
-	})
+	r.Use(testWorkspaceContext(uuid.New()))
 
 	h := NewHandler(&stubHandlerService{listNotesErr: errors.New("Get https://127.0.0.1:27124/vault/wiki/concepts: EOF")})
 	r.GET("/api/v1/review/notes", h.ListNotes)
@@ -194,6 +183,12 @@ type stubHandlerService struct {
 	finishResp    FinishResponse
 
 	lastCreateReq CreateSessionRequest
+}
+
+func testWorkspaceContext(workspaceID uuid.UUID) gin.HandlerFunc {
+	return httpx.LocalWorkspaceContext(func(context.Context) (uuid.UUID, error) {
+		return workspaceID, nil
+	})
 }
 
 func (s *stubHandlerService) GetTodayCard(context.Context, uuid.UUID) (ReviewCardResponse, error) {

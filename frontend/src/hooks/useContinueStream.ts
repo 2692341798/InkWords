@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { fetchEventSourceWithAuth } from '@/services/sse'
+import { fetchEventSourceLocal } from '@/services/sse'
 import {
   buildContinueTaskPayload,
   buildGenerationTaskRequest,
@@ -41,7 +41,7 @@ export function useContinueStream({
         buildGenerationTaskRequest('continue', buildContinueTaskPayload(blogId)),
       )
 
-      await fetchEventSourceWithAuth(task.stream_url, {
+      await fetchEventSourceLocal(task.stream_url, {
         method: 'GET',
         async onopen(response) {
           if (response.ok && response.headers.get('content-type')?.startsWith('text/event-stream')) {

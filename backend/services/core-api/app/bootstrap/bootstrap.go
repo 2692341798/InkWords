@@ -11,12 +11,13 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 
 	"inkwords-backend/services/core-api/app/projectanalysis"
-	authdomain "inkwords-backend/services/core-api/domain/auth"
+	"inkwords-backend/services/core-api/app/textbookartifact"
+	"inkwords-backend/services/core-api/app/textbookgeneration"
+	"inkwords-backend/services/core-api/app/textbookimport"
 	blogdomain "inkwords-backend/services/core-api/domain/blog"
 	projectdomain "inkwords-backend/services/core-api/domain/project"
-	projectcoursedomain "inkwords-backend/services/core-api/domain/projectcourse"
 	coretask "inkwords-backend/services/core-api/domain/task"
-	userdomain "inkwords-backend/services/core-api/domain/user"
+	textbookdomain "inkwords-backend/services/core-api/domain/textbook"
 	coremq "inkwords-backend/services/core-api/infra/mq"
 	corev1 "inkwords-backend/services/core-api/transport/http/v1"
 	"inkwords-backend/shared/kernel/httpx"
@@ -24,6 +25,9 @@ import (
 	llm "inkwords-backend/shared/platform/llm"
 	"inkwords-backend/shared/platform/parser"
 	"inkwords-backend/shared/platform/postgres"
+	"inkwords-backend/shared/platform/sourceartifact"
+	"inkwords-backend/shared/platform/teachingartifact"
+	"inkwords-backend/shared/platform/visualasset"
 )
 
 type taskPublisherFactory func(rabbitURL string, exchange string) (coretask.Publisher, func(), error)
@@ -56,14 +60,6 @@ func BuildRouter() (*gin.Engine, func(), error) {
 		"db": httpx.NewGormReadinessCheck(dbConn),
 	}))
 
-	userRepo := userdomain.NewGormRepository(dbConn)
-	userDomainService := userdomain.NewService(userRepo)
-	userDomainHandler := userdomain.NewHandler(userDomainService)
-
-	authRepo := authdomain.NewGormRepository(dbConn)
-	authDomainService := authdomain.NewService(authRepo)
-	authDomainHandler := authdomain.NewHandler(authDomainService)
-
 	blogRepo := blogdomain.NewGormRepository(dbConn)
 	blogDomainService := blogdomain.NewService(blogRepo)
 	blogDomainHandler := blogdomain.NewHandler(blogDomainService)
@@ -78,12 +74,19 @@ func BuildRouter() (*gin.Engine, func(), error) {
 		paService,
 		gitFetcher,
 		docParser,
-		userDomainService,
 	)
 	projectDomainHandler := projectdomain.NewHandler(projectDomainService)
-	projectCourseRepo := projectcoursedomain.NewGormRepository(dbConn)
+	textbookTarget, err := textbookgeneration.SampleGenerationTargetFromConfig(os.Getenv("TEXTBOOK_GENERATION_PROVIDER"), os.Getenv("TEXTBOOK_STANDARD_MODEL"))
+	if err != nil {
+		cleanupTaskPublisher()
+		return nil, nil, fmt.Errorf("configure textbook sample target: %w", err)
+	}
+	textbookRepo := textbookdomain.NewGormRepository(dbConn, textbookTarget)
 	generationResultRepo := coretask.NewGormGenerationResultRepository(dbConn)
-	resultPersister := coretask.NewResultPersister(generationResultRepo, generationResultRepo, projectCourseRepo)
+	teachingArtifacts := teachingartifact.NewStore(envOrDefault("TEXTBOOK_TEACHING_ARTIFACTS_DIR", "/app/teaching-artifacts")).WithReadGroup(teachingartifact.ReaderGroupID)
+	textbookArtifactService := textbookartifact.NewService(teachingArtifacts, textbookRepo)
+	textbookSamplePersister := textbookartifact.NewSampleProjectionPersister(textbookRepo, textbookRepo, textbookArtifactService).WithGoToolchainVersion(os.Getenv("TEXTBOOK_TEACHING_GO_VERSION"))
+	resultPersister := coretask.NewResultPersister(generationResultRepo).WithTextbookSampleRepository(textbookSamplePersister).WithTextbookSourceImportRepository(textbookRepo)
 
 	taskRepo := coretask.NewGormRepository(dbConn)
 	taskDomainService := coretask.NewService(taskRepo, taskPublisher, resultPersister)
@@ -91,42 +94,79 @@ func BuildRouter() (*gin.Engine, func(), error) {
 		taskDomainService,
 		envOrDefault("EXPORT_ARTIFACTS_DIR", "/app/export-artifacts"),
 	)
-	projectCourseHandler := projectcoursedomain.NewHandler(projectcoursedomain.NewService(projectCourseRepo), taskDomainService)
+	textbookService := textbookdomain.NewService(textbookRepo)
+	textbookTaskCreator := textbookgeneration.NewService(textbookService, taskDomainService, textbookTarget)
+	textbookVerificationTaskCreator := textbookartifact.NewVerificationTaskService(textbookService, taskDomainService, os.Getenv("TEXTBOOK_TEACHING_ARTIFACT_VERIFICATION_ENABLED") == "true")
+	sourceArtifacts := sourceartifact.NewStore(envOrDefault("TEXTBOOK_SOURCE_ARTIFACTS_DIR", "/app/source-artifacts"))
+	textbookImportService := textbookimport.NewService(textbookService, taskDomainService, sourceArtifacts)
+	textbookHandler := textbookdomain.NewHandler(textbookService, textbookTaskCreator).WithSourceImportCreator(textbookImportService).WithOfficialWebImportCreator(textbookImportService).WithVerificationTaskCreator(textbookVerificationTaskCreator).WithVisualAssetCreator(textbookartifact.NewVisualAssetService(visualasset.NewStore(envOrDefault("TEXTBOOK_VISUAL_ASSETS_DIR", "/app/visual-assets")).WithReadGroup(teachingartifact.ReaderGroupID), textbookService))
+	textbookTaskHandler := corev1.NewTextbookTaskHandler(textbookgeneration.NewTaskAccessService(taskDomainService))
 
-	corev1.RegisterCoreRoutes(r, httpx.AuthMiddleware(), corev1.CoreHandlers{
-		AuthRegister:                  authDomainHandler.Register,
-		AuthLogin:                     authDomainHandler.Login,
-		AuthBindGithub:                authDomainHandler.BindGithub,
-		AuthGetCaptcha:                authDomainHandler.GetCaptcha,
-		AuthOAuthRedirect:             authDomainHandler.OAuthRedirect,
-		AuthOAuthCallback:             authDomainHandler.OAuthCallback,
-		UserProfile:                   userDomainHandler.GetProfile,
-		UserUpdateProfile:             userDomainHandler.UpdateProfile,
-		UserUploadAvatar:              userDomainHandler.UploadAvatar,
-		UserStats:                     userDomainHandler.GetUserStats,
-		UserGetPromptSetting:          userDomainHandler.GetPromptSettings,
-		UserPutPromptSetting:          userDomainHandler.UpdatePromptSettings,
-		BlogList:                      blogDomainHandler.GetUserBlogs,
-		BlogCreateDraft:               blogDomainHandler.CreateDraftBlog,
-		BlogBatchDelete:               blogDomainHandler.BatchDeleteBlogs,
-		BlogUpdate:                    blogDomainHandler.UpdateBlog,
-		ProjectScan:                   projectDomainHandler.ScanGithubRepo,
-		ProjectAnalyze:                projectDomainHandler.Analyze,
-		ProjectCourseCreate:           projectCourseHandler.Create,
-		ProjectCourseGet:              projectCourseHandler.Get,
-		ProjectCourseCoverage:         projectCourseHandler.Coverage,
-		ProjectCourseQualityReport:    projectCourseHandler.QualityReport,
-		ProjectCourseBlueprintPreview: projectCourseHandler.PreviewBlueprint,
-		ProjectCourseBlueprintUpdate:  projectCourseHandler.UpdateBlueprint,
-		ProjectCourseApprove:          projectCourseHandler.Approve,
-		ProjectCoursePackage:          projectCourseHandler.Package,
-		TaskCreateGeneration:          taskDomainHandler.CreateGenerationTask,
-		TaskCreateParse:               taskDomainHandler.CreateParseTask,
-		TaskCreateExport:              taskDomainHandler.CreateExportTask,
-		TaskGet:                       taskDomainHandler.GetTask,
-		TaskCancel:                    taskDomainHandler.CancelTask,
-		TaskStream:                    taskDomainHandler.StreamTask,
-		TaskDownload:                  taskDomainHandler.DownloadTask,
+	workspaceMiddleware := httpx.LocalWorkspaceContext(postgres.NewLocalWorkspaceResolver(dbConn))
+	dependencyCatalog := textbookartifact.NewLocalDependencyCatalog(os.Getenv("TEXTBOOK_DEPENDENCY_CATALOG_FILE"), textbookRepo)
+	corev1.RegisterDependencyProjectionRoutes(r, workspaceMiddleware, corev1.NewDependencyProjectionHandler(dependencyCatalog, textbookartifact.NewDependencyProjectionService(textbookRepo, dependencyCatalog, textbookArtifactService)))
+	corev1.RegisterBlogRoutes(r, workspaceMiddleware, corev1.BlogHandlers{
+		BlogList:        blogDomainHandler.GetUserBlogs,
+		BlogCreateDraft: blogDomainHandler.CreateDraftBlog,
+		BlogBatchDelete: blogDomainHandler.BatchDeleteBlogs,
+		BlogUpdate:      blogDomainHandler.UpdateBlog,
+	})
+	corev1.RegisterProjectRoutes(r, workspaceMiddleware, corev1.ProjectHandlers{
+		ProjectScan:    projectDomainHandler.ScanGithubRepo,
+		ProjectAnalyze: projectDomainHandler.Analyze,
+	})
+	corev1.RegisterTaskRoutes(r, workspaceMiddleware, corev1.TaskHandlers{
+		TaskCreateGeneration: taskDomainHandler.CreateGenerationTask,
+		TaskCreateParse:      taskDomainHandler.CreateParseTask,
+		TaskCreateExport:     taskDomainHandler.CreateExportTask,
+		TaskGet:              taskDomainHandler.GetTask,
+		TaskRetry:            taskDomainHandler.RetryGenerationTask,
+		TaskCancel:           taskDomainHandler.CancelTask,
+		TaskStream:           taskDomainHandler.StreamTask,
+		TaskDownload:         taskDomainHandler.DownloadTask,
+	})
+	corev1.RegisterTextbookRoutes(r, workspaceMiddleware, corev1.TextbookHandlers{
+		TextbookGetTask:                          textbookTaskHandler.GetTask,
+		TextbookRetryTask:                        textbookTaskHandler.RetryTask,
+		TextbookCreateProject:                    textbookHandler.CreateProject,
+		TextbookListProjects:                     textbookHandler.ListProjects,
+		TextbookGetProject:                       textbookHandler.GetProject,
+		TextbookGetProjectWorkspace:              textbookHandler.GetProjectWorkspace,
+		TextbookGetProjectProgress:               textbookHandler.GetProjectProgress,
+		TextbookCreateBookBuild:                  textbookHandler.CreateBookBuild,
+		TextbookGetEditorialWorkspace:            textbookHandler.GetEditorialWorkspace,
+		TextbookAddRightsItem:                    textbookHandler.AddRightsItem,
+		TextbookAppendRightsAmendment:            textbookHandler.AppendRightsAmendment,
+		TextbookCompletePublicationReview:        textbookHandler.CompletePublicationReview,
+		TextbookRecordDelegatedPublicationReview: textbookHandler.RecordDelegatedPublicationReview,
+		TextbookPromoteBookBuild:                 textbookHandler.PromoteBookBuild,
+		TextbookListSourceLibrary:                textbookHandler.ListSourceLibrary,
+		TextbookListSourceEvidence:               textbookHandler.ListSourceEvidence,
+		TextbookRetrieveSourceEvidence:           textbookHandler.RetrieveSourceEvidence,
+		TextbookGetChapterWorkspace:              textbookHandler.GetChapterWorkspace,
+		TextbookGetApprovedProjections:           textbookHandler.GetApprovedChapterProjections,
+		TextbookGetPracticeEvidence:              textbookHandler.GetPracticeEvidence,
+		TextbookAddSource:                        textbookHandler.AddSource,
+		TextbookLoadGinFixture:                   textbookHandler.LoadGinFixture,
+		TextbookCreateSourceImport:               textbookHandler.CreateSourceImport,
+		TextbookCreateOfficialWebImport:          textbookHandler.CreateOfficialWebImport,
+		TextbookCreateChapter:                    textbookHandler.CreateChapter,
+		TextbookCreateBookContract:               textbookHandler.CreateBookContract,
+		TextbookCreateStyleSheet:                 textbookHandler.CreateStyleSheet,
+		TextbookCreateBlueprint:                  textbookHandler.CreateBlueprint,
+		TextbookApproveBookContract:              textbookHandler.ApproveBookContract,
+		TextbookApproveStyleSheet:                textbookHandler.ApproveStyleSheet,
+		TextbookApproveBlueprint:                 textbookHandler.ApproveBlueprint,
+		TextbookAcquireLock:                      textbookHandler.AcquireLock,
+		TextbookAppendRevision:                   textbookHandler.AppendRevision,
+		TextbookApplyCandidate:                   textbookHandler.ApplyCandidate,
+		TextbookRejectCandidate:                  textbookHandler.RejectCandidate,
+		TextbookGetSampleGenerationPreflight:     textbookHandler.GetSampleGenerationPreflight,
+		TextbookGenerateSample:                   textbookHandler.GenerateSample,
+		TextbookCorrectSample:                    textbookHandler.CorrectSample,
+		TextbookCreateArtifactVerification:       textbookHandler.CreateArtifactVerification,
+		TextbookGetArtifactVerification:          textbookHandler.GetArtifactVerification,
+		TextbookUploadVisualAsset:                textbookHandler.UploadVisualAsset,
 	})
 
 	return r, cleanupTaskPublisher, nil

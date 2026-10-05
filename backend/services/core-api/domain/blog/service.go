@@ -22,8 +22,8 @@ func NewService(repo Repository) *Service {
 }
 
 // GetUserBlogs 获取用户博客列表，并组织成树状结构（与历史接口保持一致）。
-func (s *Service) GetUserBlogs(ctx context.Context, userID uuid.UUID, page int, size int) ([]*BlogNode, error) {
-	parents, err := s.repo.ListTopLevelBlogs(ctx, userID, page, size)
+func (s *Service) GetUserBlogs(ctx context.Context, workspaceID uuid.UUID, page int, size int) ([]*BlogNode, error) {
+	parents, err := s.repo.ListTopLevelBlogs(ctx, workspaceID, page, size)
 	if err != nil {
 		return nil, err
 	}
@@ -37,7 +37,7 @@ func (s *Service) GetUserBlogs(ctx context.Context, userID uuid.UUID, page int, 
 		parentIDs = append(parentIDs, p.ID)
 	}
 
-	children, err := s.repo.ListChildrenByParentIDs(ctx, userID, parentIDs)
+	children, err := s.repo.ListChildrenByParentIDs(ctx, workspaceID, parentIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -85,17 +85,17 @@ func (s *Service) GetUserBlogs(ctx context.Context, userID uuid.UUID, page int, 
 }
 
 // GetSeriesBlogs 获取系列博客（父节点及所有子节点）。
-func (s *Service) GetSeriesBlogs(ctx context.Context, parentID uuid.UUID, userID uuid.UUID) ([]Blog, error) {
-	return s.repo.GetSeriesBlogs(ctx, userID, parentID)
+func (s *Service) GetSeriesBlogs(ctx context.Context, parentID uuid.UUID, workspaceID uuid.UUID) ([]Blog, error) {
+	return s.repo.GetSeriesBlogs(ctx, workspaceID, parentID)
 }
 
 // BatchDeleteBlogs 批量删除博客及其子节点。
-func (s *Service) BatchDeleteBlogs(ctx context.Context, userID uuid.UUID, blogIDs []uuid.UUID) error {
-	return s.repo.BatchDelete(ctx, userID, blogIDs)
+func (s *Service) BatchDeleteBlogs(ctx context.Context, workspaceID uuid.UUID, blogIDs []uuid.UUID) error {
+	return s.repo.BatchDelete(ctx, workspaceID, blogIDs)
 }
 
 // UpdateBlog 更新博客内容。
-func (s *Service) UpdateBlog(ctx context.Context, id uuid.UUID, userID uuid.UUID, req UpdateRequest) error {
+func (s *Service) UpdateBlog(ctx context.Context, id uuid.UUID, workspaceID uuid.UUID, req UpdateRequest) error {
 	updates := map[string]any{}
 	if req.Title != nil {
 		updates["title"] = *req.Title
@@ -107,7 +107,7 @@ func (s *Service) UpdateBlog(ctx context.Context, id uuid.UUID, userID uuid.UUID
 		return nil
 	}
 
-	rowsAffected, err := s.repo.Update(ctx, userID, id, updates)
+	rowsAffected, err := s.repo.Update(ctx, workspaceID, id, updates)
 	if err != nil {
 		return err
 	}
@@ -118,9 +118,9 @@ func (s *Service) UpdateBlog(ctx context.Context, id uuid.UUID, userID uuid.UUID
 }
 
 // CreateDraftBlog 创建手写草稿博客。
-func (s *Service) CreateDraftBlog(ctx context.Context, userID uuid.UUID) (Blog, error) {
+func (s *Service) CreateDraftBlog(ctx context.Context, workspaceID uuid.UUID) (Blog, error) {
 	blog := Blog{
-		UserID:      userID,
+		WorkspaceID: workspaceID,
 		ParentID:    nil,
 		ChapterSort: 0,
 		Title:       "未命名博客",

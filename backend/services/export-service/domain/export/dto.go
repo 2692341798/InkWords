@@ -9,10 +9,10 @@ import (
 
 // RequestedMessage is the export-service view of the shared export RabbitMQ envelope.
 type RequestedMessage struct {
-	TaskID  uuid.UUID       `json:"task_id"`
-	Kind    string          `json:"kind"`
-	UserID  uuid.UUID       `json:"user_id"`
-	Payload json.RawMessage `json:"payload"`
+	TaskID      uuid.UUID       `json:"task_id"`
+	Kind        string          `json:"kind"`
+	WorkspaceID *uuid.UUID      `json:"workspace_id,omitempty"`
+	Payload     json.RawMessage `json:"payload"`
 }
 
 // TaskResult describes controlled download metadata stored in task result_json.

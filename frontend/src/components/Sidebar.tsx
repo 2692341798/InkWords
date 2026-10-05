@@ -3,14 +3,12 @@ import { useStreamStore } from '@/store/streamStore'
 import { useBlogStore } from '@/store/blogStore'
 import { useReviewStore } from '@/store/reviewStore'
 import type { BlogNode } from '@/store/blogStore'
-import { FilePenLine, GitBranch, Loader2, LogOut, Plus, Sparkles, User } from 'lucide-react'
+import { BookOpen, FilePenLine, GitBranch, Loader2, Plus, Sparkles } from 'lucide-react'
 import { syncExpandedNodesWithSelection } from '@/lib/blogTreeSelection'
 import { cn } from '@/lib/utils'
 import { Button } from './ui/button'
 import { ConfirmDialog } from './ui/confirm-dialog'
 import { toast } from 'sonner'
-import { authTokenStore } from '@/lib/authTokenStore'
-import { isAuthBypassEnabled } from '@/lib/authBypass'
 import { useBatchExportZip } from '@/hooks/useBatchExportZip'
 import { exportSeriesPdfs, syncSeriesToObsidian } from '@/services/sidebarExport'
 import { useSidebarBatchSelection } from '@/hooks/useSidebarBatchSelection'
@@ -20,7 +18,6 @@ import { StreamOutlineSection } from './sidebar/StreamOutlineSection'
 import { BlogTreeDisplay } from './sidebar/BlogTreeDisplay'
 
 export function Sidebar() {
-  const authBypassEnabled = isAuthBypassEnabled(import.meta.env.VITE_AUTH_BYPASS)
   const streamStore = useStreamStore(
     useShallow((state) => ({
       outline: state.outline,
@@ -41,7 +38,6 @@ export function Sidebar() {
   const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false)
   const [isCreatingDraft, setIsCreatingDraft] = useState(false)
   const [showWorkspaceResetConfirm, setShowWorkspaceResetConfirm] = useState(false)
-  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
   const {
     isBatchMode,
     selectedForExport,
@@ -68,7 +64,7 @@ export function Sidebar() {
   }, [blogs])
 
   useEffect(() => {
-    fetchBlogs()
+    void fetchBlogs()
   }, [fetchBlogs])
 
   useEffect(() => {
@@ -217,6 +213,7 @@ export function Sidebar() {
       </div>
 
       <nav className="mt-4 space-y-1">
+        <Button variant="ghost" className={cn('w-full justify-start gap-2', currentView === 'textbook-projects' && !selectedBlog ? 'bg-sidebar-accent text-sidebar-foreground font-medium' : 'text-muted-foreground hover:text-sidebar-foreground')} onClick={() => setCurrentView('textbook-projects')}><BookOpen className="w-4 h-4" />教材项目</Button>
         <Button
           variant="ghost"
           className={cn(
@@ -246,41 +243,13 @@ export function Sidebar() {
           <Sparkles className="w-4 h-4" />
           知识复习
         </Button>
-        <Button
-          variant="ghost"
-          className={cn(
-            'w-full justify-start gap-2',
-            currentView === 'dashboard' && !selectedBlog
-              ? 'bg-sidebar-accent text-sidebar-foreground font-medium'
-              : 'text-muted-foreground hover:text-sidebar-foreground',
-          )}
-          onClick={() => setCurrentView('dashboard')}
-        >
-          <User className="w-4 h-4" />
-          个人中心
-        </Button>
       </nav>
-    </div>
-  )
-
-  const footerContent = authBypassEnabled ? null : (
-    <div className="border-t border-sidebar-border p-4">
-      <Button
-        variant="ghost"
-        className="w-full justify-start gap-2 text-muted-foreground hover:bg-red-50 hover:text-red-600"
-        onClick={() => {
-          setShowLogoutConfirm(true)
-        }}
-      >
-        <LogOut className="w-4 h-4" />
-        退出登录
-      </Button>
     </div>
   )
 
   return (
     <>
-      <SidebarShell header={headerContent} footer={footerContent}>
+      <SidebarShell header={headerContent} footer={null}>
         {streamStore.outline && streamStore.outline.length > 0 && (
           <StreamOutlineSection
             outline={streamStore.outline}
@@ -349,19 +318,6 @@ export function Sidebar() {
         isDestructive={true}
       />
 
-      <ConfirmDialog
-        isOpen={showLogoutConfirm}
-        title="退出登录"
-        message="确定要退出登录吗？"
-        confirmText="退出登录"
-        cancelText="取消"
-        onConfirm={() => {
-          authTokenStore.clearToken()
-          setShowLogoutConfirm(false)
-        }}
-        onCancel={() => setShowLogoutConfirm(false)}
-        isDestructive={true}
-      />
     </>
   )
 }

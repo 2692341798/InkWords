@@ -3,12 +3,12 @@ package stream
 import (
 	"context"
 	"errors"
-	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"inkwords-backend/shared/kernel/httpx"
 )
 
 type streamOperation string
@@ -28,7 +28,6 @@ type Handler struct {
 }
 
 type streamService interface {
-	CheckQuota(uuid.UUID) error
 	Generate(context.Context, uuid.UUID, GenerateRequest, chan<- string, chan<- error)
 	Continue(context.Context, uuid.UUID, uuid.UUID, chan<- string, chan<- error)
 	Polish(context.Context, PolishRequest, chan<- string, chan<- error)
@@ -40,25 +39,12 @@ func NewHandler(service streamService, blogRepo BlogReadable) *Handler {
 	return &Handler{service: service, blogRepo: blogRepo}
 }
 
-func (h *Handler) getUserID(c *gin.Context) uuid.UUID {
-	if v, exists := c.Get("user_id"); exists {
-		if id, ok := v.(uuid.UUID); ok {
-			return id
-		}
+func (h *Handler) getWorkspaceID(c *gin.Context) uuid.UUID {
+	workspaceID, err := httpx.GetLocalWorkspaceID(c)
+	if err != nil {
+		return uuid.Nil
 	}
-	return uuid.Nil
-}
-
-func (h *Handler) maybeCheckQuota(c *gin.Context) bool {
-	if userID, exists := c.Get("user_id"); exists {
-		if uid, ok := userID.(uuid.UUID); ok {
-			if err := h.service.CheckQuota(uid); err != nil {
-				c.JSON(http.StatusPaymentRequired, gin.H{"error": "quota exceeded"})
-				return false
-			}
-		}
-	}
-	return true
+	return workspaceID
 }
 
 func externalStreamErrorMessage(operation streamOperation, err error) string {

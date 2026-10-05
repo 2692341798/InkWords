@@ -14,11 +14,10 @@
 - 已配置 `backend/.env`
 - 至少具备以下变量：
   - `DEEPSEEK_API_KEY`
-  - `JWT_SECRET`
   - `OBSIDIAN_REST_API_KEY`
   - `OBSIDIAN_VAULT_PATH`
 - 本地 Docker / Docker Compose 可用
-- 若要验证生成、解析、导出与 review 的完整业务链路，需准备一个可登录账号和一份可用的 Obsidian `wiki/`
+- 若要验证生成、解析、导出与 review 的完整业务链路，需准备本地工作区数据和一份可用的 Obsidian `wiki/`
 - Phase 1 当前基线：`parser-service`、`review-service`、`export-service` 的服务私有入口与装配应分别收口在 `backend/services/parser-service/`、`backend/services/review-service/`、`backend/services/export-service/`；如果你刚修改过这些目录，本 Runbook 应视为必跑项
 
 ## 2.5 P0 最小回归集
@@ -145,8 +144,6 @@ npm test -- --run src/gatewayRouting.test.ts
 
 ```bash
 FRONTEND_PORT=8081 \
-FRONTEND_URL=http://localhost:5173 \
-DOCKER_GITHUB_REDIRECT_URL=http://localhost:5173/api/v1/auth/callback/github \
 docker compose --env-file backend/.env up -d --build
 
 cd frontend
@@ -283,11 +280,9 @@ docker compose --env-file backend/.env logs --no-color
 - 检查 `REVIEW_DATABASE_URL`
 - 检查 `OBSIDIAN_WIKI_DIR` 与 `OBSIDIAN_VAULT_PATH`
 
-### 8.6 Vite 或 OAuth 回调异常
+### 8.6 Vite 网关异常
 
 - Vite 请求 `502`：确认 `INKWORDS_GATEWAY_ORIGIN` 与 Compose 的 `FRONTEND_PORT` 指向同一端口
-- OAuth 回到静态网关而不是 Vite：确认 `FRONTEND_URL=http://localhost:5173`
-- GitHub callback 直接 `404`：确认 `DOCKER_GITHUB_REDIRECT_URL=http://localhost:5173/api/v1/auth/callback/github`，并确保 Vite 正在运行、`/api` 正常代理到网关
 - 不要把 `core-api:8080` 或其他容器地址配置进浏览器环境变量；这些名称只在 Compose 网络内可解析
 
 ## 9. 提交前最小核对清单

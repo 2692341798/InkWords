@@ -15,9 +15,9 @@ import (
 
 type writableBlog struct {
 	ID          uuid.UUID      `gorm:"type:uuid;primaryKey"`
-	UserID      uuid.UUID      `gorm:"type:uuid;index:idx_user_parent_chapter;not null"`
-	ParentID    *uuid.UUID     `gorm:"type:uuid;index:idx_user_parent_chapter"`
-	ChapterSort int            `gorm:"type:integer;index:idx_user_parent_chapter"`
+	WorkspaceID uuid.UUID      `gorm:"type:uuid;index:idx_blogs_workspace_parent_chapter;not null"`
+	ParentID    *uuid.UUID     `gorm:"type:uuid;index:idx_blogs_workspace_parent_chapter"`
+	ChapterSort int            `gorm:"type:integer;index:idx_blogs_workspace_parent_chapter"`
 	Title       string         `gorm:"type:varchar(255);not null"`
 	Content     string         `gorm:"type:text;not null"`
 	SourceType  string         `gorm:"type:varchar(50);not null"`
@@ -42,15 +42,6 @@ func (b *writableBlog) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
-type writableUserTokenBalance struct {
-	ID         uuid.UUID `gorm:"type:uuid;primaryKey"`
-	TokensUsed int       `gorm:"type:integer;default:0"`
-}
-
-func (writableUserTokenBalance) TableName() string {
-	return "users"
-}
-
 type generatedBlogPersistence struct {
 	db *gorm.DB
 }
@@ -67,7 +58,7 @@ func (p *generatedBlogPersistence) SaveGeneratedBlog(ctx context.Context, input 
 	}
 
 	blog := &writableBlog{
-		UserID:      input.UserID,
+		WorkspaceID: input.WorkspaceID,
 		Title:       input.Title,
 		Content:     input.Content,
 		SourceType:  input.SourceType,
@@ -77,20 +68,9 @@ func (p *generatedBlogPersistence) SaveGeneratedBlog(ctx context.Context, input 
 		TechStacks:  input.TechStacks,
 	}
 
-	estimatedTokens := len([]rune(input.Content)) * 2
 	return p.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(blog).Error; err != nil {
 			return fmt.Errorf("create blog record: %w", err)
-		}
-
-		tokenUpdateResult := tx.Model(&writableUserTokenBalance{}).
-			Where("id = ?", input.UserID).
-			UpdateColumn("tokens_used", gorm.Expr("tokens_used + ?", estimatedTokens))
-		if tokenUpdateResult.Error != nil {
-			return fmt.Errorf("update user tokens: %w", tokenUpdateResult.Error)
-		}
-		if tokenUpdateResult.RowsAffected == 0 {
-			return fmt.Errorf("update user tokens: user not found")
 		}
 
 		return nil
@@ -107,16 +87,16 @@ func NewContinuePersistence(database *gorm.DB) sharedblog.ContinuePersistence {
 	return &continuePersistence{db: database}
 }
 
-func (p *continuePersistence) LoadContinueBlog(ctx context.Context, userID uuid.UUID, blogID uuid.UUID) (sharedblog.ContinueBlog, error) {
+func (p *continuePersistence) LoadContinueBlog(ctx context.Context, workspaceID uuid.UUID, blogID uuid.UUID) (sharedblog.ContinueBlog, error) {
 	if p.db == nil {
 		return sharedblog.ContinueBlog{}, fmt.Errorf("continue persistence database is not initialized")
 	}
 
 	var blog writableBlog
-	if err := p.db.WithContext(ctx).First(&blog, "id = ? AND user_id = ?", blogID, userID).Error; err != nil {
+	if err := p.db.WithContext(ctx).First(&blog, "id = ? AND workspace_id = ?", blogID, workspaceID).Error; err != nil {
 		return sharedblog.ContinueBlog{}, err
 	}
-	return sharedblog.ContinueBlog{ID: blog.ID, UserID: blog.UserID, Content: blog.Content}, nil
+	return sharedblog.ContinueBlog{ID: blog.ID, WorkspaceID: blog.WorkspaceID, Content: blog.Content}, nil
 }
 
 func (p *continuePersistence) SaveContinuedBlog(ctx context.Context, blog sharedblog.ContinueBlog, updatedContent string) error {
@@ -148,7 +128,7 @@ func (p *seriesPersistence) EnsureSeriesParentAndDrafts(ctx context.Context, inp
 	updatedOutline := append([]sharedblog.Chapter(nil), input.Outline...)
 	if err := p.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var existingParent writableBlog
-		err := tx.Select("id", "user_id", "source_url").First(&existingParent, "id = ?", input.ParentID).Error
+		err := tx.Select("id", "workspace_id", "source_url").First(&existingParent, "id = ?", input.ParentID).Error
 		if err != nil {
 			if !errors.Is(err, gorm.ErrRecordNotFound) {
 				return fmt.Errorf("query parent blog: %w", err)
@@ -156,7 +136,7 @@ func (p *seriesPersistence) EnsureSeriesParentAndDrafts(ctx context.Context, inp
 
 			parentBlog := &writableBlog{
 				ID:         input.ParentID,
-				UserID:     input.UserID,
+				WorkspaceID: input.WorkspaceID,
 				Title:      input.ParentTitle,
 				Content:    "正在生成系列导读...",
 				SourceType: input.SourceType,
@@ -167,8 +147,8 @@ func (p *seriesPersistence) EnsureSeriesParentAndDrafts(ctx context.Context, inp
 			if err := tx.Create(parentBlog).Error; err != nil {
 				return fmt.Errorf("create parent blog: %w", err)
 			}
-		} else if existingParent.UserID != input.UserID {
-			return fmt.Errorf("parent blog does not belong to user")
+		} else if existingParent.WorkspaceID != input.WorkspaceID {
+			return fmt.Errorf("parent blog does not belong to workspace")
 		}
 		if err == nil && existingParent.SourceURL == "" && input.GitURL != "" {
 			if err := tx.Model(&existingParent).Update("source_url", input.GitURL).Error; err != nil {
@@ -177,7 +157,7 @@ func (p *seriesPersistence) EnsureSeriesParentAndDrafts(ctx context.Context, inp
 		}
 
 		validChildrenIDs := collectValidSeriesChildIDs(updatedOutline)
-		deleteQuery := tx.Where("parent_id = ? AND user_id = ?", input.ParentID, input.UserID)
+		deleteQuery := tx.Where("parent_id = ? AND workspace_id = ?", input.ParentID, input.WorkspaceID)
 		if len(validChildrenIDs) > 0 {
 			deleteQuery = deleteQuery.Where("id NOT IN ?", validChildrenIDs)
 		}
@@ -193,7 +173,7 @@ func (p *seriesPersistence) EnsureSeriesParentAndDrafts(ctx context.Context, inp
 			}
 
 			draftBlog := &writableBlog{
-				UserID:      input.UserID,
+				WorkspaceID: input.WorkspaceID,
 				ParentID:    &input.ParentID,
 				ChapterSort: chapter.Sort,
 				Title:       chapter.Title,
@@ -221,11 +201,10 @@ func (p *seriesPersistence) SaveSeriesChapter(ctx context.Context, input sharedb
 		return fmt.Errorf("series persistence database is not initialized")
 	}
 
-	estimatedTokens := len([]rune(input.Content)) * 2
 	return p.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if input.BlogID != uuid.Nil {
 			updateResult := tx.Model(&writableBlog{}).
-				Where("id = ? AND user_id = ?", input.BlogID, input.UserID).
+				Where("id = ? AND workspace_id = ?", input.BlogID, input.WorkspaceID).
 				Updates(map[string]any{
 					"chapter_sort": input.Chapter.Sort,
 					"title":        input.Chapter.Title,
@@ -243,7 +222,7 @@ func (p *seriesPersistence) SaveSeriesChapter(ctx context.Context, input sharedb
 			}
 		} else {
 			blog := &writableBlog{
-				UserID:      input.UserID,
+				WorkspaceID: input.WorkspaceID,
 				ParentID:    &input.ParentID,
 				ChapterSort: input.Chapter.Sort,
 				Title:       input.Chapter.Title,
@@ -258,37 +237,27 @@ func (p *seriesPersistence) SaveSeriesChapter(ctx context.Context, input sharedb
 			}
 		}
 
-		tokenUpdateResult := tx.Model(&writableUserTokenBalance{}).
-			Where("id = ?", input.UserID).
-			UpdateColumn("tokens_used", gorm.Expr("tokens_used + ?", estimatedTokens))
-		if tokenUpdateResult.Error != nil {
-			return fmt.Errorf("update user tokens: %w", tokenUpdateResult.Error)
-		}
-		if tokenUpdateResult.RowsAffected == 0 {
-			return fmt.Errorf("update user tokens: user not found")
-		}
-
 		return nil
 	})
 }
 
-func (p *seriesPersistence) MarkSeriesChapterFailed(ctx context.Context, userID uuid.UUID, blogID uuid.UUID) error {
+func (p *seriesPersistence) MarkSeriesChapterFailed(ctx context.Context, workspaceID uuid.UUID, blogID uuid.UUID) error {
 	if p.db == nil {
 		return fmt.Errorf("series persistence database is not initialized")
 	}
 
-	return p.db.WithContext(ctx).Model(&writableBlog{}).Where("id = ? AND user_id = ?", blogID, userID).Updates(map[string]any{
+	return p.db.WithContext(ctx).Model(&writableBlog{}).Where("id = ? AND workspace_id = ?", blogID, workspaceID).Updates(map[string]any{
 		"status":  2,
 		"content": "章节生成失败，请重试。",
 	}).Error
 }
 
-func (p *seriesPersistence) SaveSeriesIntro(ctx context.Context, userID uuid.UUID, parentID uuid.UUID, content string) error {
+func (p *seriesPersistence) SaveSeriesIntro(ctx context.Context, workspaceID uuid.UUID, parentID uuid.UUID, content string) error {
 	if p.db == nil {
 		return fmt.Errorf("series persistence database is not initialized")
 	}
 
-	updateResult := p.db.WithContext(ctx).Model(&writableBlog{}).Where("id = ? AND user_id = ?", parentID, userID).Updates(map[string]any{
+	updateResult := p.db.WithContext(ctx).Model(&writableBlog{}).Where("id = ? AND workspace_id = ?", parentID, workspaceID).Updates(map[string]any{
 		"content": content,
 		"status":  1,
 	})
@@ -301,12 +270,12 @@ func (p *seriesPersistence) SaveSeriesIntro(ctx context.Context, userID uuid.UUI
 	return nil
 }
 
-func (p *seriesPersistence) MarkSeriesIntroFailed(ctx context.Context, userID uuid.UUID, parentID uuid.UUID) error {
+func (p *seriesPersistence) MarkSeriesIntroFailed(ctx context.Context, workspaceID uuid.UUID, parentID uuid.UUID) error {
 	if p.db == nil {
 		return fmt.Errorf("series persistence database is not initialized")
 	}
 
-	updateResult := p.db.WithContext(ctx).Model(&writableBlog{}).Where("id = ? AND user_id = ?", parentID, userID).Updates(map[string]any{
+	updateResult := p.db.WithContext(ctx).Model(&writableBlog{}).Where("id = ? AND workspace_id = ?", parentID, workspaceID).Updates(map[string]any{
 		"status": 2,
 	})
 	if updateResult.Error != nil {
@@ -318,24 +287,24 @@ func (p *seriesPersistence) MarkSeriesIntroFailed(ctx context.Context, userID uu
 	return nil
 }
 
-func (p *seriesPersistence) LoadSeriesOldContent(ctx context.Context, userID uuid.UUID, blogID uuid.UUID) (string, error) {
+func (p *seriesPersistence) LoadSeriesOldContent(ctx context.Context, workspaceID uuid.UUID, blogID uuid.UUID) (string, error) {
 	if p.db == nil {
 		return "", fmt.Errorf("series persistence database is not initialized")
 	}
 
 	var blog writableBlog
-	if err := p.db.WithContext(ctx).Select("content").First(&blog, "id = ? AND user_id = ?", blogID, userID).Error; err != nil {
+	if err := p.db.WithContext(ctx).Select("content").First(&blog, "id = ? AND workspace_id = ?", blogID, workspaceID).Error; err != nil {
 		return "", err
 	}
 	return blog.Content, nil
 }
 
-func (p *seriesPersistence) UpdateSkippedSeriesChapterMeta(ctx context.Context, userID uuid.UUID, blogID uuid.UUID, chapter sharedblog.Chapter) error {
+func (p *seriesPersistence) UpdateSkippedSeriesChapterMeta(ctx context.Context, workspaceID uuid.UUID, blogID uuid.UUID, chapter sharedblog.Chapter) error {
 	if p.db == nil {
 		return fmt.Errorf("series persistence database is not initialized")
 	}
 
-	return p.db.WithContext(ctx).Model(&writableBlog{}).Where("id = ? AND user_id = ?", blogID, userID).Updates(map[string]any{
+	return p.db.WithContext(ctx).Model(&writableBlog{}).Where("id = ? AND workspace_id = ?", blogID, workspaceID).Updates(map[string]any{
 		"chapter_sort": chapter.Sort,
 		"title":        chapter.Title,
 	}).Error

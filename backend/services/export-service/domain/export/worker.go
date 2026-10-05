@@ -11,7 +11,7 @@ import (
 const ExportTaskSubtypePDF = "export_pdf"
 
 type exportPDFService interface {
-	ExportSeriesToPDF(ctx context.Context, blogID uuid.UUID, userID uuid.UUID) (string, string, error)
+	ExportSeriesToPDF(ctx context.Context, blogID uuid.UUID, workspaceID uuid.UUID) (string, string, error)
 }
 
 type exportTaskService interface {
@@ -25,10 +25,6 @@ type artifactStore interface {
 	Save(taskID uuid.UUID, sourcePath string, filename string) (TaskResult, error)
 }
 
-type coursePackageBuilder interface {
-	BuildCoursePackage(ctx context.Context, payload CoursePackagePayload) (sourcePath string, filename string, err error)
-}
-
 // PDFPayload describes the export_pdf payload consumed by export-service.
 type PDFPayload struct {
 	BlogID uuid.UUID `json:"blog_id"`
@@ -36,33 +32,29 @@ type PDFPayload struct {
 
 // Consumer converts RabbitMQ export tasks into PDF export executions.
 type Consumer struct {
-	tasks          exportTaskService
-	exporter       exportPDFService
-	store          artifactStore
-	packageBuilder coursePackageBuilder
+	tasks       exportTaskService
+	exporter    exportPDFService
+	store       artifactStore
+	workspaceID uuid.UUID
 }
 
 // NewConsumer wires export-service worker dependencies.
-func NewConsumer(tasks exportTaskService, exporter exportPDFService, store artifactStore, builders ...coursePackageBuilder) *Consumer {
-	var packageBuilder coursePackageBuilder
-	if len(builders) > 0 {
-		packageBuilder = builders[0]
-	}
+func NewConsumer(tasks exportTaskService, exporter exportPDFService, store artifactStore, workspaceID uuid.UUID) *Consumer {
 	return &Consumer{
-		tasks:          tasks,
-		exporter:       exporter,
-		store:          store,
-		packageBuilder: packageBuilder,
+		tasks:       tasks,
+		exporter:    exporter,
+		store:       store,
+		workspaceID: workspaceID,
 	}
 }
 
 // HandleExportRequested consumes one export task and writes task status/result snapshots.
 func (c *Consumer) HandleExportRequested(ctx context.Context, message RequestedMessage) error {
-	if c == nil || c.tasks == nil || c.exporter == nil || c.store == nil {
+	if c == nil || c.tasks == nil || c.exporter == nil || c.store == nil || c.workspaceID == uuid.Nil {
 		return errors.New("export task consumer dependencies are not configured")
 	}
-	if message.Kind == "project_course_package" {
-		return c.handleCoursePackage(ctx, message)
+	if message.WorkspaceID != nil && *message.WorkspaceID != c.workspaceID {
+		return c.tasks.MarkFailed(ctx, message.TaskID, "export task workspace does not match the local workspace")
 	}
 	if message.Kind != ExportTaskSubtypePDF {
 		return c.tasks.MarkFailed(ctx, message.TaskID, "unsupported export kind")
@@ -85,7 +77,7 @@ func (c *Consumer) HandleExportRequested(ctx context.Context, message RequestedM
 		return err
 	}
 
-	pdfPath, filename, err := c.exporter.ExportSeriesToPDF(ctx, payload.BlogID, message.UserID)
+	pdfPath, filename, err := c.exporter.ExportSeriesToPDF(ctx, payload.BlogID, c.workspaceID)
 	if err != nil {
 		return c.tasks.MarkFailed(ctx, message.TaskID, err.Error())
 	}
@@ -95,32 +87,6 @@ func (c *Consumer) HandleExportRequested(ctx context.Context, message RequestedM
 		return c.tasks.MarkFailed(ctx, message.TaskID, err.Error())
 	}
 
-	body, err := json.Marshal(result)
-	if err != nil {
-		return err
-	}
-	return c.tasks.MarkSucceeded(ctx, message.TaskID, body)
-}
-
-func (c *Consumer) handleCoursePackage(ctx context.Context, message RequestedMessage) error {
-	if c.packageBuilder == nil {
-		return c.tasks.MarkFailed(ctx, message.TaskID, "course package builder is not configured")
-	}
-	var payload CoursePackagePayload
-	if err := json.Unmarshal(message.Payload, &payload); err != nil {
-		return c.tasks.MarkFailed(ctx, message.TaskID, "invalid course package payload")
-	}
-	if err := c.tasks.MarkRunning(ctx, message.TaskID); err != nil {
-		return err
-	}
-	sourcePath, filename, err := c.packageBuilder.BuildCoursePackage(ctx, payload)
-	if err != nil {
-		return c.tasks.MarkFailed(ctx, message.TaskID, err.Error())
-	}
-	result, err := c.store.Save(message.TaskID, sourcePath, filename)
-	if err != nil {
-		return c.tasks.MarkFailed(ctx, message.TaskID, err.Error())
-	}
 	body, err := json.Marshal(result)
 	if err != nil {
 		return err

@@ -12,9 +12,9 @@ type StreamHandlers struct {
 }
 
 // RegisterStreamRoutes wires the rollback-compatible stream routes for llm-stream.
-func RegisterStreamRoutes(r *gin.Engine, authMiddleware gin.HandlerFunc, h StreamHandlers) {
-	if authMiddleware == nil {
-		panic("missing middleware: authMiddleware")
+func RegisterStreamRoutes(r *gin.Engine, workspaceMiddleware gin.HandlerFunc, h StreamHandlers) {
+	if workspaceMiddleware == nil {
+		panic("missing middleware: workspaceMiddleware")
 	}
 
 	must(h.ContinueBlog, "ContinueBlog")
@@ -26,12 +26,12 @@ func RegisterStreamRoutes(r *gin.Engine, authMiddleware gin.HandlerFunc, h Strea
 	v1 := r.Group("/api/v1")
 
 	blogGroup := v1.Group("/blogs")
-	blogGroup.Use(authMiddleware)
+	blogGroup.Use(workspaceMiddleware)
 	blogGroup.POST("/:id/continue", h.ContinueBlog)
 	blogGroup.POST("/:id/polish", h.PolishBlog)
 
 	streamGroup := v1.Group("/stream")
-	streamGroup.Use(authMiddleware)
+	streamGroup.Use(workspaceMiddleware)
 	streamGroup.POST("/scan", h.Scan)
 	streamGroup.POST("/analyze", h.Analyze)
 	streamGroup.POST("/generate", h.Generate)

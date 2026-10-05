@@ -1,0 +1,13 @@
+{
+  "name": "inkwords-playwright-browser-probe",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Locked runtime dependency for the isolated InkWords textbook browser probe.",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "playwright": "1.62.1"
+  }
+}

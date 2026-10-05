@@ -8,12 +8,12 @@ import (
 )
 
 // GetHistory 返回最近复习记录的摘要列表。
-func (s *Service) GetHistory(ctx context.Context, userID uuid.UUID, limit int) (ReviewHistoryResponse, error) {
+func (s *Service) GetHistory(ctx context.Context, workspaceID uuid.UUID, limit int) (ReviewHistoryResponse, error) {
 	if limit <= 0 {
 		limit = 5
 	}
 
-	sessions, err := s.repo.GetRecentSessions(ctx, userID, limit)
+	sessions, err := s.repo.GetRecentSessions(ctx, workspaceID, limit)
 	if err != nil {
 		return ReviewHistoryResponse{}, err
 	}

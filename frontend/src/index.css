@@ -142,7 +142,8 @@
 
 @layer components {
   .app-workspace {
-    @apply min-h-0 min-w-0 flex-1 overflow-y-auto bg-background;
+    /* Keep absolutely positioned accessible labels inside this scroll area. */
+    @apply relative min-h-0 min-w-0 flex-1 overflow-y-auto bg-background;
   }
 
   .page-container {

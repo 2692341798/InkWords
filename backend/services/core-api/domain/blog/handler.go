@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"inkwords-backend/shared/kernel/httpx"
 )
 
 // Handler 提供 Blog 领域的 HTTP 适配层。
@@ -20,15 +21,8 @@ func NewHandler(service *Service) *Handler {
 }
 
 func (h *Handler) GetUserBlogs(c *gin.Context) {
-	userIDStr, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "unauthorized", "data": nil})
-		return
-	}
-
-	uid, ok := userIDStr.(uuid.UUID)
+	workspaceID, ok := currentWorkspaceID(c)
 	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "internal server error", "data": nil})
 		return
 	}
 
@@ -41,7 +35,7 @@ func (h *Handler) GetUserBlogs(c *gin.Context) {
 		size = 20
 	}
 
-	blogs, err := h.service.GetUserBlogs(c.Request.Context(), uid, page, size)
+	blogs, err := h.service.GetUserBlogs(c.Request.Context(), workspaceID, page, size)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "failed to load blogs", "data": nil})
 		return
@@ -51,19 +45,12 @@ func (h *Handler) GetUserBlogs(c *gin.Context) {
 }
 
 func (h *Handler) CreateDraftBlog(c *gin.Context) {
-	userIDStr, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "unauthorized", "data": nil})
-		return
-	}
-
-	uid, ok := userIDStr.(uuid.UUID)
+	workspaceID, ok := currentWorkspaceID(c)
 	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "internal server error", "data": nil})
 		return
 	}
 
-	draft, err := h.service.CreateDraftBlog(c.Request.Context(), uid)
+	draft, err := h.service.CreateDraftBlog(c.Request.Context(), workspaceID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "failed to create draft blog", "data": nil})
 		return
@@ -86,15 +73,8 @@ func (h *Handler) CreateDraftBlog(c *gin.Context) {
 }
 
 func (h *Handler) BatchDeleteBlogs(c *gin.Context) {
-	userIDStr, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "unauthorized", "data": nil})
-		return
-	}
-
-	uid, ok := userIDStr.(uuid.UUID)
+	workspaceID, ok := currentWorkspaceID(c)
 	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "internal server error", "data": nil})
 		return
 	}
 
@@ -109,7 +89,7 @@ func (h *Handler) BatchDeleteBlogs(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.BatchDeleteBlogs(c.Request.Context(), uid, req.BlogIDs); err != nil {
+	if err := h.service.BatchDeleteBlogs(c.Request.Context(), workspaceID, req.BlogIDs); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "failed to delete blogs", "data": nil})
 		return
 	}
@@ -118,15 +98,8 @@ func (h *Handler) BatchDeleteBlogs(c *gin.Context) {
 }
 
 func (h *Handler) UpdateBlog(c *gin.Context) {
-	userIDStr, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"code": http.StatusUnauthorized, "message": "unauthorized", "data": nil})
-		return
-	}
-
-	uid, ok := userIDStr.(uuid.UUID)
+	workspaceID, ok := currentWorkspaceID(c)
 	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{"code": http.StatusInternalServerError, "message": "internal server error", "data": nil})
 		return
 	}
 
@@ -143,7 +116,7 @@ func (h *Handler) UpdateBlog(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.UpdateBlog(c.Request.Context(), blogID, uid, req); err != nil {
+	if err := h.service.UpdateBlog(c.Request.Context(), blogID, workspaceID, req); err != nil {
 		if errors.Is(err, ErrBlogNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"code": http.StatusNotFound, "message": "blog not found", "data": nil})
 			return
@@ -153,4 +126,13 @@ func (h *Handler) UpdateBlog(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"code": http.StatusOK, "message": "success", "data": nil})
+}
+
+func currentWorkspaceID(c *gin.Context) (uuid.UUID, bool) {
+	workspaceID, err := httpx.GetLocalWorkspaceID(c)
+	if err != nil || workspaceID == uuid.Nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"code": http.StatusServiceUnavailable, "message": "local workspace unavailable", "data": nil})
+		return uuid.Nil, false
+	}
+	return workspaceID, true
 }

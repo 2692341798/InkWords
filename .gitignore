@@ -60,3 +60,7 @@ docs/superpowers/plans/2026-06-01-series-chapter-quality-pipeline.md
 
 # QA / dogfood artifacts (may contain auth tokens or large screenshots)
 dogfood-output/
+
+# Local acceptance evidence, downloaded proofs, and browser captures
+/output/
+.playwright-cli/

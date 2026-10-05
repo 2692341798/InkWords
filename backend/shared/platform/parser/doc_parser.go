@@ -11,7 +11,8 @@ import (
 	"unicode"
 
 	"github.com/ledongthuc/pdf"
-	"github.com/nguyenthenguyen/docx"
+	"inkwords-backend/shared/kernel/textbook"
+	"inkwords-backend/shared/platform/sourceartifact"
 )
 
 var plainTextExtensions = map[string]bool{
@@ -20,8 +21,17 @@ var plainTextExtensions = map[string]bool{
 	".txt":      true,
 }
 
+const maxStructuredPDFPages = 1_000
+
+const maxStructuredSourceBytes = sourceartifact.MaxTextbookSourceBytes
+
 func isPlainTextExtension(ext string) bool {
 	return plainTextExtensions[strings.ToLower(ext)]
+}
+
+func isStructuredTextExtension(ext string) bool {
+	ext = strings.ToLower(ext)
+	return isPlainTextExtension(ext) || archiveCodeTextExtensions[ext]
 }
 
 // Parser defines the interface for all document parsers
@@ -56,9 +66,12 @@ func (p *DocParser) Parse(src io.Reader, filename string) (string, error) {
 	}()
 
 	// Copy data to temp file
-	size, err := io.Copy(tempFile, src)
+	size, err := io.Copy(tempFile, io.LimitReader(src, maxStructuredSourceBytes+1))
 	if err != nil {
 		return "", fmt.Errorf("failed to write to temp file: %w", err)
+	}
+	if size > maxStructuredSourceBytes {
+		return "", fmt.Errorf("source file exceeds the maximum size limit")
 	}
 
 	// Ensure the temp file contents are fully flushed to disk
@@ -84,45 +97,119 @@ func (p *DocParser) Parse(src io.Reader, filename string) (string, error) {
 	}
 }
 
-// parseDocx extracts text from a .docx file using github.com/nguyenthenguyen/docx
-func (p *DocParser) parseDocx(file *os.File) (string, error) {
-	// Need to close the file to let the library open it by path
-	// The library opens by filename
-	// But it requires file path
-	doc, err := docx.ReadDocxFile(file.Name())
-	if err != nil {
-		return "", fmt.Errorf("failed to open docx file: %w", err)
+// ParseStructured returns citeable chunks for formats whose structure can be preserved.
+// PDF is deliberately fail-closed here: the legacy text extractor has no dependable page
+// boundaries, and pretending otherwise would create evidence that cannot be audited.
+func (p *DocParser) ParseStructured(src io.Reader, request StructuredParseRequest) (StructuredDocument, error) {
+	ext := strings.ToLower(filepath.Ext(request.Filename))
+	if isStructuredTextExtension(ext) {
+		return NewStructuredParser().Parse(src, request)
 	}
-	defer func() { _ = doc.Close() }()
+	if ext == ".pdf" {
+		return p.parseStructuredPDF(src, request)
+	}
+	if ext != ".docx" {
+		return StructuredDocument{}, fmt.Errorf("无法保留 %s 的可靠结构：请改用 Markdown、TXT、DOCX 或带文本层的 PDF", ext)
+	}
 
-	text := doc.Editable().GetContent()
-	// Usually text contains raw xml or plain text, wait, GetContent() returns a string
-	// The docx lib provides GetContent() which returns string with xml stripped or full content?
-	// Actually, `docx.ReadDocxFile` provides `Editable().GetContent()`, which might return the XML content.
-	// Wait, let's just return the raw text if possible, or use a better text extraction if needed.
-	// The simplest is to just use it.
-	// Let's strip XML tags just in case
-	text = stripXMLTags(text)
-	return strings.TrimSpace(text), nil
+	content, err := p.Parse(src, request.Filename)
+	if err != nil {
+		return StructuredDocument{}, err
+	}
+	markdownRequest := request
+	markdownRequest.Filename = request.Filename + ".md"
+	result, err := NewStructuredParser().Parse(strings.NewReader(content), markdownRequest)
+	if err != nil {
+		return StructuredDocument{}, err
+	}
+	result.Document.MediaType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+	return result, nil
 }
 
-// stripXMLTags is a simple helper to strip XML tags from docx content
-func stripXMLTags(content string) string {
-	var buf bytes.Buffer
-	inTag := false
-	for _, r := range content {
-		switch r {
-		case '<':
-			inTag = true
-		case '>':
-			inTag = false
-		default:
-			if !inTag {
-				buf.WriteRune(r)
+// ParseOfficialWebHTML parses an already policy-approved page into URL-scoped
+// textbook evidence. Fetching and URL authorization stay outside DocParser.
+func (p *DocParser) ParseOfficialWebHTML(src io.Reader, request StructuredParseRequest) (StructuredDocument, error) {
+	return NewStructuredParser().ParseOfficialWebHTML(src, request)
+}
+
+// parseStructuredPDF makes every page an independent citeable chunk. PDF text
+// has no dependable source-line concept, so page numbers are the only locator
+// emitted; a scanned or garbled page is never silently promoted to evidence.
+func (p *DocParser) parseStructuredPDF(src io.Reader, request StructuredParseRequest) (StructuredDocument, error) {
+	tempFile, err := os.CreateTemp("", "inkwords-structured-pdf-*.pdf")
+	if err != nil {
+		return StructuredDocument{}, fmt.Errorf("create temporary PDF: %w", err)
+	}
+	defer func() {
+		_ = tempFile.Close()
+		_ = os.Remove(tempFile.Name())
+	}()
+	size, err := io.Copy(tempFile, io.LimitReader(src, maxStructuredSourceBytes+1))
+	if err != nil {
+		return StructuredDocument{}, fmt.Errorf("read PDF: %w", err)
+	}
+	if size > maxStructuredSourceBytes {
+		return StructuredDocument{}, fmt.Errorf("PDF 文件超过最大大小限制")
+	}
+	if _, err := tempFile.Seek(0, io.SeekStart); err != nil {
+		return StructuredDocument{}, fmt.Errorf("seek PDF: %w", err)
+	}
+	reader, err := pdf.NewReader(tempFile, size)
+	if err != nil {
+		return StructuredDocument{}, fmt.Errorf("解析 PDF 失败: %w", err)
+	}
+	pageCount := reader.NumPage()
+	if pageCount < 1 || pageCount > maxStructuredPDFPages {
+		return StructuredDocument{}, fmt.Errorf("PDF 页数不在可安全解析范围内")
+	}
+	fonts := make(map[string]*pdf.Font)
+	pages := make([]string, 0, pageCount)
+	pageNumbers := make([]int, 0, pageCount)
+	var extractedBytes int64
+	for pageNumber := 1; pageNumber <= pageCount; pageNumber++ {
+		page := reader.Page(pageNumber)
+		for _, name := range page.Fonts() {
+			if _, exists := fonts[name]; !exists {
+				font := page.Font(name)
+				fonts[name] = &font
 			}
 		}
+		text, err := page.GetPlainText(fonts)
+		if err != nil {
+			return StructuredDocument{}, fmt.Errorf("解析 PDF 第 %d 页失败: %w", pageNumber, err)
+		}
+		text = strings.TrimSpace(normalizeStructuredText(text))
+		if text == "" {
+			continue
+		}
+		if isLowQualityPDFExtraction(text) {
+			return StructuredDocument{}, fmt.Errorf("无法可靠解析 PDF 第 %d 页：检测到严重乱码或扫描文本；请 OCR 后重试", pageNumber)
+		}
+		extractedBytes += int64(len(text))
+		if extractedBytes > maxStructuredTextBytes {
+			return StructuredDocument{}, fmt.Errorf("PDF 可引用文本超过可安全解析大小限制；请拆分后重试")
+		}
+		pages = append(pages, text)
+		pageNumbers = append(pageNumbers, pageNumber)
 	}
-	return buf.String()
+	if len(pages) == 0 {
+		return StructuredDocument{}, fmt.Errorf("无法可靠解析 PDF：没有可引用文本；请 OCR 后重试")
+	}
+	content := strings.Join(pages, "\n\f\n")
+	document := newStructuredDocument(request, filepath.Base(request.Filename), "application/pdf", content)
+	chunks := make([]textbook.SourceChunk, 0, len(pages))
+	offset := 0
+	path := request.ArtifactPath
+	if path == "" {
+		path = request.CanonicalLocator
+	}
+	for index, text := range pages {
+		end := offset + len(text)
+		chunks = append(chunks, newStructuredChunk(document.ID, index+1, index+1, offset, end, 0, 0, path, request.CanonicalLocator, "", nil, text))
+		chunks[len(chunks)-1].Locator.Page = pageNumbers[index]
+		offset = end + len("\n\f\n")
+	}
+	return StructuredDocument{SourceID: request.SourceID, Document: document, Chunks: chunks}, nil
 }
 
 // parsePDF extracts text from a PDF file using github.com/ledongthuc/pdf
@@ -206,6 +293,13 @@ func extractPDFTextWithPdftotext(filePath string) (string, error) {
 
 // parsePlainText extracts text from plain text files like Markdown or TXT
 func (p *DocParser) parsePlainText(file *os.File) (string, error) {
+	info, err := file.Stat()
+	if err != nil {
+		return "", fmt.Errorf("failed to read plain text metadata: %w", err)
+	}
+	if info.Size() > maxStructuredTextBytes {
+		return "", fmt.Errorf("plain text file exceeds the safe parsing size limit")
+	}
 	// Need to seek to the beginning before reading
 	if _, err := file.Seek(0, 0); err != nil {
 		return "", fmt.Errorf("failed to seek file: %w", err)

@@ -1,4 +1,4 @@
-import { defineConfig, devices } from '@playwright/test'
+import { defineConfig } from '@playwright/test'
 
 const configuredBaseUrl = process.env.INKWORDS_E2E_BASE_URL
 const baseURL = configuredBaseUrl || 'http://127.0.0.1:4173'
@@ -23,7 +23,6 @@ export default defineConfig({
     trace: 'retain-on-failure',
     video: 'retain-on-failure',
     locale: 'zh-CN',
-    headless: process.env.E2E_RUN_OAUTH === 'true' ? false : undefined,
   },
   webServer: configuredBaseUrl
     ? undefined
@@ -32,12 +31,10 @@ export default defineConfig({
         url: baseURL,
         reuseExistingServer: !process.env.CI,
         timeout: 120_000,
-        env: { VITE_AUTH_BYPASS: 'true' },
-      },
+  },
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
-    { name: 'mobile-chromium', use: { ...devices['Pixel 7'] } },
-    { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
-    { name: 'webkit', use: { ...devices['Desktop Safari'] } },
+    { name: 'chromium', use: { browserName: 'chromium' } },
+    { name: 'firefox', use: { browserName: 'firefox' } },
+    { name: 'webkit', use: { browserName: 'webkit' } },
   ],
 })

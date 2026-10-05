@@ -12,11 +12,12 @@ import (
 )
 
 func TestConsumerHandleExportRequestedPersistsDownloadMetadata(t *testing.T) {
+	workspaceID := uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
 	tasks := &fakeExportTaskService{}
 	exporter := &stubPDFExporter{
-		exportFunc: func(_ context.Context, blogID uuid.UUID, userID uuid.UUID) (string, string, error) {
+		exportFunc: func(_ context.Context, blogID uuid.UUID, actualWorkspaceID uuid.UUID) (string, string, error) {
 			require.Equal(t, uuid.MustParse("cccccccc-cccc-cccc-cccc-cccccccccccc"), blogID)
-			require.Equal(t, uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), userID)
+			require.Equal(t, workspaceID, actualWorkspaceID)
 			return "/tmp/series.pdf", "series.pdf", nil
 		},
 	}
@@ -33,12 +34,11 @@ func TestConsumerHandleExportRequestedPersistsDownloadMetadata(t *testing.T) {
 			}, nil
 		},
 	}
-	consumer := NewConsumer(tasks, exporter, store)
+	consumer := NewConsumer(tasks, exporter, store, workspaceID)
 
 	err := consumer.HandleExportRequested(context.Background(), RequestedMessage{
 		TaskID: uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
 		Kind:   ExportTaskSubtypePDF,
-		UserID: uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
 		Payload: json.RawMessage(`{
 			"blog_id":"cccccccc-cccc-cccc-cccc-cccccccccccc"
 		}`),
@@ -50,18 +50,18 @@ func TestConsumerHandleExportRequestedPersistsDownloadMetadata(t *testing.T) {
 }
 
 func TestConsumerHandleExportRequestedMarksFailedWhenExporterFails(t *testing.T) {
+	workspaceID := uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
 	tasks := &fakeExportTaskService{}
 	exporter := &stubPDFExporter{
 		exportFunc: func(context.Context, uuid.UUID, uuid.UUID) (string, string, error) {
 			return "", "", errors.New("chromium failed")
 		},
 	}
-	consumer := NewConsumer(tasks, exporter, &stubArtifactStore{})
+	consumer := NewConsumer(tasks, exporter, &stubArtifactStore{}, workspaceID)
 
 	err := consumer.HandleExportRequested(context.Background(), RequestedMessage{
 		TaskID: uuid.MustParse("dddddddd-dddd-dddd-dddd-dddddddddddd"),
 		Kind:   ExportTaskSubtypePDF,
-		UserID: uuid.MustParse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"),
 		Payload: json.RawMessage(`{
 			"blog_id":"ffffffff-ffff-ffff-ffff-ffffffffffff"
 		}`),
@@ -71,25 +71,21 @@ func TestConsumerHandleExportRequestedMarksFailedWhenExporterFails(t *testing.T)
 	require.Equal(t, "chromium failed", tasks.lastErrorMessage)
 }
 
-type stubCoursePackageBuilder struct{}
-
-func (stubCoursePackageBuilder) BuildCoursePackage(context.Context, CoursePackagePayload) (string, string, error) {
-	return "/tmp/course.zip", "project-course.zip", nil
-}
-
-func TestConsumerHandleCoursePackageUsesControlledArtifactStore(t *testing.T) {
+func TestConsumerHandleExportRequestedRejectsAnotherWorkspace(t *testing.T) {
+	workspaceID := uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+	otherWorkspaceID := uuid.MustParse("cccccccc-cccc-cccc-cccc-cccccccccccc")
 	tasks := &fakeExportTaskService{}
-	store := &stubArtifactStore{saveFunc: func(taskID uuid.UUID, sourcePath string, filename string) (TaskResult, error) {
-		require.Equal(t, uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), taskID)
-		require.Equal(t, "/tmp/course.zip", sourcePath)
-		require.Equal(t, "project-course.zip", filename)
-		return TaskResult{FileToken: "course-token", Filename: filename}, nil
-	}}
-	consumer := NewConsumer(tasks, &stubPDFExporter{}, store, stubCoursePackageBuilder{})
-	err := consumer.HandleExportRequested(context.Background(), RequestedMessage{TaskID: uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), Kind: "project_course_package", Payload: json.RawMessage(`{"package":{"commit_sha":"0123456789abcdef0123456789abcdef01234567"}}`)})
+	consumer := NewConsumer(tasks, &stubPDFExporter{}, &stubArtifactStore{}, workspaceID)
+
+	err := consumer.HandleExportRequested(context.Background(), RequestedMessage{
+		TaskID:      uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+		Kind:        ExportTaskSubtypePDF,
+		WorkspaceID: &otherWorkspaceID,
+		Payload:     json.RawMessage(`{"blog_id":"dddddddd-dddd-dddd-dddd-dddddddddddd"}`),
+	})
 	require.NoError(t, err)
-	require.Equal(t, "succeeded", tasks.lastStatus)
-	require.Contains(t, string(tasks.lastResult), "course-token")
+	require.Equal(t, "failed", tasks.lastStatus)
+	require.Equal(t, "export task workspace does not match the local workspace", tasks.lastErrorMessage)
 }
 
 type fakeExportTaskService struct {
@@ -123,14 +119,14 @@ func (f *fakeExportTaskService) IsCancelled(_ context.Context, _ uuid.UUID) (boo
 }
 
 type stubPDFExporter struct {
-	exportFunc func(ctx context.Context, blogID uuid.UUID, userID uuid.UUID) (string, string, error)
+	exportFunc func(ctx context.Context, blogID uuid.UUID, workspaceID uuid.UUID) (string, string, error)
 }
 
-func (s *stubPDFExporter) ExportSeriesToPDF(ctx context.Context, blogID uuid.UUID, userID uuid.UUID) (string, string, error) {
+func (s *stubPDFExporter) ExportSeriesToPDF(ctx context.Context, blogID uuid.UUID, workspaceID uuid.UUID) (string, string, error) {
 	if s.exportFunc == nil {
 		return "", "", errors.New("unexpected export call")
 	}
-	return s.exportFunc(ctx, blogID, userID)
+	return s.exportFunc(ctx, blogID, workspaceID)
 }
 
 type stubArtifactStore struct {
@@ -145,6 +141,7 @@ func (s *stubArtifactStore) Save(taskID uuid.UUID, sourcePath string, filename s
 }
 
 func TestConsumeMessage_SuccessButAckFails_ReturnsError(t *testing.T) {
+	workspaceID := uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
 	tasks := &fakeExportTaskService{}
 	exporter := &stubPDFExporter{
 		exportFunc: func(context.Context, uuid.UUID, uuid.UUID) (string, string, error) {
@@ -156,7 +153,7 @@ func TestConsumeMessage_SuccessButAckFails_ReturnsError(t *testing.T) {
 			return TaskResult{FileToken: "tok", Filename: filename}, nil
 		},
 	}
-	consumer := NewConsumer(tasks, exporter, store)
+	consumer := NewConsumer(tasks, exporter, store, workspaceID)
 	ack := &fakeDeliveryAcknowledger{ackErr: errors.New("ack io error")}
 
 	body := []byte(`{"task_id":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","kind":"export_pdf","user_id":"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb","payload":{"blog_id":"cccccccc-cccc-cccc-cccc-cccccccccccc"}}`)
@@ -170,7 +167,7 @@ func TestConsumeMessage_SuccessButAckFails_ReturnsError(t *testing.T) {
 
 func TestConsumeMessage_WorkFailsAndNackFails_RecordsBoth(t *testing.T) {
 	tasks := &fakeExportTaskService{markRunningErr: errors.New("db unavailable")}
-	consumer := NewConsumer(tasks, &stubPDFExporter{}, &stubArtifactStore{})
+	consumer := NewConsumer(tasks, &stubPDFExporter{}, &stubArtifactStore{}, uuid.New())
 	ack := &fakeDeliveryAcknowledger{nackErr: errors.New("nack io error")}
 
 	body := []byte(`{"task_id":"dddddddd-dddd-dddd-dddd-dddddddddddd","kind":"export_pdf","user_id":"eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee","payload":{"blog_id":"ffffffff-ffff-ffff-ffff-ffffffffffff"}}`)
@@ -184,7 +181,7 @@ func TestConsumeMessage_WorkFailsAndNackFails_RecordsBoth(t *testing.T) {
 }
 
 func TestConsumeMessage_MalformedPayload_AcksOnce(t *testing.T) {
-	consumer := NewConsumer(&fakeExportTaskService{}, &stubPDFExporter{}, &stubArtifactStore{})
+	consumer := NewConsumer(&fakeExportTaskService{}, &stubPDFExporter{}, &stubArtifactStore{}, uuid.New())
 	ack := &fakeDeliveryAcknowledger{}
 
 	err := consumer.ConsumeMessage(context.Background(), []byte(`not json`), ack)
@@ -195,7 +192,7 @@ func TestConsumeMessage_MalformedPayload_AcksOnce(t *testing.T) {
 
 func TestConsumeMessage_TransientWorkError_NacksWithRequeue(t *testing.T) {
 	tasks := &fakeExportTaskService{isCancelledErr: errors.New("db timeout")}
-	consumer := NewConsumer(tasks, &stubPDFExporter{}, &stubArtifactStore{})
+	consumer := NewConsumer(tasks, &stubPDFExporter{}, &stubArtifactStore{}, uuid.New())
 	ack := &fakeDeliveryAcknowledger{}
 
 	body := []byte(`{"task_id":"11111111-1111-1111-1111-111111111111","kind":"export_pdf","user_id":"22222222-2222-2222-2222-222222222222","payload":{"blog_id":"33333333-3333-3333-3333-333333333333"}}`)

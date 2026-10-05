@@ -2,26 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { reviewService } from './review'
 
 const mockFetch = vi.fn()
-const storage = new Map<string, string>()
 
 describe('reviewService', () => {
   beforeEach(() => {
     mockFetch.mockReset()
     vi.stubGlobal('fetch', mockFetch)
-    storage.clear()
-    vi.stubGlobal('localStorage', {
-      getItem: vi.fn((key: string) => storage.get(key) ?? null),
-      setItem: vi.fn((key: string, value: string) => {
-        storage.set(key, value)
-      }),
-      removeItem: vi.fn((key: string) => {
-        storage.delete(key)
-      }),
-      clear: vi.fn(() => {
-        storage.clear()
-      }),
-    })
-    globalThis.localStorage.setItem('token', 'review-token')
   })
 
   it('calls GET /api/v1/review/notes with query params', async () => {
@@ -39,10 +24,10 @@ describe('reviewService', () => {
     const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit]
 
     expect(url).toBe('/api/v1/review/notes?query=%E5%B9%B6%E5%8F%91&page=1&page_size=20')
-    expect(new Headers(init.headers).get('Authorization')).toBe('Bearer review-token')
+    expect(new Headers(init.headers).has('Authorization')).toBe(false)
   })
 
-  it('calls GET /api/v1/review/today with auth header', async () => {
+  it('calls GET /api/v1/review/today without request identity', async () => {
     mockFetch.mockResolvedValue({
       ok: true,
       status: 200,
@@ -64,7 +49,7 @@ describe('reviewService', () => {
     const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit]
 
     expect(url).toBe('/api/v1/review/today')
-    expect(new Headers(init.headers).get('Authorization')).toBe('Bearer review-token')
+    expect(new Headers(init.headers).has('Authorization')).toBe(false)
   })
 
   it('calls GET /api/v1/review/history with limit query', async () => {
@@ -85,7 +70,7 @@ describe('reviewService', () => {
     const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit]
 
     expect(url).toBe('/api/v1/review/history?limit=5')
-    expect(new Headers(init.headers).get('Authorization')).toBe('Bearer review-token')
+    expect(new Headers(init.headers).has('Authorization')).toBe(false)
   })
 
   it('preserves structured review feedback fields returned by respond', async () => {

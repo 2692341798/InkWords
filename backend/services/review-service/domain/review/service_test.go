@@ -94,9 +94,9 @@ func timePtr(value time.Time) *time.Time {
 }
 
 type seededSession struct {
-	Service *Service
-	UserID  uuid.UUID
-	ID      uuid.UUID
+	Service     *Service
+	WorkspaceID uuid.UUID
+	ID          uuid.UUID
 }
 
 func seedLightRecallSession(t *testing.T) seededSession {
@@ -121,20 +121,20 @@ func seedSession(t *testing.T, mode string) seededSession {
 		Body:          strings.Repeat("正文内容", 80),
 		PreferredMode: mode,
 	}})
-	userID := uuid.New()
+	workspaceID := uuid.New()
 
-	resp, err := svc.CreateSession(context.Background(), userID, CreateSessionRequest{
+	resp, err := svc.CreateSession(context.Background(), workspaceID, CreateSessionRequest{
 		NotePath:  "wiki/concepts/并发控制与速率限制.md",
 		Mode:      mode,
 		EntryType: ReviewEntryTypeToday,
 	})
 	require.NoError(t, err)
-	_, err = svc.CompleteReading(context.Background(), userID, resp.SessionID)
+	_, err = svc.CompleteReading(context.Background(), workspaceID, resp.SessionID)
 	require.NoError(t, err)
 
 	return seededSession{
-		Service: svc,
-		UserID:  userID,
-		ID:      resp.SessionID,
+		Service:     svc,
+		WorkspaceID: workspaceID,
+		ID:          resp.SessionID,
 	}
 }

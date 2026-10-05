@@ -38,12 +38,9 @@ jobs:
       E2E_VAULT_PATH: /tmp/inkwords-e2e-vault-${{ matrix.suffix }}
       OBSIDIAN_VAULT_PATH: /tmp/inkwords-e2e-vault-${{ matrix.suffix }}
       INKWORDS_E2E_BASE_URL: http://127.0.0.1:${{ matrix.port }}
-      E2E_AUTH_MODE: ui
       E2E_EXTERNAL_MODE: stub
       DEEPSEEK_API_KEY: ci-placeholder-key
-      JWT_SECRET: ci-placeholder-jwt-secret
       OBSIDIAN_REST_API_KEY: ci-placeholder-obsidian-key
-      VITE_AUTH_BYPASS: "true"
     steps:
       - uses: actions/checkout@v4
 
@@ -69,7 +66,7 @@ jobs:
 
       - name: Wait for gateway
         run: |
-          for attempt in $(seq 1 36); do
+          for _ in $(seq 1 36); do
             if curl --fail --silent "$INKWORDS_E2E_BASE_URL/api/v1/ping" >/dev/null; then
               exit 0
             fi

@@ -8,10 +8,6 @@ import (
 )
 
 func (h *Handler) GenerateBlogStreamHandler(c *gin.Context) {
-	if !h.maybeCheckQuota(c) {
-		return
-	}
-
 	var req GenerateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
@@ -25,12 +21,13 @@ func (h *Handler) GenerateBlogStreamHandler(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	userID := h.getUserID(c)
-	if userID == uuid.Nil {
-		userID = uuid.New()
+	workspaceID := h.getWorkspaceID(c)
+	if workspaceID == uuid.Nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "local workspace unavailable"})
+		return
 	}
 
-	go h.service.Generate(ctx, userID, req, chunkChan, errChan)
+	go h.service.Generate(ctx, workspaceID, req, chunkChan, errChan)
 
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")

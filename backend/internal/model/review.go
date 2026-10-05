@@ -35,8 +35,7 @@ const (
 // ReviewSession 记录一次完整的知识漫游复习训练。
 type ReviewSession struct {
 	ID                 uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
-	UserID             uuid.UUID      `gorm:"type:uuid;index:idx_review_sessions_user_note_created;not null" json:"user_id"`
-	NotePath           string         `gorm:"type:text;not null;index:idx_review_sessions_user_note_created" json:"note_path"`
+	NotePath           string         `gorm:"type:text;not null" json:"note_path"`
 	NoteTitle          string         `gorm:"type:varchar(255);not null" json:"note_title"`
 	SourceTitle        string         `gorm:"type:varchar(255)" json:"source_title"`
 	EntryType          string         `gorm:"type:varchar(32);not null" json:"entry_type"`

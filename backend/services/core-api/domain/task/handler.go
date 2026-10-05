@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"inkwords-backend/shared/kernel/httpx"
 )
 
 const defaultTaskStreamPollInterval = 500 * time.Millisecond
@@ -18,8 +19,9 @@ type taskService interface {
 	CreateGenerationTask(ctx context.Context, input CreateGenerationTaskInput) (JobTask, error)
 	CreateParseTask(ctx context.Context, input CreateParseTaskInput) (JobTask, error)
 	CreateExportTask(ctx context.Context, input CreateExportTaskInput) (JobTask, error)
-	GetTask(ctx context.Context, taskID uuid.UUID, requestedBy uuid.UUID) (JobTask, error)
-	CancelTask(ctx context.Context, taskID uuid.UUID, requestedBy uuid.UUID) error
+	GetTask(ctx context.Context, taskID uuid.UUID, workspaceID uuid.UUID) (JobTask, error)
+	RetryGenerationTask(ctx context.Context, taskID uuid.UUID, workspaceID uuid.UUID) (JobTask, error)
+	CancelTask(ctx context.Context, taskID uuid.UUID, workspaceID uuid.UUID) error
 	ListStreamEvents(ctx context.Context, taskID uuid.UUID, afterID uint64) ([]JobTaskEvent, bool, error)
 }
 
@@ -41,9 +43,9 @@ func NewHandler(service taskService, exportArtifactsDir string) *Handler {
 
 // CreateGenerationTask 接收前端任务创建请求，并返回可订阅的任务地址。
 func (h *Handler) CreateGenerationTask(c *gin.Context) {
-	h.createTask(c, func(userID uuid.UUID, req CreateGenerationTaskRequest) (JobTask, error) {
+	h.createTask(c, func(workspaceID uuid.UUID, req CreateGenerationTaskRequest) (JobTask, error) {
 		return h.service.CreateGenerationTask(c.Request.Context(), CreateGenerationTaskInput{
-			RequestedBy:    userID,
+			WorkspaceID:    workspaceID,
 			TaskSubtype:    req.Kind,
 			IdempotencyKey: req.IdempotencyKey,
 			Payload:        []byte(req.Payload),
@@ -53,9 +55,9 @@ func (h *Handler) CreateGenerationTask(c *gin.Context) {
 
 // CreateParseTask 接收前端解析任务创建请求，并返回可订阅的任务地址。
 func (h *Handler) CreateParseTask(c *gin.Context) {
-	h.createTask(c, func(userID uuid.UUID, req CreateGenerationTaskRequest) (JobTask, error) {
+	h.createTask(c, func(workspaceID uuid.UUID, req CreateGenerationTaskRequest) (JobTask, error) {
 		return h.service.CreateParseTask(c.Request.Context(), CreateParseTaskInput{
-			RequestedBy:    userID,
+			WorkspaceID:    workspaceID,
 			TaskSubtype:    req.Kind,
 			IdempotencyKey: req.IdempotencyKey,
 			Payload:        []byte(req.Payload),
@@ -65,9 +67,9 @@ func (h *Handler) CreateParseTask(c *gin.Context) {
 
 // CreateExportTask 接收前端导出任务创建请求，并返回可订阅的任务地址。
 func (h *Handler) CreateExportTask(c *gin.Context) {
-	h.createTask(c, func(userID uuid.UUID, req CreateGenerationTaskRequest) (JobTask, error) {
+	h.createTask(c, func(workspaceID uuid.UUID, req CreateGenerationTaskRequest) (JobTask, error) {
 		return h.service.CreateExportTask(c.Request.Context(), CreateExportTaskInput{
-			RequestedBy:    userID,
+			WorkspaceID:    workspaceID,
 			TaskSubtype:    req.Kind,
 			IdempotencyKey: req.IdempotencyKey,
 			Payload:        []byte(req.Payload),
@@ -77,7 +79,7 @@ func (h *Handler) CreateExportTask(c *gin.Context) {
 
 func (h *Handler) createTask(
 	c *gin.Context,
-	create func(userID uuid.UUID, req CreateGenerationTaskRequest) (JobTask, error),
+	create func(workspaceID uuid.UUID, req CreateGenerationTaskRequest) (JobTask, error),
 ) {
 	var req CreateGenerationTaskRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -85,13 +87,13 @@ func (h *Handler) createTask(
 		return
 	}
 
-	userID, ok := h.getUserID(c)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+	workspaceID, err := httpx.GetLocalWorkspaceID(c)
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "local workspace unavailable"})
 		return
 	}
 
-	task, err := create(userID, req)
+	task, err := create(workspaceID, req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create task"})
 		return
@@ -110,13 +112,13 @@ func (h *Handler) GetTask(c *gin.Context) {
 	if !ok {
 		return
 	}
-	userID, ok := h.getUserID(c)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+	workspaceID, err := httpx.GetLocalWorkspaceID(c)
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "local workspace unavailable"})
 		return
 	}
 
-	task, err := h.service.GetTask(c.Request.Context(), taskID, userID)
+	task, err := h.service.GetTask(c.Request.Context(), taskID, workspaceID)
 	if err != nil {
 		h.writeServiceError(c, err)
 		return
@@ -131,21 +133,45 @@ func (h *Handler) CancelTask(c *gin.Context) {
 	if !ok {
 		return
 	}
-	userID, ok := h.getUserID(c)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+	workspaceID, err := httpx.GetLocalWorkspaceID(c)
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "local workspace unavailable"})
 		return
 	}
 
-	if err := h.service.CancelTask(c.Request.Context(), taskID, userID); err != nil {
+	if err := h.service.CancelTask(c.Request.Context(), taskID, workspaceID); err != nil {
+		h.writeServiceError(c, err)
+		return
+	}
+	current, err := h.service.GetTask(c.Request.Context(), taskID, workspaceID)
+	if err != nil {
 		h.writeServiceError(c, err)
 		return
 	}
 
 	c.JSON(http.StatusAccepted, gin.H{
 		"task_id": taskID,
-		"status":  JobTaskStatusCancelled,
+		"status":  current.Status,
 	})
+}
+
+// RetryGenerationTask requeues only a failed generation task with the same frozen input.
+func (h *Handler) RetryGenerationTask(c *gin.Context) {
+	taskID, ok := h.parseTaskID(c)
+	if !ok {
+		return
+	}
+	workspaceID, err := httpx.GetLocalWorkspaceID(c)
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "local workspace unavailable"})
+		return
+	}
+	task, err := h.service.RetryGenerationTask(c.Request.Context(), taskID, workspaceID)
+	if err != nil {
+		h.writeServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusAccepted, buildTaskResponse(task))
 }
 
 // StreamTask 通过轮询事件表输出 SSE，直到任务进入终态或客户端断开。
@@ -154,12 +180,12 @@ func (h *Handler) StreamTask(c *gin.Context) {
 	if !ok {
 		return
 	}
-	userID, ok := h.getUserID(c)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+	workspaceID, err := httpx.GetLocalWorkspaceID(c)
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "local workspace unavailable"})
 		return
 	}
-	if _, err := h.service.GetTask(c.Request.Context(), taskID, userID); err != nil {
+	if _, err := h.service.GetTask(c.Request.Context(), taskID, workspaceID); err != nil {
 		h.writeServiceError(c, err)
 		return
 	}
@@ -194,15 +220,6 @@ func (h *Handler) StreamTask(c *gin.Context) {
 	}
 }
 
-func (h *Handler) getUserID(c *gin.Context) (uuid.UUID, bool) {
-	value, exists := c.Get("user_id")
-	if !exists {
-		return uuid.Nil, false
-	}
-	userID, ok := value.(uuid.UUID)
-	return userID, ok
-}
-
 func (h *Handler) parseTaskID(c *gin.Context) (uuid.UUID, bool) {
 	taskID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
@@ -218,6 +235,8 @@ func (h *Handler) writeServiceError(c *gin.Context, err error) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
 	case errors.Is(err, ErrTaskAccessDenied):
 		c.JSON(http.StatusForbidden, gin.H{"error": "task access denied"})
+	case errors.Is(err, ErrTaskNotRetryable):
+		c.JSON(http.StatusConflict, gin.H{"error": "task is not retryable"})
 	default:
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "task request failed"})
 	}

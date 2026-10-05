@@ -70,3 +70,7 @@ func TestSeriesParentTitle_FallsBackToSeries(t *testing.T) {
 	require.Equal(t, "series", seriesParentTitle(nil))
 	require.Equal(t, "series", seriesParentTitle([]Blog{{Title: ""}}))
 }
+
+func TestSanitizeExportFileNameRemovesDownloadHeaderDelimiters(t *testing.T) {
+	require.Equal(t, "Gin--路由", sanitizeExportFileName("Gin\"/路由\x00"))
+}

@@ -8,8 +8,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 
 	sharedblog "inkwords-backend/shared/kernel/blog"
 	"inkwords-backend/shared/kernel/prompt"
@@ -64,17 +62,4 @@ func TestSeriesPureHelpersCoverBoundaries(t *testing.T) {
 	var builder strings.Builder
 	appendSeriesFileSource(&builder, t.TempDir(), "missing.go")
 	require.Empty(t, builder.String())
-}
-
-func TestQuotaServiceAllowsWithinLimitAndRejectsMissingOrExhausted(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.Exec(`CREATE TABLE users (id text primary key, tokens_used integer, token_limit integer)`).Error)
-	svc := NewQuotaService(db)
-	uid := uuid.New()
-	require.NoError(t, db.Exec(`INSERT INTO users (id, tokens_used, token_limit) VALUES (?, ?, ?)`, uid, 3, 10).Error)
-	require.NoError(t, svc.CheckQuota(uid))
-	require.ErrorContains(t, svc.CheckQuota(uuid.New()), "user not found")
-	require.NoError(t, db.Exec(`UPDATE users SET tokens_used = token_limit WHERE id = ?`, uid).Error)
-	require.ErrorContains(t, svc.CheckQuota(uid), "额度已耗尽")
 }

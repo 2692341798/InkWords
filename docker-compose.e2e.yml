@@ -20,12 +20,8 @@ services:
   core-api:
     environment:
       DATABASE_URL: postgres://inkwords_e2e@db:5432/inkwords_e2e?sslmode=disable
-      FRONTEND_URL: http://127.0.0.1:${E2E_PORT:-18080}
-      GITHUB_REDIRECT_URL: http://127.0.0.1:${E2E_PORT:-18080}/api/v1/auth/callback/github
-      DEV_AUTH_USER_ID: ${E2E_DEV_AUTH_USER_ID:-}
       OBSIDIAN_WIKI_DIR: wiki/e2e/${E2E_RUN_ID:-local}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
-      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
     volumes:
       - type: bind
         source: ${E2E_VAULT_PATH:?Set E2E_VAULT_PATH to a disposable directory}
@@ -34,25 +30,17 @@ services:
   llm-stream:
     environment:
       DATABASE_URL: postgres://inkwords_e2e@db:5432/inkwords_e2e?sslmode=disable
-      FRONTEND_URL: http://127.0.0.1:${E2E_PORT:-18080}
-      DEV_AUTH_USER_ID: ${E2E_DEV_AUTH_USER_ID:-}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
-      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
 
   parser-service:
     environment:
       DATABASE_URL: postgres://inkwords_e2e@db:5432/inkwords_e2e?sslmode=disable
-      DEV_AUTH_USER_ID: ${E2E_DEV_AUTH_USER_ID:-}
-      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
 
   export-service:
     environment:
       DATABASE_URL: postgres://inkwords_e2e@db:5432/inkwords_e2e?sslmode=disable
-      FRONTEND_URL: http://127.0.0.1:${E2E_PORT:-18080}
-      DEV_AUTH_USER_ID: ${E2E_DEV_AUTH_USER_ID:-}
       OBSIDIAN_WIKI_DIR: wiki/e2e/${E2E_RUN_ID:-local}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
-      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
     volumes:
       - type: bind
         source: ${E2E_VAULT_PATH:?Set E2E_VAULT_PATH to a disposable directory}
@@ -60,18 +48,14 @@ services:
 
   review-service:
     environment:
+      DATABASE_URL: postgres://inkwords_e2e@db:5432/inkwords_e2e?sslmode=disable
       REVIEW_DATABASE_URL: postgres://inkwords_e2e@db:5432/inkwords_review_db?sslmode=disable
-      DEV_AUTH_USER_ID: ${E2E_DEV_AUTH_USER_ID:-}
       OBSIDIAN_WIKI_DIR: wiki/e2e/${E2E_RUN_ID:-local}
-      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
     volumes:
       - type: bind
         source: ${E2E_VAULT_PATH:?Set E2E_VAULT_PATH to a disposable directory}
         target: /app/obsidian
 
   frontend:
-    build:
-      args:
-        VITE_AUTH_BYPASS: ${VITE_AUTH_BYPASS:-true}
     ports: !override
       - "127.0.0.1:${E2E_PORT:-18080}:80"

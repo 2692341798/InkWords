@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"inkwords-backend/services/parser-service/app/bootstrap"
 	parsedomain "inkwords-backend/services/parser-service/domain/parse"
 	"inkwords-backend/shared/kernel/httpx"
+	"inkwords-backend/shared/platform/sourceartifact"
 )
 
 func init() {
@@ -32,7 +34,11 @@ func main() {
 	signalContext, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	stopConsumer, err := parsedomain.StartParseConsumer(signalContext, taskService, parseService)
+	artifactRoot := os.Getenv("TEXTBOOK_SOURCE_ARTIFACTS_DIR")
+	if artifactRoot == "" {
+		artifactRoot = "/app/source-artifacts"
+	}
+	stopConsumer, err := parsedomain.StartParseConsumer(signalContext, taskService, parseService, sourceartifact.NewStore(artifactRoot))
 	if err != nil {
 		log.Printf("RabbitMQ parse consumer initialization skipped: %v", err)
 	}

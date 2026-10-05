@@ -3,10 +3,39 @@ name: Real acceptance
 on:
   workflow_dispatch:
     inputs:
-      run_oauth:
-        description: Run tests requiring a pre-authorized GitHub test session
-        type: boolean
+      run_mastery_assessment:
+        description: Run four real mastery-scoring calls including causal calibration
+        required: true
         default: false
+        type: boolean
+      run_textbook_generation:
+        description: Generate one real Gin candidate for each selected audience
+        required: true
+        default: false
+        type: boolean
+      mastery_model:
+        description: DeepSeek model used for the four-case mastery scoring acceptance
+        required: true
+        default: deepseek-v4-flash
+        type: string
+      textbook_model:
+        description: DeepSeek model used for the selected-audience textbook acceptance
+        required: true
+        default: deepseek-v4-flash
+        type: string
+      textbook_audiences:
+        description: Audience candidates to generate after any separately persisted foundation retry
+        required: true
+        default: foundation,programming,stack_familiar
+        type: choice
+        options:
+          - foundation,programming,stack_familiar
+          - programming,stack_familiar
+      textbook_request_dir:
+        description: Existing runner directory with reviewed frozen audience JSON requests (required for real generation)
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: read
@@ -17,8 +46,7 @@ concurrency:
 
 jobs:
   real-acceptance:
-    # A dedicated runner provides the temporary Obsidian Vault/API and an
-    # interactive browser when first-time GitHub OAuth approval is required.
+    # A dedicated runner provides the temporary Obsidian Vault/API.
     runs-on: [self-hosted, inkwords-real-acceptance]
     timeout-minutes: 60
     environment: real-acceptance
@@ -29,18 +57,18 @@ jobs:
       E2E_VAULT_PATH: /tmp/inkwords-real-vault
       OBSIDIAN_VAULT_PATH: /tmp/inkwords-real-vault
       INKWORDS_E2E_BASE_URL: http://127.0.0.1:18080
-      E2E_AUTH_MODE: real
       E2E_EXTERNAL_MODE: real
-      E2E_RUN_OAUTH: ${{ inputs.run_oauth }}
-      E2E_TEST_TOKEN: ${{ secrets.E2E_TEST_TOKEN }}
       DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-      GITHUB_CLIENT_ID: ${{ secrets.TEST_GITHUB_CLIENT_ID }}
-      GITHUB_CLIENT_SECRET: ${{ secrets.TEST_GITHUB_CLIENT_SECRET }}
+      MASTERY_DEEPSEEK_MODEL: ${{ inputs.mastery_model }}
+      TEXTBOOK_STANDARD_MODEL: ${{ inputs.textbook_model }}
+      INKWORDS_REAL_TEXTBOOK_REQUEST_DIR: ${{ inputs.textbook_request_dir }}
       OBSIDIAN_REST_API_KEY: ${{ secrets.OBSIDIAN_REST_API_KEY }}
-      JWT_SECRET: ${{ secrets.TEST_JWT_SECRET }}
-      VITE_AUTH_BYPASS: "false"
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -57,11 +85,33 @@ jobs:
         run: docker compose -f docker-compose.yml -f docker-compose.e2e.yml -f docker-compose.real.yml up -d --build
       - name: Wait for gateway
         run: |
-          for attempt in $(seq 1 36); do
+          for _ in $(seq 1 36); do
             curl --fail --silent "$INKWORDS_E2E_BASE_URL/api/v1/ping" >/dev/null && exit 0
             sleep 5
           done
           exit 1
+      - name: Run representative real mastery scoring acceptance
+        if: ${{ inputs.run_mastery_assessment }}
+        working-directory: backend
+        env:
+          INKWORDS_REAL_ASSESSMENT_ACCEPTANCE: approved
+          INKWORDS_REAL_ASSESSMENT_OUTPUT_DIR: ${{ github.workspace }}/real-acceptance-artifacts/mastery
+          MASTERY_DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: |
+          go test ./services/review-service/app/masteryassessment \
+            -run '^TestRealAssessmentSeparatesRepresentativeAnswers$' \
+            -count=1 -timeout=5m -v | tee ../mastery-assessment-acceptance.log
+      - name: Run three-audience real textbook generation acceptance
+        if: ${{ inputs.run_textbook_generation }}
+        working-directory: backend
+        env:
+          INKWORDS_REAL_TEXTBOOK_GENERATION_ACCEPTANCE: approved
+          INKWORDS_REAL_TEXTBOOK_AUDIENCES: ${{ inputs.textbook_audiences }}
+          INKWORDS_REAL_TEXTBOOK_OUTPUT_DIR: ${{ github.workspace }}/real-acceptance-artifacts/textbook
+        run: |
+          go test ./services/llm-stream/app/textbook \
+            -run '^TestRealTextbookGenerationProducesSelectedAudienceCandidates$' \
+            -count=1 -timeout=50m -v | tee ../textbook-generation-acceptance.log
       - name: Run serial real acceptance
         working-directory: frontend
         run: npm run test:e2e:real
@@ -78,6 +128,9 @@ jobs:
           path: |
             frontend/playwright-report/
             frontend/test-results/
+            real-acceptance-artifacts/
+            mastery-assessment-acceptance.log
+            textbook-generation-acceptance.log
             compose-real.log
       - name: Clean isolated resources
         if: always()

@@ -35,7 +35,6 @@ type ChatRequest struct {
 	ReasoningEffort string            `json:"reasoning_effort,omitempty"`
 	ResponseFormat  map[string]string `json:"response_format,omitempty"`
 	StreamOptions   *StreamOptions    `json:"stream_options,omitempty"`
-	UserID          string            `json:"user_id,omitempty"`
 }
 
 // StreamOptions configures DeepSeek streaming response behavior.
@@ -48,7 +47,6 @@ type ChatOptions struct {
 	ThinkingType    string
 	ReasoningEffort string
 	MaxTokens       int
-	UserID          string
 }
 
 // ChatCompletionChunk represents a single chunk from the stream
@@ -89,7 +87,10 @@ type APIError struct {
 }
 
 func (e *APIError) Error() string {
-	return fmt.Sprintf("API request failed with status %d: %s", e.StatusCode, e.Body)
+	// The body may be an untrusted provider diagnostic. Keep it available for
+	// narrowly-scoped internal classification, but never let it reach logs,
+	// task persistence, or SSE through error formatting.
+	return fmt.Sprintf("API request failed with status %d", e.StatusCode)
 }
 
 // NewDeepSeekClient creates a new DeepSeek client
@@ -111,8 +112,8 @@ func DefaultChatOptions() ChatOptions {
 }
 
 // LightweightChatOptions is for bounded metadata/JSON tasks where reasoning is not worth the cost.
-func LightweightChatOptions(userID string, maxTokens int) ChatOptions {
-	return ChatOptions{ThinkingType: "disabled", MaxTokens: maxTokens, UserID: userID}
+func LightweightChatOptions(maxTokens int) ChatOptions {
+	return ChatOptions{ThinkingType: "disabled", MaxTokens: maxTokens}
 }
 
 func (o ChatOptions) apply(req *ChatRequest) {
@@ -133,34 +134,6 @@ func (o ChatOptions) apply(req *ChatRequest) {
 	if o.MaxTokens > 0 {
 		req.MaxTokens = o.MaxTokens
 	}
-	if userID := sanitizeUserID(o.UserID); userID != "" {
-		req.UserID = userID
-	}
-}
-
-func sanitizeUserID(raw string) string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return ""
-	}
-
-	var builder strings.Builder
-	for _, r := range raw {
-		switch {
-		case r >= 'a' && r <= 'z':
-			builder.WriteRune(r)
-		case r >= 'A' && r <= 'Z':
-			builder.WriteRune(r)
-		case r >= '0' && r <= '9':
-			builder.WriteRune(r)
-		case r == '-' || r == '_':
-			builder.WriteRune(r)
-		}
-		if builder.Len() >= 512 {
-			break
-		}
-	}
-	return builder.String()
 }
 
 // IsRetryableError returns true for transient transport/API failures.
@@ -304,7 +277,7 @@ func (c *DeepSeekClient) GenerateJSONWithOptions(ctx context.Context, model stri
 
 	content, err := extractCompletionContent(bodyBytes)
 	if err != nil {
-		return "", CompletionUsage{}, err
+		return "", parseCompletionUsage(bodyBytes), err
 	}
 
 	return content, parseCompletionUsage(bodyBytes), nil

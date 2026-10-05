@@ -24,7 +24,7 @@ describe('sidebarExport service', () => {
     vi.restoreAllMocks()
   })
 
-  it('posts each selected series root to the Obsidian series export endpoint with auth', async () => {
+  it('posts each selected series root to the Obsidian series export endpoint without request identity', async () => {
     const fetchImpl = vi.fn().mockResolvedValue({
       ok: true,
       json: vi.fn().mockResolvedValue({ code: 200 }),
@@ -32,7 +32,6 @@ describe('sidebarExport service', () => {
 
     const count = await syncSeriesToObsidian([createSeries({ id: 'series-a' }), createSeries({ id: 'series-b' })], {
       fetchImpl,
-      getToken: () => 'token-123',
     })
 
     expect(count).toBe(2)
@@ -40,7 +39,7 @@ describe('sidebarExport service', () => {
     const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit]
     expect(url).toBe('/api/v1/blogs/series-a/export/obsidian/series')
     expect(init.method).toBe('POST')
-    expect(new Headers(init.headers).get('Authorization')).toBe('Bearer token-123')
+    expect(new Headers(init.headers).has('Authorization')).toBe(false)
   })
 
   it('downloads each exported pdf with a sanitized filename and records failures', async () => {

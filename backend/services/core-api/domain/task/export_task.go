@@ -13,7 +13,7 @@ const (
 
 // CreateExportTaskInput 描述创建导出任务时服务层需要的输入。
 type CreateExportTaskInput struct {
-	RequestedBy    uuid.UUID
+	WorkspaceID    uuid.UUID
 	TaskSubtype    string
 	IdempotencyKey string
 	Payload        []byte

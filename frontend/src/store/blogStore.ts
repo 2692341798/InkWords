@@ -18,11 +18,11 @@ interface BlogState {
   blogs: BlogNode[]
   isLoading: boolean
   selectedBlog: BlogNode | null
-  currentView: 'home-entry' | 'generator' | 'dashboard' | 'knowledge-review' | 'project-course'
+  currentView: 'home-entry' | 'generator' | 'knowledge-review' | 'textbook-projects'
   fetchBlogs: () => Promise<void>
   createDraftBlog: () => Promise<BlogNode>
   selectBlog: (blog: BlogNode | null) => void
-  setCurrentView: (view: 'home-entry' | 'generator' | 'dashboard' | 'knowledge-review' | 'project-course') => void
+  setCurrentView: (view: 'home-entry' | 'generator' | 'knowledge-review' | 'textbook-projects') => void
   updateBlog: (id: string, updates: { title?: string; content?: string }) => Promise<void>
   updateBlogLocal: (id: string, updates: { title?: string; content?: string }) => void
   batchDeleteBlogs: (ids: string[]) => Promise<void>
@@ -32,7 +32,7 @@ export const useBlogStore = create<BlogState>((set, get) => ({
   blogs: [],
   isLoading: false,
   selectedBlog: null,
-  currentView: 'home-entry',
+  currentView: 'textbook-projects',
   
   fetchBlogs: async () => {
     set({ isLoading: true })

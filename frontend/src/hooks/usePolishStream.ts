@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { shouldResetPolishState } from '@/lib/polishStreamStop'
 import { createTextChunkBuffer } from '@/lib/streamFlushBuffer'
-import { fetchEventSourceWithAuth } from '@/services/sse'
+import { fetchEventSourceLocal } from '@/services/sse'
 import {
   buildGenerationTaskRequest,
   buildPolishTaskPayload,
@@ -61,7 +61,7 @@ export const usePolishStream = () => {
       )
       taskIdRef.current = task.task_id
 
-      await fetchEventSourceWithAuth(task.stream_url, {
+      await fetchEventSourceLocal(task.stream_url, {
         method: 'GET',
         signal: ctrl.signal,
         openWhenHidden: true,

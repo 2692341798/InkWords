@@ -7,10 +7,10 @@ import (
 )
 
 // RegisterReviewRoutes wires the review-service owned HTTP surface without pulling unrelated legacy routes.
-func RegisterReviewRoutes(r *gin.Engine, authMiddleware gin.HandlerFunc, handler *reviewdomain.Handler) {
+func RegisterReviewRoutes(r *gin.Engine, workspaceMiddleware gin.HandlerFunc, handler *reviewdomain.Handler) {
 	v1 := r.Group("/api/v1")
 	reviewGroup := v1.Group("/review")
-	reviewGroup.Use(authMiddleware)
+	reviewGroup.Use(workspaceMiddleware)
 	reviewGroup.GET("/today", handler.GetTodayCard)
 	reviewGroup.GET("/history", handler.GetHistory)
 	reviewGroup.POST("/pick", handler.PickRandom)
@@ -21,4 +21,13 @@ func RegisterReviewRoutes(r *gin.Engine, authMiddleware gin.HandlerFunc, handler
 	reviewGroup.POST("/sessions/:id/respond", handler.Respond)
 	reviewGroup.POST("/sessions/:id/hint", handler.RequestHint)
 	reviewGroup.POST("/sessions/:id/finish", handler.Finish)
+}
+
+// RegisterLegacyReviewMigrationRoutes exposes the explicit conversion path only
+// inside the installation's one resolved workspace.
+func RegisterLegacyReviewMigrationRoutes(r *gin.Engine, workspaceMiddleware gin.HandlerFunc, handler *reviewdomain.Handler) {
+	v1 := r.Group("/api/v1")
+	migrationGroup := v1.Group("/review/legacy-objectives")
+	migrationGroup.Use(workspaceMiddleware)
+	migrationGroup.POST("", handler.MigrateLegacyNote)
 }

@@ -3,6 +3,7 @@ package wiki
 import (
 	"context"
 	"log"
+	"os"
 	"strings"
 
 	reviewdomain "inkwords-backend/services/review-service/domain/review"
@@ -19,6 +20,18 @@ func (s unavailableReviewNoteSource) ListEligibleNotes(context.Context) ([]revie
 
 // BuildNoteSource keeps Obsidian bootstrap concerns in service-owned infra while reusing the domain note reader.
 func BuildNoteSource(rootDir string) reviewdomain.NoteSource {
+	if localVaultRoot := strings.TrimSpace(os.Getenv(localVaultRootEnv)); localVaultRoot != "" {
+		store, err := newLocalNoteStore(localVaultRoot)
+		if err != nil {
+			log.Printf("Review local note source initialization failed: %v", err)
+			return unavailableReviewNoteSource{err: err}
+		}
+		if strings.TrimSpace(rootDir) == "" {
+			rootDir = "wiki"
+		}
+		return reviewdomain.NewReviewNoteSource(store, rootDir)
+	}
+
 	store, err := obsidian.NewStoreFromEnv()
 	if err != nil {
 		log.Printf("Review note source initialization failed: %v", err)
